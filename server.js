@@ -38,17 +38,17 @@ app.post('/webhook', async (req, res) => {
     const from = message.from;
     const text = (message.text?.body || "").trim().toLowerCase();
 
-    let reply = "No entendí 🤔\n\nEscribe:\n1 Ver contenido\n2 Precio\n3 Métodos de pago";
+    let reply = "Hola 😊 escribe *hola*, *precio* o *comprar* para ayudarte";
 
-    if (text === "hola") {
-      reply = "Hola 👋\n\nEscribe:\n1 Ver contenido\n2 Precio\n3 Métodos de pago";
-    } else if (text === "1") {
-      reply = "📁 El contenido incluye plantillas y material digital listo para usar.";
-    } else if (text === "2") {
-      reply = "💰 El precio es 29 Bs, pago único.";
-    } else if (text === "3") {
-      reply = "💳 Puedes pagar por QR, depósito bancario o Tigo Money.";
-    }
+if (text.includes("hola")) {
+  reply = "Hola 😊\n\nTengo un pack de *4000 papercrafts* + 6 bonos 🎁\n\n👉 Escribe *precio* o *comprar* para continuar";
+}
+else if (text.includes("precio")) {
+  reply = "💰 Solo *39 Bs* (pago único)\n\n📥 Acceso inmediato\n⚠️ Oferta por tiempo limitado";
+}
+else if (text.includes("comprar")) {
+  reply = "💳 Métodos de pago:\n\n✅ QR\n✅ Tigo Money\n✅ Depósito bancario\n\n👉 ¿Cuál prefieres?";
+}
 
     await axios.post(
       `https://graph.facebook.com/v19.0/${PHONE_ID}/messages`,
