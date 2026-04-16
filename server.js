@@ -12,10 +12,14 @@ app.get('/webhook', (req, res) => {
   const token = req.query['hub.verify_token'];
   const challenge = req.query['hub.challenge'];
 
+  console.log('mode=', mode);
+  console.log('token recibido=', JSON.stringify(token));
+  console.log('verify token railway=', JSON.stringify(VERIFY_TOKEN));
+
   if (mode === 'subscribe' && token === VERIFY_TOKEN) {
-    return res.send(challenge);
+    return res.status(200).send(challenge);
   } else {
-    res.sendStatus(403);
+    return res.status(403).send('Forbidden');
   }
 });
 // 🔥 PON AQUÍ TUS DATOS
