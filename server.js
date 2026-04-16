@@ -6,7 +6,7 @@ const app = express();
 app.use(bodyParser.json());
 
 app.get('/webhook', (req, res) => {
-  const VERIFY_TOKEN = "123456";
+  const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
 
   const mode = req.query['hub.mode'];
   const token = req.query['hub.verify_token'];
@@ -19,8 +19,8 @@ app.get('/webhook', (req, res) => {
   }
 });
 // 🔥 PON AQUÍ TUS DATOS
-const TOKEN = 'EAAjXfdJsgp0BRAiwxiXk1EZCHeRko6L9K2ZBPuk8TodylDjEH8RIKvy1s4GLtexEEPvL1YMIZALTKOgHPFVNkcUPsES96ZBRpd6qsDYIpS4TV7UuUfhVc6YDUXMDnNZBWjMBw54kPZCzaU2YXU29lJLIYQVGOdd2TdjL7kWJZCKMxmkI76geDZBES2NT3ZBRZCI2b1wDRwPgj7AgfrGmXAc3EgYatUGI5GPTXIxjOnR5aRAL1Q83EAOGZAQ5tZCedcyiB1mTzVcMWIEYmbFwgnj5kZBL0';
-const PHONE_ID = '1154429667735151';
+const TOKEN = process.env.TOKEN;
+const PHONE_ID = process.env.PHONE_ID;
 
 app.post('/webhook', async (req, res) => {
   try {
