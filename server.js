@@ -74,9 +74,7 @@ Te cuento lo que incluye nuestro pack especial 🔥🔥👇👇
 📘 +10.000 patrones de amigurumis listos para tejer
 🎁 Perfecto para vender o emprender
 🧶 Para principiantes y avanzados
-⚡ Acceso digital inmediato
-
-👉 Escribe *PRECIO* para continuar`
+⚡ Acceso digital inmediato`
           }
         },
         {
@@ -110,7 +108,7 @@ Te cuento lo que incluye nuestro pack especial 🔥🔥👇👇
 🔥 Sin costos extra
 👉 Aprovecha ahora antes que termine la promo
 ANTES 150bs 
-🔥🔥 AHORA 29bs 🔥🔥
+🔥🔥 *AHORA 29bs* 🔥🔥
 👉 Elige método de pago:
 
 QR
