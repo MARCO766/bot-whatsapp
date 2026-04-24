@@ -99,16 +99,18 @@ Te cuento lo que incluye nuestro pack especial 🔥🔥👇👇
           text: {
             body: `Y además del pack principal, hoy te llevas 5 BONOS DE REGALO 🎁 totalmente GRATIS:
 
-🎁 Bono 1: guía para leer patrones
-🎁 Bono 2: 5000+ patrones extra
-🎁 Bono 3: videoclasas desde cero
-🎁 Bono 4: patrones de llaveros
-🎁 Bono 5: ebook de puntos
+🎁 Bono 1: guía para leer patrones en otros idiomas y traductores
+🎁 Bono 2: 5000+ patrones extra en diferentes idiomas fáciles de leer con la guía multilenguas
+🎁 Bono 3: videoclases desde cero para principiantes explicado paso a paso
+🎁 Bono 4: patrones de llaveros 
+🎁 Bono 5: e-book y guía para aprender a tejer puntos
 
-✨ Todo se desbloquea después del pago
-⚡ Acceso inmediato
+✨ Todo se desbloquea automáticamente después del pago
+⚡ Acceso digital inmediato
 🔥 Sin costos extra
-
+👉 Aprovecha ahora antes que termine la promo
+ANTES 150bs 
+🔥🔥 AHORA 29bs 🔥🔥
 👉 Elige método de pago:
 
 QR
