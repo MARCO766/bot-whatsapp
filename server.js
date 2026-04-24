@@ -165,7 +165,7 @@ TIGO MONEY`
       to: from,
       type: "image",
       image: {
-  link: "https://drive.google.com/uc?export=view&id=1J1Nlc7aM6TkdqIifYtdIM1MPwYcv5yvA",
+  link: "https://i.postimg.cc/PxkrFC1T/qr-code-1777073787629.png",
   caption: "Escanea este QR 🏦"
 }
     },
