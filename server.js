@@ -71,7 +71,58 @@ Te cuento lo que incluye nuestro pack especial 🔥🔥👇👇
 ⚡ Acceso digital inmediato`;
 }
     
+await new Promise(resolve => setTimeout(resolve, 2000));
 
+await axios.post(
+  `https://graph.facebook.com/v18.0/${process.env.PHONE_ID}/messages`,
+  {
+    messaging_product: "whatsapp",
+    to: from,
+    text: {
+      body: `Y además del pack principal, hoy te llevas 5 BONOS DE REGALO 🎁 totalmente GRATIS por tu compra:
+👇👇👇
+
+🎁 Bono 1: guía para leer patrones en otros idiomas y traductores
+🎁 Bono 2: 5000+ patrones en varios idiomas fáciles de leer con la guía multilenguas
+🎁 Bono 3: videoclases para principiantes explicando paso a paso y aprender desde cero
+🎁 Bono 4: patrones de llaveros en diferentes idiomas
+🎁 Bono 5: ebook y guía para aprender a tejer puntos
+
+✨ Todo esto se desbloquea automáticamente después del pago
+⚡ Acceso digital inmediato
+🔥 Sin costos extra
+
+👉 Aprovecha ahora antes que termine la promo
+👇👇👇
+
+ANTES 150 Bs
+Ahora 29 Bs 😳🔥🔥
+
+👉 Escribe una opción para continuar:
+
+💳 QR  
+🏦 DEPOSITO BANCARIO  
+📱 TIGO MONEY`
+    }
+  },
+  {
+    headers: {
+      Authorization: `Bearer ${process.env.TOKEN}`,
+      "Content-Type": "application/json"
+    }
+  }
+);
+if (text.includes("qr")) {
+  reply = "Perfecto 👍 aquí tienes el QR para pagar:";
+}
+
+else if (text.includes("deposito")) {
+  reply = "Perfecto 👍 estos son los datos bancarios:";
+}
+
+else if (text.includes("tigo")) {
+  reply = "Perfecto 👍 este es el número para Tigo Money:";
+}
     await axios.post(
       `https://graph.facebook.com/v19.0/${PHONE_ID}/messages`,
       {
