@@ -28,11 +28,11 @@ const PHONE_ID = process.env.PHONE_ID;
 
 app.post('/webhook', async (req, res) => {
   try {
-    const change = req.body.entry?.[0]?.changes?.[0]?.value;
-    const value = change?.value;
+    const change = req.body.entry?.[0]?.changes?.[0];
+const value = change?.value;
 
 // 👇 SOLO CONTINÚA SI HAY MENSAJE REAL
-if (!value.messages) {
+if (!value || !value.messages || !value.messages[0]) {
   return res.sendStatus(200);
 }
 
