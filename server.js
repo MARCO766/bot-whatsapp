@@ -46,8 +46,7 @@ if (message.type !== "text" || !message.text?.body) {
 const from = message.from;
 const text = message.text.body.toLowerCase();
 
-
-    let reply = "";
+let reply = "";
 
 if (text.includes("hola") || text.includes("info")) {
   reply = `Hola 😊 ¡Gracias por escribirnos!
@@ -61,15 +60,7 @@ Te cuento lo que incluye nuestro pack especial 🔥🔥👇👇
 
 ⚡ Acceso digital inmediato`;
 }
-
-👉 Escribe *PRECIO* para continuar`;
-}
-else if (text.includes("precio")) {
-  reply = "💰 Solo *39 Bs* (pago único)\n\n📥 Acceso inmediato\n⚠️ Oferta por tiempo limitado";
-}
-else if (text.includes("comprar")) {
-  reply = "💳 Métodos de pago:\n\n✅ QR\n✅ Tigo Money\n✅ Depósito bancario\n\n👉 ¿Cuál prefieres?";
-}
+    
 
     await axios.post(
       `https://graph.facebook.com/v19.0/${PHONE_ID}/messages`,
