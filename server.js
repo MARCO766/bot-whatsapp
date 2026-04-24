@@ -3,6 +3,7 @@ const axios = require('axios');
 const bodyParser = require('body-parser');
 
 const app = express();
+const mensajesProcesados = new Set();
 app.use(bodyParser.json());
 
 app.get('/webhook', (req, res) => {
@@ -37,6 +38,15 @@ if (!value || !value.messages || !value.messages[0]) {
 }
 
 const message = value.messages[0];
+if (mensajesProcesados.has(message.id)) {
+  return res.sendStatus(200);
+}
+
+mensajesProcesados.add(message.id);
+
+setTimeout(() => {
+  mensajesProcesados.delete(message.id);
+}, 10 * 60 * 1000);
 
 // 👇 SOLO TEXTO
 if (message.type !== "text" || !message.text?.body) {
