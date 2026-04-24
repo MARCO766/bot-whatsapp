@@ -134,7 +134,51 @@ TIGO MONEY`
     let reply = "";
 
     if (text.includes("qr")) {
-      reply = "Perfecto 👍 aquí tienes el QR para pagar:";
+      if (text.includes("qr")) {
+
+  // 🥇 MENSAJE TEXTO
+  await axios.post(
+    `https://graph.facebook.com/v19.0/${PHONE_ID}/messages`,
+    {
+      messaging_product: "whatsapp",
+      to: from,
+      text: {
+        body: "Perfecto 👍 aquí tienes el QR para pagar:"
+      }
+    },
+    {
+      headers: {
+        Authorization: `Bearer ${TOKEN}`,
+        "Content-Type": "application/json"
+      }
+    }
+  );
+
+  // ⏱️ espera 2 segundo
+  await new Promise(resolve => setTimeout(resolve, 2000));
+
+  // 🥈 MENSAJE IMAGEN
+  await axios.post(
+    `https://graph.facebook.com/v19.0/${PHONE_ID}/messages`,
+    {
+      messaging_product: "whatsapp",
+      to: from,
+      type: "image",
+      image: {
+  link: "https://drive.google.com/uc?export=view&id=1J1Nlc7aM6TkdqIifYtdIM1MPwYcv5yvA",
+  caption: "Escanea este QR 🏦"
+}
+    },
+    {
+      headers: {
+        Authorization: `Bearer ${TOKEN}`,
+        "Content-Type": "application/json"
+      }
+    }
+  );
+
+  return res.sendStatus(200);
+}
     } 
     else if (text.includes("deposito")) {
       reply = "Perfecto 👍 estos son los datos bancarios:";
