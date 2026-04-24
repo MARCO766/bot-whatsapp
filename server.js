@@ -46,12 +46,6 @@ if (message.type !== "text" || !message.text?.body) {
 const from = message.from;
 const text = message.text.body.toLowerCase();
 
-    if (!message || message.type !== "text" || !message.text?.body) {
-  return res.sendStatus(200);
-}
-
-    const from = message.from;
-    const text = (message.text?.body || "").trim().toLowerCase();
 
     let reply = "";
 
@@ -65,7 +59,8 @@ Te cuento lo que incluye nuestro pack especial 🔥🔥👇👇
 🎁 Perfecto para vender, regalar o crear tu propio emprendimiento
 🧶 Para principiantes y avanzados
 
-⚡ Acceso digital inmediato
+⚡ Acceso digital inmediato`;
+}
 
 👉 Escribe *PRECIO* para continuar`;
 }
