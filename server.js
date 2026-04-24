@@ -29,7 +29,22 @@ const PHONE_ID = process.env.PHONE_ID;
 app.post('/webhook', async (req, res) => {
   try {
     const change = req.body.entry?.[0]?.changes?.[0]?.value;
-    const message = change?.messages?.[0];
+    const value = change?.value;
+
+// 👇 SOLO CONTINÚA SI HAY MENSAJE REAL
+if (!value.messages) {
+  return res.sendStatus(200);
+}
+
+const message = value.messages[0];
+
+// 👇 SOLO TEXTO
+if (message.type !== "text" || !message.text?.body) {
+  return res.sendStatus(200);
+}
+
+const from = message.from;
+const text = message.text.body.toLowerCase();
 
     if (!message || message.type !== "text" || !message.text?.body) {
   return res.sendStatus(200);
@@ -38,10 +53,21 @@ app.post('/webhook', async (req, res) => {
     const from = message.from;
     const text = (message.text?.body || "").trim().toLowerCase();
 
-    let reply = "Hola 😊 escribe *hola*, *precio* o *comprar* para ayudarte";
+    let reply = "";
 
-if (text.includes("hola")) {
-  reply = "Hola 😊\n\nTengo un pack de *4000 papercrafts* + 6 bonos 🎁\n\n👉 Escribe *precio* o *comprar* para continuar";
+if (text.includes("hola") || text.includes("info")) {
+  reply = `Hola 😊 ¡Gracias por escribirnos!
+
+Te cuento lo que incluye nuestro pack especial 🔥🔥👇👇
+
+📘 +10.000 patrones de amigurumis listos para tejer reunidos de todo el mundo
+
+🎁 Perfecto para vender, regalar o crear tu propio emprendimiento
+🧶 Para principiantes y avanzados
+
+⚡ Acceso digital inmediato
+
+👉 Escribe *PRECIO* para continuar`;
 }
 else if (text.includes("precio")) {
   reply = "💰 Solo *39 Bs* (pago único)\n\n📥 Acceso inmediato\n⚠️ Oferta por tiempo limitado";
