@@ -200,9 +200,6 @@ TIGO MONEY`
         }
       );
 
-      return res.sendStatus(200);
-    }
-
 seguimientos[from] = true;
 
 // ⏱️ Seguimiento 1 (5 min)
@@ -283,6 +280,10 @@ setTimeout(async () => {
     { headers: { Authorization: `Bearer ${TOKEN}` } }
   );
 }, 5 * 60 * 1000);
+      return res.sendStatus(200);
+    }
+
+
 
     // =============================
     // 💳 RESPUESTAS SEGÚN OPCIÓN
