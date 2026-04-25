@@ -181,20 +181,22 @@ TIGO MONEY`
 }
     } 
     else if (text.includes("deposito")) {
-      reply = "Perfecto 👍 estos son los datos bancarios:
-BANCO UNION
-NRO DE CUENTA: 10000042106208
-NOMBRE: MARCO ARIAS
+  reply = `Perfecto 👍 estos son los datos bancarios:
 
-UNA VES HECHO EL PAGO ME MANDA SU COMPROBANTE PORFAVOR";
-    } 
+🏦 BANCO UNION
+📄 NRO DE CUENTA: 10000042106208
+👤 NOMBRE: MARCO ARIAS
+
+📩 Una vez hecho el pago envíame tu comprobante por favor`;
+} 
     else if (text.includes("tigo")) {
-      reply = "Perfecto 👍 este es el número para Tigo Money:
-NUMERO: 65818913
-NOMBRE: MARCO ARIAS
+  reply = `Perfecto 👍 este es el número para Tigo Money:
 
-UNA VES HECHO EL PAGO ME MANDA SU COMPROBANTE PORFAVOR";
-    }
+📱 NÚMERO: 65818913
+👤 NOMBRE: MARCO ARIAS
+
+📩 Una vez hecho el pago envíame tu comprobante por favor`;
+}
 
     if (reply !== "") {
       await axios.post(
