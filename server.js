@@ -85,6 +85,78 @@ Te cuento lo que incluye nuestro pack especial 🔥🔥👇👇
         }
       );
 
+// ⏳ espera
+await new Promise(r => setTimeout(r, 1500));
+
+
+// 🔹 IMAGEN 1
+await axios.post(
+  `https://graph.facebook.com/v19.0/${PHONE_ID}/messages`,
+  {
+    messaging_product: "whatsapp",
+    to: from,
+    type: "image",
+    image: {
+      link: "https://i.ibb.co/pBmztCJy/Whats-App-Image-2026-04-24-at-9-13-39-PM.jpg"
+    }
+  },
+  { headers: { Authorization: `Bearer ${TOKEN}` } }
+);
+
+// ⏳ espera
+await new Promise(r => setTimeout(r, 1500));
+
+
+// 🔹 IMAGEN 2
+await axios.post(
+  `https://graph.facebook.com/v19.0/${PHONE_ID}/messages`,
+  {
+    messaging_product: "whatsapp",
+    to: from,
+    type: "image",
+    image: {
+      link: "https://i.ibb.co/0pTs97nP/Whats-App-Image-2026-04-24-at-9-13-46-PM.jpg"
+    }
+  },
+  { headers: { Authorization: `Bearer ${TOKEN}` } }
+);
+
+// ⏳ espera
+await new Promise(r => setTimeout(r, 1500));
+
+
+// 🔹 IMAGEN 3
+await axios.post(
+  `https://graph.facebook.com/v19.0/${PHONE_ID}/messages`,
+  {
+    messaging_product: "whatsapp",
+    to: from,
+    type: "image",
+    image: {
+      link: "https://i.ibb.co/FqzxpS5F/Whats-App-Image-2026-04-24-at-9-13-47-PM-1.jpg"
+    }
+  },
+  { headers: { Authorization: `Bearer ${TOKEN}` } }
+);
+
+// ⏳ espera
+await new Promise(r => setTimeout(r, 1500));
+
+
+// 🔹 IMAGEN 4
+await axios.post(
+  `https://graph.facebook.com/v19.0/${PHONE_ID}/messages`,
+  {
+    messaging_product: "whatsapp",
+    to: from,
+    type: "image",
+    image: {
+      link: "https://i.ibb.co/zTThJgmj/Whats-App-Image-2026-04-24-at-9-13-47-PM-2.jpg"
+    }
+  },
+  { headers: { Authorization: `Bearer ${TOKEN}` } }
+);
+
       // ⏱️ ESPERA 2 SEGUNDOS
       await new Promise(resolve => setTimeout(resolve, 2000));
 
