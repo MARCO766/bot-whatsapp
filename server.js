@@ -166,7 +166,7 @@ TIGO MONEY`
       type: "image",
       image: {
   link: "https://i.ibb.co/xKCNJCsd/qr-code-1777073787629.png",
-  caption: "Escanea este QR 🏦"
+  caption: "Escanea este QR y despues mandame el comprobante porfavor 🏦"
 }
     },
     {
@@ -181,10 +181,19 @@ TIGO MONEY`
 }
     } 
     else if (text.includes("deposito")) {
-      reply = "Perfecto 👍 estos son los datos bancarios:";
+      reply = "Perfecto 👍 estos son los datos bancarios:
+BANCO UNION
+NRO DE CUENTA: 10000042106208
+NOMBRE: MARCO ARIAS
+
+UNA VES HECHO EL PAGO ME MANDA SU COMPROBANTE PORFAVOR";
     } 
     else if (text.includes("tigo")) {
-      reply = "Perfecto 👍 este es el número para Tigo Money:";
+      reply = "Perfecto 👍 este es el número para Tigo Money:
+NUMERO: 65818913
+NOMBRE: MARCO ARIAS
+
+UNA VES HECHO EL PAGO ME MANDA SU COMPROBANTE PORFAVOR";
     }
 
     if (reply !== "") {
