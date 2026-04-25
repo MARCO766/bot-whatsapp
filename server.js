@@ -3,6 +3,7 @@ const axios = require('axios');
 const bodyParser = require('body-parser');
 
 const app = express();
+const seguimientos = {};
 const mensajesProcesados = new Set();
 app.use(bodyParser.json());
 
@@ -53,6 +54,9 @@ mensajesProcesados.add(message.id);
     }
 
     const from = message.from;
+if (seguimientos[from]) {
+  seguimientos[from] = false;
+}
     const text = message.text.body.toLowerCase();
 
     // =============================
@@ -198,6 +202,87 @@ TIGO MONEY`
 
       return res.sendStatus(200);
     }
+
+seguimientos[from] = true;
+
+// ⏱️ Seguimiento 1 (5 min)
+setTimeout(async () => {
+  if (!seguimientos[from]) return;
+
+  await axios.post(
+    `https://graph.facebook.com/v19.0/${PHONE_ID}/messages`,
+    {
+      messaging_product: "whatsapp",
+      to: from,
+      text: { body: "👀 ¿Sigues interesada? Este pack está ayudando a muchas personas a generar ingresos 🔥" }
+    },
+    { headers: { Authorization: `Bearer ${TOKEN}` } }
+  );
+}, 1 * 60 * 1000);
+
+
+// ⏱️ Seguimiento 2 (10 min)
+setTimeout(async () => {
+  if (!seguimientos[from]) return;
+
+  await axios.post(
+    `https://graph.facebook.com/v19.0/${PHONE_ID}/messages`,
+    {
+      messaging_product: "whatsapp",
+      to: from,
+      text: { body: "💡 Puedes empezar desde cero y vender amigurumis fácilmente 😏" }
+    },
+    { headers: { Authorization: `Bearer ${TOKEN}` } }
+  );
+}, 2 * 60 * 1000);
+
+
+// ⏱️ Seguimiento 3 (20 min)
+setTimeout(async () => {
+  if (!seguimientos[from]) return;
+
+  await axios.post(
+    `https://graph.facebook.com/v19.0/${PHONE_ID}/messages`,
+    {
+      messaging_product: "whatsapp",
+      to: from,
+      text: { body: "🔥 Hoy está en solo 29 Bs\n\n👉 Escribe COMPRAR si quieres aprovechar la oferta" }
+    },
+    { headers: { Authorization: `Bearer ${TOKEN}` } }
+  );
+}, 3 * 60 * 1000);
+
+
+// ⏱️ Seguimiento 4 (30 min)
+setTimeout(async () => {
+  if (!seguimientos[from]) return;
+
+  await axios.post(
+    `https://graph.facebook.com/v19.0/${PHONE_ID}/messages`,
+    {
+      messaging_product: "whatsapp",
+      to: from,
+      text: { body: "⚠️ La promo puede subir de precio en cualquier momento" }
+    },
+    { headers: { Authorization: `Bearer ${TOKEN}` } }
+  );
+}, 4 * 60 * 1000);
+
+
+// ⏱️ Seguimiento 5 (60 min)
+setTimeout(async () => {
+  if (!seguimientos[from]) return;
+
+  await axios.post(
+    `https://graph.facebook.com/v19.0/${PHONE_ID}/messages`,
+    {
+      messaging_product: "whatsapp",
+      to: from,
+      text: { body: "😢 Último aviso\n\n¿Quieres que te pase el QR para pagar ahora?" }
+    },
+    { headers: { Authorization: `Bearer ${TOKEN}` } }
+  );
+}, 5 * 60 * 1000);
 
     // =============================
     // 💳 RESPUESTAS SEGÚN OPCIÓN
