@@ -424,7 +424,7 @@ Envíame:
 Apenas lo verifique, te envío el acceso completo ✅`;
 }
 
-else if (text.includes("descuento")) {
+else if (text === "descuento") {
 
   await axios.post(
     `https://graph.facebook.com/v19.0/${PHONE_ID}/messages`,
