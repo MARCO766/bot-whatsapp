@@ -57,7 +57,16 @@ mensajesProcesados.add(message.id);
 if (seguimientos[from]) {
   seguimientos[from] = false;
 }
-    const text = message.text.body.toLowerCase();
+
+    let text = "";
+
+if (message.type === "text") {
+  text = message.text.body.toLowerCase();
+}
+
+if (message.type === "interactive") {
+  text = message.interactive.button_reply.id.toLowerCase();
+}
 
     // =============================
     // 💬 BLOQUE PRINCIPAL (HOLA)
@@ -280,6 +289,46 @@ setTimeout(async () => {
     { headers: { Authorization: `Bearer ${TOKEN}` } }
   );
 }, 5 * 60 * 1000);
+
+// ⏱️ REMARKETING FINAL (22 horas)
+setTimeout(async () => {
+  if (!seguimientos[from]) return;
+
+  await axios.post(
+    `https://graph.facebook.com/v19.0/${PHONE_ID}/messages`,
+    {
+      messaging_product: "whatsapp",
+      to: from,
+      type: "interactive",
+      interactive: {
+        type: "button",
+        body: {
+          text: `🔥 SOLO POR HOY 🔥
+
+ANTES: 29 Bs
+HOY: 19 Bs 💸
+
+Toca el botón para activar tu descuento 👇`
+        },
+        action: {
+          buttons: [
+            {
+              type: "reply",
+              reply: {
+                id: "descuento",
+                title: "🔥 Descuento"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      headers: { Authorization: `Bearer ${TOKEN}` }
+    }
+  );
+}, 6 * 60 * 1000);
+
       return res.sendStatus(200);
     }
 
@@ -373,6 +422,14 @@ Envíame:
 2. Nombre con el que pagaste
 
 Apenas lo verifique, te envío el acceso completo ✅`;
+}
+
+else if (text.includes("descuento")) {
+  reply = `🔥 Perfecto! Activaste el precio especial
+
+👉 Ahora puedes pagar solo 19 Bs
+
+Escribe *QR* para pagar o elige tu método 👇`;
 }
 
     if (reply !== "") {
