@@ -48,11 +48,7 @@ if (mensajesProcesados.has(message.id)) {
 }
 mensajesProcesados.add(message.id);
 
-    // 🚫 solo texto
-    if (message.type !== "text" || !message.text?.body) {
-      return res.sendStatus(200);
-    }
-
+    
     const from = message.from;
 if (seguimientos[from]) {
   seguimientos[from] = false;
