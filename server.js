@@ -290,6 +290,26 @@ setTimeout(async () => {
 setTimeout(async () => {
   if (!seguimientos[from]) return;
 
+// 🖼️ ENVÍA IMAGEN PRIMERO
+await axios.post(
+  `https://graph.facebook.com/v19.0/${PHONE_ID}/messages`,
+  {
+    messaging_product: "whatsapp",
+    to: from,
+    type: "image",
+    image: {
+      link: "https://i.ibb.co/S73YCqqH/Gemini-Generated-Image-5hmq935hmq935hmq.png",
+      caption: "🔥 SOLO POR HOY 🔥\nANTES: 29 Bs\nHOY: 19 Bs 💸"
+    }
+  },
+  {
+    headers: { Authorization: `Bearer ${TOKEN}` }
+  }
+);
+
+// pequeña pausa
+await new Promise(r => setTimeout(r, 1000));
+
   await axios.post(
     `https://graph.facebook.com/v19.0/${PHONE_ID}/messages`,
     {
