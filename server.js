@@ -316,7 +316,7 @@ Toca el botón para activar tu descuento 👇`
               type: "reply",
               reply: {
                 id: "descuento",
-                title: "🔥 Descuento"
+                title: "Descuento"
               }
             }
           ]
@@ -425,11 +425,28 @@ Apenas lo verifique, te envío el acceso completo ✅`;
 }
 
 else if (text.includes("descuento")) {
-  reply = `🔥 Perfecto! Activaste el precio especial
 
-👉 Ahora puedes pagar solo 19 Bs
+  await axios.post(
+    `https://graph.facebook.com/v19.0/${PHONE_ID}/messages`,
+    {
+      messaging_product: "whatsapp",
+      to: from,
+      type: "image",
+      image: {
+        link: "https://i.ibb.co/KchxNgHg/Whats-App-Image-2026-04-25-at-4-44-41-PM.jpg",
+        caption: `🔥 DESCUENTO ACTIVADO 🔥
 
-Escribe *QR* para pagar o elige tu método 👇`;
+Ahora puedes pagar solo 19 Bs 💸
+
+👉 Escanea el QR y envíame el comprobante con: *YA PAGUÉ*`
+      }
+    },
+    {
+      headers: { Authorization: `Bearer ${TOKEN}` }
+    }
+  );
+
+  return res.sendStatus(200);
 }
 
     if (reply !== "") {
