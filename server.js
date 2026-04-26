@@ -356,6 +356,25 @@ setTimeout(async () => {
 📩 Una vez hecho el pago envíame tu comprobante por favor`;
 }
 
+else if (
+  text.includes("ya pague") ||
+  text.includes("ya pagué") ||
+  text.includes("pague") ||
+  text.includes("comprobante")
+) {
+  reply = `🎉 ¡Perfecto! Ya recibimos tu aviso de pago 🙌
+
+Para validar tu comprobante y entregarte el pack completo, escríbeme aquí:
+
+👉 https://wa.me/59176187797
+
+Envíame:
+1. Captura del pago
+2. Nombre con el que pagaste
+
+Apenas lo verifique, te envío el acceso completo ✅`;
+}
+
     if (reply !== "") {
       await axios.post(
         `https://graph.facebook.com/v19.0/${PHONE_ID}/messages`,
