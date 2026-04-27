@@ -188,7 +188,7 @@ await axios.post(
 ⚡ Acceso digital inmediato
 🔥 Sin costos extra
 👉 Aprovecha ahora antes que termine la promo
-ANTES 150bs 
+ANTES 100bs 
 🔥🔥 *AHORA 29bs* 🔥🔥
 👉 Elige método de pago:
 
@@ -248,7 +248,7 @@ setTimeout(async () => {
     {
       messaging_product: "whatsapp",
       to: from,
-      text: { body: "🔥 Hoy está en solo 29 Bs\n\n👉 Escribe COMPRAR si quieres aprovechar la oferta" }
+      text: { body: "🔥 Hoy está en solo 29 Bs\n\n👉 Escribe tu metodo de pago si quieres aprovechar la oferta" }
     },
     { headers: { Authorization: `Bearer ${TOKEN}` } }
   );
@@ -299,7 +299,7 @@ await axios.post(
     type: "image",
     image: {
       link: "https://i.ibb.co/S73YCqqH/Gemini-Generated-Image-5hmq935hmq935hmq.png",
-      caption: "🔥 SOLO POR HOY 🔥\nANTES: 29 Bs\nHOY: 19 Bs 💸"
+      caption: "🔥 SOLO POR HOY🔥"
     }
   },
   {
@@ -308,7 +308,7 @@ await axios.post(
 );
 
 // pequeña pausa
-await new Promise(r => setTimeout(r, 1000));
+await new Promise(r => setTimeout(r, 2000));
 
   await axios.post(
     `https://graph.facebook.com/v19.0/${PHONE_ID}/messages`,
