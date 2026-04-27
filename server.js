@@ -362,7 +362,7 @@ Toca el botón para activar tu descuento 👇`
 
     let reply = "";
 
-else if (text.includes("pagar_19")) {
+if (text.includes("pagar_19")) {
 
   await axios.post(
     `https://graph.facebook.com/v19.0/${PHONE_ID}/messages`,
