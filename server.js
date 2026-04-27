@@ -43,6 +43,7 @@ if (!value || !value.messages || !value.messages[0]) {
 }
 
     const message = value.messages[0];
+const nombre = value.contacts?.[0]?.profile?.name || "amiga";
 if (mensajesProcesados.has(message.id)) {
   return res.sendStatus(200);
 }
@@ -76,7 +77,7 @@ if (message.type === "interactive") {
           messaging_product: "whatsapp",
           to: from,
           text: {
-            body: `Hola 😊 ¡Gracias por escribirnos!
+            body: `Hola ${nombre} 😊 ¡Gracias por escribirnos!
 
 Te cuento lo que incluye nuestro pack especial 🔥🔥👇👇
 
