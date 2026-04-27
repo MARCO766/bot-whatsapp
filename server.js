@@ -4,6 +4,7 @@ const bodyParser = require('body-parser');
 
 const app = express();
 const seguimientos = {};
+const seguimientoDescuento = {};
 const mensajesProcesados = new Set();
 app.use(bodyParser.json());
 
@@ -432,6 +433,7 @@ else if (
   text.includes("pague") ||
   text.includes("comprobante")
 ) {
+seguimientoDescuento[from] = false;
   reply = `🎉 ¡Perfecto! Ya recibimos tu aviso de pago 🙌
 
 Para validar tu comprobante y entregarte el pack completo, escríbeme aquí:
@@ -446,7 +448,7 @@ Apenas lo verifique, te envío el acceso completo ✅`;
 }
 
 else if (text === "descuento") {
-
+seguimientoDescuento[from] = true;
   await axios.post(
     `https://graph.facebook.com/v19.0/${PHONE_ID}/messages`,
     {
@@ -466,6 +468,104 @@ Ahora puedes pagar solo 19 Bs 💸
       headers: { Authorization: `Bearer ${TOKEN}` }
     }
   );
+
+// Seguimiento descuento 1 - 5 minutos
+setTimeout(async () => {
+  if (!seguimientoDescuento[from]) return;
+
+  await axios.post(
+    `https://graph.facebook.com/v19.0/${PHONE_ID}/messages`,
+    {
+      messaging_product: "whatsapp",
+      to: from,
+      type: "interactive",
+      interactive: {
+        type: "button",
+        body: {
+          text: "🔥 Tu descuento de 19 Bs sigue activo.\n\n¿Quieres pagar ahora?"
+        },
+        action: {
+          buttons: [
+            {
+              type: "reply",
+              reply: {
+                id: "pagar_19",
+                title: "💸 Pagar ahora"
+              }
+            }
+          ]
+        }
+      }
+    },
+    { headers: { Authorization: `Bearer ${TOKEN}` } }
+  );
+}, 1 * 60 * 1000);
+
+
+// Seguimiento descuento 2 - 15 minutos
+setTimeout(async () => {
+  if (!seguimientoDescuento[from]) return;
+
+  await axios.post(
+    `https://graph.facebook.com/v19.0/${PHONE_ID}/messages`,
+    {
+      messaging_product: "whatsapp",
+      to: from,
+      type: "interactive",
+      interactive: {
+        type: "button",
+        body: {
+          text: "⚠️ Recuerda que el precio especial de 19 Bs es por tiempo limitado.\n\n¿Deseas aprovecharlo?"
+        },
+        action: {
+          buttons: [
+            {
+              type: "reply",
+              reply: {
+                id: "pagar_19",
+                title: "💸 Pagar ahora"
+              }
+            }
+          ]
+        }
+      }
+    },
+    { headers: { Authorization: `Bearer ${TOKEN}` } }
+  );
+}, 2 * 60 * 1000);
+
+
+// Seguimiento descuento 3 - 30 minutos
+setTimeout(async () => {
+  if (!seguimientoDescuento[from]) return;
+
+  await axios.post(
+    `https://graph.facebook.com/v19.0/${PHONE_ID}/messages`,
+    {
+      messaging_product: "whatsapp",
+      to: from,
+      type: "interactive",
+      interactive: {
+        type: "button",
+        body: {
+          text: "🚨 Último aviso.\n\nEl descuento puede volver a 29 Bs en cualquier momento.\n\n¿Quieres pagar con 19 Bs ahora?"
+        },
+        action: {
+          buttons: [
+            {
+              type: "reply",
+              reply: {
+                id: "pagar_19",
+                title: "💸 Pagar ahora"
+              }
+            }
+          ]
+        }
+      }
+    },
+    { headers: { Authorization: `Bearer ${TOKEN}` } }
+  );
+}, 3 * 60 * 1000);
 
   return res.sendStatus(200);
 }
