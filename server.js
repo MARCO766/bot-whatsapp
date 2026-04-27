@@ -362,6 +362,25 @@ Toca el botón para activar tu descuento 👇`
 
     let reply = "";
 
+else if (text.includes("pagar_19")) {
+
+  await axios.post(
+    `https://graph.facebook.com/v19.0/${PHONE_ID}/messages`,
+    {
+      messaging_product: "whatsapp",
+      to: from,
+      type: "image",
+      image: {
+        link: "https://i.ibb.co/KchxNgHg/Whats-App-Image-2026-04-25-at-4-44-41-PM.jpg",
+        caption: "🔥 Aquí tienes el QR de 19 Bs.\n\nCuando pagues escribe: YA PAGUÉ"
+      }
+    },
+    { headers: { Authorization: `Bearer ${TOKEN}` } }
+  );
+
+  return res.sendStatus(200);
+}
+
     if (text.includes("qr")) {
       if (text.includes("qr")) {
 
