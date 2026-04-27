@@ -51,13 +51,7 @@ mensajesProcesados.add(message.id);
 
     
     const from = message.from;
-if (
-  text.includes("ya pague") ||
-  text.includes("ya pagué") ||
-  text.includes("comprobante")
-) {
-  seguimientos[from] = false;
-}
+
     let text = "";
 
 if (message.type === "text") {
@@ -68,6 +62,13 @@ if (message.type === "interactive") {
   text = message.interactive.button_reply.id.toLowerCase();
 }
 
+if (
+  text.includes("ya pague") ||
+  text.includes("ya pagué") ||
+  text.includes("comprobante")
+) {
+  seguimientos[from] = false;
+}
     // =============================
     // 💬 BLOQUE PRINCIPAL (HOLA)
     // =============================
