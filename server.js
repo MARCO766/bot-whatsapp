@@ -73,7 +73,11 @@ if (
     // =============================
     // 💬 BLOQUE PRINCIPAL (HOLA)
     // =============================
-    if (text.includes("hola") || text.includes("info")) {
+    if (
+  (text.includes("hola") || text.includes("info")) &&
+  !seguimientos[from] &&
+  !seguimientoDescuento[from]
+) {
 
       // 🥇 MENSAJE 1
       await axios.post(
