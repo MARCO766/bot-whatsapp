@@ -51,10 +51,13 @@ mensajesProcesados.add(message.id);
 
     
     const from = message.from;
-if (seguimientos[from]) {
+if (
+  text.includes("ya pague") ||
+  text.includes("ya pagué") ||
+  text.includes("comprobante")
+) {
   seguimientos[from] = false;
 }
-
     let text = "";
 
 if (message.type === "text") {
