@@ -253,10 +253,10 @@ setTimeout(async () => {
     },
     { headers: { Authorization: `Bearer ${TOKEN}` } }
   );
-}, 1 * 60 * 1000);
+}, 5 * 60 * 1000);
 
 
-// ⏱️ Seguimiento 2 (10 min)
+// ⏱️ Seguimiento 2 (15 min)
 setTimeout(async () => {
   if (!seguimientos[from]) return;
 
@@ -269,10 +269,10 @@ setTimeout(async () => {
     },
     { headers: { Authorization: `Bearer ${TOKEN}` } }
   );
-}, 2 * 60 * 1000);
+}, 15 * 60 * 1000);
 
 
-// ⏱️ Seguimiento 3 (20 min)
+// ⏱️ Seguimiento 3 (40 min)
 setTimeout(async () => {
   if (!seguimientos[from]) return;
 
@@ -285,10 +285,10 @@ setTimeout(async () => {
     },
     { headers: { Authorization: `Bearer ${TOKEN}` } }
   );
-}, 3 * 60 * 1000);
+}, 40 * 60 * 1000);
 
 
-// ⏱️ Seguimiento 4 (30 min)
+// ⏱️ Seguimiento 4 (90 min)
 setTimeout(async () => {
   if (!seguimientos[from]) return;
 
@@ -301,10 +301,10 @@ setTimeout(async () => {
     },
     { headers: { Authorization: `Bearer ${TOKEN}` } }
   );
-}, 4 * 60 * 1000);
+}, 90 * 60 * 1000);
 
 
-// ⏱️ Seguimiento 5 (60 min)
+// ⏱️ Seguimiento 5 (180 min)
 setTimeout(async () => {
   if (!seguimientos[from]) return;
 
@@ -317,7 +317,7 @@ setTimeout(async () => {
     },
     { headers: { Authorization: `Bearer ${TOKEN}` } }
   );
-}, 5 * 60 * 1000);
+}, 3 * 60 * 60 * 1000);
 
 // ⏱️ REMARKETING FINAL (22 horas)
 setTimeout(async () => {
@@ -376,7 +376,7 @@ Toca el botón para activar tu descuento 👇`
       headers: { Authorization: `Bearer ${TOKEN}` }
     }
   );
-}, 6 * 60 * 1000);
+}, 22 * 60 * 60 * 1000);
 
       return res.sendStatus(200);
     }
@@ -545,10 +545,10 @@ setTimeout(async () => {
     },
     { headers: { Authorization: `Bearer ${TOKEN}` } }
   );
-}, 1 * 60 * 1000);
+}, 5 * 60 * 1000);
 
 
-// Seguimiento descuento 2 - 15 minutos
+// Seguimiento descuento 2 - 20 minutos
 setTimeout(async () => {
   if (!seguimientoDescuento[from]) return;
 
@@ -578,10 +578,10 @@ setTimeout(async () => {
     },
     { headers: { Authorization: `Bearer ${TOKEN}` } }
   );
-}, 2 * 60 * 1000);
+}, 20 * 60 * 1000);
 
 
-// Seguimiento descuento 3 - 30 minutos
+// Seguimiento descuento 3 - 60 minutos
 setTimeout(async () => {
   if (!seguimientoDescuento[from]) return;
 
@@ -611,7 +611,7 @@ setTimeout(async () => {
     },
     { headers: { Authorization: `Bearer ${TOKEN}` } }
   );
-}, 3 * 60 * 1000);
+}, 60 * 60 * 1000);
 
   return res.sendStatus(200);
 }
