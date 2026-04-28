@@ -55,6 +55,28 @@ mensajesProcesados.add(message.id);
 
     let text = "";
 
+if (text.includes("reset")) {
+
+  seguimientos[from] = false;
+  seguimientoDescuento[from] = false;
+
+  await axios.post(
+    `https://graph.facebook.com/v19.0/${PHONE_ID}/messages`,
+    {
+      messaging_product: "whatsapp",
+      to: from,
+      text: {
+        body: "🔄 Conversación reiniciada. Ya puedes probar como cliente nuevo."
+      }
+    },
+    {
+      headers: { Authorization: `Bearer ${TOKEN}` }
+    }
+  );
+
+  return res.sendStatus(200);
+}
+
 if (message.type === "text") {
   text = message.text.body.toLowerCase();
 }
