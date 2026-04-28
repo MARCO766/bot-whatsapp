@@ -91,7 +91,7 @@ if (
     // 💬 BLOQUE PRINCIPAL (HOLA)
     // =============================
     if (
-  (text.includes("HOLA") || text.includes("INFORMACION")) &&
+  (text.includes("hola") || text.includes("informacion") || text.includes("más información") || text.includes("mas informacion")) &&
   !seguimientos[from] &&
   !seguimientoDescuento[from]
 ) {
