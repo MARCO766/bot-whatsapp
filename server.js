@@ -254,7 +254,7 @@ setTimeout(async () => {
     },
     { headers: { Authorization: `Bearer ${TOKEN}` } }
   );
-}, 1 * 60 * 1000);
+}, 5 * 60 * 1000);
 
 
 // ⏱️ Seguimiento 2 (15 min)
@@ -270,7 +270,7 @@ setTimeout(async () => {
     },
     { headers: { Authorization: `Bearer ${TOKEN}` } }
   );
-}, 2 * 60 * 1000);
+}, 15 * 60 * 1000);
 
 
 // ⏱️ Seguimiento 3 (40 min)
@@ -286,7 +286,7 @@ setTimeout(async () => {
     },
     { headers: { Authorization: `Bearer ${TOKEN}` } }
   );
-}, 3 * 60 * 1000);
+}, 40 * 60 * 1000);
 
 
 // ⏱️ Seguimiento 4 (90 min)
@@ -302,7 +302,7 @@ setTimeout(async () => {
     },
     { headers: { Authorization: `Bearer ${TOKEN}` } }
   );
-}, 4 * 60 * 1000);
+}, 90 * 60 * 1000);
 
 
 // ⏱️ Seguimiento 5 (180 min)
@@ -318,7 +318,7 @@ setTimeout(async () => {
     },
     { headers: { Authorization: `Bearer ${TOKEN}` } }
   );
-}, 5 * 60 * 1000);
+}, 3 * 60 * 60 * 1000);
 
 // ⏱️ REMARKETING FINAL (22 horas)
 setTimeout(async () => {
