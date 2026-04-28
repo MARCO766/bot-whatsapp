@@ -60,22 +60,17 @@ if (message.type === "text") {
 }
 
 if (text.includes("reset")) {
-
-  seguimientos[from] = false;
-  seguimientoDescuento[from] = false;
+  delete seguimientos[from];
+  delete seguimientoDescuento[from];
 
   await axios.post(
     `https://graph.facebook.com/v19.0/${PHONE_ID}/messages`,
     {
       messaging_product: "whatsapp",
       to: from,
-      text: {
-        body: "🔄 Conversación reiniciada. Ya puedes probar como cliente nuevo."
-      }
+      text: { body: "🔄 Conversación reiniciada. Ya puedes probar como cliente nuevo." }
     },
-    {
-      headers: { Authorization: `Bearer ${TOKEN}` }
-    }
+    { headers: { Authorization: `Bearer ${TOKEN}` } }
   );
 
   return res.sendStatus(200);
