@@ -96,6 +96,12 @@ if (
   !seguimientoDescuento[from]
 ) {
 
+if (seguimientos[from]) {
+  return res.sendStatus(200);
+}
+
+seguimientos[from] = true;
+
       // 🥇 MENSAJE 1
       await axios.post(
         `https://graph.facebook.com/v19.0/${PHONE_ID}/messages`,
