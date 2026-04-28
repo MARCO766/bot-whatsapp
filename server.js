@@ -55,6 +55,10 @@ mensajesProcesados.add(message.id);
 
     let text = "";
 
+if (message.type === "text") {
+  text = message.text.body.toLowerCase();
+}
+
 if (text.includes("reset")) {
 
   seguimientos[from] = false;
@@ -75,10 +79,6 @@ if (text.includes("reset")) {
   );
 
   return res.sendStatus(200);
-}
-
-if (message.type === "text") {
-  text = message.text.body.toLowerCase();
 }
 
 if (message.type === "interactive") {
