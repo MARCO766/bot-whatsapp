@@ -475,7 +475,6 @@ if (text.includes("pagar_19")) {
 }
 
 else if (
-  message.type === "image" ||
   text.includes("ya pague") ||
   text.includes("ya pagué") ||
   text.includes("pague") ||
