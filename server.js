@@ -481,7 +481,8 @@ else if (
   text.includes("pague") ||
   text.includes("comprobante")
 ) {
-seguimientoDescuento[from] = false;
+delete seguimientos[from];
+delete seguimientoDescuento[from];
   reply = `🎉 ¡Perfecto! Ya recibimos tu aviso de pago 🙌
 
 Para validar tu comprobante y entregarte el pack completo, escríbeme aquí:
