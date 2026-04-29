@@ -442,7 +442,7 @@ if (text.includes("pagar_19")) {
       type: "image",
       image: {
   link: "https://i.ibb.co/xKCNJCsd/qr-code-1777073787629.png",
-  caption: "Escanea este QR y despues mandame el comprobante porfavor 🏦"
+  caption: "Escanea este QR y despues mandame el comprobante con la palabra: *YA PAGUÉ*"
 }
     },
     {
@@ -463,7 +463,7 @@ if (text.includes("pagar_19")) {
 📄 NRO DE CUENTA: 10000042106208
 👤 NOMBRE: MARCO ARIAS
 
-📩 Una vez hecho el pago envíame tu comprobante por favor`;
+📩 Una vez hecho el pago envíame tu comprobante con la palabra: *YA PAGUÉ*`;
 } 
     else if (text.includes("tigo")) {
   reply = `Perfecto 👍 este es el número para Tigo Money:
@@ -471,7 +471,7 @@ if (text.includes("pagar_19")) {
 📱 NÚMERO: 65818913
 👤 NOMBRE: MARCO ARIAS
 
-📩 Una vez hecho el pago envíame tu comprobante por favor`;
+📩 Una vez hecho el pago envíame tu comprobante con la palabra: *YA PAGUÉ*`;
 }
 
 else if (
@@ -508,7 +508,7 @@ seguimientoDescuento[from] = true;
 
 Ahora puedes pagar solo 19 Bs 💸
 
-👉 Escanea el QR y envíame el comprobante con: *YA PAGUÉ*`
+👉 Escanea el QR y envíame el comprobante con la palabra: *YA PAGUÉ*`
       }
     },
     {
