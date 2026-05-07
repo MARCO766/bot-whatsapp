@@ -833,7 +833,7 @@ app.get("/inbox", async (req, res) => {
   try {
 
     const response = await axios.get(
-  `${SUPABASE_URL}/rest/v1/mensajes?select=*`,
+      `${SUPABASE_URL}/rest/v1/mensajes?select=*`,
       {
         headers: {
           apikey: SUPABASE_KEY,
@@ -843,84 +843,67 @@ app.get("/inbox", async (req, res) => {
     );
 
     const mensajes = response.data || [];
-console.log("MENSAJES SUPABASE:", mensajes);
 
-    // AGRUPAR CONVERSACIONES
+    // ==========================
+    // AGRUPAR CHATS
+    // ==========================
+
     const conversaciones = {};
 
     mensajes.forEach(msg => {
 
-  const numeroCliente =
-    msg.cliente_numero ||
-    msg.numero ||
-    msg.from ||
-    msg.telefono ||
-    "sin_numero";
+      const numero =
+        msg.numero_de_cliente;
 
-  if (!conversaciones[numeroCliente]) {
-    conversaciones[numeroCliente] = [];
-  }
+      if (!conversaciones[numero]) {
+        conversaciones[numero] = [];
+      }
 
-  conversaciones[numeroCliente].push(msg);
+      conversaciones[numero].push(msg);
 
-});
+    });
 
-    // GENERAR HTML
+    // ==========================
+    // SIDEBAR
+    // ==========================
+
     let sidebar = "";
-    let firstChat = Object.keys(conversaciones)[0];
 
     Object.keys(conversaciones).forEach(numero => {
 
       const ultimo =
-        conversaciones[numero][conversaciones[numero].length - 1];
+        conversaciones[numero]
+        [conversaciones[numero].length - 1];
 
       sidebar += `
+
         <div class="chat-item"
              onclick="openChat('${numero}')">
 
-          <div class="chat-name">
+          <div class="chat-number">
             📱 ${numero}
           </div>
 
-          <div class="chat-last">
-            ${ultimo.mensaje || ""}
+          <div class="chat-preview">
+            ${ultimo.contenido || ""}
           </div>
 
         </div>
+
       `;
 
     });
 
-    // MENSAJES INICIALES
-    let mensajesHTML = "";
+    // ==========================
+    // PRIMER CHAT
+    // ==========================
 
-    if (firstChat) {
+    const firstChat =
+      Object.keys(conversaciones)[0] || "";
 
-      conversaciones[firstChat].forEach(msg => {
-
-        const tipo =
-          (msg.direccion === "saliente" || msg.role === "agent")
-            ? "agent-message"
-            : "client-message";
-
-        mensajesHTML += `
-          <div class="message ${tipo}">
-            ${msg.contenido || msg.texto || msg.body || ""}
-
-            <span class="message-time">
-              ${new Date(msg.creado_en || msg.fecha || Date.now())
-                .toLocaleTimeString("es-BO", {
-  timeZone: "America/La_Paz",
-  hour: "2-digit",
-  minute: "2-digit"
-})}
-            </span>
-          </div>
-        `;
-
-      });
-
-    }
+    // ==========================
+    // HTML
+    // ==========================
 
     res.send(`
 
@@ -931,35 +914,43 @@ console.log("MENSAJES SUPABASE:", mensajes);
 
 <meta charset="UTF-8">
 
-<title>MacBot CRM Inbox</title>
+<title>MacBot Inbox</title>
 
 <style>
+
+*{
+  box-sizing:border-box;
+}
 
 body{
   margin:0;
   font-family:Arial,sans-serif;
-  background:#111827;
+  background:#0f172a;
 }
+
+/* ========================== */
+/* LAYOUT */
+/* ========================== */
 
 .crm{
   display:flex;
   height:100vh;
 }
 
-/* ========================= */
+/* ========================== */
 /* SIDEBAR */
-/* ========================= */
+/* ========================== */
 
 .sidebar{
   width:320px;
-  background:#0f172a;
+  background:#111827;
   border-right:1px solid #1e293b;
   color:white;
   overflow-y:auto;
 }
 
 .logo{
-  padding:18px;
+  padding:20px;
   font-size:22px;
   font-weight:bold;
   background:#020617;
@@ -976,19 +967,19 @@ body{
   background:#1e293b;
 }
 
-.chat-name{
+.chat-number{
   font-weight:bold;
 }
 
-.chat-last{
+.chat-preview{
   font-size:13px;
+  margin-top:5px;
   color:#94a3b8;
-  margin-top:4px;
 }
 
-/* ========================= */
+/* ========================== */
 /* CHAT */
-/* ========================= */
+/* ========================== */
 
 .chat-container{
   flex:1;
@@ -997,7 +988,7 @@ body{
   background:#e5ddd5;
 }
 
-.chat-topbar{
+.chat-header{
   height:65px;
   background:#075e54;
   color:white;
@@ -1017,16 +1008,21 @@ body{
   gap:10px;
 }
 
+/* ========================== */
+/* MENSAJES */
+/* ========================== */
+
 .message{
   max-width:70%;
   padding:10px 14px;
+  border-radius:16px;
   font-size:15px;
   line-height:1.4;
-  animation:popup .15s ease;
   word-wrap:break-word;
+  animation:pop .15s ease;
 }
 
-@keyframes popup{
+@keyframes pop{
   from{
     opacity:0;
     transform:scale(.95);
@@ -1046,7 +1042,7 @@ body{
   border-radius:16px 16px 16px 5px;
 }
 
-/* AGENTE */
+/* BOT / AGENTE */
 
 .agent-message{
   align-self:flex-end;
@@ -1063,18 +1059,18 @@ body{
   margin-top:5px;
 }
 
-/* ========================= */
+/* ========================== */
 /* INPUT */
-/* ========================= */
+/* ========================== */
 
-.chat-input-area{
+.chat-input{
   background:#f0f2f5;
   padding:10px;
   display:flex;
   gap:10px;
 }
 
-.chat-input{
+.chat-input input{
   flex:1;
   border:none;
   outline:none;
@@ -1083,17 +1079,17 @@ body{
   font-size:15px;
 }
 
-.send-btn{
+.chat-input button{
   background:#25d366;
   color:white;
   border:none;
   border-radius:30px;
-  padding:13px 20px;
+  padding:14px 20px;
   cursor:pointer;
   font-weight:bold;
 }
 
-.send-btn:hover{
+.chat-input button:hover{
   background:#1ebe5d;
 }
 
@@ -1119,28 +1115,24 @@ body{
   <!-- CHAT -->
   <div class="chat-container">
 
-    <div class="chat-topbar">
+    <div class="chat-header">
       📱 WhatsApp Inbox
     </div>
 
-    <div id="messagesBox" class="messages-box">
-
-      ${mensajesHTML}
-
+    <div
+      id="messagesBox"
+      class="messages-box">
     </div>
 
-    <div class="chat-input-area">
+    <div class="chat-input">
 
       <input
         id="manualMessage"
-        class="chat-input"
         placeholder="Escribe un mensaje..."
       >
 
       <button
-        class="send-btn"
-        onclick="sendManualMessage()"
-      >
+        onclick="sendManualMessage()">
         Enviar
       </button>
 
@@ -1156,56 +1148,69 @@ const conversaciones =
   ${JSON.stringify(conversaciones)};
 
 let activeChat =
-  "${firstChat || ""}";
+  "${firstChat}";
 
-/* ========================= */
-/* ABRIR CHAT */
-/* ========================= */
+// ==========================
+// ABRIR CHAT
+// ==========================
 
 function openChat(numero){
 
   activeChat = numero;
+
+  renderMessages();
+
+}
+
+// ==========================
+// RENDER MENSAJES
+// ==========================
+
+function renderMessages(){
 
   const box =
     document.getElementById("messagesBox");
 
   box.innerHTML = "";
 
-  conversaciones[numero]
+  if(!conversaciones[activeChat]) return;
+
+  conversaciones[activeChat]
   .forEach(msg => {
 
     const tipo =
-      msg.tipo === "saliente"
+      msg.direccion === "saliente"
         ? "agent-message"
         : "client-message";
 
-    box.innerHTML += \`
-      <div class="message \${tipo}">
+    box.innerHTML +=
+      '<div class="message ' + tipo + '">' +
 
-        \${msg.mensaje}
+      (msg.contenido || '') +
 
-        <span class="message-time">
+      '<span class="message-time">' +
 
-          \${new Date(msg.created_at)
-            .toLocaleTimeString([], {
-              hour:'2-digit',
-              minute:'2-digit'
-            })}
+      new Date(msg.creado_en)
+      .toLocaleTimeString("es-BO", {
+        timeZone: "America/La_Paz",
+        hour: "2-digit",
+        minute: "2-digit"
+      }) +
 
-        </span>
+      '</span>' +
 
-      </div>
-    \`;
+      '</div>';
 
   });
 
-  scrollBottom();
+  box.scrollTop =
+    box.scrollHeight;
 
 }
 
-/* ========================= */
-/* ENVIAR MANUAL */
-/* ========================= */
+// ==========================
+// ENVIAR MANUAL
+// ==========================
 
 async function sendManualMessage(){
 
@@ -1215,32 +1220,22 @@ async function sendManualMessage(){
   const text =
     input.value.trim();
 
-  if(!text || !activeChat) return;
-
-  // MOSTRAR EN PANTALLA
-  const box =
-    document.getElementById("messagesBox");
-
-  box.innerHTML += \`
-    <div class="message agent-message">
-
-      \${text}
-
-      <span class="message-time">
-        \${new Date().toLocaleTimeString([],{
-          hour:'2-digit',
-          minute:'2-digit'
-        })}
-      </span>
-
-    </div>
-  \`;
-
-  scrollBottom();
+  if(!text || !activeChat){
+    return;
+  }
 
   input.value = "";
 
-  // ENVÍO REAL
+  // MOSTRAR INSTANTE
+  conversaciones[activeChat].push({
+    direccion:"saliente",
+    contenido:text,
+    creado_en:new Date()
+  });
+
+  renderMessages();
+
+  // ENVIAR REAL
   await fetch("/send-manual-message",{
     method:"POST",
     headers:{
@@ -1254,23 +1249,32 @@ async function sendManualMessage(){
 
 }
 
-/* ========================= */
-/* AUTO SCROLL */
-/* ========================= */
+// ==========================
+// AUTO REFRESH
+// ==========================
 
-function scrollBottom(){
+setInterval(async () => {
 
-  const box =
-    document.getElementById("messagesBox");
+  if(!activeChat) return;
 
-  box.scrollTop =
-    box.scrollHeight;
+  const response =
+    await fetch(
+      "/get-messages/" + activeChat
+    );
 
-}
+  const mensajes =
+    await response.json();
 
-scrollBottom();
+  conversaciones[activeChat] =
+    mensajes;
 
-/* ENTER */
+  renderMessages();
+
+}, 3000);
+
+// ==========================
+// ENTER
+// ==========================
 
 document
 .getElementById("manualMessage")
@@ -1283,51 +1287,12 @@ document
 });
 
 // ==========================
-// AUTO REFRESH SOLO MENSAJES
+// INICIAR
 // ==========================
 
-setInterval(async () => {
-
-  if (!activeChat) return;
-
-  try {
-
-    const response = await fetch("/get-messages/" + activeChat);
-
-    const mensajes = await response.json();
-
-    const box =
-      document.getElementById("messagesBox");
-
-    box.innerHTML +=
-  '<div class="message ' + tipo + '">' +
-    (msg.contenido || '') +
-
-    '<span class="message-time">' +
-
-      new Date(msg.creado_en)
-      .toLocaleTimeString("es-BO", {
-        timeZone: "America/La_Paz",
-        hour: "2-digit",
-        minute: "2-digit"
-      }) +
-
-    '</span>' +
-
-  '</div>';
-
-    });
-
-    // AUTO SCROLL ABAJO
-    box.scrollTop = box.scrollHeight;
-
-  } catch (err) {
-
-    console.log(err);
-
-  }
-
-}, 3000);
+if(activeChat){
+  renderMessages();
+}
 
 </script>
 
@@ -1341,104 +1306,6 @@ setInterval(async () => {
     console.log(error.message);
 
     res.send("Error cargando inbox");
-
-  }
-
-});
-
-// ==========================
-// ENVIAR MENSAJE MANUAL DESDE INBOX
-// ==========================
-
-app.post("/send-manual-message", async (req, res) => {
-  try {
-    const { numero, mensaje } = req.body;
-
-    if (!numero || !mensaje) {
-      return res.status(400).json({
-        error: "Falta numero o mensaje"
-      });
-    }
-
-    // 1. Enviar a WhatsApp
-    await axios.post(
-      `https://graph.facebook.com/v20.0/${PHONE_ID}/messages`,
-      {
-        messaging_product: "whatsapp",
-        to: numero,
-        type: "text",
-        text: {
-          body: mensaje
-        }
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${TOKEN}`,
-          "Content-Type": "application/json"
-        }
-      }
-    );
-
-    // 2. Guardar en Supabase como saliente
-    await axios.post(
-      `${SUPABASE_URL}/rest/v1/mensajes`,
-      {
-        numero_de_cliente: numero,
-        direccion: "saliente",
-        tipo: "texto",
-        contenido: mensaje
-      },
-      {
-        headers: {
-          apikey: SUPABASE_KEY,
-          Authorization: `Bearer ${SUPABASE_KEY}`,
-          "Content-Type": "application/json",
-          Prefer: "return=minimal"
-        }
-      }
-    );
-
-    res.json({
-      ok: true,
-      mensaje: "Mensaje enviado"
-    });
-
-  } catch (error) {
-    console.log("ERROR ENVIANDO MANUAL:", error.response?.data || error.message);
-
-    res.status(500).json({
-      error: error.response?.data || error.message
-    });
-  }
-});
-
-// ==========================
-// OBTENER MENSAJES DE CHAT
-// ==========================
-
-app.get("/get-messages/:numero", async (req, res) => {
-
-  try {
-
-    const numero = req.params.numero;
-
-    const response = await axios.get(
-      `${SUPABASE_URL}/rest/v1/mensajes?numero_de_cliente=eq.${numero}&select=*`,
-      {
-        headers: {
-          apikey: SUPABASE_KEY,
-          Authorization: `Bearer ${SUPABASE_KEY}`
-        }
-      }
-    );
-
-    res.json(response.data || []);
-
-  } catch (error) {
-
-    console.log(error.message);
-
-    res.json([]);
 
   }
 
