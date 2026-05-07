@@ -794,63 +794,34 @@ tiempo_seguimiento
 // 🚀 SERVIDOR
 const PORT = process.env.PORT || 3000;
 
-// ==========================
-// ✍️ RESPONDER MANUAL DESDE INBOX
-// ==========================
+// =========================
+// ✍️ RESPONDER MANUAL
+// =========================
 
 app.post("/inbox/responder", async (req, res) => {
-  try {
-    const { numero, respuesta } = req.body;
+  const { numero, respuesta } = req.body;
 
-    if (!numero || !respuesta) {
-      return res.send("Falta número o respuesta");
+  await axios.post(
+    `https://graph.facebook.com/v19.0/${PHONE_ID}/messages`,
+    {
+      messaging_product: "whatsapp",
+      to: numero,
+      text: {
+        body: respuesta
+      }
+    },
+    {
+      headers: {
+        Authorization: `Bearer ${TOKEN}`,
+        "Content-Type": "application/json"
+      }
     }
+  );
 
-    // 1. ENVIAR A WHATSAPP
-    await axios.post(
-      `https://graph.facebook.com/v19.0/${PHONE_ID}/messages`,
-      {
-        messaging_product: "whatsapp",
-        to: numero,
-        type: "text",
-        text: {
-          body: respuesta
-        }
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${TOKEN}`,
-          "Content-Type": "application/json"
-        }
-      }
-    );
-
-    // 2. GUARDAR EN SUPABASE COMO SALIENTE
-    await axios.post(
-      `${SUPABASE_URL}/rest/v1/mensajes`,
-      {
-        numero_de_cliente: numero,
-        direccion: "saliente",
-        tipo: "text",
-        contenido: respuesta,
-        imagen_url: null
-      },
-      {
-        headers: {
-          apikey: SUPABASE_KEY,
-          Authorization: `Bearer ${SUPABASE_KEY}`,
-          "Content-Type": "application/json"
-        }
-      }
-    );
-
-    // 3. VOLVER AL INBOX
-    res.redirect("/inbox");
-
-  } catch (error) {
-    console.log("ERROR RESPONDER:", error.response?.data || error.message);
-    res.send("Error enviando respuesta. Revisa Railway Logs.");
-  }
+  res.send(`
+    <h1>✅ Respuesta enviada</h1>
+    <a href="/inbox">Volver al inbox</a>
+  `);
 });
 
 app.listen(PORT, () => {
@@ -915,198 +886,186 @@ app.get("/inbox", async (req, res) => {
 <title>WhatsApp Inbox Ultra Pro</title>
 
 <style>
-*{
-  box-sizing:border-box;
-}
+*{box-sizing:border-box}
 
 body{
   margin:0;
   font-family:Arial, sans-serif;
-  background:#0f172a;
+  background:#0b141a;
 }
 
 .crm{
   display:flex;
   height:100vh;
+  background:#0b141a;
 }
 
-/* SIDEBAR */
-
 .sidebar{
-  width:330px;
-  background:#111827;
+  width:320px;
+  background:#111b21;
   color:white;
-  border-right:1px solid #1f2937;
+  border-right:1px solid #263238;
   overflow-y:auto;
 }
 
 .logo{
-  padding:20px;
-  font-size:22px;
+  padding:18px;
+  font-size:20px;
   font-weight:bold;
-  background:#020617;
-  border-bottom:1px solid #1f2937;
+  background:#202c33;
+  color:#e9edef;
 }
 
 .chat-item{
   display:flex;
-  gap:12px;
   padding:14px;
+  border-bottom:1px solid #222d34;
   cursor:pointer;
-  border-bottom:1px solid #1f2937;
-  transition:.2s;
 }
 
 .chat-item:hover{
-  background:#1f2937;
+  background:#202c33;
 }
 
 .avatar{
   width:42px;
   height:42px;
   border-radius:50%;
-  background:#25d366;
+  background:#00a884;
   display:flex;
   align-items:center;
   justify-content:center;
-  font-size:20px;
-}
-
-.chat-info{
-  flex:1;
-  overflow:hidden;
+  margin-right:12px;
 }
 
 .chat-numero{
+  color:#e9edef;
   font-weight:bold;
-  font-size:14px;
 }
 
 .chat-preview{
+  color:#8696a0;
   font-size:13px;
-  color:#94a3b8;
   margin-top:4px;
-  white-space:nowrap;
-  overflow:hidden;
-  text-overflow:ellipsis;
 }
-
-/* CHAT */
 
 .chat-area{
   flex:1;
   display:flex;
   flex-direction:column;
-  background:#e5ddd5;
+  background:#0b141a;
 }
 
 .chat-header{
-  height:65px;
-  background:#075e54;
-  color:white;
+  height:64px;
+  background:#202c33;
+  color:#e9edef;
   display:flex;
   align-items:center;
   padding:0 20px;
   font-size:18px;
   font-weight:bold;
-  box-shadow:0 1px 3px rgba(0,0,0,.25);
 }
 
 .status{
   font-size:12px;
-  margin-left:10px;
-  color:#dcfce7;
+  color:#8696a0;
+  margin-left:8px;
 }
 
 .messages{
   flex:1;
-  padding:20px;
+  padding:18px;
   overflow-y:auto;
   display:flex;
   flex-direction:column;
-  gap:10px;
+  gap:8px;
+  background-color:#0b141a;
+  background-image:
+    radial-gradient(circle at 20px 20px, rgba(255,255,255,.03) 2px, transparent 3px);
+  background-size:60px 60px;
 }
 
 .message{
-  max-width:70%;
-  padding:10px 14px;
+  max-width:65%;
+  padding:8px 10px 6px 10px;
   font-size:15px;
-  line-height:1.4;
-  color:#111827;
+  line-height:1.35;
+  color:#e9edef;
   word-wrap:break-word;
-  box-shadow:0 1px 2px rgba(0,0,0,.12);
-  animation:pop .15s ease;
-}
-
-@keyframes pop{
-  from{
-    opacity:0;
-    transform:scale(.95);
-  }
-  to{
-    opacity:1;
-    transform:scale(1);
-  }
+  box-shadow:0 1px .5px rgba(0,0,0,.4);
 }
 
 .entrante{
   align-self:flex-start;
-  background:white;
-  border-radius:16px 16px 16px 5px;
+  background:#202c33;
+  border-radius:0 12px 12px 12px;
 }
 
 .saliente{
   align-self:flex-end;
-  background:#dcf8c6;
-  border-radius:16px 16px 5px 16px;
+  background:#005c4b;
+  border-radius:12px 0 12px 12px;
 }
 
 .time{
-  display:block;
-  text-align:right;
+  display:inline-block;
+  float:right;
   font-size:11px;
-  color:#667085;
-  margin-top:5px;
+  color:#aebac1;
+  margin-left:10px;
+  margin-top:4px;
 }
-
-.empty{
-  margin:auto;
-  color:#64748b;
-  font-size:22px;
-}
-
-/* FORM */
 
 .chat-input{
-  background:#f0f2f5;
-  padding:10px;
+  height:64px;
+  background:#202c33;
+  padding:9px 12px;
   display:flex;
+  align-items:center;
   gap:10px;
-  border-top:1px solid #d1d5db;
 }
 
 .chat-input input[type="text"]{
   flex:1;
+  height:44px;
   border:none;
   outline:none;
-  border-radius:30px;
-  padding:14px 18px;
-  font-size:15px;
-  background:white;
+  border-radius:25px;
+  padding:0 18px;
+  font-size:16px;
+  background:#2a3942;
+  color:#e9edef;
+}
+
+.chat-input input::placeholder{
+  color:#8696a0;
 }
 
 .chat-input button{
+  width:46px;
+  height:46px;
   border:none;
-  background:#25d366;
+  border-radius:50%;
+  background:#00a884;
   color:white;
-  font-weight:bold;
-  padding:14px 22px;
-  border-radius:30px;
+  font-size:0;
   cursor:pointer;
+  position:relative;
 }
 
-.chat-input button:hover{
-  background:#1ebe5d;
+.chat-input button::after{
+  content:"➤";
+  font-size:20px;
+  position:absolute;
+  left:15px;
+  top:11px;
+}
+
+.empty{
+  margin:auto;
+  color:#8696a0;
+  font-size:20px;
 }
 </style>
 </head>
