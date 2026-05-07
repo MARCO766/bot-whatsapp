@@ -794,87 +794,43 @@ tiempo_seguimiento
 // 🚀 SERVIDOR
 const PORT = process.env.PORT || 3000;
 
-// ==========================
+// =========================
 // ✍️ RESPONDER MANUAL
-// ==========================
+// =========================
 
 app.post("/inbox/responder", async (req, res) => {
+  const { numero, respuesta } = req.body;
 
-  try {
-
-    const numero = req.body.numero;
-    const respuesta =
-      req.body.respuesta || req.body.mensaje;
-
-    if (!numero || !respuesta) {
-
-      return res.status(400).json({
-        ok: false,
-        error: "Falta numero o respuesta"
-      });
-
+  await axios.post(
+    `https://graph.facebook.com/v19.0/${PHONE_ID}/messages`,
+    {
+      messaging_product: "whatsapp",
+      to: numero,
+      text: {
+        body: respuesta
+      }
+    },
+    {
+      headers: {
+        Authorization: `Bearer ${TOKEN}`,
+        "Content-Type": "application/json"
+      }
     }
+  );
 
-    // ENVIAR A WHATSAPP
-    await axios.post(
-      `https://graph.facebook.com/v19.0/${PHONE_ID}/messages`,
-      {
-        messaging_product: "whatsapp",
-        to: numero,
-        type: "text",
-        text: {
-          body: respuesta
-        }
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${TOKEN}`,
-          "Content-Type": "application/json"
-        }
-      }
-    );
-
-    // GUARDAR MENSAJE
-    await axios.post(
-      `${SUPABASE_URL}/rest/v1/mensajes`,
-      {
-        numero_de_cliente: numero,
-        direccion: "saliente",
-        tipo: "text",
-        contenido: respuesta,
-        imagen_url: null
-      },
-      {
-        headers: {
-          apikey: SUPABASE_KEY,
-          Authorization: `Bearer ${SUPABASE_KEY}`,
-          "Content-Type": "application/json"
-        }
-      }
-    );
-
-    res.json({
-      ok: true
-    });
-
-  } catch (error) {
-
-    console.log(
-      "ERROR RESPONDER:",
-      error.response?.data || error.message
-    );
-
-    res.status(500).json({
-      ok: false
-    });
-
-  }
-
+  res.send(`
+    <h1>✅ Respuesta enviada</h1>
+    <a href="/inbox">Volver al inbox</a>
+  `);
 });
 
-// ==========================
-// 💬 WHATSAPP INBOX VISUAL PRO
-// ==========================
+app.listen(PORT, () => {
+  console.log("🚀 Servidor corriendo en puerto", PORT);
+});
+
+// =========================
+// 📥 INBOX VISUAL
+// =========================
 
 app.get("/inbox", async (req, res) => {
 
@@ -890,476 +846,53 @@ app.get("/inbox", async (req, res) => {
       }
     );
 
-    const mensajes = response.data || [];
+    let html = `
+    <h1>MacBot Inbox</h1>
+    `;
 
-    // ==========================
-    // AGRUPAR CHATS
-    // ==========================
+    response.data.reverse().forEach(msg => {
 
-    const conversaciones = {};
+      html += `
+      <div style="
+        border:1px solid #ccc;
+        padding:10px;
+        margin:10px;
+        border-radius:10px;
+      ">
 
-    mensajes.forEach(msg => {
+      <b>${msg.cliente_numero}</b><br>
+      ${msg.contenido || ""}<br>
+<form method="POST" action="/inbox/responder">
 
-      const numero =
-        msg.numero_de_cliente;
+  <input
+    type="hidden"
+    name="numero"
+    value="${msg.cliente_numero}"
+  >
 
-      if (!conversaciones[numero]) {
-        conversaciones[numero] = [];
-      }
+  <textarea
+    name="respuesta"
+    rows="3"
+    cols="40"
+    placeholder="Responder..."
+  ></textarea><br><br>
 
-      conversaciones[numero].push(msg);
+  <button type="submit">
+    Enviar respuesta
+  </button>
 
-    });
+</form>
 
-    // ==========================
-    // SIDEBAR
-    // ==========================
-
-    let sidebar = "";
-
-    Object.keys(conversaciones).forEach(numero => {
-
-      const ultimo =
-        conversaciones[numero]
-        [conversaciones[numero].length - 1];
-
-      sidebar += `
-
-        <div class="chat-item"
-             onclick="openChat('${numero}')">
-
-          <div class="chat-number">
-            📱 ${numero}
-          </div>
-
-          <div class="chat-preview">
-            ${ultimo.contenido || ""}
-          </div>
-
-        </div>
-
+      </div>
       `;
-
     });
 
-    // ==========================
-    // PRIMER CHAT
-    // ==========================
-
-    const firstChat =
-      Object.keys(conversaciones)[0] || "";
-
-    // ==========================
-    // HTML
-    // ==========================
-
-    res.send(`
-
-<!DOCTYPE html>
-<html lang="es">
-
-<head>
-
-<meta charset="UTF-8">
-
-<title>MacBot Inbox</title>
-
-<style>
-
-*{
-  box-sizing:border-box;
-}
-
-body{
-  margin:0;
-  font-family:Arial,sans-serif;
-  background:#0f172a;
-}
-
-/* ========================== */
-/* LAYOUT */
-/* ========================== */
-
-.crm{
-  display:flex;
-  height:100vh;
-}
-
-/* ========================== */
-/* SIDEBAR */
-/* ========================== */
-
-.sidebar{
-  width:320px;
-  background:#111827;
-  border-right:1px solid #1e293b;
-  color:white;
-  overflow-y:auto;
-}
-
-.logo{
-  padding:20px;
-  font-size:22px;
-  font-weight:bold;
-  background:#020617;
-}
-
-.chat-item{
-  padding:15px;
-  border-bottom:1px solid #1e293b;
-  cursor:pointer;
-  transition:.2s;
-}
-
-.chat-item:hover{
-  background:#1e293b;
-}
-
-.chat-number{
-  font-weight:bold;
-}
-
-.chat-preview{
-  font-size:13px;
-  margin-top:5px;
-  color:#94a3b8;
-}
-
-/* ========================== */
-/* CHAT */
-/* ========================== */
-
-.chat-container{
-  flex:1;
-  display:flex;
-  flex-direction:column;
-  background:#e5ddd5;
-}
-
-.chat-header{
-  height:65px;
-  background:#075e54;
-  color:white;
-  display:flex;
-  align-items:center;
-  padding:0 20px;
-  font-size:18px;
-  font-weight:bold;
-}
-
-.messages-box{
-  flex:1;
-  overflow-y:auto;
-  padding:20px;
-  display:flex;
-  flex-direction:column;
-  gap:10px;
-}
-
-/* ========================== */
-/* MENSAJES */
-/* ========================== */
-
-.message{
-  max-width:70%;
-  padding:10px 14px;
-  border-radius:16px;
-  font-size:15px;
-  line-height:1.4;
-  word-wrap:break-word;
-  animation:pop .15s ease;
-}
-
-@keyframes pop{
-  from{
-    opacity:0;
-    transform:scale(.95);
-  }
-  to{
-    opacity:1;
-    transform:scale(1);
-  }
-}
-
-/* CLIENTE */
-
-.client-message{
-  align-self:flex-start;
-  background:white;
-  color:#111827;
-  border-radius:16px 16px 16px 5px;
-}
-
-/* BOT / AGENTE */
-
-.agent-message{
-  align-self:flex-end;
-  background:#dcf8c6;
-  color:#111827;
-  border-radius:16px 16px 5px 16px;
-}
-
-.message-time{
-  display:block;
-  text-align:right;
-  font-size:11px;
-  color:#667085;
-  margin-top:5px;
-}
-
-/* ========================== */
-/* INPUT */
-/* ========================== */
-
-.chat-input{
-  background:#f0f2f5;
-  padding:10px;
-  display:flex;
-  gap:10px;
-}
-
-.chat-input input{
-  flex:1;
-  border:none;
-  outline:none;
-  border-radius:30px;
-  padding:14px 18px;
-  font-size:15px;
-}
-
-.chat-input button{
-  background:#25d366;
-  color:white;
-  border:none;
-  border-radius:30px;
-  padding:14px 20px;
-  cursor:pointer;
-  font-weight:bold;
-}
-
-.chat-input button:hover{
-  background:#1ebe5d;
-}
-
-</style>
-
-</head>
-
-<body>
-
-<div class="crm">
-
-  <!-- SIDEBAR -->
-  <div class="sidebar">
-
-    <div class="logo">
-      💬 MacBot CRM
-    </div>
-
-    ${sidebar}
-
-  </div>
-
-  <!-- CHAT -->
-  <div class="chat-container">
-
-    <div class="chat-header">
-      📱 WhatsApp Inbox
-    </div>
-
-    <div
-      id="messagesBox"
-      class="messages-box">
-    </div>
-
-    <div class="chat-input">
-
-      <input
-        id="manualMessage"
-        placeholder="Escribe un mensaje..."
-      >
-
-      <button
-        onclick="sendManualMessage()">
-        Enviar
-      </button>
-
-    </div>
-
-  </div>
-
-</div>
-
-<script>
-
-const conversaciones =
-  ${JSON.stringify(conversaciones)};
-
-let activeChat =
-  "${firstChat}";
-
-// ==========================
-// ABRIR CHAT
-// ==========================
-
-function openChat(numero){
-
-  activeChat = numero;
-
-  renderMessages();
-
-}
-
-// ==========================
-// RENDER MENSAJES
-// ==========================
-
-function renderMessages(){
-
-  const box =
-    document.getElementById("messagesBox");
-
-  box.innerHTML = "";
-
-  if(!conversaciones[activeChat]) return;
-
-  conversaciones[activeChat]
-  .forEach(msg => {
-
-    const tipo =
-      msg.direccion === "saliente"
-        ? "agent-message"
-        : "client-message";
-
-    box.innerHTML +=
-      '<div class="message ' + tipo + '">' +
-
-      (msg.contenido || '') +
-
-      '<span class="message-time">' +
-
-      new Date(msg.creado_en)
-.toLocaleTimeString("es-BO", {
-  timeZone: "America/La_Paz",
-  hour: "2-digit",
-  minute: "2-digit"
-}) +
-
-      '</span>' +
-
-      '</div>';
-
-  });
-
-  box.scrollTop =
-    box.scrollHeight;
-
-}
-
-// ==========================
-// ENVIAR MANUAL
-// ==========================
-
-async function sendManualMessage(){
-
-  const input =
-    document.getElementById("manualMessage");
-
-  const text =
-    input.value.trim();
-
-  if(!text || !activeChat){
-    return;
-  }
-
-  input.value = "";
-
-  // MOSTRAR INSTANTE
-  conversaciones[activeChat].push({
-    direccion:"saliente",
-    contenido:text,
-    creado_en:new Date()
-  });
-
-  renderMessages();
-
-  // ENVIAR REAL
-  await fetch("/send-manual-message",{
-    method:"POST",
-    headers:{
-      "Content-Type":"application/json"
-    },
-    body:JSON.stringify({
-      numero:activeChat,
-      mensaje:text
-    })
-  });
-
-}
-
-// ==========================
-// AUTO REFRESH
-// ==========================
-
-setInterval(async () => {
-
-  if(!activeChat) return;
-
-  const response =
-    await fetch(
-      "/get-messages/" + activeChat
-    );
-
-  const mensajes =
-    await response.json();
-
-  conversaciones[activeChat] =
-    mensajes;
-
-  renderMessages();
-
-}, 3000);
-
-// ==========================
-// ENTER
-// ==========================
-
-document
-.getElementById("manualMessage")
-.addEventListener("keydown",e=>{
-
-  if(e.key==="Enter"){
-    sendManualMessage();
-  }
-
-});
-
-// ==========================
-// INICIAR
-// ==========================
-
-if(activeChat){
-  renderMessages();
-}
-
-</script>
-
-</body>
-</html>
-
-`);
+    res.send(html);
 
   } catch (error) {
 
-    console.log(error.message);
-
-    res.send("Error cargando inbox");
+    res.send(error.message);
 
   }
 
 });
-
-app.listen(PORT, () => {
-  console.log("🚀 Servidor corriendo en puerto", PORT);
-});
-
