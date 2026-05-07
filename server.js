@@ -821,9 +821,9 @@ app.post("/inbox/responder", async (req, res) => {
 await axios.post(
   `${SUPABASE_URL}/rest/v1/mensajes`,
   {
-    numero_de_cliente: numero,
-    direccion: "saliente",
-    tipo: "text",
+    número_de_cliente: numero,
+    dirección: "saliente",
+    tipo: "texto",
     contenido: respuesta,
     imagen_url: null
   },
@@ -866,7 +866,7 @@ app.get("/inbox", async (req, res) => {
     const conversaciones = {};
 
     mensajes.forEach(msg => {
-      const numero = msg.numero_de_cliente || msg.cliente_numero;
+      const numero = msg["número_de_cliente"];
 
       if (!numero) return;
 
@@ -1144,7 +1144,7 @@ function renderMensajes(){
   }
 
   conversaciones[chatActual].forEach(msg => {
-    const clase = msg.direccion === "saliente" ? "saliente" : "entrante";
+    const clase = msg["dirección"] === "saliente" ? "saliente" : "entrante";
 
     box.innerHTML +=
       '<div class="message ' + clase + '">' +
