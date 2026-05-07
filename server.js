@@ -837,7 +837,7 @@ app.get("/inbox", async (req, res) => {
   try {
 
     const response = await axios.get(
-      `${SUPABASE_URL}/rest/v1/mensajes?select=*&order=created_at.asc`,
+  `${SUPABASE_URL}/rest/v1/mensajes?select=*`,
       {
         headers: {
           apikey: SUPABASE_KEY,
@@ -904,7 +904,7 @@ app.get("/inbox", async (req, res) => {
             ${msg.mensaje}
 
             <span class="message-time">
-              ${new Date(msg.created_at)
+              ${new Date(msg.created_at || msg.fecha || Date.now())
                 .toLocaleTimeString([], {
                   hour: '2-digit',
                   minute: '2-digit'
