@@ -98,8 +98,8 @@ await axios.post(
 await axios.post(
   `${SUPABASE_URL}/rest/v1/mensajes`,
   {
-    "número_de_cliente": from,
-"dirección": "entrante",
+    cliente_numero: from,
+    direccion: "entrante",
     tipo: message.type,
     contenido: text || "",
     imagen_url: message.image ? message.image.id : null
@@ -116,7 +116,7 @@ await axios.post(
 await axios.post(
   `${SUPABASE_URL}/rest/v1/conversaciones`,
   {
-    "número_de_cliente": from,
+    cliente_numero: from,
     ultimo_mensaje: text || message.type,
     ultimo_mensaje_en: new Date().toISOString(),
     estado: "abierta"
@@ -817,24 +817,6 @@ app.post("/inbox/responder", async (req, res) => {
       }
     }
   );
-// GUARDAR MENSAJE SALIENTE
-await axios.post(
-  `${SUPABASE_URL}/rest/v1/mensajes`,
-  {
-    número_de_cliente: numero,
-    dirección: "saliente",
-    tipo: "texto",
-    contenido: respuesta,
-    imagen_url: null
-  },
-  {
-    headers: {
-      apikey: SUPABASE_KEY,
-      Authorization: `Bearer ${SUPABASE_KEY}`,
-      "Content-Type": "application/json"
-    }
-  }
-);
 
   res.send(`
     <h1>✅ Respuesta enviada</h1>
@@ -846,12 +828,14 @@ app.listen(PORT, () => {
   console.log("🚀 Servidor corriendo en puerto", PORT);
 });
 
-// ==========================
-// 💬 WHATSAPP INBOX VISUAL ULTRA PRO
-// ==========================
+// =========================
+// 📥 INBOX VISUAL
+// =========================
 
 app.get("/inbox", async (req, res) => {
+
   try {
+
     const response = await axios.get(
       `${SUPABASE_URL}/rest/v1/mensajes?select=*`,
       {
@@ -862,312 +846,53 @@ app.get("/inbox", async (req, res) => {
       }
     );
 
-    const mensajes = response.data || [];
-    const conversaciones = {};
+    let html = `
+    <h1>MacBot Inbox</h1>
+    `;
 
-    mensajes.forEach(msg => {
-      const numero = msg["número_de_cliente"];
+    response.data.reverse().forEach(msg => {
 
-      if (!numero) return;
+      html += `
+      <div style="
+        border:1px solid #ccc;
+        padding:10px;
+        margin:10px;
+        border-radius:10px;
+      ">
 
-      if (!conversaciones[numero]) {
-        conversaciones[numero] = [];
-      }
+      <b>${msg.cliente_numero}</b><br>
+      ${msg.contenido || ""}<br>
+<form method="POST" action="/inbox/responder">
 
-      conversaciones[numero].push(msg);
-    });
+  <input
+    type="hidden"
+    name="numero"
+    value="${msg.cliente_numero}"
+  >
 
-    const numeros = Object.keys(conversaciones);
-    const primerChat = numeros[0] || "";
+  <textarea
+    name="respuesta"
+    rows="3"
+    cols="40"
+    placeholder="Responder..."
+  ></textarea><br><br>
 
-    let sidebarHTML = "";
+  <button type="submit">
+    Enviar respuesta
+  </button>
 
-    numeros.forEach(numero => {
-      const ultimo = conversaciones[numero][conversaciones[numero].length - 1];
+</form>
 
-      sidebarHTML += `
-        <div class="chat-item" onclick="abrirChat('${numero}')">
-          <div class="avatar">👤</div>
-          <div class="chat-info">
-            <div class="chat-numero">${numero}</div>
-            <div class="chat-preview">${ultimo.contenido || ""}</div>
-          </div>
-        </div>
+      </div>
       `;
     });
 
-    res.send(`
-<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8">
-<title>WhatsApp Inbox Ultra Pro</title>
-
-<style>
-*{box-sizing:border-box}
-
-body{
-  margin:0;
-  font-family:Arial, sans-serif;
-  background:#0b141a;
-}
-
-.crm{
-  display:flex;
-  height:100vh;
-  background:#0b141a;
-}
-
-.sidebar{
-  width:320px;
-  background:#111b21;
-  color:white;
-  border-right:1px solid #263238;
-  overflow-y:auto;
-}
-
-.logo{
-  padding:18px;
-  font-size:20px;
-  font-weight:bold;
-  background:#202c33;
-  color:#e9edef;
-}
-
-.chat-item{
-  display:flex;
-  padding:14px;
-  border-bottom:1px solid #222d34;
-  cursor:pointer;
-}
-
-.chat-item:hover{
-  background:#202c33;
-}
-
-.avatar{
-  width:42px;
-  height:42px;
-  border-radius:50%;
-  background:#00a884;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  margin-right:12px;
-}
-
-.chat-numero{
-  color:#e9edef;
-  font-weight:bold;
-}
-
-.chat-preview{
-  color:#8696a0;
-  font-size:13px;
-  margin-top:4px;
-}
-
-.chat-area{
-  flex:1;
-  display:flex;
-  flex-direction:column;
-  background:#0b141a;
-}
-
-.chat-header{
-  height:64px;
-  background:#202c33;
-  color:#e9edef;
-  display:flex;
-  align-items:center;
-  padding:0 20px;
-  font-size:18px;
-  font-weight:bold;
-}
-
-.status{
-  font-size:12px;
-  color:#8696a0;
-  margin-left:8px;
-}
-
-.messages{
-  flex:1;
-  padding:18px;
-  overflow-y:auto;
-  display:flex;
-  flex-direction:column;
-  gap:8px;
-  background-color:#0b141a;
-  background-image:
-    radial-gradient(circle at 20px 20px, rgba(255,255,255,.03) 2px, transparent 3px);
-  background-size:60px 60px;
-}
-
-.message{
-  max-width:65%;
-  padding:8px 10px 6px 10px;
-  font-size:15px;
-  line-height:1.35;
-  color:#e9edef;
-  word-wrap:break-word;
-  box-shadow:0 1px .5px rgba(0,0,0,.4);
-}
-
-.entrante{
-  align-self:flex-start;
-  background:#202c33;
-  border-radius:0 12px 12px 12px;
-}
-
-.saliente{
-  align-self:flex-end;
-  background:#005c4b;
-  border-radius:12px 0 12px 12px;
-}
-
-.time{
-  display:inline-block;
-  float:right;
-  font-size:11px;
-  color:#aebac1;
-  margin-left:10px;
-  margin-top:4px;
-}
-
-.chat-input{
-  height:64px;
-  background:#202c33;
-  padding:9px 12px;
-  display:flex;
-  align-items:center;
-  gap:10px;
-}
-
-.chat-input input[type="text"]{
-  flex:1;
-  height:44px;
-  border:none;
-  outline:none;
-  border-radius:25px;
-  padding:0 18px;
-  font-size:16px;
-  background:#2a3942;
-  color:#e9edef;
-}
-
-.chat-input input::placeholder{
-  color:#8696a0;
-}
-
-.chat-input button{
-  width:46px;
-  height:46px;
-  border:none;
-  border-radius:50%;
-  background:#00a884;
-  color:white;
-  font-size:0;
-  cursor:pointer;
-  position:relative;
-}
-
-.chat-input button::after{
-  content:"➤";
-  font-size:20px;
-  position:absolute;
-  left:15px;
-  top:11px;
-}
-
-.empty{
-  margin:auto;
-  color:#8696a0;
-  font-size:20px;
-}
-</style>
-</head>
-
-<body>
-
-<div class="crm">
-
-  <div class="sidebar">
-    <div class="logo">💬 MacBot CRM</div>
-    ${sidebarHTML}
-  </div>
-
-  <div class="chat-area">
-
-    <div class="chat-header">
-      📱 WhatsApp Inbox
-      <span class="status">● En línea</span>
-    </div>
-
-    <div id="messages" class="messages"></div>
-
-    <form method="POST" action="/inbox/responder" class="chat-input">
-      <input type="hidden" id="numeroInput" name="numero" value="${primerChat}">
-      <input type="text" name="respuesta" placeholder="Escribe un mensaje..." required>
-      <button type="submit">Enviar</button>
-    </form>
-
-  </div>
-
-</div>
-
-<script>
-const conversaciones = ${JSON.stringify(conversaciones)};
-let chatActual = "${primerChat}";
-
-function horaBolivia(fecha){
-  return new Date(fecha || Date.now()).toLocaleTimeString("es-BO", {
-    timeZone:"America/La_Paz",
-    hour:"2-digit",
-    minute:"2-digit"
-  });
-}
-
-function abrirChat(numero){
-  chatActual = numero;
-  document.getElementById("numeroInput").value = numero;
-  renderMensajes();
-}
-
-function renderMensajes(){
-  const box = document.getElementById("messages");
-  box.innerHTML = "";
-
-  if(!chatActual || !conversaciones[chatActual]){
-    box.innerHTML = '<div class="empty">Selecciona un chat</div>';
-    return;
-  }
-
-  conversaciones[chatActual].forEach(msg => {
-    const clase = msg["dirección"] === "saliente" ? "saliente" : "entrante";
-
-    box.innerHTML +=
-      '<div class="message ' + clase + '">' +
-        (msg.contenido || "") +
-        '<span class="time">' + horaBolivia(msg.creado_en) + '</span>' +
-      '</div>';
-  });
-
-  box.scrollTop = box.scrollHeight;
-}
-
-renderMensajes();
-</script>
-
-</body>
-</html>
-    `);
+    res.send(html);
 
   } catch (error) {
-  console.log("ERROR DETALLADO:");
-  console.log(error.response?.data);
-  console.log(error.message);
 
-  return res.sendStatus(200);
-}
+    res.send(error.message);
+
+  }
+
 });
