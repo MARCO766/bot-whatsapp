@@ -817,10 +817,11 @@ app.post("/inbox/responder", async (req, res) => {
       }
     }
   );
+
 await axios.post(
   `${SUPABASE_URL}/rest/v1/mensajes`,
   {
-    numero_de_cliente: numero,
+    número_de_cliente: numero,
     direccion: "saliente",
     tipo: "text",
     contenido: respuesta,
