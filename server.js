@@ -1282,9 +1282,62 @@ document
 
 });
 
-// Actualiza el inbox cada 3 segundos
-setInterval(() => {
-  location.reload();
+// ==========================
+// AUTO REFRESH SOLO MENSAJES
+// ==========================
+
+setInterval(async () => {
+
+  if (!activeChat) return;
+
+  try {
+
+    const response = await fetch("/get-messages/" + activeChat);
+
+    const mensajes = await response.json();
+
+    const box =
+      document.getElementById("messagesBox");
+
+    box.innerHTML = "";
+
+    mensajes.forEach(msg => {
+
+      const tipo =
+        msg.direccion === "saliente"
+          ? "agent-message"
+          : "client-message";
+
+      box.innerHTML += `
+        <div class="message ${tipo}">
+
+          ${msg.contenido}
+
+          <span class="message-time">
+
+            ${new Date(msg.creado_en)
+              .toLocaleTimeString("es-BO", {
+                timeZone: "America/La_Paz",
+                hour: "2-digit",
+                minute: "2-digit"
+              })}
+
+          </span>
+
+        </div>
+      `;
+
+    });
+
+    // AUTO SCROLL ABAJO
+    box.scrollTop = box.scrollHeight;
+
+  } catch (err) {
+
+    console.log(err);
+
+  }
+
 }, 3000);
 
 </script>
@@ -1368,6 +1421,38 @@ app.post("/send-manual-message", async (req, res) => {
       error: error.response?.data || error.message
     });
   }
+});
+
+// ==========================
+// OBTENER MENSAJES DE CHAT
+// ==========================
+
+app.get("/get-messages/:numero", async (req, res) => {
+
+  try {
+
+    const numero = req.params.numero;
+
+    const response = await axios.get(
+      `${SUPABASE_URL}/rest/v1/mensajes?numero_de_cliente=eq.${numero}&select=*`,
+      {
+        headers: {
+          apikey: SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_KEY}`
+        }
+      }
+    );
+
+    res.json(response.data || []);
+
+  } catch (error) {
+
+    console.log(error.message);
+
+    res.json([]);
+
+  }
+
 });
 
 app.listen(PORT, () => {
