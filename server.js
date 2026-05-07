@@ -665,6 +665,12 @@ app.get("/admin", async (req, res) => {
 
     <form method="POST" action="/admin/guardar">
 
+<label>Número WhatsApp</label><br>
+<input type="text" name="numero_whatsapp"><br><br>
+
+<label>Producto</label><br>
+<input type="text" name="producto"><br><br>
+
       <label>Mensaje 1</label><br>
       <textarea name="mensaje_1" rows="5" cols="50"></textarea><br><br>
 
@@ -683,16 +689,24 @@ app.get("/admin", async (req, res) => {
 });
 
 app.post("/admin/guardar", async (req, res) => {
-  const { mensaje_1, mensaje_2, seguimiento_1 } = req.body;
+  const {
+  numero_whatsapp,
+  producto,
+  mensaje_1,
+  mensaje_2,
+  seguimiento_1
+} = req.body;
 
   try {
     await axios.patch(
-      `${SUPABASE_URL}/rest/v1/flujos?producto=eq.Amigurumis`,
-      {
-        mensaje_1,
-        mensaje_2,
-        seguimiento_1
-      },
+      `${SUPABASE_URL}/rest/v1/flujos?numero_whatsapp=eq.${numero_whatsapp}`,
+        {
+  numero_whatsapp,
+  producto,
+  mensaje_1,
+  mensaje_2,
+  seguimiento_1
+},
       {
         headers: {
           apikey: SUPABASE_KEY,
