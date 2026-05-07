@@ -72,6 +72,58 @@ mensajesProcesados.add(message.id);
     
     const from = message.from;
 
+await axios.post(
+  `${SUPABASE_URL}/rest/v1/clientes`,
+  {
+    numero: from,
+    estado: "nuevo"
+  },
+  {
+    headers: {
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${SUPABASE_KEY}`,
+      "Content-Type": "application/json",
+      Prefer: "resolution=merge-duplicates"
+    }
+  }
+);
+
+await axios.post(
+  `${SUPABASE_URL}/rest/v1/mensajes`,
+  {
+    cliente_numero: from,
+    direccion: "entrante",
+    tipo: message.type,
+    contenido: text || "",
+    imagen_url: message.image ? message.image.id : null
+  },
+  {
+    headers: {
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${SUPABASE_KEY}`,
+      "Content-Type": "application/json"
+    }
+  }
+);
+
+await axios.post(
+  `${SUPABASE_URL}/rest/v1/conversaciones`,
+  {
+    cliente_numero: from,
+    ultimo_mensaje: text || message.type,
+    ultimo_mensaje_en: new Date().toISOString(),
+    estado: "abierta"
+  },
+  {
+    headers: {
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${SUPABASE_KEY}`,
+      "Content-Type": "application/json",
+      Prefer: "resolution=merge-duplicates"
+    }
+  }
+);
+
     let text = "";
 
 if (message.type === "text") {
