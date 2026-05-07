@@ -8,6 +8,8 @@ const seguimientoDescuento = {};
 const mensajesProcesados = new Set();
 app.use(bodyParser.json());
 
+app.use(express.urlencoded({ extended: true }));
+
 // 🔑 VARIABLES (Railway)
 const TOKEN = process.env.TOKEN;
 const PHONE_ID = process.env.PHONE_ID;
@@ -642,6 +644,30 @@ setTimeout(async () => {
     console.log("ERROR:", error.response?.data || error.message);
     res.sendStatus(200);
   }
+});
+
+// 🖥 PANEL ADMIN
+app.get("/admin", async (req, res) => {
+  res.send(`
+    <h1>MacBot CRM</h1>
+
+    <form method="POST" action="/admin/guardar">
+
+      <label>Mensaje 1</label><br>
+      <textarea name="mensaje_1" rows="5" cols="50"></textarea><br><br>
+
+      <label>Mensaje 2</label><br>
+      <textarea name="mensaje_2" rows="5" cols="50"></textarea><br><br>
+
+      <label>Seguimiento</label><br>
+      <textarea name="seguimiento_1" rows="5" cols="50"></textarea><br><br>
+
+      <button type="submit">
+        Guardar
+      </button>
+
+    </form>
+  `);
 });
 
 // 🚀 SERVIDOR
