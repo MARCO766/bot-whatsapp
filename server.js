@@ -72,6 +72,13 @@ mensajesProcesados.add(message.id);
     
     const from = message.from;
 
+
+    let text = "";
+
+if (message.type === "text") {
+  text = message.text.body.toLowerCase();
+}
+
 await axios.post(
   `${SUPABASE_URL}/rest/v1/clientes`,
   {
@@ -124,11 +131,6 @@ await axios.post(
   }
 );
 
-    let text = "";
-
-if (message.type === "text") {
-  text = message.text.body.toLowerCase();
-}
 
 if (text.includes("reset")) {
   delete seguimientos[from];
