@@ -824,10 +824,6 @@ app.post("/inbox/responder", async (req, res) => {
   `);
 });
 
-app.listen(PORT, () => {
-  console.log("🚀 Servidor corriendo en puerto", PORT);
-});
-
 // ==========================
 // 💬 WHATSAPP INBOX VISUAL PRO
 // ==========================
@@ -1301,3 +1297,8 @@ document
   }
 
 });
+
+app.listen(PORT, () => {
+  console.log("🚀 Servidor corriendo en puerto", PORT);
+});
+
