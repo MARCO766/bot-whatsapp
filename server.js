@@ -817,6 +817,24 @@ app.post("/inbox/responder", async (req, res) => {
       }
     }
   );
+// GUARDAR MENSAJE SALIENTE
+await axios.post(
+  `${SUPABASE_URL}/rest/v1/mensajes`,
+  {
+    numero_de_cliente: numero,
+    direccion: "saliente",
+    tipo: "text",
+    contenido: respuesta,
+    imagen_url: null
+  },
+  {
+    headers: {
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${SUPABASE_KEY}`,
+      "Content-Type": "application/json"
+    }
+  }
+);
 
   res.send(`
     <h1>✅ Respuesta enviada</h1>
