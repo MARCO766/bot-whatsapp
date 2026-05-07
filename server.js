@@ -968,7 +968,7 @@ body{
   flex:1;
   overflow-y:auto;
   padding:20px;
-  background-image:url('https://i.imgur.com/3QZQZ9P.png');
+  background:#0b141a;
 }
 
 .message{
