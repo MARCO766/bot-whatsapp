@@ -1164,7 +1164,10 @@ renderMensajes();
     `);
 
   } catch (error) {
-    console.log(error.response?.data || error.message);
-    res.send("Error cargando inbox");
-  }
+  console.log("ERROR DETALLADO:");
+  console.log(error.response?.data);
+  console.log(error.message);
+
+  return res.sendStatus(200);
+}
 });
