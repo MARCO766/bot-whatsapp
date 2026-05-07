@@ -909,10 +909,11 @@ console.log("MENSAJES SUPABASE:", mensajes);
 
             <span class="message-time">
               ${new Date(msg.creado_en || msg.fecha || Date.now())
-                .toLocaleTimeString([], {
-                  hour: '2-digit',
-                  minute: '2-digit'
-                })}
+                .toLocaleTimeString("es-BO", {
+  timeZone: "America/La_Paz",
+  hour: "2-digit",
+  minute: "2-digit"
+})}
             </span>
           </div>
         `;
@@ -1280,6 +1281,11 @@ document
   }
 
 });
+
+// Actualiza el inbox cada 3 segundos
+setInterval(() => {
+  location.reload();
+}, 3000);
 
 </script>
 
