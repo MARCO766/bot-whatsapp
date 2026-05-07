@@ -829,15 +829,13 @@ app.listen(PORT, () => {
 });
 
 // =========================
-// 💬 INBOX ESTILO WHATSAPP
+// 💬 INBOX WHATSAPP PRO
 // =========================
 
 app.get("/inbox", async (req, res) => {
-
   try {
-
     const response = await axios.get(
-      `${SUPABASE_URL}/rest/v1/mensajes?select=*`,
+      `${SUPABASE_URL}/rest/v1/mensajes?select=*&order=creado_en.asc`,
       {
         headers: {
           apikey: SUPABASE_KEY,
@@ -846,142 +844,264 @@ app.get("/inbox", async (req, res) => {
       }
     );
 
-    const mensajes = response.data;
+    const mensajes = response.data || [];
 
-    let html = `
-    <html>
-
-    <head>
-
-      <title>MacBot CRM</title>
-
-      <style>
-
-        body{
-          margin:0;
-          font-family:Arial;
-          background:#ece5dd;
-        }
-
-        .topbar{
-          background:#075e54;
-          color:white;
-          padding:15px;
-          font-size:22px;
-          font-weight:bold;
-        }
-
-        .chat{
-          padding:20px;
-        }
-
-        .mensaje{
-          max-width:70%;
-          padding:12px;
-          margin-bottom:10px;
-          border-radius:10px;
-          font-size:15px;
-        }
-
-        .entrante{
-          background:white;
-        }
-
-        .saliente{
-          background:#dcf8c6;
-          margin-left:auto;
-        }
-
-        textarea{
-          width:100%;
-          height:80px;
-          border-radius:10px;
-          border:none;
-          padding:10px;
-          font-size:15px;
-        }
-
-        button{
-          background:#075e54;
-          color:white;
-          border:none;
-          padding:12px 20px;
-          border-radius:10px;
-          margin-top:10px;
-          cursor:pointer;
-        }
-
-        .numero{
-          font-size:13px;
-          color:#666;
-          margin-bottom:5px;
-        }
-
-      </style>
-
-    </head>
-
-    <body>
-
-      <div class="topbar">
-        💬 MacBot CRM
-      </div>
-
-      <div class="chat">
-    `;
-
-    mensajes.reverse().forEach(msg => {
-
-      html += `
-
-      <div class="mensaje ${msg.direccion === "saliente" ? "saliente" : "entrante"}">
-
-        <div class="numero">
-          ${msg.cliente_numero}
-        </div>
-
-        ${msg.contenido || ""}
-
-      </div>
-
-      `;
-
+    const conversaciones = {};
+    mensajes.forEach(msg => {
+      if (!conversaciones[msg.cliente_numero]) {
+        conversaciones[msg.cliente_numero] = [];
+      }
+      conversaciones[msg.cliente_numero].push(msg);
     });
 
-    html += `
+    const numeros = Object.keys(conversaciones);
+    const clienteSeleccionado = req.query.cliente || numeros[0] || "";
+    const chat = conversaciones[clienteSeleccionado] || [];
 
-    <form method="POST" action="/inbox/responder">
+    let listaChats = "";
 
-      <input
-        type="hidden"
-        name="numero"
-        value="${mensajes[0]?.cliente_numero || ""}"
-      >
+    numeros.forEach(numero => {
+      const ultimo = conversaciones[numero][conversaciones[numero].length - 1];
 
-      <textarea
-        name="respuesta"
-        placeholder="Escribe un mensaje..."
-      ></textarea>
+      listaChats += `
+        <a class="chat-item ${numero === clienteSeleccionado ? "active" : ""}" href="/inbox?cliente=${numero}">
+          <div class="avatar">👤</div>
+          <div class="chat-info">
+            <strong>${numero}</strong>
+            <span>${ultimo.contenido || ultimo.tipo || ""}</span>
+          </div>
+        </a>
+      `;
+    });
 
-      <button type="submit">
-        Enviar
-      </button>
+    let mensajesHtml = "";
 
+    chat.forEach(msg => {
+      mensajesHtml += `
+        <div class="bubble ${msg.direccion === "saliente" ? "out" : "in"}">
+          <div>${msg.contenido || ""}</div>
+          <small>${new Date(msg.creado_en).toLocaleTimeString()}</small>
+        </div>
+      `;
+    });
+
+    res.send(`
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>MacBot CRM</title>
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #111b21;
+    }
+
+    .app {
+      display: flex;
+      height: 100vh;
+      width: 100%;
+    }
+
+    .sidebar {
+      width: 35%;
+      background: #111b21;
+      color: white;
+      border-right: 1px solid #2a3942;
+      overflow-y: auto;
+    }
+
+    .sidebar-header {
+      padding: 20px;
+      background: #202c33;
+      font-size: 24px;
+      font-weight: bold;
+    }
+
+    .search {
+      padding: 12px;
+      background: #111b21;
+    }
+
+    .search input {
+      width: 100%;
+      padding: 12px;
+      border: none;
+      border-radius: 8px;
+      background: #202c33;
+      color: white;
+    }
+
+    .chat-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 15px;
+      text-decoration: none;
+      color: white;
+      border-bottom: 1px solid #2a3942;
+    }
+
+    .chat-item:hover,
+    .chat-item.active {
+      background: #2a3942;
+    }
+
+    .avatar {
+      width: 45px;
+      height: 45px;
+      background: #8696a0;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+    }
+
+    .chat-info {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .chat-info span {
+      color: #8696a0;
+      font-size: 14px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 220px;
+    }
+
+    .main {
+      width: 65%;
+      display: flex;
+      flex-direction: column;
+      background: #efeae2;
+    }
+
+    .chat-header {
+      background: #202c33;
+      color: white;
+      padding: 18px;
+      font-size: 20px;
+      font-weight: bold;
+    }
+
+    .messages {
+      flex: 1;
+      padding: 25px;
+      overflow-y: auto;
+      background: #efeae2;
+    }
+
+    .bubble {
+      max-width: 65%;
+      padding: 10px 14px;
+      margin-bottom: 12px;
+      border-radius: 10px;
+      font-size: 16px;
+      clear: both;
+    }
+
+    .bubble small {
+      display: block;
+      text-align: right;
+      color: #667781;
+      font-size: 11px;
+      margin-top: 5px;
+    }
+
+    .in {
+      background: white;
+      float: left;
+    }
+
+    .out {
+      background: #d9fdd3;
+      float: right;
+    }
+
+    .reply-box {
+      background: #202c33;
+      padding: 12px;
+      display: flex;
+      gap: 10px;
+    }
+
+    .reply-box textarea {
+      flex: 1;
+      height: 45px;
+      border-radius: 8px;
+      border: none;
+      padding: 12px;
+      resize: none;
+      font-size: 15px;
+    }
+
+    .reply-box button {
+      background: #00a884;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      padding: 0 22px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+
+    .empty {
+      color: #555;
+      text-align: center;
+      margin-top: 50px;
+    }
+  </style>
+</head>
+
+<body>
+
+<div class="app">
+
+  <div class="sidebar">
+    <div class="sidebar-header">💬 MacBot CRM</div>
+
+    <div class="search">
+      <input placeholder="Buscar chat...">
+    </div>
+
+    ${listaChats}
+  </div>
+
+  <div class="main">
+
+    <div class="chat-header">
+      ${clienteSeleccionado || "Selecciona un chat"}
+    </div>
+
+    <div class="messages">
+      ${mensajesHtml || '<div class="empty">No hay mensajes todavía</div>'}
+    </div>
+
+    <form class="reply-box" method="POST" action="/inbox/responder">
+      <input type="hidden" name="numero" value="${clienteSeleccionado}">
+      <textarea name="respuesta" placeholder="Escribe un mensaje..."></textarea>
+      <button type="submit">➤</button>
     </form>
 
-      </div>
+  </div>
 
-    </body>
+</div>
 
-    </html>
-    `;
-
-    res.send(html);
+</body>
+</html>
+    `);
 
   } catch (error) {
-
     res.send(error.message);
-
   }
-
 });
