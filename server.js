@@ -799,6 +799,7 @@ const PORT = process.env.PORT || 3000;
 // =========================
 
 app.post("/inbox/responder", async (req, res) => {
+try {
   const { numero, respuesta } = req.body;
 
   await axios.post(
@@ -836,6 +837,12 @@ await axios.post(
   }
 );
     res.redirect("/inbox");
+} catch (error) {
+  console.log("ERROR RESPONDER DETALLADO:");
+  console.log(error.response?.data || error.message);
+
+  res.send("Error enviando o guardando");
+}
 });
 
 app.listen(PORT, () => {
