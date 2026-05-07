@@ -847,6 +847,7 @@ app.get("/inbox", async (req, res) => {
     );
 
     const mensajes = response.data || [];
+console.log("MENSAJES SUPABASE:", mensajes);
 
     // AGRUPAR CONVERSACIONES
     const conversaciones = {};
@@ -902,16 +903,16 @@ app.get("/inbox", async (req, res) => {
       conversaciones[firstChat].forEach(msg => {
 
         const tipo =
-          (msg.tipo === "saliente" || msg.role === "agent")
+          (msg.direccion === "saliente" || msg.role === "agent")
             ? "agent-message"
             : "client-message";
 
         mensajesHTML += `
           <div class="message ${tipo}">
-            ${msg.mensaje || msg.texto || msg.body || ""}
+            ${msg.contenido || msg.texto || msg.body || ""}
 
             <span class="message-time">
-              ${new Date(msg.created_at || msg.fecha || Date.now())
+              ${new Date(msg.creado_en || msg.fecha || Date.now())
                 .toLocaleTimeString([], {
                   hour: '2-digit',
                   minute: '2-digit'
