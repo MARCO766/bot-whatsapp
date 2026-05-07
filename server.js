@@ -842,6 +842,9 @@ app.get("/inbox", async (req, res) => {
         }
       }
     );
+const conversaciones = {};
+const numeros = Object.keys(conversaciones);
+const chatActual = numeros[0] || "";
 
     let html = `
 <style>
