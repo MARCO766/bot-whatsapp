@@ -829,7 +829,7 @@ app.listen(PORT, () => {
 });
 
 // =========================
-// 📥 INBOX VISUAL
+// 💬 INBOX ESTILO WHATSAPP
 // =========================
 
 app.get("/inbox", async (req, res) => {
@@ -846,46 +846,135 @@ app.get("/inbox", async (req, res) => {
       }
     );
 
+    const mensajes = response.data;
+
     let html = `
-    <h1>MacBot Inbox</h1>
+    <html>
+
+    <head>
+
+      <title>MacBot CRM</title>
+
+      <style>
+
+        body{
+          margin:0;
+          font-family:Arial;
+          background:#ece5dd;
+        }
+
+        .topbar{
+          background:#075e54;
+          color:white;
+          padding:15px;
+          font-size:22px;
+          font-weight:bold;
+        }
+
+        .chat{
+          padding:20px;
+        }
+
+        .mensaje{
+          max-width:70%;
+          padding:12px;
+          margin-bottom:10px;
+          border-radius:10px;
+          font-size:15px;
+        }
+
+        .entrante{
+          background:white;
+        }
+
+        .saliente{
+          background:#dcf8c6;
+          margin-left:auto;
+        }
+
+        textarea{
+          width:100%;
+          height:80px;
+          border-radius:10px;
+          border:none;
+          padding:10px;
+          font-size:15px;
+        }
+
+        button{
+          background:#075e54;
+          color:white;
+          border:none;
+          padding:12px 20px;
+          border-radius:10px;
+          margin-top:10px;
+          cursor:pointer;
+        }
+
+        .numero{
+          font-size:13px;
+          color:#666;
+          margin-bottom:5px;
+        }
+
+      </style>
+
+    </head>
+
+    <body>
+
+      <div class="topbar">
+        💬 MacBot CRM
+      </div>
+
+      <div class="chat">
     `;
 
-    response.data.reverse().forEach(msg => {
+    mensajes.reverse().forEach(msg => {
 
       html += `
-      <div style="
-        border:1px solid #ccc;
-        padding:10px;
-        margin:10px;
-        border-radius:10px;
-      ">
 
-      <b>${msg.cliente_numero}</b><br>
-      ${msg.contenido || ""}<br>
-<form method="POST" action="/inbox/responder">
+      <div class="mensaje ${msg.direccion === "saliente" ? "saliente" : "entrante"}">
 
-  <input
-    type="hidden"
-    name="numero"
-    value="${msg.cliente_numero}"
-  >
+        <div class="numero">
+          ${msg.cliente_numero}
+        </div>
 
-  <textarea
-    name="respuesta"
-    rows="3"
-    cols="40"
-    placeholder="Responder..."
-  ></textarea><br><br>
-
-  <button type="submit">
-    Enviar respuesta
-  </button>
-
-</form>
+        ${msg.contenido || ""}
 
       </div>
+
       `;
+
     });
+
+    html += `
+
+    <form method="POST" action="/inbox/responder">
+
+      <input
+        type="hidden"
+        name="numero"
+        value="${mensajes[0]?.cliente_numero || ""}"
+      >
+
+      <textarea
+        name="respuesta"
+        placeholder="Escribe un mensaje..."
+      ></textarea>
+
+      <button type="submit">
+        Enviar
+      </button>
+
+    </form>
+
+      </div>
+
+    </body>
+
+    </html>
+    `;
 
     res.send(html);
 
