@@ -843,6 +843,24 @@ app.get("/inbox", async (req, res) => {
       }
     );
 const conversaciones = {};
+const mensajes = response.data || [];
+
+mensajes.forEach(msg => {
+
+  const numero =
+    msg.cliente_numero ||
+    msg.numero_de_cliente ||
+    msg["número_de_cliente"];
+
+  if (!numero) return;
+
+  if (!conversaciones[numero]) {
+    conversaciones[numero] = [];
+  }
+
+  conversaciones[numero].push(msg);
+
+});
 const numeros = Object.keys(conversaciones);
 const chatActual = numeros[0] || "";
 
