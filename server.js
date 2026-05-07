@@ -1135,15 +1135,10 @@ body{
 
       </div>
      
-      : ""
-).join("")
-}
-
   </div>
 
 </div>
       `;
-    });
 
 
     res.send(html);
