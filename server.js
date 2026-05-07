@@ -80,18 +80,18 @@ if (message.type === "text") {
 }
 
 await axios.post(
-  `${SUPABASE_URL}/rest/v1/clientes`,
+  `${SUPABASE_URL}/rest/v1/clientes?on_conflict=numero`,
   {
     numero: from,
     estado: "nuevo"
   },
   {
     headers: {
-      apikey: SUPABASE_KEY,
-      Authorization: `Bearer ${SUPABASE_KEY}`,
-      "Content-Type": "application/json",
-      Prefer: "resolution=merge-duplicates"
-    }
+  apikey: SUPABASE_KEY,
+  Authorization: `Bearer ${SUPABASE_KEY}`,
+  "Content-Type": "application/json",
+  Prefer: "resolution=merge-duplicates,return=minimal"
+}
   }
 );
 
