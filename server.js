@@ -794,54 +794,82 @@ tiempo_seguimiento
 // 🚀 SERVIDOR
 const PORT = process.env.PORT || 3000;
 
-// =========================
+// ==========================
 // ✍️ RESPONDER MANUAL
-// =========================
+// ==========================
 
 app.post("/inbox/responder", async (req, res) => {
-  const { numero, respuesta } = req.body;
 
-  await axios.post(
-    `https://graph.facebook.com/v19.0/${PHONE_ID}/messages`,
-    {
-      messaging_product: "whatsapp",
-      to: numero,
-      text: {
-        body: respuesta
-      }
-    },
-    {
-      headers: {
-        Authorization: `Bearer ${TOKEN}`,
-        "Content-Type": "application/json"
-      }
+  try {
+
+    const numero = req.body.numero;
+    const respuesta =
+      req.body.respuesta || req.body.mensaje;
+
+    if (!numero || !respuesta) {
+
+      return res.status(400).json({
+        ok: false,
+        error: "Falta numero o respuesta"
+      });
+
     }
-  );
 
-// GUARDAR MENSAJE SALIENTE
+    // ENVIAR A WHATSAPP
+    await axios.post(
+      `https://graph.facebook.com/v19.0/${PHONE_ID}/messages`,
+      {
+        messaging_product: "whatsapp",
+        to: numero,
+        type: "text",
+        text: {
+          body: respuesta
+        }
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${TOKEN}`,
+          "Content-Type": "application/json"
+        }
+      }
+    );
 
-await axios.post(
-  `${SUPABASE_URL}/rest/v1/mensajes`,
-  {
-    numero_de_cliente: numero,
-    direccion: "saliente",
-    tipo: "text",
-    contenido: respuesta,
-    imagen_url: null
-  },
-  {
-    headers: {
-      apikey: SUPABASE_KEY,
-      Authorization: `Bearer ${SUPABASE_KEY}`,
-      "Content-Type": "application/json"
-    }
+    // GUARDAR MENSAJE
+    await axios.post(
+      `${SUPABASE_URL}/rest/v1/mensajes`,
+      {
+        numero_de_cliente: numero,
+        direccion: "saliente",
+        tipo: "text",
+        contenido: respuesta,
+        imagen_url: null
+      },
+      {
+        headers: {
+          apikey: SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_KEY}`,
+          "Content-Type": "application/json"
+        }
+      }
+    );
+
+    res.json({
+      ok: true
+    });
+
+  } catch (error) {
+
+    console.log(
+      "ERROR RESPONDER:",
+      error.response?.data || error.message
+    );
+
+    res.status(500).json({
+      ok: false
+    });
+
   }
-);
 
-  res.send(`
-    <h1>✅ Respuesta enviada</h1>
-    <a href="/inbox">Volver al inbox</a>
-  `);
 });
 
 // ==========================
