@@ -996,15 +996,19 @@ body{
   overflow-y:auto;
   padding:20px;
   background:#0b141a;
+  display:flex;
+flex-direction:column;
 }
 
 .message{
   max-width:65%;
+  width:fit-content;
   padding:12px;
   border-radius:12px;
   margin-bottom:15px;
   position:relative;
   word-wrap:break-word;
+  display:inline-block;
 }
 
 .entrante{
