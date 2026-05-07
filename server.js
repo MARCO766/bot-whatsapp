@@ -818,7 +818,6 @@ app.post("/inbox/responder", async (req, res) => {
     }
   );
 
-  res.send(`
     res.redirect("/inbox");
 });
 
