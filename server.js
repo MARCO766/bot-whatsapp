@@ -17,6 +17,20 @@ const PHONE_ID = process.env.PHONE_ID;
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
 
+async function obtenerFlujo() {
+  const response = await axios.get(
+    `${SUPABASE_URL}/rest/v1/flujos?producto=eq.Amigurumis&select=*`,
+    {
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`
+      }
+    }
+  );
+
+  return response.data[0];
+}
+
 // 🔐 VERIFICACIÓN WEBHOOK
 app.get('/webhook', (req, res) => {
   const VERIFY_TOKEN = "123456";
@@ -108,6 +122,8 @@ if (seguimientos[from]) {
 
 seguimientos[from] = true;
 
+const flujo = await obtenerFlujo();
+
       // 🥇 MENSAJE 1
       await axios.post(
         `https://graph.facebook.com/v19.0/${PHONE_ID}/messages`,
@@ -115,14 +131,7 @@ seguimientos[from] = true;
           messaging_product: "whatsapp",
           to: from,
           text: {
-            body: `Hola ${nombre} 😊 ¡Gracias por escribirnos!
-
-Te cuento lo que incluye nuestro pack especial 🔥🔥👇👇
-
-📘 +10.000 patrones de amigurumis listos para tejer
-🎁 Perfecto para vender o emprender
-🧶 Para principiantes y avanzados
-⚡ Acceso digital inmediato`
+            body: flujo.mensaje_1
           }
         },
         {
