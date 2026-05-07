@@ -680,6 +680,9 @@ app.get("/admin", async (req, res) => {
       <label>Seguimiento</label><br>
       <textarea name="seguimiento_1" rows="5" cols="50"></textarea><br><br>
 
+<label>Tiempo seguimiento en segundos</label><br>
+<input type="number" name="tiempo_seguimiento"><br><br>
+
       <button type="submit">
         Guardar
       </button>
@@ -694,7 +697,8 @@ app.post("/admin/guardar", async (req, res) => {
   producto,
   mensaje_1,
   mensaje_2,
-  seguimiento_1
+  seguimiento_1,
+  tiempo_seguimiento
 } = req.body;
 
   try {
@@ -706,6 +710,7 @@ app.post("/admin/guardar", async (req, res) => {
   mensaje_1,
   mensaje_2,
   seguimiento_1
+tiempo_seguimiento
 },
       {
         headers: {
