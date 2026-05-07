@@ -1298,6 +1298,72 @@ document
 
 });
 
+// ==========================
+// ENVIAR MENSAJE MANUAL DESDE INBOX
+// ==========================
+
+app.post("/send-manual-message", async (req, res) => {
+  try {
+    const { numero, mensaje } = req.body;
+
+    if (!numero || !mensaje) {
+      return res.status(400).json({
+        error: "Falta numero o mensaje"
+      });
+    }
+
+    // 1. Enviar a WhatsApp
+    await axios.post(
+      `https://graph.facebook.com/v20.0/${PHONE_ID}/messages`,
+      {
+        messaging_product: "whatsapp",
+        to: numero,
+        type: "text",
+        text: {
+          body: mensaje
+        }
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${TOKEN}`,
+          "Content-Type": "application/json"
+        }
+      }
+    );
+
+    // 2. Guardar en Supabase como saliente
+    await axios.post(
+      `${SUPABASE_URL}/rest/v1/mensajes`,
+      {
+        numero_de_cliente: numero,
+        direccion: "saliente",
+        tipo: "texto",
+        contenido: mensaje
+      },
+      {
+        headers: {
+          apikey: SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_KEY}`,
+          "Content-Type": "application/json",
+          Prefer: "return=minimal"
+        }
+      }
+    );
+
+    res.json({
+      ok: true,
+      mensaje: "Mensaje enviado"
+    });
+
+  } catch (error) {
+    console.log("ERROR ENVIANDO MANUAL:", error.response?.data || error.message);
+
+    res.status(500).json({
+      error: error.response?.data || error.message
+    });
+  }
+});
+
 app.listen(PORT, () => {
   console.log("🚀 Servidor corriendo en puerto", PORT);
 });
