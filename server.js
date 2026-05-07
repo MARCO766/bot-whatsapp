@@ -845,99 +845,305 @@ app.get("/inbox", async (req, res) => {
 
     let html = `
 <style>
-body{
+*{
   margin:0;
+  padding:0;
+  box-sizing:border-box;
   font-family:Arial,sans-serif;
+}
+
+body{
   background:#0b141a;
-  color:#e9edef;
-}
-h1{
-  margin:0;
-  padding:18px;
-  background:#202c33;
-  color:#e9edef;
-  font-size:22px;
-}
-div{
-  background:#111b21 !important;
-  border:1px solid #263238 !important;
-  border-radius:14px !important;
-  margin:14px !important;
-  padding:14px !important;
-  color:#e9edef !important;
-}
-b{
-  color:#25d366;
-  font-size:16px;
-}
-textarea{
-  width:100%;
-  max-width:520px;
-  background:#2a3942;
-  color:#e9edef;
-  border:none;
-  border-radius:20px;
-  padding:12px;
-  outline:none;
-  resize:none;
-}
-button{
-  background:#00a884;
+  height:100vh;
+  overflow:hidden;
   color:white;
-  border:none;
-  padding:10px 18px;
-  border-radius:20px;
+}
+
+/* APP */
+.whatsapp{
+  display:flex;
+  height:100vh;
+}
+
+/* SIDEBAR */
+.sidebar{
+  width:32%;
+  background:#111b21;
+  border-right:1px solid #222d34;
+  display:flex;
+  flex-direction:column;
+}
+
+.sidebar-top{
+  height:70px;
+  background:#202c33;
+  display:flex;
+  align-items:center;
+  padding:15px;
+  font-size:24px;
   font-weight:bold;
+  color:#25d366;
+}
+
+.search{
+  padding:10px;
+  background:#111b21;
+}
+
+.search input{
+  width:100%;
+  padding:12px;
+  border:none;
+  border-radius:10px;
+  background:#202c33;
+  color:white;
+  outline:none;
+}
+
+.chat-list{
+  overflow-y:auto;
+  flex:1;
+}
+
+.chat-item{
+  display:flex;
+  gap:12px;
+  padding:15px;
+  border-bottom:1px solid #202c33;
   cursor:pointer;
-  margin-top:8px;
+  transition:0.2s;
 }
-button:hover{
-  background:#029979;
+
+.chat-item:hover{
+  background:#202c33;
 }
-form{
-  margin-top:10px;
+
+.avatar{
+  width:50px;
+  height:50px;
+  border-radius:50%;
+  background:#2a3942;
+}
+
+.chat-info{
+  flex:1;
+}
+
+.chat-info h4{
+  color:#25d366;
+  font-size:18px;
+}
+
+.chat-info p{
+  color:#b1b3b5;
+  margin-top:5px;
+}
+
+/* CHAT */
+.chat{
+  flex:1;
+  display:flex;
+  flex-direction:column;
+  background:#0b141a;
+}
+
+.chat-top{
+  height:70px;
+  background:#202c33;
+  display:flex;
+  align-items:center;
+  padding:15px;
+  gap:15px;
+  border-left:1px solid #2a3942;
+}
+
+.chat-top h3{
+  color:#25d366;
+}
+
+.chat-messages{
+  flex:1;
+  overflow-y:auto;
+  padding:20px;
+  background-image:url('https://i.imgur.com/3QZQZ9P.png');
+}
+
+.message{
+  max-width:65%;
+  padding:12px;
+  border-radius:12px;
+  margin-bottom:15px;
+  position:relative;
+  word-wrap:break-word;
+}
+
+.entrante{
+  background:#202c33;
+  color:white;
+}
+
+.saliente{
+  background:#005c4b;
+  color:white;
+  margin-left:auto;
+}
+
+.time{
+  display:block;
+  font-size:11px;
+  opacity:.7;
+  margin-top:6px;
+  text-align:right;
+}
+
+/* INPUT */
+.chat-bottom{
+  background:#202c33;
+  padding:15px;
+}
+
+.chat-bottom form{
+  display:flex;
+  gap:10px;
+}
+
+.chat-bottom textarea{
+  flex:1;
+  resize:none;
+  border:none;
+  border-radius:30px;
+  padding:14px 20px;
+  background:#2a3942;
+  color:white;
+  outline:none;
+  height:55px;
+}
+
+.chat-bottom button{
+  width:55px;
+  border:none;
+  border-radius:50%;
+  background:#25d366;
+  color:white;
+  font-size:22px;
+  cursor:pointer;
+}
+
+/* MOBILE */
+@media(max-width:900px){
+  .sidebar{
+    width:40%;
+  }
+}
+
+@media(max-width:700px){
+  .sidebar{
+    display:none;
+  }
 }
 </style>
 
-<h1>💬 MacBot Inbox</h1>
-`;
+<div class="whatsapp">
 
-    response.data.reverse().forEach(msg => {
+  <!-- SIDEBAR -->
+  <div class="sidebar">
 
-      html += `
-      <div style="
-        border:1px solid #ccc;
-        padding:10px;
-        margin:10px;
-        border-radius:10px;
-      ">
+    <div class="sidebar-top">
+      MacBot Inbox
+    </div>
 
-      <b>${msg.cliente_numero}</b><br>
-      ${msg.contenido || ""}<br>
-<form method="POST" action="/inbox/responder">
+    <div class="search">
+      <input type="text" placeholder="Buscar chat...">
+    </div>
 
-  <input
-    type="hidden"
-    name="numero"
-    value="${msg.cliente_numero}"
-  >
+    <div class="chat-list">
 
-  <textarea
-    name="respuesta"
-    rows="3"
-    cols="40"
-    placeholder="Responder..."
-  ></textarea><br><br>
+      ${numeros.map(numero => `
+        <div class="chat-item" onclick="abrirChat('${numero}')">
 
-  <button type="submit">
-    Enviar respuesta
-  </button>
+          <div class="avatar"></div>
 
-</form>
+          <div class="chat-info">
+            <h4>${numero}</h4>
+            <p>
+              ${(conversaciones[numero][conversaciones[numero].length - 1]?.contenido || "").substring(0,30)}
+            </p>
+          </div>
+
+        </div>
+      `).join("")}
+
+    </div>
+
+  </div>
+
+  <!-- CHAT -->
+  <div class="chat">
+
+    <div class="chat-top">
+      <div class="avatar"></div>
+
+      <div>
+        <h3>${chatActual || "Selecciona un chat"}</h3>
+        <small style="color:#25d366;">en línea</small>
+      </div>
+    </div>
+
+    <div class="chat-messages" id="mensajes">
+
+      ${
+        chatActual && conversaciones[chatActual]
+        ? conversaciones[chatActual].map(msg => `
+
+          <div class="message ${msg.direccion === "saliente" ? "saliente" : "entrante"}">
+
+            ${msg.contenido || ""}
+
+            <span class="time">
+              ${horaBolivia(msg.creado_en)}
+            </span>
+
+          </div>
+
+        `).join("")
+        : ""
+      }
+
+    </div>
+
+    ${
+      chatActual
+      ? `
+      <div class="chat-bottom">
+
+        <form action="/inbox/responder" method="POST">
+
+          <input
+            type="hidden"
+            name="numero"
+            value="${chatActual}"
+          >
+
+          <textarea
+            name="respuesta"
+            placeholder="Escribe un mensaje"
+          ></textarea>
+
+          <button type="submit">➤</button>
+
+        </form>
 
       </div>
+      `
+      : ""
+    }
+
+  </div>
+
+</div>
       `;
     });
+
 
     res.send(html);
 
