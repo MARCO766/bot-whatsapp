@@ -863,7 +863,16 @@ mensajes.forEach(msg => {
 });
 const numeros = Object.keys(conversaciones);
 const chatActual = numeros[0] || "";
+function horaBolivia(fecha) {
 
+  if (!fecha) return "";
+
+  return new Date(fecha).toLocaleTimeString("es-BO", {
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+
+}
     let html = `
 <style>
 *{
