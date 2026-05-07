@@ -822,7 +822,7 @@ try {
 await axios.post(
   `${SUPABASE_URL}/rest/v1/mensajes`,
   {
-    numero_de_cliente: numero,
+    cliente_numero: numero,
     direccion: "saliente",
     tipo: "texto",
     contenido: respuesta,
