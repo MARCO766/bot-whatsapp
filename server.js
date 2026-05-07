@@ -853,13 +853,20 @@ app.get("/inbox", async (req, res) => {
 
     mensajes.forEach(msg => {
 
-      if (!conversaciones[msg.cliente_numero]) {
-        conversaciones[msg.cliente_numero] = [];
-      }
+  const numeroCliente =
+    msg.cliente_numero ||
+    msg.numero ||
+    msg.from ||
+    msg.telefono ||
+    "sin_numero";
 
-      conversaciones[msg.cliente_numero].push(msg);
+  if (!conversaciones[numeroCliente]) {
+    conversaciones[numeroCliente] = [];
+  }
 
-    });
+  conversaciones[numeroCliente].push(msg);
+
+});
 
     // GENERAR HTML
     let sidebar = "";
@@ -895,13 +902,13 @@ app.get("/inbox", async (req, res) => {
       conversaciones[firstChat].forEach(msg => {
 
         const tipo =
-          msg.tipo === "saliente"
+          (msg.tipo === "saliente" || msg.role === "agent")
             ? "agent-message"
             : "client-message";
 
         mensajesHTML += `
           <div class="message ${tipo}">
-            ${msg.mensaje}
+            ${msg.mensaje || msg.texto || msg.body || ""}
 
             <span class="message-time">
               ${new Date(msg.created_at || msg.fecha || Date.now())
