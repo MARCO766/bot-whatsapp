@@ -828,14 +828,16 @@ app.listen(PORT, () => {
   console.log("🚀 Servidor corriendo en puerto", PORT);
 });
 
-// =========================
-// 💬 INBOX WHATSAPP PRO
-// =========================
+// ==========================
+// 💬 WHATSAPP INBOX VISUAL PRO
+// ==========================
 
 app.get("/inbox", async (req, res) => {
+
   try {
+
     const response = await axios.get(
-      `${SUPABASE_URL}/rest/v1/mensajes?select=*&order=creado_en.asc`,
+      `${SUPABASE_URL}/rest/v1/mensajes?select=*&order=created_at.asc`,
       {
         headers: {
           apikey: SUPABASE_KEY,
@@ -846,262 +848,448 @@ app.get("/inbox", async (req, res) => {
 
     const mensajes = response.data || [];
 
+    // AGRUPAR CONVERSACIONES
     const conversaciones = {};
+
     mensajes.forEach(msg => {
+
       if (!conversaciones[msg.cliente_numero]) {
         conversaciones[msg.cliente_numero] = [];
       }
+
       conversaciones[msg.cliente_numero].push(msg);
+
     });
 
-    const numeros = Object.keys(conversaciones);
-    const clienteSeleccionado = req.query.cliente || numeros[0] || "";
-    const chat = conversaciones[clienteSeleccionado] || [];
+    // GENERAR HTML
+    let sidebar = "";
+    let firstChat = Object.keys(conversaciones)[0];
 
-    let listaChats = "";
+    Object.keys(conversaciones).forEach(numero => {
 
-    numeros.forEach(numero => {
-      const ultimo = conversaciones[numero][conversaciones[numero].length - 1];
+      const ultimo =
+        conversaciones[numero][conversaciones[numero].length - 1];
 
-      listaChats += `
-        <a class="chat-item ${numero === clienteSeleccionado ? "active" : ""}" href="/inbox?cliente=${numero}">
-          <div class="avatar">👤</div>
-          <div class="chat-info">
-            <strong>${numero}</strong>
-            <span>${ultimo.contenido || ultimo.tipo || ""}</span>
+      sidebar += `
+        <div class="chat-item"
+             onclick="openChat('${numero}')">
+
+          <div class="chat-name">
+            📱 ${numero}
           </div>
-        </a>
-      `;
-    });
 
-    let mensajesHtml = "";
+          <div class="chat-last">
+            ${ultimo.mensaje || ""}
+          </div>
 
-    chat.forEach(msg => {
-      mensajesHtml += `
-        <div class="bubble ${msg.direccion === "saliente" ? "out" : "in"}">
-          <div>${msg.contenido || ""}</div>
-          <small>${new Date(msg.creado_en).toLocaleTimeString()}</small>
         </div>
       `;
+
     });
 
+    // MENSAJES INICIALES
+    let mensajesHTML = "";
+
+    if (firstChat) {
+
+      conversaciones[firstChat].forEach(msg => {
+
+        const tipo =
+          msg.tipo === "saliente"
+            ? "agent-message"
+            : "client-message";
+
+        mensajesHTML += `
+          <div class="message ${tipo}">
+            ${msg.mensaje}
+
+            <span class="message-time">
+              ${new Date(msg.created_at)
+                .toLocaleTimeString([], {
+                  hour: '2-digit',
+                  minute: '2-digit'
+                })}
+            </span>
+          </div>
+        `;
+
+      });
+
+    }
+
     res.send(`
+
 <!DOCTYPE html>
-<html>
+<html lang="es">
+
 <head>
-  <meta charset="UTF-8">
-  <title>MacBot CRM</title>
 
-  <style>
-    * {
-      box-sizing: border-box;
-    }
+<meta charset="UTF-8">
 
-    body {
-      margin: 0;
-      font-family: Arial, sans-serif;
-      background: #111b21;
-    }
+<title>MacBot CRM Inbox</title>
 
-    .app {
-      display: flex;
-      height: 100vh;
-      width: 100%;
-    }
+<style>
 
-    .sidebar {
-      width: 35%;
-      background: #111b21;
-      color: white;
-      border-right: 1px solid #2a3942;
-      overflow-y: auto;
-    }
+body{
+  margin:0;
+  font-family:Arial,sans-serif;
+  background:#111827;
+}
 
-    .sidebar-header {
-      padding: 20px;
-      background: #202c33;
-      font-size: 24px;
-      font-weight: bold;
-    }
+.crm{
+  display:flex;
+  height:100vh;
+}
 
-    .search {
-      padding: 12px;
-      background: #111b21;
-    }
+/* ========================= */
+/* SIDEBAR */
+/* ========================= */
 
-    .search input {
-      width: 100%;
-      padding: 12px;
-      border: none;
-      border-radius: 8px;
-      background: #202c33;
-      color: white;
-    }
+.sidebar{
+  width:320px;
+  background:#0f172a;
+  border-right:1px solid #1e293b;
+  color:white;
+  overflow-y:auto;
+}
 
-    .chat-item {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 15px;
-      text-decoration: none;
-      color: white;
-      border-bottom: 1px solid #2a3942;
-    }
+.logo{
+  padding:18px;
+  font-size:22px;
+  font-weight:bold;
+  background:#020617;
+}
 
-    .chat-item:hover,
-    .chat-item.active {
-      background: #2a3942;
-    }
+.chat-item{
+  padding:15px;
+  border-bottom:1px solid #1e293b;
+  cursor:pointer;
+  transition:.2s;
+}
 
-    .avatar {
-      width: 45px;
-      height: 45px;
-      background: #8696a0;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 22px;
-    }
+.chat-item:hover{
+  background:#1e293b;
+}
 
-    .chat-info {
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-    }
+.chat-name{
+  font-weight:bold;
+}
 
-    .chat-info span {
-      color: #8696a0;
-      font-size: 14px;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      max-width: 220px;
-    }
+.chat-last{
+  font-size:13px;
+  color:#94a3b8;
+  margin-top:4px;
+}
 
-    .main {
-      width: 65%;
-      display: flex;
-      flex-direction: column;
-      background: #efeae2;
-    }
+/* ========================= */
+/* CHAT */
+/* ========================= */
 
-    .chat-header {
-      background: #202c33;
-      color: white;
-      padding: 18px;
-      font-size: 20px;
-      font-weight: bold;
-    }
+.chat-container{
+  flex:1;
+  display:flex;
+  flex-direction:column;
+  background:#e5ddd5;
+}
 
-    .messages {
-      flex: 1;
-      padding: 25px;
-      overflow-y: auto;
-      background: #efeae2;
-    }
+.chat-topbar{
+  height:65px;
+  background:#075e54;
+  color:white;
+  display:flex;
+  align-items:center;
+  padding:0 20px;
+  font-size:18px;
+  font-weight:bold;
+}
 
-    .bubble {
-      max-width: 65%;
-      padding: 10px 14px;
-      margin-bottom: 12px;
-      border-radius: 10px;
-      font-size: 16px;
-      clear: both;
-    }
+.messages-box{
+  flex:1;
+  overflow-y:auto;
+  padding:20px;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
 
-    .bubble small {
-      display: block;
-      text-align: right;
-      color: #667781;
-      font-size: 11px;
-      margin-top: 5px;
-    }
+.message{
+  max-width:70%;
+  padding:10px 14px;
+  font-size:15px;
+  line-height:1.4;
+  animation:popup .15s ease;
+  word-wrap:break-word;
+}
 
-    .in {
-      background: white;
-      float: left;
-    }
+@keyframes popup{
+  from{
+    opacity:0;
+    transform:scale(.95);
+  }
+  to{
+    opacity:1;
+    transform:scale(1);
+  }
+}
 
-    .out {
-      background: #d9fdd3;
-      float: right;
-    }
+/* CLIENTE */
 
-    .reply-box {
-      background: #202c33;
-      padding: 12px;
-      display: flex;
-      gap: 10px;
-    }
+.client-message{
+  align-self:flex-start;
+  background:white;
+  color:#111827;
+  border-radius:16px 16px 16px 5px;
+}
 
-    .reply-box textarea {
-      flex: 1;
-      height: 45px;
-      border-radius: 8px;
-      border: none;
-      padding: 12px;
-      resize: none;
-      font-size: 15px;
-    }
+/* AGENTE */
 
-    .reply-box button {
-      background: #00a884;
-      color: white;
-      border: none;
-      border-radius: 8px;
-      padding: 0 22px;
-      font-size: 16px;
-      cursor: pointer;
-    }
+.agent-message{
+  align-self:flex-end;
+  background:#dcf8c6;
+  color:#111827;
+  border-radius:16px 16px 5px 16px;
+}
 
-    .empty {
-      color: #555;
-      text-align: center;
-      margin-top: 50px;
-    }
-  </style>
+.message-time{
+  display:block;
+  text-align:right;
+  font-size:11px;
+  color:#667085;
+  margin-top:5px;
+}
+
+/* ========================= */
+/* INPUT */
+/* ========================= */
+
+.chat-input-area{
+  background:#f0f2f5;
+  padding:10px;
+  display:flex;
+  gap:10px;
+}
+
+.chat-input{
+  flex:1;
+  border:none;
+  outline:none;
+  border-radius:30px;
+  padding:14px 18px;
+  font-size:15px;
+}
+
+.send-btn{
+  background:#25d366;
+  color:white;
+  border:none;
+  border-radius:30px;
+  padding:13px 20px;
+  cursor:pointer;
+  font-weight:bold;
+}
+
+.send-btn:hover{
+  background:#1ebe5d;
+}
+
+</style>
+
 </head>
 
 <body>
 
-<div class="app">
+<div class="crm">
 
+  <!-- SIDEBAR -->
   <div class="sidebar">
-    <div class="sidebar-header">💬 MacBot CRM</div>
 
-    <div class="search">
-      <input placeholder="Buscar chat...">
+    <div class="logo">
+      💬 MacBot CRM
     </div>
 
-    ${listaChats}
+    ${sidebar}
+
   </div>
 
-  <div class="main">
+  <!-- CHAT -->
+  <div class="chat-container">
 
-    <div class="chat-header">
-      ${clienteSeleccionado || "Selecciona un chat"}
+    <div class="chat-topbar">
+      📱 WhatsApp Inbox
     </div>
 
-    <div class="messages">
-      ${mensajesHtml || '<div class="empty">No hay mensajes todavía</div>'}
+    <div id="messagesBox" class="messages-box">
+
+      ${mensajesHTML}
+
     </div>
 
-    <form class="reply-box" method="POST" action="/inbox/responder">
-      <input type="hidden" name="numero" value="${clienteSeleccionado}">
-      <textarea name="respuesta" placeholder="Escribe un mensaje..."></textarea>
-      <button type="submit">➤</button>
-    </form>
+    <div class="chat-input-area">
+
+      <input
+        id="manualMessage"
+        class="chat-input"
+        placeholder="Escribe un mensaje..."
+      >
+
+      <button
+        class="send-btn"
+        onclick="sendManualMessage()"
+      >
+        Enviar
+      </button>
+
+    </div>
 
   </div>
 
 </div>
 
+<script>
+
+const conversaciones =
+  ${JSON.stringify(conversaciones)};
+
+let activeChat =
+  "${firstChat || ""}";
+
+/* ========================= */
+/* ABRIR CHAT */
+/* ========================= */
+
+function openChat(numero){
+
+  activeChat = numero;
+
+  const box =
+    document.getElementById("messagesBox");
+
+  box.innerHTML = "";
+
+  conversaciones[numero]
+  .forEach(msg => {
+
+    const tipo =
+      msg.tipo === "saliente"
+        ? "agent-message"
+        : "client-message";
+
+    box.innerHTML += \`
+      <div class="message \${tipo}">
+
+        \${msg.mensaje}
+
+        <span class="message-time">
+
+          \${new Date(msg.created_at)
+            .toLocaleTimeString([], {
+              hour:'2-digit',
+              minute:'2-digit'
+            })}
+
+        </span>
+
+      </div>
+    \`;
+
+  });
+
+  scrollBottom();
+
+}
+
+/* ========================= */
+/* ENVIAR MANUAL */
+/* ========================= */
+
+async function sendManualMessage(){
+
+  const input =
+    document.getElementById("manualMessage");
+
+  const text =
+    input.value.trim();
+
+  if(!text || !activeChat) return;
+
+  // MOSTRAR EN PANTALLA
+  const box =
+    document.getElementById("messagesBox");
+
+  box.innerHTML += \`
+    <div class="message agent-message">
+
+      \${text}
+
+      <span class="message-time">
+        \${new Date().toLocaleTimeString([],{
+          hour:'2-digit',
+          minute:'2-digit'
+        })}
+      </span>
+
+    </div>
+  \`;
+
+  scrollBottom();
+
+  input.value = "";
+
+  // ENVÍO REAL
+  await fetch("/send-manual-message",{
+    method:"POST",
+    headers:{
+      "Content-Type":"application/json"
+    },
+    body:JSON.stringify({
+      numero:activeChat,
+      mensaje:text
+    })
+  });
+
+}
+
+/* ========================= */
+/* AUTO SCROLL */
+/* ========================= */
+
+function scrollBottom(){
+
+  const box =
+    document.getElementById("messagesBox");
+
+  box.scrollTop =
+    box.scrollHeight;
+
+}
+
+scrollBottom();
+
+/* ENTER */
+
+document
+.getElementById("manualMessage")
+.addEventListener("keydown",e=>{
+
+  if(e.key==="Enter"){
+    sendManualMessage();
+  }
+
+});
+
+</script>
+
 </body>
 </html>
-    `);
+
+`);
 
   } catch (error) {
-    res.send(error.message);
+
+    console.log(error.message);
+
+    res.send("Error cargando inbox");
+
   }
+
 });
