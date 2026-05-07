@@ -709,7 +709,7 @@ app.post("/admin/guardar", async (req, res) => {
   producto,
   mensaje_1,
   mensaje_2,
-  seguimiento_1
+  seguimiento_1,
 tiempo_seguimiento
 },
       {
