@@ -8,28 +8,9 @@ const seguimientoDescuento = {};
 const mensajesProcesados = new Set();
 app.use(bodyParser.json());
 
-app.use(express.urlencoded({ extended: true }));
-
 // 🔑 VARIABLES (Railway)
 const TOKEN = process.env.TOKEN;
 const PHONE_ID = process.env.PHONE_ID;
-
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
-
-async function obtenerFlujo() {
-  const response = await axios.get(
-    `${SUPABASE_URL}/rest/v1/flujos?producto=eq.Amigurumis&select=*`,
-    {
-      headers: {
-        apikey: SUPABASE_KEY,
-        Authorization: `Bearer ${SUPABASE_KEY}`
-      }
-    }
-  );
-
-  return response.data[0];
-}
 
 // 🔐 VERIFICACIÓN WEBHOOK
 app.get('/webhook', (req, res) => {
@@ -72,65 +53,11 @@ mensajesProcesados.add(message.id);
     
     const from = message.from;
 
-
     let text = "";
 
 if (message.type === "text") {
   text = message.text.body.toLowerCase();
 }
-
-await axios.post(
-  `${SUPABASE_URL}/rest/v1/clientes?on_conflict=numero`,
-  {
-    numero: from,
-    estado: "nuevo"
-  },
-  {
-    headers: {
-  apikey: SUPABASE_KEY,
-  Authorization: `Bearer ${SUPABASE_KEY}`,
-  "Content-Type": "application/json",
-  Prefer: "resolution=merge-duplicates,return=minimal"
-}
-  }
-);
-
-await axios.post(
-  `${SUPABASE_URL}/rest/v1/mensajes`,
-  {
-    cliente_numero: from,
-    direccion: "entrante",
-    tipo: message.type,
-    contenido: text || "",
-    imagen_url: message.image ? message.image.id : null
-  },
-  {
-    headers: {
-      apikey: SUPABASE_KEY,
-      Authorization: `Bearer ${SUPABASE_KEY}`,
-      "Content-Type": "application/json"
-    }
-  }
-);
-
-await axios.post(
-  `${SUPABASE_URL}/rest/v1/conversaciones`,
-  {
-    cliente_numero: from,
-    ultimo_mensaje: text || message.type,
-    ultimo_mensaje_en: new Date().toISOString(),
-    estado: "abierta"
-  },
-  {
-    headers: {
-      apikey: SUPABASE_KEY,
-      Authorization: `Bearer ${SUPABASE_KEY}`,
-      "Content-Type": "application/json",
-      Prefer: "resolution=merge-duplicates"
-    }
-  }
-);
-
 
 if (text.includes("reset")) {
   delete seguimientos[from];
@@ -176,8 +103,6 @@ if (seguimientos[from]) {
 
 seguimientos[from] = true;
 
-const flujo = await obtenerFlujo();
-
       // 🥇 MENSAJE 1
       await axios.post(
         `https://graph.facebook.com/v19.0/${PHONE_ID}/messages`,
@@ -185,7 +110,14 @@ const flujo = await obtenerFlujo();
           messaging_product: "whatsapp",
           to: from,
           text: {
-            body: flujo.mensaje_1
+            body: `Hola ${nombre} 😊 ¡Gracias por escribirnos!
+
+Te cuento lo que incluye nuestro pack especial 🔥🔥👇👇
+
+📘 +10.000 patrones de amigurumis listos para tejer
+🎁 Perfecto para vender o emprender
+🧶 Para principiantes y avanzados
+⚡ Acceso digital inmediato`
           }
         },
         {
@@ -712,187 +644,7 @@ setTimeout(async () => {
   }
 });
 
-// 🖥 PANEL ADMIN
-app.get("/admin", async (req, res) => {
-  res.send(`
-    <h1>MacBot CRM</h1>
-
-    <form method="POST" action="/admin/guardar">
-
-<label>Número WhatsApp</label><br>
-<input type="text" name="numero_whatsapp"><br><br>
-
-<label>Producto</label><br>
-<input type="text" name="producto"><br><br>
-
-      <label>Mensaje 1</label><br>
-      <textarea name="mensaje_1" rows="5" cols="50"></textarea><br><br>
-
-      <label>Mensaje 2</label><br>
-      <textarea name="mensaje_2" rows="5" cols="50"></textarea><br><br>
-
-      <label>Seguimiento</label><br>
-      <textarea name="seguimiento_1" rows="5" cols="50"></textarea><br><br>
-
-<label>Tiempo seguimiento en segundos</label><br>
-<input type="number" name="tiempo_seguimiento"><br><br>
-
-      <button type="submit">
-        Guardar
-      </button>
-
-    </form>
-  `);
-});
-
-app.post("/admin/guardar", async (req, res) => {
-  const {
-  numero_whatsapp,
-  producto,
-  mensaje_1,
-  mensaje_2,
-  seguimiento_1,
-  tiempo_seguimiento
-} = req.body;
-
-  try {
-    await axios.patch(
-      `${SUPABASE_URL}/rest/v1/flujos?numero_whatsapp=eq.${numero_whatsapp}`,
-        {
-  numero_whatsapp,
-  producto,
-  mensaje_1,
-  mensaje_2,
-  seguimiento_1,
-tiempo_seguimiento
-},
-      {
-        headers: {
-          apikey: SUPABASE_KEY,
-          Authorization: `Bearer ${SUPABASE_KEY}`,
-          "Content-Type": "application/json"
-        }
-      }
-    );
-
-    res.send(`
-      <h1>✅ Guardado correctamente</h1>
-      <a href="/admin">Volver al panel</a>
-    `);
-
-  } catch (error) {
-    console.log(error.response?.data || error.message);
-
-    res.send(`
-      <h1>❌ Error al guardar</h1>
-      <p>Revisa Railway logs.</p>
-      <a href="/admin">Volver</a>
-    `);
-  }
-});
-
 // 🚀 SERVIDOR
 const PORT = process.env.PORT || 3000;
-
-// =========================
-// ✍️ RESPONDER MANUAL
-// =========================
-
-app.post("/inbox/responder", async (req, res) => {
-  const { numero, respuesta } = req.body;
-
-  await axios.post(
-    `https://graph.facebook.com/v19.0/${PHONE_ID}/messages`,
-    {
-      messaging_product: "whatsapp",
-      to: numero,
-      text: {
-        body: respuesta
-      }
-    },
-    {
-      headers: {
-        Authorization: `Bearer ${TOKEN}`,
-        "Content-Type": "application/json"
-      }
-    }
-  );
-
-  res.send(`
-    <h1>✅ Respuesta enviada</h1>
-    <a href="/inbox">Volver al inbox</a>
-  `);
-});
-
 app.listen(PORT, () => {
   console.log("🚀 Servidor corriendo en puerto", PORT);
-});
-
-// =========================
-// 📥 INBOX VISUAL
-// =========================
-
-app.get("/inbox", async (req, res) => {
-
-  try {
-
-    const response = await axios.get(
-      `${SUPABASE_URL}/rest/v1/mensajes?select=*`,
-      {
-        headers: {
-          apikey: SUPABASE_KEY,
-          Authorization: `Bearer ${SUPABASE_KEY}`
-        }
-      }
-    );
-
-    let html = `
-    <h1>MacBot Inbox</h1>
-    `;
-
-    response.data.reverse().forEach(msg => {
-
-      html += `
-      <div style="
-        border:1px solid #ccc;
-        padding:10px;
-        margin:10px;
-        border-radius:10px;
-      ">
-
-      <b>${msg.cliente_numero}</b><br>
-      ${msg.contenido || ""}<br>
-<form method="POST" action="/inbox/responder">
-
-  <input
-    type="hidden"
-    name="numero"
-    value="${msg.cliente_numero}"
-  >
-
-  <textarea
-    name="respuesta"
-    rows="3"
-    cols="40"
-    placeholder="Responder..."
-  ></textarea><br><br>
-
-  <button type="submit">
-    Enviar respuesta
-  </button>
-
-</form>
-
-      </div>
-      `;
-    });
-
-    res.send(html);
-
-  } catch (error) {
-
-    res.send(error.message);
-
-  }
-
-});
