@@ -98,8 +98,8 @@ await axios.post(
 await axios.post(
   `${SUPABASE_URL}/rest/v1/mensajes`,
   {
-    cliente_numero: from,
-    direccion: "entrante",
+    número_de_cliente: from,
+    dirección: "entrante",
     tipo: message.type,
     contenido: text || "",
     imagen_url: message.image ? message.image.id : null
@@ -116,7 +116,7 @@ await axios.post(
 await axios.post(
   `${SUPABASE_URL}/rest/v1/conversaciones`,
   {
-    cliente_numero: from,
+    número_de_cliente: from,
     ultimo_mensaje: text || message.type,
     ultimo_mensaje_en: new Date().toISOString(),
     estado: "abierta"
