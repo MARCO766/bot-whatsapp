@@ -793,6 +793,37 @@ tiempo_seguimiento
 
 // 🚀 SERVIDOR
 const PORT = process.env.PORT || 3000;
+
+// =========================
+// ✍️ RESPONDER MANUAL
+// =========================
+
+app.post("/inbox/responder", async (req, res) => {
+  const { numero, respuesta } = req.body;
+
+  await axios.post(
+    `https://graph.facebook.com/v19.0/${PHONE_ID}/messages`,
+    {
+      messaging_product: "whatsapp",
+      to: numero,
+      text: {
+        body: respuesta
+      }
+    },
+    {
+      headers: {
+        Authorization: `Bearer ${TOKEN}`,
+        "Content-Type": "application/json"
+      }
+    }
+  );
+
+  res.send(`
+    <h1>✅ Respuesta enviada</h1>
+    <a href="/inbox">Volver al inbox</a>
+  `);
+});
+
 app.listen(PORT, () => {
   console.log("🚀 Servidor corriendo en puerto", PORT);
 });
@@ -831,6 +862,26 @@ app.get("/inbox", async (req, res) => {
 
       <b>${msg.cliente_numero}</b><br>
       ${msg.contenido || ""}<br>
+<form method="POST" action="/inbox/responder">
+
+  <input
+    type="hidden"
+    name="numero"
+    value="${msg.cliente_numero}"
+  >
+
+  <textarea
+    name="respuesta"
+    rows="3"
+    cols="40"
+    placeholder="Responder..."
+  ></textarea><br><br>
+
+  <button type="submit">
+    Enviar respuesta
+  </button>
+
+</form>
 
       </div>
       `;
