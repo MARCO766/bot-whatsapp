@@ -1299,33 +1299,22 @@ setInterval(async () => {
     const box =
       document.getElementById("messagesBox");
 
-    box.innerHTML = "";
+    box.innerHTML +=
+  '<div class="message ' + tipo + '">' +
+    (msg.contenido || '') +
 
-    mensajes.forEach(msg => {
+    '<span class="message-time">' +
 
-      const tipo =
-        msg.direccion === "saliente"
-          ? "agent-message"
-          : "client-message";
+      new Date(msg.creado_en)
+      .toLocaleTimeString("es-BO", {
+        timeZone: "America/La_Paz",
+        hour: "2-digit",
+        minute: "2-digit"
+      }) +
 
-      box.innerHTML += `
-        <div class="message ${tipo}">
+    '</span>' +
 
-          ${msg.contenido}
-
-          <span class="message-time">
-
-            ${new Date(msg.creado_en)
-              .toLocaleTimeString("es-BO", {
-                timeZone: "America/La_Paz",
-                hour: "2-digit",
-                minute: "2-digit"
-              })}
-
-          </span>
-
-        </div>
-      `;
+  '</div>';
 
     });
 
