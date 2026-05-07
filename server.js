@@ -828,14 +828,12 @@ app.listen(PORT, () => {
   console.log("🚀 Servidor corriendo en puerto", PORT);
 });
 
-// =========================
-// 📥 INBOX VISUAL
-// =========================
+// ==========================
+// 💬 WHATSAPP INBOX VISUAL ULTRA PRO
+// ==========================
 
 app.get("/inbox", async (req, res) => {
-
   try {
-
     const response = await axios.get(
       `${SUPABASE_URL}/rest/v1/mensajes?select=*`,
       {
@@ -846,53 +844,321 @@ app.get("/inbox", async (req, res) => {
       }
     );
 
-    let html = `
-    <h1>MacBot Inbox</h1>
-    `;
+    const mensajes = response.data || [];
+    const conversaciones = {};
 
-    response.data.reverse().forEach(msg => {
+    mensajes.forEach(msg => {
+      const numero = msg.numero_de_cliente || msg.cliente_numero;
 
-      html += `
-      <div style="
-        border:1px solid #ccc;
-        padding:10px;
-        margin:10px;
-        border-radius:10px;
-      ">
+      if (!numero) return;
 
-      <b>${msg.cliente_numero}</b><br>
-      ${msg.contenido || ""}<br>
-<form method="POST" action="/inbox/responder">
+      if (!conversaciones[numero]) {
+        conversaciones[numero] = [];
+      }
 
-  <input
-    type="hidden"
-    name="numero"
-    value="${msg.cliente_numero}"
-  >
+      conversaciones[numero].push(msg);
+    });
 
-  <textarea
-    name="respuesta"
-    rows="3"
-    cols="40"
-    placeholder="Responder..."
-  ></textarea><br><br>
+    const numeros = Object.keys(conversaciones);
+    const primerChat = numeros[0] || "";
 
-  <button type="submit">
-    Enviar respuesta
-  </button>
+    let sidebarHTML = "";
 
-</form>
+    numeros.forEach(numero => {
+      const ultimo = conversaciones[numero][conversaciones[numero].length - 1];
 
-      </div>
+      sidebarHTML += `
+        <div class="chat-item" onclick="abrirChat('${numero}')">
+          <div class="avatar">👤</div>
+          <div class="chat-info">
+            <div class="chat-numero">${numero}</div>
+            <div class="chat-preview">${ultimo.contenido || ""}</div>
+          </div>
+        </div>
       `;
     });
 
-    res.send(html);
+    res.send(`
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>WhatsApp Inbox Ultra Pro</title>
 
-  } catch (error) {
+<style>
+*{
+  box-sizing:border-box;
+}
 
-    res.send(error.message);
+body{
+  margin:0;
+  font-family:Arial, sans-serif;
+  background:#0f172a;
+}
 
+.crm{
+  display:flex;
+  height:100vh;
+}
+
+/* SIDEBAR */
+
+.sidebar{
+  width:330px;
+  background:#111827;
+  color:white;
+  border-right:1px solid #1f2937;
+  overflow-y:auto;
+}
+
+.logo{
+  padding:20px;
+  font-size:22px;
+  font-weight:bold;
+  background:#020617;
+  border-bottom:1px solid #1f2937;
+}
+
+.chat-item{
+  display:flex;
+  gap:12px;
+  padding:14px;
+  cursor:pointer;
+  border-bottom:1px solid #1f2937;
+  transition:.2s;
+}
+
+.chat-item:hover{
+  background:#1f2937;
+}
+
+.avatar{
+  width:42px;
+  height:42px;
+  border-radius:50%;
+  background:#25d366;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:20px;
+}
+
+.chat-info{
+  flex:1;
+  overflow:hidden;
+}
+
+.chat-numero{
+  font-weight:bold;
+  font-size:14px;
+}
+
+.chat-preview{
+  font-size:13px;
+  color:#94a3b8;
+  margin-top:4px;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+
+/* CHAT */
+
+.chat-area{
+  flex:1;
+  display:flex;
+  flex-direction:column;
+  background:#e5ddd5;
+}
+
+.chat-header{
+  height:65px;
+  background:#075e54;
+  color:white;
+  display:flex;
+  align-items:center;
+  padding:0 20px;
+  font-size:18px;
+  font-weight:bold;
+  box-shadow:0 1px 3px rgba(0,0,0,.25);
+}
+
+.status{
+  font-size:12px;
+  margin-left:10px;
+  color:#dcfce7;
+}
+
+.messages{
+  flex:1;
+  padding:20px;
+  overflow-y:auto;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+
+.message{
+  max-width:70%;
+  padding:10px 14px;
+  font-size:15px;
+  line-height:1.4;
+  color:#111827;
+  word-wrap:break-word;
+  box-shadow:0 1px 2px rgba(0,0,0,.12);
+  animation:pop .15s ease;
+}
+
+@keyframes pop{
+  from{
+    opacity:0;
+    transform:scale(.95);
+  }
+  to{
+    opacity:1;
+    transform:scale(1);
+  }
+}
+
+.entrante{
+  align-self:flex-start;
+  background:white;
+  border-radius:16px 16px 16px 5px;
+}
+
+.saliente{
+  align-self:flex-end;
+  background:#dcf8c6;
+  border-radius:16px 16px 5px 16px;
+}
+
+.time{
+  display:block;
+  text-align:right;
+  font-size:11px;
+  color:#667085;
+  margin-top:5px;
+}
+
+.empty{
+  margin:auto;
+  color:#64748b;
+  font-size:22px;
+}
+
+/* FORM */
+
+.chat-input{
+  background:#f0f2f5;
+  padding:10px;
+  display:flex;
+  gap:10px;
+  border-top:1px solid #d1d5db;
+}
+
+.chat-input input[type="text"]{
+  flex:1;
+  border:none;
+  outline:none;
+  border-radius:30px;
+  padding:14px 18px;
+  font-size:15px;
+  background:white;
+}
+
+.chat-input button{
+  border:none;
+  background:#25d366;
+  color:white;
+  font-weight:bold;
+  padding:14px 22px;
+  border-radius:30px;
+  cursor:pointer;
+}
+
+.chat-input button:hover{
+  background:#1ebe5d;
+}
+</style>
+</head>
+
+<body>
+
+<div class="crm">
+
+  <div class="sidebar">
+    <div class="logo">💬 MacBot CRM</div>
+    ${sidebarHTML}
+  </div>
+
+  <div class="chat-area">
+
+    <div class="chat-header">
+      📱 WhatsApp Inbox
+      <span class="status">● En línea</span>
+    </div>
+
+    <div id="messages" class="messages"></div>
+
+    <form method="POST" action="/inbox/responder" class="chat-input">
+      <input type="hidden" id="numeroInput" name="numero" value="${primerChat}">
+      <input type="text" name="respuesta" placeholder="Escribe un mensaje..." required>
+      <button type="submit">Enviar</button>
+    </form>
+
+  </div>
+
+</div>
+
+<script>
+const conversaciones = ${JSON.stringify(conversaciones)};
+let chatActual = "${primerChat}";
+
+function horaBolivia(fecha){
+  return new Date(fecha || Date.now()).toLocaleTimeString("es-BO", {
+    timeZone:"America/La_Paz",
+    hour:"2-digit",
+    minute:"2-digit"
+  });
+}
+
+function abrirChat(numero){
+  chatActual = numero;
+  document.getElementById("numeroInput").value = numero;
+  renderMensajes();
+}
+
+function renderMensajes(){
+  const box = document.getElementById("messages");
+  box.innerHTML = "";
+
+  if(!chatActual || !conversaciones[chatActual]){
+    box.innerHTML = '<div class="empty">Selecciona un chat</div>';
+    return;
   }
 
+  conversaciones[chatActual].forEach(msg => {
+    const clase = msg.direccion === "saliente" ? "saliente" : "entrante";
+
+    box.innerHTML +=
+      '<div class="message ' + clase + '">' +
+        (msg.contenido || "") +
+        '<span class="time">' + horaBolivia(msg.creado_en) + '</span>' +
+      '</div>';
+  });
+
+  box.scrollTop = box.scrollHeight;
+}
+
+renderMensajes();
+</script>
+
+</body>
+</html>
+    `);
+
+  } catch (error) {
+    console.log(error.response?.data || error.message);
+    res.send("Error cargando inbox");
+  }
 });
