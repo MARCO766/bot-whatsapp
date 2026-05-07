@@ -796,3 +796,52 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log("🚀 Servidor corriendo en puerto", PORT);
 });
+
+// =========================
+// 📥 INBOX VISUAL
+// =========================
+
+app.get("/inbox", async (req, res) => {
+
+  try {
+
+    const response = await axios.get(
+      `${SUPABASE_URL}/rest/v1/mensajes?select=*`,
+      {
+        headers: {
+          apikey: SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_KEY}`
+        }
+      }
+    );
+
+    let html = `
+    <h1>MacBot Inbox</h1>
+    `;
+
+    response.data.reverse().forEach(msg => {
+
+      html += `
+      <div style="
+        border:1px solid #ccc;
+        padding:10px;
+        margin:10px;
+        border-radius:10px;
+      ">
+
+      <b>${msg.cliente_numero}</b><br>
+      ${msg.contenido || ""}<br>
+
+      </div>
+      `;
+    });
+
+    res.send(html);
+
+  } catch (error) {
+
+    res.send(error.message);
+
+  }
+
+});
