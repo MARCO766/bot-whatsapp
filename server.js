@@ -847,8 +847,63 @@ app.get("/inbox", async (req, res) => {
     );
 
     let html = `
-    <h1>MacBot Inbox</h1>
-    `;
+<style>
+body{
+  margin:0;
+  font-family:Arial,sans-serif;
+  background:#0b141a;
+  color:#e9edef;
+}
+h1{
+  margin:0;
+  padding:18px;
+  background:#202c33;
+  color:#e9edef;
+  font-size:22px;
+}
+div{
+  background:#111b21 !important;
+  border:1px solid #263238 !important;
+  border-radius:14px !important;
+  margin:14px !important;
+  padding:14px !important;
+  color:#e9edef !important;
+}
+b{
+  color:#25d366;
+  font-size:16px;
+}
+textarea{
+  width:100%;
+  max-width:520px;
+  background:#2a3942;
+  color:#e9edef;
+  border:none;
+  border-radius:20px;
+  padding:12px;
+  outline:none;
+  resize:none;
+}
+button{
+  background:#00a884;
+  color:white;
+  border:none;
+  padding:10px 18px;
+  border-radius:20px;
+  font-weight:bold;
+  cursor:pointer;
+  margin-top:8px;
+}
+button:hover{
+  background:#029979;
+}
+form{
+  margin-top:10px;
+}
+</style>
+
+<h1>💬 MacBot Inbox</h1>
+`;
 
     response.data.reverse().forEach(msg => {
 
