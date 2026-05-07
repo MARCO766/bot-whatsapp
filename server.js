@@ -818,6 +818,26 @@ app.post("/inbox/responder", async (req, res) => {
     }
   );
 
+// GUARDAR MENSAJE SALIENTE
+
+await axios.post(
+  `${SUPABASE_URL}/rest/v1/mensajes`,
+  {
+    numero_de_cliente: numero,
+    direccion: "saliente",
+    tipo: "text",
+    contenido: respuesta,
+    imagen_url: null
+  },
+  {
+    headers: {
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${SUPABASE_KEY}`,
+      "Content-Type": "application/json"
+    }
+  }
+);
+
   res.send(`
     <h1>✅ Respuesta enviada</h1>
     <a href="/inbox">Volver al inbox</a>
@@ -1191,11 +1211,11 @@ function renderMessages(){
       '<span class="message-time">' +
 
       new Date(msg.creado_en)
-      .toLocaleTimeString("es-BO", {
-        timeZone: "America/La_Paz",
-        hour: "2-digit",
-        minute: "2-digit"
-      }) +
+.toLocaleTimeString("es-BO", {
+  timeZone: "America/La_Paz",
+  hour: "2-digit",
+  minute: "2-digit"
+}) +
 
       '</span>' +
 
