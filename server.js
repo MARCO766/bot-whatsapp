@@ -14,6 +14,9 @@ app.use(express.urlencoded({ extended: true }));
 const TOKEN = process.env.TOKEN;
 const PHONE_ID = process.env.PHONE_ID;
 
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
+
 // 🔐 VERIFICACIÓN WEBHOOK
 app.get('/webhook', (req, res) => {
   const VERIFY_TOKEN = "123456";
@@ -668,6 +671,42 @@ app.get("/admin", async (req, res) => {
 
     </form>
   `);
+});
+
+app.post("/admin/guardar", async (req, res) => {
+  const { mensaje_1, mensaje_2, seguimiento_1 } = req.body;
+
+  try {
+    await axios.patch(
+      `${SUPABASE_URL}/rest/v1/flujos?producto=eq.Amigurumis`,
+      {
+        mensaje_1,
+        mensaje_2,
+        seguimiento_1
+      },
+      {
+        headers: {
+          apikey: SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_KEY}`,
+          "Content-Type": "application/json"
+        }
+      }
+    );
+
+    res.send(`
+      <h1>✅ Guardado correctamente</h1>
+      <a href="/admin">Volver al panel</a>
+    `);
+
+  } catch (error) {
+    console.log(error.response?.data || error.message);
+
+    res.send(`
+      <h1>❌ Error al guardar</h1>
+      <p>Revisa Railway logs.</p>
+      <a href="/admin">Volver</a>
+    `);
+  }
 });
 
 // 🚀 SERVIDOR
