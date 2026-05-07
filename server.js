@@ -794,34 +794,63 @@ tiempo_seguimiento
 // 🚀 SERVIDOR
 const PORT = process.env.PORT || 3000;
 
-// =========================
-// ✍️ RESPONDER MANUAL
-// =========================
+// ==========================
+// ✍️ RESPONDER MANUAL DESDE INBOX
+// ==========================
 
 app.post("/inbox/responder", async (req, res) => {
-  const { numero, respuesta } = req.body;
+  try {
+    const { numero, respuesta } = req.body;
 
-  await axios.post(
-    `https://graph.facebook.com/v19.0/${PHONE_ID}/messages`,
-    {
-      messaging_product: "whatsapp",
-      to: numero,
-      text: {
-        body: respuesta
-      }
-    },
-    {
-      headers: {
-        Authorization: `Bearer ${TOKEN}`,
-        "Content-Type": "application/json"
-      }
+    if (!numero || !respuesta) {
+      return res.send("Falta número o respuesta");
     }
-  );
 
-  res.send(`
-    <h1>✅ Respuesta enviada</h1>
-    <a href="/inbox">Volver al inbox</a>
-  `);
+    // 1. ENVIAR A WHATSAPP
+    await axios.post(
+      `https://graph.facebook.com/v19.0/${PHONE_ID}/messages`,
+      {
+        messaging_product: "whatsapp",
+        to: numero,
+        type: "text",
+        text: {
+          body: respuesta
+        }
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${TOKEN}`,
+          "Content-Type": "application/json"
+        }
+      }
+    );
+
+    // 2. GUARDAR EN SUPABASE COMO SALIENTE
+    await axios.post(
+      `${SUPABASE_URL}/rest/v1/mensajes`,
+      {
+        numero_de_cliente: numero,
+        direccion: "saliente",
+        tipo: "text",
+        contenido: respuesta,
+        imagen_url: null
+      },
+      {
+        headers: {
+          apikey: SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_KEY}`,
+          "Content-Type": "application/json"
+        }
+      }
+    );
+
+    // 3. VOLVER AL INBOX
+    res.redirect("/inbox");
+
+  } catch (error) {
+    console.log("ERROR RESPONDER:", error.response?.data || error.message);
+    res.send("Error enviando respuesta. Revisa Railway Logs.");
+  }
 });
 
 app.listen(PORT, () => {
