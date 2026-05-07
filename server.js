@@ -819,9 +819,7 @@ app.post("/inbox/responder", async (req, res) => {
   );
 
   res.send(`
-    <h1>✅ Respuesta enviada</h1>
-    <a href="/inbox">Volver al inbox</a>
-  `);
+    res.redirect("/inbox");
 });
 
 app.listen(PORT, () => {
