@@ -400,7 +400,7 @@ ${
       `;
 
 
-    res.send(html);
+    res.render("inbox");
 
   } catch (error) {
 
