@@ -3,6 +3,12 @@ const router = express.Router();
 
 const axios = require("axios");
 const multer = require("multer");
+const ffmpeg = require("fluent-ffmpeg");
+const ffmpegPath = require("ffmpeg-static");
+const fs = require("fs");
+const path = require("path");
+
+ffmpeg.setFfmpegPath(ffmpegPath);
 
 const upload = multer({
   storage: multer.memoryStorage()
@@ -91,26 +97,219 @@ const PORT = process.env.PORT || 3000;
 // ✍️ RESPONDER MANUAL
 // =========================
 
-router.post("/inbox/responder", protegerPanel, async (req, res) => {
+router.post("/inbox/responder", protegerPanel, upload.single("archivo"), async (req, res) => {
+
   try {
+
     const { numero, respuesta } = req.body;
 
-    await enviarTextoWhatsApp(
-      numero,
-      respuesta,
-      {
-        usuarioId: req.session.usuario.id
+    // =========================
+    // SOLO TEXTO
+    // =========================
+
+    if (!req.file) {
+
+      if (!respuesta || !respuesta.trim()) {
+        return res.redirect("/inbox?numero=" + numero);
       }
+
+      await enviarTextoWhatsApp(
+        numero,
+        respuesta,
+        {
+          usuarioId: req.session.usuario.id
+        }
+      );
+
+      return res.redirect("/inbox?numero=" + numero);
+    }
+
+    // =========================
+    // ARCHIVO
+    // =========================
+
+    const mime = req.file.mimetype;
+    const sizeMB = req.file.size / 1024 / 1024;
+
+    let tipoWhatsApp = null;
+
+    // =========================
+    // IMAGEN
+    // =========================
+
+    if (mime.startsWith("image/")) {
+
+      if (sizeMB > 2) {
+        return res.send("❌ Imagen máxima 2MB");
+      }
+
+      tipoWhatsApp = "image";
+    }
+
+    // =========================
+    // VIDEO
+    // =========================
+
+    else if (mime.startsWith("video/")) {
+
+      tipoWhatsApp = "video";
+
+      // video temporal original
+      const tempInput = path.join(
+        __dirname,
+        "../temp",
+        Date.now() + "-input.mp4"
+      );
+
+      // video comprimido
+      const tempOutput = path.join(
+        __dirname,
+        "../temp",
+        Date.now() + "-output.mp4"
+      );
+
+      fs.writeFileSync(tempInput, req.file.buffer);
+
+      // comprimir video
+      await new Promise((resolve, reject) => {
+
+        ffmpeg(tempInput)
+
+          .outputOptions([
+            "-vcodec libx264",
+            "-crf 32",
+            "-preset veryfast",
+            "-movflags +faststart",
+            "-acodec aac",
+            "-b:a 96k",
+            "-vf scale=720:-2"
+          ])
+
+          .save(tempOutput)
+
+          .on("end", resolve)
+
+          .on("error", reject);
+
+      });
+
+      const compressedBuffer = fs.readFileSync(tempOutput);
+
+      req.file.buffer = compressedBuffer;
+
+      fs.unlinkSync(tempInput);
+      fs.unlinkSync(tempOutput);
+
+    }
+
+    // =========================
+    // DOCUMENTOS
+    // =========================
+
+    else if (
+
+      mime === "application/pdf" ||
+
+      mime === "application/msword" ||
+
+      mime === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+
+      mime === "application/vnd.ms-excel" ||
+
+      mime === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+    ) {
+
+      tipoWhatsApp = "document";
+
+    }
+
+    else {
+
+      return res.send("❌ Archivo no permitido");
+
+    }
+
+    // =========================
+    // SUBIR A SUPABASE
+    // =========================
+
+    const extension = req.file.originalname.split(".").pop();
+
+    const nombreArchivo =
+      Date.now() +
+      "-" +
+      Math.random().toString(36).substring(2) +
+      "." +
+      extension;
+
+    const rutaArchivo =
+      `whatsapp/${req.session.usuario.id}/${nombreArchivo}`;
+
+    await axios.post(
+
+      `${SUPABASE_URL}/storage/v1/object/archivos/${rutaArchivo}`,
+
+      req.file.buffer,
+
+      {
+
+        headers: {
+
+          apikey: SUPABASE_KEY,
+
+          Authorization: `Bearer ${SUPABASE_KEY}`,
+
+          "Content-Type": req.file.mimetype,
+
+          "x-upsert": "true"
+
+        }
+
+      }
+
     );
 
-    res.redirect("/inbox");
+    const urlPublica =
+      `${SUPABASE_URL}/storage/v1/object/public/archivos/${rutaArchivo}`;
 
-  } catch (error) {
-    console.log("ERROR RESPONDER DETALLADO:");
-    console.log(error.response?.data || error.message);
+    // =========================
+    // ENVIAR WHATSAPP
+    // =========================
 
-    res.send("Error enviando o guardando");
+    await enviarMediaWhatsApp(
+
+      numero,
+
+      tipoWhatsApp,
+
+      urlPublica,
+
+      respuesta || "",
+
+      {
+
+        usuarioId: req.session.usuario.id
+
+      }
+
+    );
+
+    res.redirect("/inbox?numero=" + numero);
+
   }
+
+  catch (error) {
+
+    console.log(
+      "ERROR ARCHIVO:",
+      error.response?.data || error.message
+    );
+
+    res.send("Error enviando archivo");
+
+  }
+
 });
 
 router.post("/guardar-flujo-builder", protegerPanel, async (req, res) => {
@@ -861,22 +1060,92 @@ document.addEventListener("click", () => {
       ? `
       <div class="chat-bottom">
 
-        <form action="/inbox/responder" method="POST">
+<form action="/inbox/responder" method="POST" enctype="multipart/form-data">
 
-          <input
-            type="hidden"
-            name="numero"
-            value="${chatActual}"
-          >
+  <input type="hidden" name="numero" value="${chatActual}">
 
-          <textarea
-            name="respuesta"
-            placeholder="Escribe un mensaje"
-          ></textarea>
+  <input
+    type="file"
+    name="archivo"
+    id="archivoChat"
+    accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx"
+    style="display:none;"
+  >
 
-          <button type="submit">➤</button>
+  <button
+    type="button"
+    onclick="document.getElementById('archivoChat').click()"
+    style="
+      width:55px;
+      border:none;
+      border-radius:50%;
+      background:#2a3942;
+      color:white;
+      font-size:28px;
+      cursor:pointer;
+    "
+  >
+    +
+  </button>
 
-        </form>
+  <textarea
+    name="respuesta"
+    placeholder="Mensaje..."
+  ></textarea>
+
+  <button type="submit">➤</button>
+
+</form>
+
+<div
+  id="previewArchivo"
+  style="
+    color:#25d366;
+    font-size:13px;
+    margin-top:8px;
+  "
+></div>
+
+<script>
+
+const archivoChat =
+  document.getElementById("archivoChat");
+
+const previewArchivo =
+  document.getElementById("previewArchivo");
+
+archivoChat.addEventListener("change", function(){
+
+  if(!this.files[0]) return;
+
+  const file = this.files[0];
+
+  const mb = file.size / 1024 / 1024;
+
+  if(file.type.startsWith("image/") && mb > 2){
+
+    alert("❌ Imagen máxima 2MB");
+
+    this.value = "";
+
+    previewArchivo.innerHTML = "";
+
+    return;
+
+  }
+
+  if(file.type.startsWith("video/") && mb > 15){
+
+    alert("⚠️ El video será comprimido automáticamente");
+
+  }
+
+  previewArchivo.innerHTML =
+    "📎 " + file.name;
+
+});
+
+</script>
 
       </div>
      `
