@@ -884,6 +884,35 @@ document.addEventListener("click", () => {
 }
   </div>
 
+  </div>
+
+<script src="/socket.io/socket.io.js"></script>
+
+<script>
+const socket = io();
+const USUARIO_ID = "${req.session.usuario.id}";
+const CHAT_ACTUAL = "${chatActual}";
+
+socket.emit("join-user", USUARIO_ID);
+
+socket.on("nuevo-mensaje", function(msg){
+  if(msg.cliente_numero !== CHAT_ACTUAL) return;
+
+  const mensajes = document.getElementById("mensajes");
+  if(!mensajes) return;
+
+  const div = document.createElement("div");
+  div.className = "message entrante";
+
+  div.innerHTML =
+    (msg.contenido || "") +
+    '<span class="time">ahora</span>';
+
+  mensajes.appendChild(div);
+  mensajes.scrollTop = mensajes.scrollHeight;
+});
+</script>
+
 </div>
       `;
 
@@ -1330,8 +1359,7 @@ router.get("/chat-etiqueta", protegerPanel, async (req, res) => {
 
         <br>
         <a href="/inbox" style="color:#25d366;">← Volver</a>
-
-
+        
       </body>
     `);
 

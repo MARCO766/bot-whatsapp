@@ -127,6 +127,7 @@ await axios.post(
 
 await axios.post(
   `${SUPABASE_URL}/rest/v1/mensajes`,
+  
   {
     cliente_numero: from,
     usuario_id: usuarioIdWebhook,
@@ -143,6 +144,20 @@ await axios.post(
     }
   }
 );
+
+const io = req.app.get("io");
+
+if (io && usuarioIdWebhook) {
+  io.to("user_" + usuarioIdWebhook).emit("nuevo-mensaje", {
+    cliente_numero: from,
+    usuario_id: usuarioIdWebhook,
+    direccion: "entrante",
+    tipo: message.type,
+    contenido: text || "",
+    imagen_url: message.image ? message.image.id : null,
+    creado_en: new Date().toISOString()
+  });
+}
 
 await axios.post(
   `${SUPABASE_URL}/rest/v1/conversaciones`,

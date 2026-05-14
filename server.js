@@ -78,6 +78,32 @@ app.get("/crear-pass", async (req, res) => {
 
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
+const http = require("http");
+const { Server } = require("socket.io");
+
+const server = http.createServer(app);
+
+const io = new Server(server, {
+  cors: {
+    origin: "*"
+  }
+});
+
+app.set("io", io);
+
+io.on("connection", (socket) => {
+  console.log("🟢 Cliente conectado al inbox:", socket.id);
+
+  socket.on("join-user", (usuarioId) => {
+    socket.join("user_" + usuarioId);
+    console.log("📡 Usuario unido a sala:", usuarioId);
+  });
+
+  socket.on("disconnect", () => {
+    console.log("🔴 Cliente desconectado:", socket.id);
+  });
+});
+
+server.listen(PORT, () => {
   console.log("🚀 Servidor corriendo en puerto", PORT);
 });
