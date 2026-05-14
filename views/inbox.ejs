@@ -1,3 +1,13 @@
 <link rel="stylesheet" href="/css/crm.css">
 
-<%- html %>
+<div
+  class="whatsapp"
+  data-usuario="<%= usuarioId %>"
+  data-chat="<%= chatActual %>"
+>
+  <div style="color:white;padding:30px;">
+    <h1>Inbox EJS conectado ✅</h1>
+    <p>Chat actual: <%= chatActual %></p>
+    <p>Total chats: <%= numeros.length %></p>
+  </div>
+</div>

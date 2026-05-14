@@ -401,7 +401,16 @@ ${
 
 
 res.render("inbox", {
-  html
+  etiquetaFiltro,
+  etiquetasUnicas,
+  mapaColoresEtiquetas,
+  etiquetasClientes,
+  conversaciones,
+  numeros,
+  chatActual,
+  mapaUnread,
+  horaBolivia,
+  usuarioId: req.session.usuario.id
 });
 
   } catch (error) {
