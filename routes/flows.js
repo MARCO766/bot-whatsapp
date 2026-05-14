@@ -1028,14 +1028,6 @@ ${
   : ""
 }
 
-${
-  msg.tipo === "audio" && msg.imagen_url
-  ? `<audio controls style="width:260px;display:block;margin-bottom:6px;">
-       <source src="${msg.imagen_url}" type="audio/ogg">
-     </audio>`
-  : ""
-}
-
       ${
         msg.contenido && !msg.contenido.startsWith("http")
         ? msg.contenido
@@ -1175,23 +1167,8 @@ archivoChat.addEventListener("change", function(){
 
   }
 
-let progreso = 1;
-
-previewArchivo.innerHTML =
-  "📎 " + file.name + " - cargando " + progreso + "%";
-
-const intervaloCarga = setInterval(() => {
-  progreso += 5;
-
-  if (progreso >= 100) {
-    progreso = 100;
-    clearInterval(intervaloCarga);
-  }
-
   previewArchivo.innerHTML =
-    "📎 " + file.name + " - cargando " + progreso + "%";
-
-}, 120);
+    "📎 " + file.name;
 
 });
 
@@ -1223,9 +1200,36 @@ socket.on("nuevo-mensaje", function(msg){
   const div = document.createElement("div");
   div.className = "message entrante";
 
-  div.innerHTML =
-    (msg.contenido || "") +
-    '<span class="time">ahora</span>';
+let mediaHtml = "";
+
+if (msg.tipo === "image" && msg.imagen_url) {
+  mediaHtml =
+    '<img src="' + msg.imagen_url + '" style="max-width:260px;border-radius:10px;display:block;margin-bottom:6px;">';
+}
+
+if (msg.tipo === "video" && msg.imagen_url) {
+  mediaHtml =
+    '<video controls style="max-width:280px;border-radius:10px;display:block;margin-bottom:6px;">' +
+    '<source src="' + msg.imagen_url + '">' +
+    '</video>';
+}
+
+if (msg.tipo === "audio" && msg.imagen_url) {
+  mediaHtml =
+    '<audio controls style="width:260px;display:block;margin-bottom:6px;">' +
+    '<source src="' + msg.imagen_url + '" type="audio/ogg">' +
+    '</audio>';
+}
+
+if (msg.tipo === "document" && msg.imagen_url) {
+  mediaHtml =
+    '<a href="' + msg.imagen_url + '" target="_blank" style="display:block;background:#202c33;color:#25d366;padding:12px;border-radius:10px;text-decoration:none;margin-bottom:6px;">📄 Abrir documento</a>';
+}
+
+div.innerHTML =
+  mediaHtml +
+  (msg.contenido || "") +
+  '<span class="time">ahora</span>';
 
   mensajes.appendChild(div);
   mensajes.scrollTop = mensajes.scrollHeight;
