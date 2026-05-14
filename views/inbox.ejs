@@ -45,7 +45,7 @@
 
         <div
           class="chat-item"
-          onclick="window.location.href='/inbox?numero=<%= numero %><%= etiquetaFiltro ? '&etiqueta=' + encodeURIComponent(etiquetaFiltro) : '' %>'"
+          onclick='window.location.href="/inbox?numero=<%= numero %><%= etiquetaFiltro ? "&etiqueta=" + encodeURIComponent(etiquetaFiltro) : "" %>"'
         >
 
           <div class="avatar"></div>
@@ -114,13 +114,73 @@
 
   </div>
 
-  <!-- CHAT TEMPORAL -->
-  <div class="chat">
-    <div style="color:white;padding:30px;">
-      <h2>Chat seleccionado</h2>
-      <p><%= chatActual || "Selecciona un chat" %></p>
+<!-- CHAT -->
+<div class="chat">
+
+  <div class="chat-top">
+    <div class="avatar"></div>
+
+    <div>
+      <h3><%= chatActual || "Selecciona un chat" %></h3>
+      <small style="color:#25d366;">en línea</small>
     </div>
   </div>
+
+  <div class="chat-messages" id="mensajes">
+
+    <% if (chatActual && conversaciones[chatActual]) { %>
+
+      <% conversaciones[chatActual].forEach(msg => { %>
+
+        <div class="message <%= msg.direccion === 'saliente' ? 'saliente' : 'entrante' %>">
+
+          <% if ((msg.tipo === "image" || msg.tipo === "imagen") && msg.imagen_url) { %>
+            <img src="<%= msg.imagen_url %>" style="max-width:260px;border-radius:10px;display:block;margin-bottom:6px;">
+          <% } %>
+
+          <% if (msg.tipo === "video" && msg.imagen_url) { %>
+            <video controls style="max-width:280px;border-radius:10px;display:block;margin-bottom:6px;">
+              <source src="<%= msg.imagen_url %>">
+            </video>
+          <% } %>
+
+          <% if (msg.tipo === "document" && msg.imagen_url) { %>
+            <a href="<%= msg.imagen_url %>" target="_blank" style="
+              display:block;
+              background:#202c33;
+              color:#25d366;
+              padding:12px;
+              border-radius:10px;
+              text-decoration:none;
+              margin-bottom:6px;
+            ">
+              📄 Abrir documento
+            </a>
+          <% } %>
+
+          <% if (msg.tipo === "audio" && msg.imagen_url) { %>
+            <audio controls style="width:260px;display:block;margin-bottom:6px;">
+              <source src="<%= msg.imagen_url %>">
+            </audio>
+          <% } %>
+
+          <% if (msg.contenido && !msg.contenido.startsWith("http")) { %>
+            <%= msg.contenido %>
+          <% } %>
+
+          <span class="time">
+            <%= horaBolivia(msg.creado_en) %>
+          </span>
+
+        </div>
+
+      <% }) %>
+
+    <% } %>
+
+  </div>
+
+</div>
 
 </div>
 
