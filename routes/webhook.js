@@ -45,6 +45,7 @@ router.post('/webhook', async (req, res) => {
     console.log("PHONE_ID WEBHOOK:", phoneNumberIdWebhook);
 
 let usuarioIdWebhook = null;
+let conexionWebhook = null;
 
 if (phoneNumberIdWebhook) {
   const responseConexionWebhook = await axios.get(
@@ -57,7 +58,7 @@ if (phoneNumberIdWebhook) {
     }
   );
 
-  const conexionWebhook = responseConexionWebhook.data?.[0];
+  conexionWebhook = responseConexionWebhook.data?.[0];
   console.log("CONEXION ENCONTRADA:", conexionWebhook);
 
   if (conexionWebhook) {
@@ -127,7 +128,7 @@ await axios.post(
 
 let mediaUrlFinal = null;
 
-if (message.audio && message.audio.id) {
+if (message.audio && message.audio.id && conexionWebhook?.token) {
 
   try {
 
@@ -180,52 +181,7 @@ if (message.audio && message.audio.id) {
   }
 
 }
-if (message.type === "audio") {
 
-  try {
-
-    const audioInfo = await axios.get(
-      `https://graph.facebook.com/v19.0/${message.audio.id}`,
-      {
-        headers: {
-          Authorization: `Bearer ${conexion.token}`
-        }
-      }
-    );
-
-    const audioUrl = audioInfo.data.url;
-
-    await axios.post(
-      `${SUPABASE_URL}/rest/v1/mensajes`,
-      {
-        cliente_numero: from,
-        usuario_id: usuarioIdWebhook,
-        direccion: "entrante",
-        tipo: "audio",
-        contenido: "audio",
-        imagen_url: audioUrl
-      },
-      {
-        headers: {
-          apikey: SUPABASE_KEY,
-          Authorization: `Bearer ${SUPABASE_KEY}`,
-          "Content-Type": "application/json"
-        }
-      }
-    );
-
-    console.log("✅ AUDIO GUARDADO");
-
-  } catch (err) {
-
-    console.log(
-      "ERROR DESCARGANDO AUDIO:",
-      err.response?.data || err.message
-    );
-
-  }
-
-}
 await axios.post(
   `${SUPABASE_URL}/rest/v1/mensajes`,
   
