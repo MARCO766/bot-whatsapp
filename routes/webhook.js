@@ -151,6 +151,7 @@ if (message.audio && message.audio.id && conexionWebhook?.token) {
     });
 
     const nombreAudio = Date.now() + "-audio.ogg";
+    text = "audio";
 
     const rutaAudio =
       `whatsapp/${usuarioIdWebhook}/${nombreAudio}`;
