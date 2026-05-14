@@ -184,4 +184,75 @@
 
 </div>
 
+<% if (chatActual) { %>
+
+  <div class="chat-bottom">
+
+    <form action="/inbox/responder" method="POST" enctype="multipart/form-data">
+
+      <input type="hidden" name="numero" value="<%= chatActual %>">
+
+      <input
+        type="file"
+        name="archivo"
+        id="archivoChat"
+        accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx"
+        style="display:none;"
+      >
+
+      <button
+        type="button"
+        onclick="document.getElementById('archivoChat').click()"
+        style="
+          width:55px;
+          border:none;
+          border-radius:50%;
+          background:#2a3942;
+          color:white;
+          font-size:28px;
+          cursor:pointer;
+        "
+      >
+        +
+      </button>
+
+      <textarea
+        name="respuesta"
+        placeholder="Mensaje..."
+      ></textarea>
+
+      <button type="submit">➤</button>
+
+      <button id="btnAudio" type="button" style="
+        width:55px;
+        border:none;
+        border-radius:50%;
+        background:#202c33;
+        color:white;
+        font-size:22px;
+        cursor:pointer;
+      ">
+        🎤
+      </button>
+
+    </form>
+
+    <div
+      id="previewArchivo"
+      style="
+        color:#25d366;
+        font-size:13px;
+        margin-top:8px;
+      "
+    ></div>
+
+  </div>
+
+<% } %>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="/js/autoscroll.js"></script>
 <script src="/js/chat-menu.js"></script>
+<script src="/js/crm.js"></script>
+<script src="/js/preview.js"></script>
+<script src="/js/audio-recorder.js"></script>
