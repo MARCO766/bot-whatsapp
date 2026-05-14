@@ -485,17 +485,3 @@ body{
   .message audio{width:260px !important;}
 }
 
-.chat {
-  display: flex !important;
-  flex-direction: column !important;
-}
-
-.chat-messages {
-  flex: 1 !important;
-  overflow-y: auto !important;
-}
-
-.chat-bottom {
-  width: 100% !important;
-  flex-shrink: 0 !important;
-}
