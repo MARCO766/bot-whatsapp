@@ -1,6 +1,8 @@
 const socket = io();
-const USUARIO_ID = "${req.session.usuario.id}";
-const CHAT_ACTUAL = "${chatActual}";
+const appCRM = document.querySelector(".whatsapp");
+
+const USUARIO_ID = appCRM.dataset.usuario;
+const CHAT_ACTUAL = appCRM.dataset.chat;
 
 socket.emit("join-user", USUARIO_ID);
 
