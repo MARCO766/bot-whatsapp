@@ -125,6 +125,62 @@ await axios.post(
   }
 );
 
+let mediaUrlFinal = null;
+
+if (message.audio && message.audio.id) {
+
+  try {
+
+    const audioInfo = await axios.get(
+      `https://graph.facebook.com/v19.0/${message.audio.id}`,
+      {
+        headers: {
+          Authorization: `Bearer ${conexionWebhook.token}`
+        }
+      }
+    );
+
+    const audioUrlMeta = audioInfo.data.url;
+
+    const audioFile = await axios.get(audioUrlMeta, {
+      responseType: "arraybuffer",
+      headers: {
+        Authorization: `Bearer ${conexionWebhook.token}`
+      }
+    });
+
+    const nombreAudio = Date.now() + "-audio.ogg";
+
+    const rutaAudio =
+      `whatsapp/${usuarioIdWebhook}/${nombreAudio}`;
+
+    await axios.post(
+      `${SUPABASE_URL}/storage/v1/object/archivos/${rutaAudio}`,
+      audioFile.data,
+      {
+        headers: {
+          apikey: SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_KEY}`,
+          "Content-Type": "audio/ogg",
+          "x-upsert": "true"
+        }
+      }
+    );
+
+    mediaUrlFinal =
+      `${SUPABASE_URL}/storage/v1/object/public/archivos/${rutaAudio}`;
+
+  } catch (error) {
+
+    console.log(
+      "ERROR DESCARGANDO AUDIO:",
+      error.response?.data || error.message
+    );
+
+  }
+
+}
+
 await axios.post(
   `${SUPABASE_URL}/rest/v1/mensajes`,
   
@@ -134,7 +190,7 @@ await axios.post(
     direccion: "entrante",
     tipo: message.type,
     contenido: text || "",
-    imagen_url: message.image ? message.image.id : null
+    imagen_url: mediaUrlFinal || null,
   },
   {
     headers: {
@@ -154,7 +210,7 @@ if (io && usuarioIdWebhook) {
     direccion: "entrante",
     tipo: message.type,
     contenido: text || "",
-    imagen_url: message.image ? message.image.id : null,
+    imagen_url: mediaUrlFinal || null,
     creado_en: new Date().toISOString()
   });
 }
