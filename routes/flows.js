@@ -1280,10 +1280,14 @@ if (msg.tipo === "video" && msg.imagen_url) {
     '</video>';
 }
 
-if (
-  (msg.tipo === "audio" || msg.tipo === "voice") &&
-  msg.imagen_url
-) {
+if (msg.tipo === "audio" && msg.imagen_url) {
+
+  mediaHtml =
+    '<audio controls style="width:260px;display:block;margin-bottom:6px;">' +
+    '<source src="' + msg.imagen_url + '">' +
+    '</audio>';
+
+}
   mediaHtml =
     '<audio controls style="width:260px;display:block;margin-bottom:6px;">' +
     <source src="${msg.imagen_url}">
