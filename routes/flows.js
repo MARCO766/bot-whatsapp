@@ -1207,7 +1207,7 @@ btnAudio.addEventListener("click", async () => {
       const formData = new FormData();
       formData.append("numero", "${chatActual}");
       formData.append("archivo", audioBlob, "audio.ogg");
-
+alert("Audio grabado: " + audioBlob.size + " bytes");
       await fetch("/inbox/responder", {
         method: "POST",
         body: formData
