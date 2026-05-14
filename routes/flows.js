@@ -957,8 +957,8 @@ const previewArchivo =
   </div>
 
 <script src="/socket.io/socket.io.js"></script>
-<script src="/js/audio-recorder.js"></script>
 <script src="/js/crm.js"></script>
+<script src="/js/audio-recorder.js"></script>
 
 
 </div>
