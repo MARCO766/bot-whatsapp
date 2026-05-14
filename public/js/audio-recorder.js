@@ -1,11 +1,14 @@
-const btnAudio = document.getElementById("btnAudio");
-const appCRM = document.querySelector(".whatsapp");
+document.addEventListener("DOMContentLoaded", () => {
 
-let mediaRecorder;
-let audioChunks = [];
-let grabando = false;
+  const btnAudio = document.getElementById("btnAudio");
+  const appCRM = document.querySelector(".whatsapp");
 
-if (btnAudio && appCRM) {
+  let mediaRecorder;
+  let audioChunks = [];
+  let grabando = false;
+
+  if (!btnAudio || !appCRM) return;
+
   btnAudio.addEventListener("click", async () => {
 
     if (!grabando) {
@@ -57,4 +60,5 @@ if (btnAudio && appCRM) {
     }
 
   });
-}
+
+});
