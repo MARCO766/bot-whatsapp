@@ -180,7 +180,52 @@ if (message.audio && message.audio.id) {
   }
 
 }
+if (message.type === "audio") {
 
+  try {
+
+    const audioInfo = await axios.get(
+      `https://graph.facebook.com/v19.0/${message.audio.id}`,
+      {
+        headers: {
+          Authorization: `Bearer ${conexion.token}`
+        }
+      }
+    );
+
+    const audioUrl = audioInfo.data.url;
+
+    await axios.post(
+      `${SUPABASE_URL}/rest/v1/mensajes`,
+      {
+        cliente_numero: from,
+        usuario_id: usuarioIdWebhook,
+        direccion: "entrante",
+        tipo: "audio",
+        contenido: "audio",
+        imagen_url: audioUrl
+      },
+      {
+        headers: {
+          apikey: SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_KEY}`,
+          "Content-Type": "application/json"
+        }
+      }
+    );
+
+    console.log("✅ AUDIO GUARDADO");
+
+  } catch (err) {
+
+    console.log(
+      "ERROR DESCARGANDO AUDIO:",
+      err.response?.data || err.message
+    );
+
+  }
+
+}
 await axios.post(
   `${SUPABASE_URL}/rest/v1/mensajes`,
   
