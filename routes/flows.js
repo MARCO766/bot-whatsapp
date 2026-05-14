@@ -1005,6 +1005,30 @@ flex-direction:column;
       }
 
       ${
+  msg.tipo === "video" && msg.imagen_url
+  ? `<video controls style="max-width:280px;border-radius:10px;display:block;margin-bottom:6px;">
+       <source src="${msg.imagen_url}">
+     </video>`
+  : ""
+}
+
+${
+  msg.tipo === "document" && msg.imagen_url
+  ? `<a href="${msg.imagen_url}" target="_blank" style="
+        display:block;
+        background:#202c33;
+        color:#25d366;
+        padding:12px;
+        border-radius:10px;
+        text-decoration:none;
+        margin-bottom:6px;
+      ">
+        📄 Abrir documento
+     </a>`
+  : ""
+}
+
+      ${
         msg.contenido && !msg.contenido.startsWith("http")
         ? msg.contenido
         : ""
@@ -1143,8 +1167,23 @@ archivoChat.addEventListener("change", function(){
 
   }
 
+let progreso = 1;
+
+previewArchivo.innerHTML =
+  "📎 " + file.name + " - cargando " + progreso + "%";
+
+const intervaloCarga = setInterval(() => {
+  progreso += 5;
+
+  if (progreso >= 100) {
+    progreso = 100;
+    clearInterval(intervaloCarga);
+  }
+
   previewArchivo.innerHTML =
-    "📎 " + file.name;
+    "📎 " + file.name + " - cargando " + progreso + "%";
+
+}, 120);
 
 });
 
