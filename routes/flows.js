@@ -1288,11 +1288,7 @@ if (msg.tipo === "audio" && msg.imagen_url) {
     '</audio>';
 
 }
-  mediaHtml =
-    '<audio controls style="width:260px;display:block;margin-bottom:6px;">' +
-    <source src="${msg.imagen_url}">
-    '</audio>';
-}
+
 
 if (msg.tipo === "document" && msg.imagen_url) {
   mediaHtml =
