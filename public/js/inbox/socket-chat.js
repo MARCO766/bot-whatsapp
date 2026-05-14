@@ -1,0 +1,56 @@
+const socket = io();
+const appCRM = document.querySelector(".whatsapp");
+
+const USUARIO_ID = appCRM.dataset.usuario;
+const CHAT_ACTUAL = appCRM.dataset.chat;
+
+socket.emit("join-user", USUARIO_ID);
+
+socket.on("nuevo-mensaje", function(msg){
+  if(msg.cliente_numero !== CHAT_ACTUAL) return;
+
+  const mensajes = document.getElementById("mensajes");
+  if(!mensajes) return;
+
+  const div = document.createElement("div");
+  div.className = "message entrante";
+
+let mediaHtml = "";
+
+if (msg.tipo === "image" && msg.imagen_url) {
+  mediaHtml =
+    '<img src="' + msg.imagen_url + '" style="max-width:260px;border-radius:10px;display:block;margin-bottom:6px;">';
+}
+
+if (msg.tipo === "video" && msg.imagen_url) {
+  mediaHtml =
+    '<video controls style="max-width:280px;border-radius:10px;display:block;margin-bottom:6px;">' +
+    '<source src="' + msg.imagen_url + '">' +
+    '</video>';
+}
+
+if (msg.tipo === "audio" && msg.imagen_url) {
+
+  mediaHtml =
+    '<audio controls style="width:260px;display:block;margin-bottom:6px;">' +
+    '<source src="' + msg.imagen_url + '">' +
+    '</audio>';
+
+}
+
+
+if (msg.tipo === "document" && msg.imagen_url) {
+  mediaHtml =
+    '<a href="' + msg.imagen_url + '" target="_blank" style="display:block;background:#202c33;color:#25d366;padding:12px;border-radius:10px;text-decoration:none;margin-bottom:6px;">📄 Abrir documento</a>';
+}
+
+
+
+div.innerHTML =
+  mediaHtml +
+  (msg.contenido || "") +
+  '<span class="time">ahora</span>';
+
+  mensajes.appendChild(div);
+  mensajes.scrollTop = mensajes.scrollHeight;
+});
