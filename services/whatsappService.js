@@ -73,10 +73,6 @@ async function enviarTextoWhatsApp(numero, texto, opciones = {}) {
   }
 }
 
-module.exports = {
-  enviarTextoWhatsApp,
-  enviarMediaWhatsApp
-};
 
 async function enviarMediaWhatsApp(numero, tipo, mediaUrl, caption = "", opciones = {}) {
   try {
@@ -181,3 +177,8 @@ async function enviarMediaWhatsApp(numero, tipo, mediaUrl, caption = "", opcione
     console.log(JSON.stringify(error.response?.data || error.message, null, 2));
   }
 }
+
+module.exports = {
+  enviarTextoWhatsApp,
+  enviarMediaWhatsApp
+};

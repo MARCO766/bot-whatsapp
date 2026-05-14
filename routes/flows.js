@@ -15,7 +15,10 @@ const upload = multer({
 });
 
 const { protegerPanel } = require("../middlewares/auth");
-const { enviarTextoWhatsApp } = require("../services/whatsappService");
+const {
+  enviarTextoWhatsApp,
+  enviarMediaWhatsApp
+} = require("../services/whatsappService");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
