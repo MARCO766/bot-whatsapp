@@ -42,6 +42,7 @@ router.post('/webhook', async (req, res) => {
     const changes = entry?.changes?.[0];
     const value = changes?.value;
     const phoneNumberIdWebhook = value?.metadata?.phone_number_id;
+    console.log("PHONE_ID WEBHOOK:", phoneNumberIdWebhook);
 
 let usuarioIdWebhook = null;
 
@@ -57,6 +58,7 @@ if (phoneNumberIdWebhook) {
   );
 
   const conexionWebhook = responseConexionWebhook.data?.[0];
+  console.log("CONEXION ENCONTRADA:", conexionWebhook);
 
   if (conexionWebhook) {
     usuarioIdWebhook = conexionWebhook.usuario_id;
