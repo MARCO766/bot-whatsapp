@@ -14,18 +14,18 @@ const authRoutes = require("./routes/auth");
 const webhookRoutes = require("./routes/webhook");
 const adminRoutes = require("./routes/admin");
 const { protegerPanel } = require("./middlewares/auth");
+const inboxRoutes = require("./routes/inbox");
 const flowsRoutes = require("./routes/flows");
 
 const app = express();
 
 app.use(express.static("public"));
-
 app.use(bodyParser.json());
-
 app.use(express.urlencoded({ extended: true }));
 app.use(authRoutes);
 app.use(webhookRoutes);
 app.use(adminRoutes);
+app.use("/", inboxRoutes);
 app.use(flowsRoutes);
 app.use(session({
   secret: process.env.SESSION_SECRET || "macbot-secreto-cambiar",
