@@ -843,14 +843,7 @@ ${
 
     </div>
 
-<script>
-  setTimeout(() => {
-    const mensajes = document.getElementById("mensajes");
-    if(mensajes){
-      mensajes.scrollTop = mensajes.scrollHeight;
-    }
-  }, 100);
-</script>
+<script src="/js/autoscroll.js"></script>
 
 <script src="/js/chat-menu.js"></script>
 
