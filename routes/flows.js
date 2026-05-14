@@ -1190,7 +1190,15 @@ archivoChat.addEventListener("change", function(){
 
 if (btnAudio) {
   btnAudio.addEventListener("mousedown", async () => {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    let stream;
+
+try {
+  stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+} catch (err) {
+  alert("No se pudo activar el micrófono. Permite el micrófono en el navegador y usa HTTPS.");
+  console.log("ERROR MICROFONO:", err);
+  return;
+}
 
     mediaRecorder = new MediaRecorder(stream);
     audioChunks = [];
