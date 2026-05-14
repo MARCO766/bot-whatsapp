@@ -1188,17 +1188,11 @@ archivoChat.addEventListener("change", function(){
 
 });
 
-if (btnAudio) {
-  btnAudio.addEventListener("mousedown", async () => {
-    let stream;
+let grabando = false;
 
-try {
-  stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-} catch (err) {
-  alert("No se pudo activar el micrófono. Permite el micrófono en el navegador y usa HTTPS.");
-  console.log("ERROR MICROFONO:", err);
-  return;
-}
+btnAudio.addEventListener("click", async () => {
+  if (!grabando) {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
     mediaRecorder = new MediaRecorder(stream);
     audioChunks = [];
@@ -1223,16 +1217,16 @@ try {
     };
 
     mediaRecorder.start();
+    grabando = true;
     btnAudio.style.background = "#ff3b30";
-  });
-
-  btnAudio.addEventListener("mouseup", () => {
-    if (mediaRecorder) {
-      mediaRecorder.stop();
-      btnAudio.style.background = "#202c33";
-    }
-  });
-}
+    btnAudio.innerHTML = "⏹";
+  } else {
+    mediaRecorder.stop();
+    grabando = false;
+    btnAudio.style.background = "#202c33";
+    btnAudio.innerHTML = "🎤";
+  }
+});
 
 </script>
 
