@@ -297,7 +297,7 @@ router.get("/inbox", protegerPanel, async (req, res) => {
   try {
 const etiquetaFiltro = req.query.etiqueta || "";
     const response = await axios.get(
-  `${SUPABASE_URL}/rest/v1/mensajes?usuario_id=eq.${req.session.usuario.id}&select=*`,
+  `${SUPABASE_URL}/rest/v1/mensajes?select=*`,
       {
         headers: {
           apikey: SUPABASE_KEY,
