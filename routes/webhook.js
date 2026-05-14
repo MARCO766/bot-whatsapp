@@ -135,7 +135,7 @@ if (message.audio && message.audio.id) {
       `https://graph.facebook.com/v19.0/${message.audio.id}`,
       {
         headers: {
-          Authorization: `Bearer ${conexion.token}`
+          Authorization: `Bearer ${conexionWebhook.token}`
         }
       }
     );
@@ -145,7 +145,7 @@ if (message.audio && message.audio.id) {
     const audioFile = await axios.get(audioUrlMeta, {
       responseType: "arraybuffer",
       headers: {
-        Authorization: `Bearer ${conexion.token}`
+        Authorization: `Bearer ${conexionWebhook.token}`
       }
     });
 
