@@ -213,6 +213,42 @@ else if (mime.startsWith("audio/")) {
 
   tipoWhatsApp = "audio";
 
+  const tempInput = path.join(
+    __dirname,
+    "../temp",
+    Date.now() + "-input.webm"
+  );
+
+  const tempOutput = path.join(
+    __dirname,
+    "../temp",
+    Date.now() + "-output.mp3"
+  );
+
+  fs.writeFileSync(tempInput, req.file.buffer);
+
+  await new Promise((resolve, reject) => {
+    ffmpeg(tempInput)
+      .outputOptions([
+        "-vn",
+        "-ar 44100",
+        "-ac 2",
+        "-b:a 96k"
+      ])
+      .save(tempOutput)
+      .on("end", resolve)
+      .on("error", reject);
+  });
+
+  const audioConvertido = fs.readFileSync(tempOutput);
+
+  req.file.buffer = audioConvertido;
+  req.file.mimetype = "audio/mpeg";
+  req.file.originalname = "audio.mp3";
+
+  fs.unlinkSync(tempInput);
+  fs.unlinkSync(tempOutput);
+
 }
 
     // =========================
@@ -1218,11 +1254,11 @@ btnAudio.addEventListener("click", async () => {
     };
 
     mediaRecorder.onstop = async () => {
-      const audioBlob = new Blob(audioChunks, { type: "audio/ogg" });
+      const audioBlob = new Blob(audioChunks, { type: "audio/webm" });
 
       const formData = new FormData();
       formData.append("numero", "${chatActual}");
-      formData.append("archivo", audioBlob, "audio.ogg");
+      formData.append("archivo", audioBlob, "audio.webm");
 alert("Audio grabado: " + audioBlob.size + " bytes");
       await fetch("/inbox/responder", {
         method: "POST",
