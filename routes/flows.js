@@ -206,6 +206,16 @@ router.post("/inbox/responder", protegerPanel, upload.single("archivo"), async (
     }
 
     // =========================
+// AUDIO
+// =========================
+
+else if (mime.startsWith("audio/")) {
+
+  tipoWhatsApp = "audio";
+
+}
+
+    // =========================
     // DOCUMENTOS
     // =========================
 
