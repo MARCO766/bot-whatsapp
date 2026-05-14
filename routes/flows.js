@@ -1121,6 +1121,17 @@ document.addEventListener("click", () => {
   ></textarea>
 
   <button type="submit">➤</button>
+  <button id="btnAudio" type="button" style="
+  width:55px;
+  border:none;
+  border-radius:50%;
+  background:#202c33;
+  color:white;
+  font-size:22px;
+  cursor:pointer;
+">
+🎤
+</button>
 
 </form>
 
@@ -1140,6 +1151,11 @@ const archivoChat =
 
 const previewArchivo =
   document.getElementById("previewArchivo");
+
+  const btnAudio = document.getElementById("btnAudio");
+
+let mediaRecorder;
+let audioChunks = [];
 
 archivoChat.addEventListener("change", function(){
 
@@ -1171,6 +1187,44 @@ archivoChat.addEventListener("change", function(){
     "📎 " + file.name;
 
 });
+
+if (btnAudio) {
+  btnAudio.addEventListener("mousedown", async () => {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+    mediaRecorder = new MediaRecorder(stream);
+    audioChunks = [];
+
+    mediaRecorder.ondataavailable = (e) => {
+      audioChunks.push(e.data);
+    };
+
+    mediaRecorder.onstop = async () => {
+      const audioBlob = new Blob(audioChunks, { type: "audio/ogg" });
+
+      const formData = new FormData();
+      formData.append("numero", "${chatActual}");
+      formData.append("archivo", audioBlob, "audio.ogg");
+
+      await fetch("/inbox/responder", {
+        method: "POST",
+        body: formData
+      });
+
+      window.location.reload();
+    };
+
+    mediaRecorder.start();
+    btnAudio.style.background = "#ff3b30";
+  });
+
+  btnAudio.addEventListener("mouseup", () => {
+    if (mediaRecorder) {
+      mediaRecorder.stop();
+      btnAudio.style.background = "#202c33";
+    }
+  });
+}
 
 </script>
 
