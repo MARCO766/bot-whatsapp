@@ -5,9 +5,123 @@
   data-usuario="<%= usuarioId %>"
   data-chat="<%= chatActual %>"
 >
-  <div style="color:white;padding:30px;">
-    <h1>Inbox EJS conectado ✅</h1>
-    <p>Chat actual: <%= chatActual %></p>
-    <p>Total chats: <%= numeros.length %></p>
+
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+
+    <div class="sidebar-top">
+      MacBot Inbox
+    </div>
+
+    <div class="search">
+      <input type="text" placeholder="Buscar chat...">
+
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">
+        <a href="/inbox" style="
+          background:<%= !etiquetaFiltro ? '#25d366' : '#202c33' %>;
+          color:white;
+          padding:6px 10px;
+          border-radius:8px;
+          text-decoration:none;
+          font-size:12px;
+        ">Todos</a>
+
+        <% etiquetasUnicas.forEach(et => { %>
+          <a href="/inbox?etiqueta=<%= encodeURIComponent(et) %>" style="
+            background:<%= etiquetaFiltro === et ? (mapaColoresEtiquetas[et] || '#25d366') : '#202c33' %>;
+            color:white;
+            padding:6px 10px;
+            border-radius:8px;
+            text-decoration:none;
+            font-size:12px;
+          "><%= et %></a>
+        <% }) %>
+      </div>
+    </div>
+
+    <div class="chat-list">
+
+      <% numeros.forEach(numero => { %>
+
+        <div
+          class="chat-item"
+          onclick="window.location.href='/inbox?numero=<%= numero %><%= etiquetaFiltro ? '&etiqueta=' + encodeURIComponent(etiquetaFiltro) : '' %>'"
+        >
+
+          <div class="avatar"></div>
+
+          <div class="chat-info">
+            <h4><%= numero %></h4>
+
+            <% if (mapaUnread[numero] > 0) { %>
+              <span style="
+                background:#ff3b30;
+                color:white;
+                padding:3px 8px;
+                border-radius:999px;
+                font-size:12px;
+                font-weight:bold;
+                display:inline-block;
+                margin-top:5px;
+              ">
+                <%= mapaUnread[numero] %> nuevo
+              </span>
+            <% } %>
+
+            <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:6px;">
+
+              <% etiquetasClientes
+                .filter(e => e.cliente_numero === numero)
+                .forEach(e => { %>
+
+                  <span style="
+                    background:<%= mapaColoresEtiquetas[e.etiqueta] || '#25d366' %>;
+                    color:white;
+                    padding:3px 8px;
+                    border-radius:999px;
+                    font-size:11px;
+                    font-weight:bold;
+                    border:1px solid <%= mapaColoresEtiquetas[e.etiqueta] || '#25d366' %>;
+                  ">
+                    <%= e.etiqueta %>
+                  </span>
+
+              <% }) %>
+
+            </div>
+
+            <p>
+              <%= ((conversaciones[numero][conversaciones[numero].length - 1]?.contenido || '')).substring(0,30) %>
+            </p>
+          </div>
+
+          <div class="chat-actions" onclick="event.stopPropagation()">
+            <button class="chat-dots" onclick='toggleChatMenu("<%= numero %>")'>⋮</button>
+
+            <div class="chat-menu" id="chat_menu_<%= numero %>">
+              <a href="/chat-etiqueta?numero=<%= numero %>">🏷️ Etiqueta</a>
+              <a href="/bloquear-chat?numero=<%= numero %>" onclick="return confirm('¿Bloquear este chat?')">🚫 Bloquear</a>
+              <a href="/desbloquear-chat?numero=<%= numero %>">✅ Desbloquear</a>
+              <a class="danger" href="/eliminar-chat?numero=<%= numero %>" onclick="return confirm('¿Eliminar este chat?')">🗑️ Eliminar</a>
+            </div>
+          </div>
+
+        </div>
+
+      <% }) %>
+
+    </div>
+
   </div>
+
+  <!-- CHAT TEMPORAL -->
+  <div class="chat">
+    <div style="color:white;padding:30px;">
+      <h2>Chat seleccionado</h2>
+      <p><%= chatActual || "Selecciona un chat" %></p>
+    </div>
+  </div>
+
 </div>
+
+<script src="/js/chat-menu.js"></script>
