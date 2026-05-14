@@ -10,7 +10,7 @@ const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
 
 router.get("/builder", protegerPanel, async (req, res) => {
   try {
-    res.send("Builder funcionando ✅");
+    res.render("builder");
   } catch (error) {
     res.send(error.message);
   }
