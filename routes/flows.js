@@ -1028,6 +1028,14 @@ ${
   : ""
 }
 
+${
+  msg.tipo === "audio" && msg.imagen_url
+  ? `<audio controls style="width:260px;display:block;margin-bottom:6px;">
+       <source src="${msg.imagen_url}" type="audio/ogg">
+     </audio>`
+  : ""
+}
+
       ${
         msg.contenido && !msg.contenido.startsWith("http")
         ? msg.contenido
