@@ -297,7 +297,7 @@ router.get("/inbox", protegerPanel, async (req, res) => {
   try {
 const etiquetaFiltro = req.query.etiqueta || "";
     const response = await axios.get(
-  `${SUPABASE_URL}/rest/v1/mensajes?select=*`,
+  `${SUPABASE_URL}/rest/v1/mensajes?usuario_id=eq.${req.session.usuario.id}&select=*&order=creado_en.asc&limit=1000`,
       {
         headers: {
           apikey: SUPABASE_KEY,
@@ -354,7 +354,9 @@ const mapaUnread = {};
 conversacionesDB.forEach(c => {
   mapaUnread[c.cliente_numero] = c.unread_count || 0;
 });
-
+mensajes.sort((a, b) => {
+  return new Date(a.creado_en) - new Date(b.creado_en);
+});
 mensajes.forEach(msg => {
 
   const numero =
