@@ -92,9 +92,13 @@
 
             </div>
 
-            <p>
-              <%= ((conversaciones[numero][conversaciones[numero].length - 1]?.contenido || '')).substring(0,30) %>
-            </p>
+            <p class="chat-last-message" data-numero="<%= numero %>">
+  <%= (
+    conversaciones[numero][conversaciones[numero].length - 1]?.contenido ||
+    conversaciones[numero][conversaciones[numero].length - 1]?.tipo ||
+    ''
+  ).substring(0,30) %>
+</p>
           </div>
 
           <div class="chat-actions" onclick="event.stopPropagation()">

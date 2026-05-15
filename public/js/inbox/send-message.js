@@ -21,6 +21,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const mensajeTemporal = agregarMensajeSaliente(texto, archivo);
     moverChatArriba(numeroActual);
+    actualizarUltimoMensajeLista(
+  numeroActual,
+  texto || (archivo ? archivo.name : "")
+);
 
     textarea.value = "";
 
