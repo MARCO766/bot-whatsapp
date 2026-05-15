@@ -116,17 +116,17 @@ mensajes.forEach(msg => {
 let numeros = Object.keys(conversaciones);
 numeros.sort((a, b) => {
 
-  const ultimoA =
-    conversaciones[a][conversaciones[a].length - 1];
+  const fechaA =
+    mapaConversaciones[a]?.ultimo_mensaje_en ||
+    conversaciones[a]?.[conversaciones[a].length - 1]?.creado_en ||
+    0;
 
-  const ultimoB =
-    conversaciones[b][conversaciones[b].length - 1];
+  const fechaB =
+    mapaConversaciones[b]?.ultimo_mensaje_en ||
+    conversaciones[b]?.[conversaciones[b].length - 1]?.creado_en ||
+    0;
 
-  const fechaA = new Date(ultimoA.creado_en).getTime();
-
-  const fechaB = new Date(ultimoB.creado_en).getTime();
-
-  return fechaB - fechaA;
+  return new Date(fechaB).getTime() - new Date(fechaA).getTime();
 
 });
 
