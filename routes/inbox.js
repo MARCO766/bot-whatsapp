@@ -135,7 +135,10 @@ if (etiquetaFiltro) {
   numeros = numeros.filter(numero => numerosConEtiqueta.includes(numero));
 }
 const chatSeleccionado = req.query.numero || "";
-const chatActual = numeros.includes(chatSeleccionado) ? chatSeleccionado : (numeros[0] || "");
+const chatActual =
+  numeros.includes(chatSeleccionado)
+    ? chatSeleccionado
+    : "";
 
 if (chatActual) {
   await axios.patch(

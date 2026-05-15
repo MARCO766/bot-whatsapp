@@ -17,6 +17,17 @@ async function cargarChatSinRecargar(numero) {
     const data = await res.json();
 
     appCRM.dataset.chat = numero;
+    document
+  .querySelectorAll(".chat-item")
+  .forEach(el => el.classList.remove("chat-selected"));
+
+const item = document.querySelector(
+  '.chat-item[data-numero="' + numero + '"]'
+);
+
+if (item) {
+  item.classList.add("chat-selected");
+}
     limpiarBadgeNuevo(numero);
 
     const titulo = document.querySelector(".chat-top h3");
