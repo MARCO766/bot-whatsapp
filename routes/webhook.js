@@ -403,7 +403,7 @@ if (io && usuarioIdWebhook) {
 }
 
 const responseConversacionActual = await axios.get(
-  `${SUPABASE_URL}/rest/v1/conversaciones?cliente_numero=eq.${from}&usuario_id=eq.${usuarioIdWebhook}&select=unread_count`,
+  `${SUPABASE_URL}/rest/v1/conversaciones?cliente_numero=eq.${from}&usuario_id=eq.${usuarioIdWebhook}&select=*`,
   {
     headers: {
       apikey: SUPABASE_KEY,
@@ -412,28 +412,51 @@ const responseConversacionActual = await axios.get(
   }
 );
 
-const unreadActual =
-  responseConversacionActual.data?.[0]?.unread_count || 0;
+const conversacionActual = responseConversacionActual.data?.[0];
 
-await axios.post(
-  `${SUPABASE_URL}/rest/v1/conversaciones`,
-  {
-    cliente_numero: from,
-    usuario_id: usuarioIdWebhook,
-    ultimo_mensaje: text || message.type,
-    ultimo_mensaje_en: new Date().toISOString(),
-    estado: "abierta",
-    unread_count: unreadActual + 1
-  },
-  {
-    headers: {
-      apikey: SUPABASE_KEY,
-      Authorization: `Bearer ${SUPABASE_KEY}`,
-      "Content-Type": "application/json",
-      Prefer: "resolution=merge-duplicates"
+if (conversacionActual) {
+
+  const unreadActual = conversacionActual.unread_count || 0;
+
+  await axios.patch(
+    `${SUPABASE_URL}/rest/v1/conversaciones?cliente_numero=eq.${from}&usuario_id=eq.${usuarioIdWebhook}`,
+    {
+      ultimo_mensaje: text || message.type,
+      ultimo_mensaje_en: new Date().toISOString(),
+      estado: "abierta",
+      unread_count: unreadActual + 1
+    },
+    {
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`,
+        "Content-Type": "application/json"
+      }
     }
-  }
-);
+  );
+
+} else {
+
+  await axios.post(
+    `${SUPABASE_URL}/rest/v1/conversaciones`,
+    {
+      cliente_numero: from,
+      usuario_id: usuarioIdWebhook,
+      ultimo_mensaje: text || message.type,
+      ultimo_mensaje_en: new Date().toISOString(),
+      estado: "abierta",
+      unread_count: 1
+    },
+    {
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`,
+        "Content-Type": "application/json"
+      }
+    }
+  );
+
+}
 
 if (text.includes("reset")) {
   
