@@ -46,7 +46,7 @@
         <div
           class="chat-item"
           data-numero="<%= numero %>"
-          onclick='window.location.href="/inbox?numero=<%= numero %><%= etiquetaFiltro ? "&etiqueta=" + encodeURIComponent(etiquetaFiltro) : "" %>"'
+          onclick='cargarChatSinRecargar("<%= numero %>")'
         >
 
           <div class="avatar"></div>
@@ -271,6 +271,7 @@
 <script src="/js/autoscroll.js"></script>
 <script src="/js/chat-menu.js"></script>
 <script src="/js/inbox/media-render.js"></script>
+<script src="/js/inbox/load-chat.js"></script>
 <script src="/js/inbox/message-render.js"></script>
 <script src="/js/inbox/socket-chat.js"></script>
 <script src="/js/inbox/send-message.js"></script>

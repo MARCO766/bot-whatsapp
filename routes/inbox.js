@@ -454,4 +454,54 @@ res.render("inbox", {
 
 });
 
+router.get("/inbox/chat-json", protegerPanel, async (req, res) => {
+  try {
+    const numero = req.query.numero;
+
+    const responseMensajes = await axios.get(
+      `${SUPABASE_URL}/rest/v1/mensajes?usuario_id=eq.${req.session.usuario.id}&cliente_numero=eq.${numero}&select=*&order=creado_en.asc&limit=1000`,
+      {
+        headers: {
+          apikey: SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_KEY}`
+        }
+      }
+    );
+
+    const responseCliente = await axios.get(
+      `${SUPABASE_URL}/rest/v1/clientes?usuario_id=eq.${req.session.usuario.id}&numero=eq.${numero}&select=*`,
+      {
+        headers: {
+          apikey: SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_KEY}`
+        }
+      }
+    );
+
+    await axios.patch(
+      `${SUPABASE_URL}/rest/v1/conversaciones?cliente_numero=eq.${numero}&usuario_id=eq.${req.session.usuario.id}`,
+      { unread_count: 0 },
+      {
+        headers: {
+          apikey: SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_KEY}`,
+          "Content-Type": "application/json"
+        }
+      }
+    );
+
+    const cliente = responseCliente.data?.[0];
+
+    res.json({
+      ok: true,
+      nombre: cliente?.nombre || numero,
+      mensajes: responseMensajes.data || []
+    });
+
+  } catch (error) {
+    console.log("ERROR CHAT JSON:", error.response?.data || error.message);
+    res.status(500).json({ ok: false });
+  }
+});
+
 module.exports = router;
