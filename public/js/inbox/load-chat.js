@@ -17,6 +17,8 @@ async function cargarChatSinRecargar(numero) {
     const data = await res.json();
 
     appCRM.dataset.chat = numero;
+    const numeroResponder = document.getElementById("numeroResponder");
+if (numeroResponder) numeroResponder.value = numero;
     document
   .querySelectorAll(".chat-item")
   .forEach(el => el.classList.remove("chat-selected"));

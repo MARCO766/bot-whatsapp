@@ -227,13 +227,13 @@
   </div>
 
 
-<% if (chatActual) { %>
+<% if (chatActual || true) { %>
 
   <div class="chat-bottom">
 
     <form action="/inbox/responder" method="POST" enctype="multipart/form-data">
 
-      <input type="hidden" name="numero" value="<%= chatActual %>">
+      <input type="hidden" name="numero" value="<%= chatActual %>" id="numeroResponder">
 
       <input
         type="file"
