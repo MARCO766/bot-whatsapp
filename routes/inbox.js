@@ -118,7 +118,7 @@ let numeros = [
     ...Object.keys(mapaConversaciones),
     ...Object.keys(conversaciones)
   ])
-];
+].filter(numero => numero && mapaConversaciones[numero]);
 numeros.sort((a, b) => {
 
   const fechaA =
@@ -250,7 +250,7 @@ function horaBolivia(fecha) {
 
 </div>
             <p>
-              ${(conversaciones[numero][conversaciones[numero].length - 1]?.contenido || "").substring(0,30)}
+              ${(mapaConversaciones[numero]?.ultimo_mensaje || "").substring(0,30)}
             </p>
           </div>
           <div class="chat-actions" onclick="event.stopPropagation()">
