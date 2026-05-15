@@ -83,13 +83,32 @@
 
             </div>
 
+<%
+var ultimoMsg = conversaciones[numero][conversaciones[numero].length - 1] || {};
+
+var previewTexto = String(
+  ultimoMsg.contenido ||
+  ultimoMsg.tipo ||
+  ""
+);
+
+if (previewTexto.startsWith("http")) {
+  if (ultimoMsg.tipo === "image") {
+    previewTexto = "📷 Imagen";
+  } else if (ultimoMsg.tipo === "audio") {
+    previewTexto = "🎧 Audio";
+  } else if (ultimoMsg.tipo === "document") {
+    previewTexto = "📄 Documento";
+  } else {
+    previewTexto = "📎 Archivo";
+  }
+}
+%>
+
 <p class="chat-last-message" data-numero="<%= numero %>">
-  <%= (
-    conversaciones[numero][conversaciones[numero].length - 1]?.contenido ||
-    conversaciones[numero][conversaciones[numero].length - 1]?.tipo ||
-    ''
-  ).substring(0,30) %>
+  <%= previewTexto.substring(0,30) %>
 </p>
+
           </div>
 
           <div class="chat-actions" onclick="event.stopPropagation()">
