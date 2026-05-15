@@ -32,8 +32,8 @@ async function enviarTextoWhatsApp(numero, texto, opciones = {}) {
       }
     }
 
-    await axios.post(
-      `https://graph.facebook.com/v19.0/${phoneIdEnviar}/messages`,
+    const respuestaMeta = await axios.post(
+  `https://graph.facebook.com/v19.0/${phoneIdEnviar}/messages`,
       {
         messaging_product: "whatsapp",
         to: numero,
@@ -48,16 +48,20 @@ async function enviarTextoWhatsApp(numero, texto, opciones = {}) {
         }
       }
     );
-
+const whatsappMessageId =
+  respuestaMeta.data?.messages?.[0]?.id || null;
     await axios.post(
       `${SUPABASE_URL}/rest/v1/mensajes`,
+    
       {
         cliente_numero: numero,
         usuario_id: opciones.usuarioId || null,
         direccion: "saliente",
         tipo: "texto",
         contenido: texto,
-        imagen_url: null
+        imagen_url: null,
+whatsapp_message_id: whatsappMessageId,
+estado_envio: "sent"
       },
       {
         headers: {
@@ -151,6 +155,8 @@ async function enviarMediaWhatsApp(numero, tipo, mediaUrl, caption = "", opcione
 
     console.log("✅ MEDIA ENVIADA CORRECTAMENTE:");
     console.log(respuestaMeta.data);
+    const whatsappMessageId =
+  respuestaMeta.data?.messages?.[0]?.id || null;
 
     await axios.post(
       `${SUPABASE_URL}/rest/v1/mensajes`,
@@ -160,7 +166,9 @@ async function enviarMediaWhatsApp(numero, tipo, mediaUrl, caption = "", opcione
         direccion: "saliente",
         tipo: tipo,
         contenido: caption || mediaUrl,
-        imagen_url: mediaUrl
+        imagen_url: mediaUrl,
+whatsapp_message_id: whatsappMessageId,
+estado_envio: "sent"
       },
       {
         headers: {

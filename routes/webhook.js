@@ -67,8 +67,36 @@ if (phoneNumberIdWebhook) {
 }
 
 // 🚫 Ignorar estados (read, delivered, etc)
+// ✅ estados WhatsApp (sent, delivered, read)
+
 if (value?.statuses) {
+
+  for (const status of value.statuses) {
+
+    const whatsappMessageId = status.id;
+
+    const estado = status.status;
+
+    if (!whatsappMessageId || !estado) continue;
+
+    await axios.patch(
+      `${SUPABASE_URL}/rest/v1/mensajes?whatsapp_message_id=eq.${whatsappMessageId}`,
+      {
+        estado_envio: estado
+      },
+      {
+        headers: {
+          apikey: SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_KEY}`,
+          "Content-Type": "application/json"
+        }
+      }
+    );
+
+  }
+
   return res.sendStatus(200);
+
 }
 // 🚫 evitar errores y duplicados
 if (!value || !value.messages || !value.messages[0]) {
