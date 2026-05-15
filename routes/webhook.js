@@ -421,7 +421,10 @@ if (conversacionActual) {
   await axios.patch(
     `${SUPABASE_URL}/rest/v1/conversaciones?cliente_numero=eq.${from}&usuario_id=eq.${usuarioIdWebhook}`,
     {
-      ultimo_mensaje: text || message.type,
+      ultimo_mensaje:
+  text && text.trim() !== ""
+    ? text
+    : message.type,
       ultimo_mensaje_en: new Date().toISOString(),
       estado: "abierta",
       unread_count: unreadActual + 1
@@ -442,7 +445,10 @@ if (conversacionActual) {
     {
       cliente_numero: from,
       usuario_id: usuarioIdWebhook,
-      ultimo_mensaje: text || message.type,
+      ultimo_mensaje:
+  text && text.trim() !== ""
+    ? text
+    : message.type,
       ultimo_mensaje_en: new Date().toISOString(),
       estado: "abierta",
       unread_count: 1

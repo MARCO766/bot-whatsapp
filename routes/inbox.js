@@ -91,6 +91,7 @@ const mapaUnread = {};
 conversacionesDB.forEach(c => {
   mapaUnread[c.cliente_numero] = c.unread_count || 0;
 });
+
 mensajes.sort((a, b) => {
   return new Date(a.creado_en) - new Date(b.creado_en);
 });
