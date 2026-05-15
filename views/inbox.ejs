@@ -76,7 +76,7 @@
                 .filter(e => e.cliente_numero === numero)
                 .forEach(e => { %>
 
-                  <span style="
+                  <span class="chat-label-manual" style="
                     background:<%= mapaColoresEtiquetas[e.etiqueta] || '#25d366' %>;
                     color:white;
                     padding:3px 8px;
@@ -106,9 +106,9 @@
 
             <div class="chat-menu" id="chat_menu_<%= numero %>">
 
-  <a href="/chat-etiqueta?numero=<%= numero %>">
-    🏷️ Etiqueta
-  </a>
+  <a href="#" onclick='abrirMiniEtiqueta("<%= numero %>"); return false;'>
+  🏷️ Etiqueta
+</a>
 
   <% if (mapaClientes[numero]?.estado === "bloqueado") { %>
 
@@ -293,6 +293,166 @@
 
 <% } %>
 </div>
+
+<div id="miniEtiquetaModal" class="mini-etiqueta-modal">
+  <div class="mini-etiqueta-box">
+
+    <button class="mini-etiqueta-close" onclick="cerrarMiniEtiqueta()">×</button>
+
+    <h3>🏷️ Etiquetar chat</h3>
+
+    <form id="formMiniEtiqueta">
+      <input type="hidden" name="numero" id="miniEtiquetaNumero">
+
+      <select name="etiqueta" required>
+  <% etiquetasDisponibles.forEach(et => { %>
+    <option value="<%= et.nombre %>" data-color="<%= et.color || '#25d366' %>">
+  <%= et.nombre %>
+</option>
+  <% }) %>
+</select>
+
+      <button type="submit" class="mini-etiqueta-save">
+        Guardar etiqueta
+      </button>
+    </form>
+
+    <form id="formQuitarEtiqueta">
+      <input type="hidden" name="numero" id="miniQuitarEtiquetaNumero">
+
+      <button type="submit" class="mini-etiqueta-remove">
+        Quitar etiqueta
+      </button>
+    </form>
+
+  </div>
+</div>
+
+<script>
+  let numeroEtiquetaActual = null;
+function abrirMiniEtiqueta(numero){
+  numeroEtiquetaActual = numero;
+  document.getElementById("miniEtiquetaNumero").value = numero;
+  document.getElementById("miniQuitarEtiquetaNumero").value = numero;
+  document.getElementById("miniEtiquetaModal").classList.add("activo");
+}
+
+function cerrarMiniEtiqueta(){
+  document.getElementById("miniEtiquetaModal").classList.remove("activo");
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  const form = document.getElementById("formMiniEtiqueta");
+
+  if (!form) return;
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+
+    const numero = document.getElementById("miniEtiquetaNumero").value;
+    const etiqueta = form.querySelector('[name="etiqueta"]').value;
+
+    if (!numero || !etiqueta) return;
+
+    const formData = new FormData();
+    formData.append("numero", numero);
+    formData.append("etiqueta", etiqueta);
+
+    await fetch("/guardar-etiqueta-chat", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json"
+  },
+  body: JSON.stringify({
+    numero: numero,
+    etiqueta: etiqueta
+  })
+});
+
+    pintarEtiquetaEnChat(numero, etiqueta);
+    cerrarMiniEtiqueta();
+  });
+});
+
+function pintarEtiquetaEnChat(numero, etiqueta) {
+  const item = document.querySelector('.chat-item[data-numero="' + numero + '"]');
+
+  if (!item) return;
+
+  const info = item.querySelector(".chat-info");
+
+  if (!info) return;
+
+  item.querySelectorAll(".chat-label-manual").forEach(el => el.remove());
+
+  const span = document.createElement("span");
+  span.className = "chat-label-manual";
+  span.innerText = etiqueta;
+  const opcion = document.querySelector('[name="etiqueta"] option[value="' + etiqueta + '"]');
+const color = opcion?.dataset?.color || "#25d366";
+span.style.background = color;
+
+  const ultimoMensaje = info.querySelector(".chat-last-message");
+
+  if (ultimoMensaje) {
+    info.insertBefore(span, ultimoMensaje);
+  } else {
+    info.appendChild(span);
+  }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+
+  const formQuitar = document.getElementById("formQuitarEtiqueta");
+
+  if (!formQuitar) return;
+
+  formQuitar.addEventListener("submit", async (e) => {
+
+    e.preventDefault();
+
+    const numero =
+      document.getElementById("miniQuitarEtiquetaNumero").value;
+
+    if (!numero) return;
+
+    const formData = new FormData();
+
+    formData.append("numero", numero);
+
+    await fetch("/quitar-etiqueta-chat", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json"
+  },
+  body: JSON.stringify({
+    numero: numero
+  })
+});
+
+    quitarEtiquetaVisual(numero);
+
+    cerrarMiniEtiqueta();
+
+  });
+
+});
+
+function quitarEtiquetaVisual(numero) {
+
+  const item =
+    document.querySelector('.chat-item[data-numero="' + numero + '"]');
+
+  if (!item) return;
+
+  item
+    .querySelectorAll(".chat-label-manual")
+    .forEach(el => el.remove());
+
+}
+
+</script>
+
 <script src="/socket.io/socket.io.js"></script>
 <script src="/js/autoscroll.js"></script>
 <script src="/js/chat-menu.js"></script>

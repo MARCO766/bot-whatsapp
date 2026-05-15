@@ -26,12 +26,7 @@ app.set("views", "views");
 app.use(express.static("public"));
 app.use(bodyParser.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(authRoutes);
-app.use(webhookRoutes);
-app.use(adminRoutes);
-app.use("/", inboxRoutes);
-app.use("/", builderRoutes);
-app.use(flowsRoutes);
+
 app.use(session({
   secret: process.env.SESSION_SECRET || "macbot-secreto-cambiar",
   resave: false,
@@ -40,6 +35,14 @@ app.use(session({
     maxAge: 1000 * 60 * 60 * 24 * 7
   }
 }));
+
+app.use(authRoutes);
+app.use(webhookRoutes);
+app.use(adminRoutes);
+app.use("/", inboxRoutes);
+app.use("/", builderRoutes);
+app.use(flowsRoutes);
+
 
 
 

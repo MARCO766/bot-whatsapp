@@ -95,7 +95,7 @@ if (value?.statuses) {
 const io = req.app.get("io");
 
 if (io && usuarioIdWebhook) {
-  io.to("user-" + usuarioIdWebhook).emit("mensaje-estado", {
+  io.to("user_" + usuarioIdWebhook).emit("mensaje-estado", {
     whatsapp_message_id: whatsappMessageId,
     estado_envio: estado
   });
@@ -120,6 +120,10 @@ mensajesProcesados.add(message.id);
     
     const from = message.from;
 
+    const creadoEn = message.timestamp
+  ? new Date(Number(message.timestamp) * 1000).toISOString()
+  : new Date().toISOString();
+
 const responseClienteBloqueado = await axios.get(
   `${SUPABASE_URL}/rest/v1/clientes?numero=eq.${from}&usuario_id=eq.${usuarioIdWebhook}&select=estado`,
   {
@@ -141,7 +145,7 @@ if (clienteBloqueado?.estado === "bloqueado") {
     let text = "";
 
 if (message.type === "text") {
-  text = message.text.body.toLowerCase();
+  text = message.text.body;
 }
 
 await axios.post(
@@ -250,7 +254,7 @@ if (io && usuarioIdWebhook) {
     tipo: message.type,
     contenido: text || "",
     imagen_url: mediaUrlFinal || null,
-    creado_en: new Date().toISOString()
+    creado_en: creadoEn
   });
 }
 

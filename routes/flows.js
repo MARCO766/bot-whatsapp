@@ -1,6 +1,9 @@
 const express = require("express");
 const router = express.Router();
 
+router.use(express.urlencoded({ extended: true }));
+router.use(express.json());
+
 const axios = require("axios");
 const multer = require("multer");
 const ffmpeg = require("fluent-ffmpeg");
@@ -628,7 +631,7 @@ router.post("/crear-etiqueta", protegerPanel, async (req, res) => {
     }
 
     await axios.post(
-      `${SUPABASE_URL}/rest/v1/etiquetas?on_conflict=nombre`,
+      `${SUPABASE_URL}/rest/v1/etiquetas`,
       {
   nombre: nombre.trim(),
   color: color || "#25d366",
@@ -639,7 +642,7 @@ router.post("/crear-etiqueta", protegerPanel, async (req, res) => {
           apikey: SUPABASE_KEY,
           Authorization: `Bearer ${SUPABASE_KEY}`,
           "Content-Type": "application/json",
-          Prefer: "resolution=merge-duplicates,return=minimal"
+          Prefer: "return=minimal"
         }
       }
     );
@@ -981,21 +984,49 @@ router.get("/chat-etiqueta", protegerPanel, async (req, res) => {
 
 router.post("/guardar-etiqueta-chat", protegerPanel, async (req, res) => {
   try {
-    const { numero, etiqueta } = req.body;
+  const body = req.body || {};
+const numero = body.numero;
+const etiqueta = body.etiqueta;
 
-    await agregarEtiquetaCliente(numero, etiqueta, req.session.usuario.id);
+  await axios.delete(
+    `${SUPABASE_URL}/rest/v1/clientes_etiquetas?cliente_numero=eq.${encodeURIComponent(numero)}`,
+    {
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`
+      }
+    }
+  );
 
-    res.redirect("/inbox?numero=" + numero);
+  await axios.post(
+    `${SUPABASE_URL}/rest/v1/clientes_etiquetas`,
+    {
+      cliente_numero: numero,
+      usuario_id: req.session.usuario.id,
+      etiqueta: etiqueta
+    },
+    {
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`,
+        "Content-Type": "application/json",
+        Prefer: "return=minimal"
+      }
+    }
+  );
 
-  } catch (error) {
-    console.log("ERROR GUARDANDO ETIQUETA CHAT:", error.response?.data || error.message);
-    res.send("Error guardando etiqueta");
-  }
+  return res.redirect("/inbox?numero=" + numero);
+
+} catch (error) {
+  console.log("ERROR GUARDANDO ETIQUETA CHAT:", error.response?.data || error.message);
+  return res.redirect("/inbox?numero=" + req.body.numero);
+}
 });
 
 router.post("/quitar-etiqueta-chat", protegerPanel, async (req, res) => {
   try {
-    const { numero } = req.body;
+    const body = req.body || {};
+const numero = body.numero;
 
     await axios.delete(
       `${SUPABASE_URL}/rest/v1/clientes_etiquetas?cliente_numero=eq.${numero}&usuario_id=eq.${req.session.usuario.id}`,

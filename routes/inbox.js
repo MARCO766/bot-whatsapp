@@ -435,6 +435,7 @@ ${
 res.render("inbox", {
   etiquetaFiltro,
   etiquetasUnicas,
+  etiquetasDisponibles: responseColoresEtiquetas.data || [],
   mapaColoresEtiquetas,
   etiquetasClientes,
   conversaciones,
