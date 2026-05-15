@@ -161,32 +161,46 @@ function incrementarBadgeNuevo(numero) {
   let badge = item.querySelector(".unread-badge");
 
   if (!badge) {
-    const info = item.querySelector(".chat-info");
-    if (!info) return;
-
     badge = document.createElement("span");
     badge.className = "unread-badge";
     badge.dataset.numero = numero;
     badge.innerText = "1 nuevo";
 
-   
+    item.appendChild(badge);
 
-    const actions = item.querySelector(".chat-actions");
-
-badge.style.position = "absolute";
-badge.style.right = "55px";
-badge.style.top = "18px";
-badge.style.zIndex = "5";
-
-item.style.position = "relative";
-
-if (actions) {
-  item.appendChild(badge);
-}
-
+    guardarBadgeLocal(numero, 1);
     return;
   }
 
   const actual = parseInt(badge.innerText) || 0;
-  badge.innerText = (actual + 1) + " nuevo";
+  const nuevo = actual + 1;
+
+  badge.innerText = nuevo + " nuevo";
+  guardarBadgeLocal(numero, nuevo);
 }
+
+function guardarBadgeLocal(numero, cantidad) {
+  const badges = JSON.parse(localStorage.getItem("macbot_badges") || "{}");
+  badges[numero] = cantidad;
+  localStorage.setItem("macbot_badges", JSON.stringify(badges));
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  const badges = JSON.parse(localStorage.getItem("macbot_badges") || "{}");
+
+  Object.keys(badges).forEach(numero => {
+    const item = document.querySelector('.chat-item[data-numero="' + numero + '"]');
+    if (!item) return;
+
+    let badge = item.querySelector(".unread-badge");
+
+    if (!badge) {
+      badge = document.createElement("span");
+      badge.className = "unread-badge";
+      badge.dataset.numero = numero;
+      item.appendChild(badge);
+    }
+
+    badge.innerText = badges[numero] + " nuevo";
+  });
+});
