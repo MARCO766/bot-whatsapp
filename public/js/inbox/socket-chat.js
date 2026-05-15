@@ -91,15 +91,10 @@ function crearChatItemRealtime(numero, msg) {
       <button class="chat-dots" onclick='toggleChatMenu("${numero}")'>⋮</button>
 
       <div class="chat-menu" id="chat_menu_${numero}">
-        <a
-  href="#"
-  onclick='abrirModalEtiqueta("${numero}"); return false;'
->
-  🏷️ Etiqueta
-</a>
-<a href="/bloquear-chat?numero=${numero}" onclick="return confirm('¿Bloquear este chat?')">🚫 Bloquear</a>
-<a class="danger" href="/eliminar-chat?numero=${numero}" onclick="return confirm('¿Eliminar este chat?')">🗑️ Eliminar</a>
-      </div>
+  <a href="/chat-etiqueta?numero=${numero}">🏷️ Etiqueta</a>
+  <a href="/bloquear-chat?numero=${numero}" onclick="return confirm('¿Bloquear este chat?')">🚫 Bloquear</a>
+  <a class="danger" href="/eliminar-chat?numero=${numero}" onclick="return confirm('¿Eliminar este chat?')">🗑️ Eliminar</a>
+</div>
     </div>
   `;
 
