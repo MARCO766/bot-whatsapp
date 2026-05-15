@@ -84,31 +84,24 @@
             </div>
 
 <%
-const ultimoMsg = conversaciones[numero][conversaciones[numero].length - 1];
+var ultimoMsg = conversaciones[numero][conversaciones[numero].length - 1] || {};
 
-let previewTexto =
-  ultimoMsg?.contenido ||
-  ultimoMsg?.tipo ||
-  "";
+var previewTexto = String(
+  ultimoMsg.contenido ||
+  ultimoMsg.tipo ||
+  ""
+);
 
 if (previewTexto.startsWith("http")) {
-
-  if (ultimoMsg?.tipo === "image") {
+  if (ultimoMsg.tipo === "image") {
     previewTexto = "📷 Imagen";
-  }
-
-  else if (ultimoMsg?.tipo === "audio") {
+  } else if (ultimoMsg.tipo === "audio") {
     previewTexto = "🎧 Audio";
-  }
-
-  else if (ultimoMsg?.tipo === "document") {
+  } else if (ultimoMsg.tipo === "document") {
     previewTexto = "📄 Documento";
-  }
-
-  else {
+  } else {
     previewTexto = "📎 Archivo";
   }
-
 }
 %>
 
