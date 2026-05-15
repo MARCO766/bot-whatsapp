@@ -1,7 +1,8 @@
-setTimeout(() => {
+document.addEventListener("DOMContentLoaded", () => {
   const mensajes = document.getElementById("mensajes");
 
-  if(mensajes){
-    mensajes.scrollTop = mensajes.scrollHeight;
-  }
-}, 100);
+  if (!mensajes) return;
+
+  mensajes.style.scrollBehavior = "auto";
+  mensajes.scrollTop = mensajes.scrollHeight;
+});
