@@ -64,7 +64,7 @@
             <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:6px;">
 
               <% etiquetasClientes
-                .filter(e => e.cliente_numero === numero)
+                .filter(e => e.cliente_numero === numero)s
                 .forEach(e => { %>
 
                   <span class="chat-label-manual" style="
@@ -83,12 +83,20 @@
 
             </div>
 
-            <p class="chat-last-message" data-numero="<%= numero %>">
-  <%= (
-    conversaciones[numero][conversaciones[numero].length - 1]?.contenido ||
-    conversaciones[numero][conversaciones[numero].length - 1]?.tipo ||
-    ''
-  ).substring(0,30) %>
+            <%
+  const ultimoMsg = conversaciones[numero][conversaciones[numero].length - 1];
+  let previewTexto = ultimoMsg?.contenido || ultimoMsg?.tipo || "";
+
+  if (previewTexto.startsWith("http")) {
+    if (ultimoMsg?.tipo === "image") previewTexto = "📷 Imagen";
+    else if (ultimoMsg?.tipo === "audio") previewTexto = "🎧 Audio";
+    else if (ultimoMsg?.tipo === "document") previewTexto = "📄 Documento";
+    else previewTexto = "📎 Archivo";
+  }
+%>
+
+<p class="chat-last-message" data-numero="<%= numero %>">
+  <%= previewTexto.substring(0,30) %>
 </p>
           </div>
 
