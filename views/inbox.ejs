@@ -138,7 +138,7 @@
             <img src="<%= msg.imagen_url %>" style="max-width:260px;border-radius:10px;display:block;margin-bottom:6px;">
           <% } %>
 
-          <% if (msg.tipo === "video" && msg.imagen_url) { %>
+          <% if ((msg.tipo === "video" || msg.tipo === "video/mp4" || (msg.imagen_url && msg.imagen_url.includes(".mp4"))) && msg.imagen_url) { %>
             <video controls style="max-width:280px;border-radius:10px;display:block;margin-bottom:6px;">
               <source src="<%= msg.imagen_url %>">
             </video>
