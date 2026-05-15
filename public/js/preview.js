@@ -27,9 +27,26 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if(file.type.startsWith("video/") && mb > 15){
 
-      alert("⚠️ El video será comprimido automáticamente");
+      alert("⚠️ El video será comprimido automáticamente al enviar");
 
     }
+
+    previewArchivo.innerHTML = `
+      <div class="file-upload-preview">
+        <div class="file-upload-top">
+          <span>📎 ${file.name}</span>
+          <strong id="uploadPercent">1%</strong>
+        </div>
+
+        <div class="file-upload-bar">
+          <div id="uploadProgress" style="width:1%;"></div>
+        </div>
+
+        <div id="uploadStatus" class="file-upload-status">
+          Preparando archivo...
+        </div>
+      </div>
+    `;
 
     const progress = document.getElementById("uploadProgress");
     const percent = document.getElementById("uploadPercent");
@@ -37,9 +54,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
     let value = 1;
 
+    const sizeFactor = Math.min(Math.max(mb, 1), 30);
+    const speed = Math.max(35, 180 - sizeFactor * 4);
+
     const timer = setInterval(() => {
 
-      value += Math.floor(Math.random() * 12) + 4;
+      value += 2;
 
       if(value >= 100){
         value = 100;
@@ -58,7 +78,7 @@ document.addEventListener("DOMContentLoaded", () => {
         percent.innerText = value + "%";
       }
 
-    }, 120);
+    }, speed);
 
   });
 
