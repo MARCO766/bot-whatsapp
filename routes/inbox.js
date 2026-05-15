@@ -468,17 +468,7 @@ router.get("/inbox/chat-json", protegerPanel, async (req, res) => {
       }
     );
 
-    await axios.patch(
-      `${SUPABASE_URL}/rest/v1/conversaciones?cliente_numero=eq.${numero}&usuario_id=eq.${req.session.usuario.id}`,
-      { unread_count: 0 },
-      {
-        headers: {
-          apikey: SUPABASE_KEY,
-          Authorization: `Bearer ${SUPABASE_KEY}`,
-          "Content-Type": "application/json"
-        }
-      }
-    );
+
 
     const cliente = responseCliente.data?.[0];
 
