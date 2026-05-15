@@ -44,7 +44,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     } catch (error) {
       console.log("ERROR ENVIANDO:", error);
-      mostrarToast("❌ Error enviando mensaje");
+      
 
       const btnEnviar = form.querySelector('button[type="submit"]');
       if (btnEnviar) {
