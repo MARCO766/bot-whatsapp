@@ -137,7 +137,10 @@ document.addEventListener("DOMContentLoaded", () => {
   div.innerHTML =
     mediaHtml +
     escapeHtml(texto) +
-    `<span class="time">subiendo...</span>`;
+    `<span class="time">
+  subiendo...
+  <span class="msg-status sent">✓</span>
+</span>`;
 
   mensajes.appendChild(div);
 
@@ -195,7 +198,7 @@ function enviarConProgreso(formData, mensajeTemporal) {
           }
 
           if (status) {
-            status.innerText = "ahora ✓";
+            status.innerHTML = 'ahora <span class="msg-status sent">✓</span>';
           }
           activarPreviewArchivo(mensajeTemporal);
 

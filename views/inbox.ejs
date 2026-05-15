@@ -169,8 +169,18 @@
           <% } %>
 
           <span class="time">
-            <%= horaBolivia(msg.creado_en) %>
-          </span>
+  <%= horaBolivia(msg.creado_en) %>
+
+  <% if (msg.direccion === "saliente") { %>
+    <% if (msg.estado_envio === "read") { %>
+      <span class="msg-status read">✓✓</span>
+    <% } else if (msg.estado_envio === "delivered") { %>
+      <span class="msg-status delivered">✓✓</span>
+    <% } else { %>
+      <span class="msg-status sent">✓</span>
+    <% } %>
+  <% } %>
+</span>
 
         </div>
 

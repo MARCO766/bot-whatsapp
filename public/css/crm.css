@@ -888,3 +888,39 @@ body{
   justify-content: center;
   font-size: 26px;
 }
+
+.msg-status {
+  font-size: 13px;
+  margin-left: 4px;
+  font-weight: bold;
+}
+
+.msg-status.sent {
+  color: #cfd8dc;
+}
+
+.msg-status.delivered {
+  color: #cfd8dc;
+}
+
+.msg-status.read {
+  color: #53bdeb;
+}
+
+.msg-status {
+  font-size: 13px;
+  margin-left: 4px;
+  font-weight: bold;
+}
+
+.msg-status.sent {
+  color: #cfd8dc;
+}
+
+.msg-status.delivered {
+  color: #cfd8dc;
+}
+
+.msg-status.read {
+  color: #53bdeb;
+}
