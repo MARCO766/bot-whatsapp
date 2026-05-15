@@ -12,13 +12,7 @@ socket.on("nuevo-mensaje", function(msg){
   const mensajes = document.getElementById("mensajes");
   if(!mensajes) return;
 
-  const div = document.createElement("div");
-  div.className = "message entrante";
-const mediaHtml = renderMedia(msg);
-div.innerHTML =
-  mediaHtml +
-  (msg.contenido || "") +
-  '<span class="time">ahora</span>';
+const div = renderIncomingMessage(msg);
 
   mensajes.appendChild(div);
   mensajes.scrollTop = mensajes.scrollHeight;
