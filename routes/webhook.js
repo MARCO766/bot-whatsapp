@@ -184,11 +184,20 @@ if (message.audio && message.audio.id && conexionWebhook?.token) {
     const audioUrlMeta = audioInfo.data.url;
 
     const audioFile = await axios.get(audioUrlMeta, {
+      
       responseType: "arraybuffer",
       headers: {
         Authorization: `Bearer ${conexionWebhook.token}`
       }
     });
+
+    const audioSizeMB =
+  audioFile.data.byteLength / 1024 / 1024;
+
+if (audioSizeMB > 5) {
+  console.log("🚫 Audio mayor a 5MB");
+  return res.sendStatus(200);
+}
 
     const nombreAudio = Date.now() + "-audio.ogg";
     text = "audio";
@@ -216,6 +225,141 @@ if (message.audio && message.audio.id && conexionWebhook?.token) {
 
     console.log(
       "ERROR DESCARGANDO AUDIO:",
+      error.response?.data || error.message
+    );
+
+  }
+
+}
+
+if (message.image && message.image.id && conexionWebhook?.token) {
+
+  try {
+
+    const imageInfo = await axios.get(
+      `https://graph.facebook.com/v19.0/${message.image.id}`,
+      {
+        headers: {
+          Authorization: `Bearer ${conexionWebhook.token}`
+        }
+      }
+    );
+
+    const imageUrlMeta = imageInfo.data.url;
+
+    const imageFile = await axios.get(imageUrlMeta, {
+      responseType: "arraybuffer",
+      headers: {
+        Authorization: `Bearer ${conexionWebhook.token}`
+      }
+    });
+
+    const imageSizeMB =
+      imageFile.data.byteLength / 1024 / 1024;
+
+    if (imageSizeMB > 2) {
+      console.log("🚫 Imagen mayor a 2MB");
+      return res.sendStatus(200);
+    }
+
+    const nombreImagen =
+      Date.now() + "-imagen.jpg";
+
+    const rutaImagen =
+      `whatsapp/${usuarioIdWebhook}/${nombreImagen}`;
+
+    await axios.post(
+      `${SUPABASE_URL}/storage/v1/object/archivos/${rutaImagen}`,
+      imageFile.data,
+      {
+        headers: {
+          apikey: SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_KEY}`,
+          "Content-Type": "image/jpeg",
+          "x-upsert": "true"
+        }
+      }
+    );
+
+    mediaUrlFinal =
+      `${SUPABASE_URL}/storage/v1/object/public/archivos/${rutaImagen}`;
+
+    text = message.image.caption || "imagen";
+
+  } catch (error) {
+
+    console.log(
+      "ERROR DESCARGANDO IMAGEN:",
+      error.response?.data || error.message
+    );
+
+  }
+
+}
+
+if (message.document && message.document.id && conexionWebhook?.token) {
+
+  try {
+
+    const docInfo = await axios.get(
+      `https://graph.facebook.com/v19.0/${message.document.id}`,
+      {
+        headers: {
+          Authorization: `Bearer ${conexionWebhook.token}`
+        }
+      }
+    );
+
+    const docUrlMeta = docInfo.data.url;
+
+    const docFile = await axios.get(docUrlMeta, {
+      responseType: "arraybuffer",
+      headers: {
+        Authorization: `Bearer ${conexionWebhook.token}`
+      }
+    });
+
+    const docSizeMB =
+      docFile.data.byteLength / 1024 / 1024;
+
+    if (docSizeMB > 8) {
+      console.log("🚫 Documento mayor a 8MB");
+      return res.sendStatus(200);
+    }
+
+    const extension =
+      message.document.filename?.split(".").pop() || "pdf";
+
+    const nombreDoc =
+      Date.now() + "-doc." + extension;
+
+    const rutaDoc =
+      `whatsapp/${usuarioIdWebhook}/${nombreDoc}`;
+
+    await axios.post(
+      `${SUPABASE_URL}/storage/v1/object/archivos/${rutaDoc}`,
+      docFile.data,
+      {
+        headers: {
+          apikey: SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_KEY}`,
+          "Content-Type":
+            message.document.mime_type || "application/pdf",
+          "x-upsert": "true"
+        }
+      }
+    );
+
+    mediaUrlFinal =
+      `${SUPABASE_URL}/storage/v1/object/public/archivos/${rutaDoc}`;
+
+    text =
+      message.document.filename || "documento";
+
+  } catch (error) {
+
+    console.log(
+      "ERROR DESCARGANDO DOCUMENTO:",
       error.response?.data || error.message
     );
 
