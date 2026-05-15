@@ -101,3 +101,28 @@ function crearChatItemRealtime(numero, msg) {
 
   return item;
 }
+
+function actualizarUltimoMensajeLista(numero, texto) {
+  let preview = document.querySelector(
+    '.chat-last-message[data-numero="' + numero + '"]'
+  );
+
+  const item = document.querySelector(
+    '.chat-item[data-numero="' + numero + '"]'
+  );
+
+  if (!preview && item) {
+    const info = item.querySelector(".chat-info");
+
+    if (info) {
+      preview = document.createElement("p");
+      preview.className = "chat-last-message";
+      preview.dataset.numero = numero;
+      info.appendChild(preview);
+    }
+  }
+
+  if (!preview) return;
+
+  preview.innerText = (texto || "").substring(0, 35);
+}
