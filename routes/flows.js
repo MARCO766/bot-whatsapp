@@ -127,6 +127,21 @@ router.post("/inbox/responder", protegerPanel, upload.single("archivo"), async (
         }
       );
 
+      await axios.patch(
+  `${SUPABASE_URL}/rest/v1/conversaciones?cliente_numero=eq.${numero}&usuario_id=eq.${req.session.usuario.id}`,
+  {
+    ultimo_mensaje: respuesta,
+    ultimo_mensaje_en: new Date().toISOString()
+  },
+  {
+    headers: {
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${SUPABASE_KEY}`,
+      "Content-Type": "application/json"
+    }
+  }
+);
+
       return res.redirect("/inbox?numero=" + numero);
     }
 
@@ -346,6 +361,24 @@ else if (mime.startsWith("audio/")) {
       }
 
     );
+
+    await axios.patch(
+  `${SUPABASE_URL}/rest/v1/conversaciones?cliente_numero=eq.${numero}&usuario_id=eq.${req.session.usuario.id}`,
+  {
+    ultimo_mensaje:
+      respuesta && respuesta.trim() !== ""
+        ? respuesta
+        : tipoWhatsApp,
+    ultimo_mensaje_en: new Date().toISOString()
+  },
+  {
+    headers: {
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${SUPABASE_KEY}`,
+      "Content-Type": "application/json"
+    }
+  }
+);
 
     res.redirect("/inbox?numero=" + numero);
 
