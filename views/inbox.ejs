@@ -84,17 +84,25 @@
             </div>
 
 <%
-  let previewTexto = mapaConversaciones[numero]?.ultimo_mensaje || "";
+let previewTexto =
+  mapaConversaciones[numero]?.ultimo_mensaje ||
+  "";
 
-  if (previewTexto === "image" || previewTexto === "imagen") {
-    previewTexto = "📷 Imagen";
-  } else if (previewTexto === "audio") {
-    previewTexto = "🎧 Audio";
-  } else if (previewTexto === "document") {
-    previewTexto = "📄 Documento";
-  } else if (previewTexto === "video") {
-    previewTexto = "🎥 Video";
-  }
+if (previewTexto === "image" || previewTexto === "imagen") {
+  previewTexto = "📷 Imagen";
+}
+
+else if (previewTexto === "audio") {
+  previewTexto = "🎧 Audio";
+}
+
+else if (previewTexto === "document") {
+  previewTexto = "📄 Documento";
+}
+
+else if (previewTexto === "video") {
+  previewTexto = "🎥 Video";
+}
 %>
 
 <p class="chat-last-message" data-numero="<%= numero %>">

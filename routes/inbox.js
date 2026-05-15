@@ -87,9 +87,11 @@ const responseConversaciones = await axios.get(
 const conversacionesDB = responseConversaciones.data || [];
 
 const mapaUnread = {};
+const mapaConversaciones = {};
 
 conversacionesDB.forEach(c => {
   mapaUnread[c.cliente_numero] = c.unread_count || 0;
+  mapaConversaciones[c.cliente_numero] = c;
 });
 
 mensajes.sort((a, b) => {
@@ -429,6 +431,7 @@ res.render("inbox", {
   mapaColoresEtiquetas,
   etiquetasClientes,
   conversaciones,
+  mapaConversaciones,
   numeros,
   chatActual,
   mapaUnread,
