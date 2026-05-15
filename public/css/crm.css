@@ -682,3 +682,74 @@ body{
     font-size: 14px;
   }
 }
+
+/* ============================= */
+/* PREVIEW ARCHIVO CON PROGRESO */
+/* ============================= */
+
+.file-upload-preview {
+  margin-left: 68px;
+  margin-top: 10px;
+  max-width: 420px;
+  background: rgba(32, 44, 51, 0.95);
+  border: 1px solid rgba(37, 211, 102, 0.25);
+  border-radius: 14px;
+  padding: 12px 14px;
+  color: white;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+  animation: fileIn .2s ease;
+}
+
+.file-upload-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+  margin-bottom: 10px;
+}
+
+.file-upload-top span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-upload-top strong {
+  color: #25d366;
+  font-size: 13px;
+}
+
+.file-upload-bar {
+  width: 100%;
+  height: 8px;
+  background: rgba(255,255,255,0.10);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+#uploadProgress {
+  width: 1%;
+  height: 100%;
+  background: linear-gradient(90deg, #16a34a, #25d366, #86efac);
+  border-radius: 999px;
+  box-shadow: 0 0 12px rgba(37,211,102,.65);
+  transition: width .18s ease;
+}
+
+.file-upload-status {
+  margin-top: 8px;
+  color: #9ca3af;
+  font-size: 12px;
+}
+
+@keyframes fileIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
