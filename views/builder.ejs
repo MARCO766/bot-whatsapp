@@ -1,0 +1,101 @@
+<link rel="stylesheet" href="/css/crm.css">
+
+<div class="builder-layout">
+
+  <!-- SIDEBAR -->
+  <aside class="builder-sidebar">
+
+    <div class="sidebar-top">
+      <h1>⚡ MacBot Flujos</h1>
+      <p>
+        Automatizaciones visuales para WhatsApp
+      </p>
+    </div>
+
+    <div class="node-buttons">
+
+      <button onclick="crearNodo('texto')">
+        💬 Texto
+      </button>
+
+      <button onclick="crearNodo('imagen')">
+        🖼 Imagen
+      </button>
+
+      <button onclick="crearNodo('audio')">
+        🎧 Audio
+      </button>
+
+      <button onclick="crearNodo('delay')">
+        ⏱ Espera
+      </button>
+
+      <button onclick="crearNodo('condicion')">
+        🔀 Condición
+      </button>
+
+      <button onclick="crearNodo('ia')">
+        🤖 IA
+      </button>
+
+      <button onclick="crearNodo('etiqueta')">
+        🏷 Etiqueta
+      </button>
+
+      <button onclick="crearNodo('webhook')">
+        🔗 Webhook
+      </button>
+
+    </div>
+
+  </aside>
+
+  <!-- CANVAS -->
+  <main id="builder-canvas">
+
+    <div id="canvas-area">
+
+      <!-- GRID -->
+      <div class="grid-bg"></div>
+
+    </div>
+
+  </main>
+
+  <!-- PANEL DERECHO -->
+  <aside id="config-panel">
+
+    <div class="panel-header">
+
+      <h2 id="panel-title">
+        Configuración
+      </h2>
+
+      <button onclick="cerrarPanel()">
+        ✕
+      </button>
+
+    </div>
+
+    <div class="panel-content">
+
+      <label>
+        Contenido
+      </label>
+
+      <textarea
+        id="node-content"
+        placeholder="Escribe aquí..."
+      ></textarea>
+
+      <button class="save-node-btn">
+        Guardar Nodo
+      </button>
+
+    </div>
+
+  </aside>
+
+</div>
+
+<script src="/js/builder.js"></script>
