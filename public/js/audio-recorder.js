@@ -34,13 +34,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
         formData.append("numero", appCRM.dataset.chat);
         formData.append("archivo", audioBlob, "audio.webm");
-
+         agregarAudioSaliente(audioBlob);
         await fetch("/inbox/responder", {
           method: "POST",
           body: formData
         });
 
-        window.location.reload();
+        
       };
 
       mediaRecorder.start();
@@ -60,5 +60,28 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
   });
+function agregarAudioSaliente(audioBlob) {
+  const mensajes = document.getElementById("mensajes");
 
+  if (!mensajes) return;
+
+  const audioURL = URL.createObjectURL(audioBlob);
+
+  const div = document.createElement("div");
+  div.className = "message saliente";
+
+  div.innerHTML =
+    '<audio controls style="width:260px;display:block;margin-bottom:6px;">' +
+      '<source src="' + audioURL + '">' +
+    '</audio>' +
+    '<span class="time">enviando...</span>';
+
+  mensajes.appendChild(div);
+  mensajes.scrollTop = mensajes.scrollHeight;
+
+  setTimeout(() => {
+    const time = div.querySelector(".time");
+    if (time) time.innerText = "ahora ✓";
+  }, 700);
+}
 });
