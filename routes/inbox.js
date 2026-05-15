@@ -111,6 +111,21 @@ mensajes.forEach(msg => {
 
 });
 let numeros = Object.keys(conversaciones);
+numeros.sort((a, b) => {
+
+  const ultimoA =
+    conversaciones[a][conversaciones[a].length - 1];
+
+  const ultimoB =
+    conversaciones[b][conversaciones[b].length - 1];
+
+  const fechaA = new Date(ultimoA.creado_en).getTime();
+
+  const fechaB = new Date(ultimoB.creado_en).getTime();
+
+  return fechaB - fechaA;
+
+});
 
 if (etiquetaFiltro) {
   const numerosConEtiqueta = etiquetasClientes
