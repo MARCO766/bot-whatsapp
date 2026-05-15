@@ -17,7 +17,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const formData = new FormData(form);
 
-    agregarMensajeSaliente(texto, archivo);
+    const mensajeTemporal = agregarMensajeSaliente(texto, archivo);
 
     textarea.value = "";
 
@@ -31,7 +31,7 @@ document.addEventListener("DOMContentLoaded", () => {
         btnEnviar.innerHTML = "✓";
       }
 
-      await enviarConProgreso(formData);
+      await enviarConProgreso(formData, mensajeTemporal);
 
       if (!res.ok) {
         alert("❌ Error enviando mensaje");
@@ -55,117 +55,169 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   function agregarMensajeSaliente(texto, archivo) {
-    const div = document.createElement("div");
-    div.className = "message saliente";
 
-    let mediaHtml = "";
+  const div = document.createElement("div");
 
-    if (archivo) {
-      const urlLocal = URL.createObjectURL(archivo);
+  div.className = "message saliente";
 
-      if (archivo.type.startsWith("image/")) {
-        mediaHtml = `
-          <img src="${urlLocal}" style="max-width:260px;border-radius:10px;display:block;margin-bottom:6px;">
-        `;
-      }
+  let mediaHtml = "";
 
-      if (archivo.type.startsWith("video/")) {
-        mediaHtml = `
-          <video controls style="max-width:280px;border-radius:10px;display:block;margin-bottom:6px;">
-            <source src="${urlLocal}">
-          </video>
-        `;
-      }
+  if (archivo) {
 
-      if (archivo.type.startsWith("audio/")) {
-        mediaHtml = `
-          <audio controls style="width:260px;display:block;margin-bottom:6px;">
-            <source src="${urlLocal}">
-          </audio>
-        `;
-      }
+    const urlLocal = URL.createObjectURL(archivo);
 
-      if (
-        archivo.type.includes("pdf") ||
-        archivo.name.endsWith(".doc") ||
-        archivo.name.endsWith(".docx") ||
-        archivo.name.endsWith(".xls") ||
-        archivo.name.endsWith(".xlsx")
-      ) {
-        mediaHtml = `
-          <div style="
-            background:#202c33;
-            color:#25d366;
-            padding:12px;
-            border-radius:10px;
-            margin-bottom:6px;
-          ">
-            📄 ${archivo.name}
+    if (archivo.type.startsWith("image/")) {
+
+      mediaHtml = `
+        <div class="wa-upload-card">
+
+          <img src="${urlLocal}" class="wa-upload-media">
+
+          <div class="wa-upload-overlay">
+            <span class="wa-upload-percent">0%</span>
           </div>
-        `;
-      }
+
+          <div class="wa-upload-bar">
+            <div class="wa-upload-bar-fill"></div>
+          </div>
+
+        </div>
+      `;
+
     }
 
-    div.innerHTML =
-      mediaHtml +
-      escapeHtml(texto) +
-      `<span class="time">enviando...</span>`;
+    if (archivo.type.startsWith("video/")) {
 
-    mensajes.appendChild(div);
-    mensajes.scrollTop = mensajes.scrollHeight;
+      mediaHtml = `
+        <div class="wa-upload-card">
 
-    setTimeout(() => {
-      const time = div.querySelector(".time");
-      if (time) time.innerText = "ahora ✓";
-    }, 700);
+          <video class="wa-upload-media" muted>
+            <source src="${urlLocal}">
+          </video>
+
+          <div class="wa-upload-overlay">
+            ▶ <span class="wa-upload-percent">0%</span>
+          </div>
+
+          <div class="wa-upload-bar">
+            <div class="wa-upload-bar-fill"></div>
+          </div>
+
+        </div>
+      `;
+
+    }
+
+    if (
+      archivo.type.includes("pdf") ||
+      archivo.name.endsWith(".doc") ||
+      archivo.name.endsWith(".docx") ||
+      archivo.name.endsWith(".xls") ||
+      archivo.name.endsWith(".xlsx")
+    ) {
+
+      mediaHtml = `
+        <div class="wa-upload-doc">
+
+          <div>📄 ${archivo.name}</div>
+
+          <strong class="wa-upload-percent">0%</strong>
+
+          <div class="wa-upload-bar">
+            <div class="wa-upload-bar-fill"></div>
+          </div>
+
+        </div>
+      `;
+
+    }
+
   }
+
+  div.innerHTML =
+    mediaHtml +
+    escapeHtml(texto) +
+    `<span class="time">subiendo...</span>`;
+
+  mensajes.appendChild(div);
+
+  mensajes.scrollTop = mensajes.scrollHeight;
+
+  return div;
+
+}
 
   function escapeHtml(text) {
     const div = document.createElement("div");
     div.innerText = text || "";
     return div.innerHTML;
   }
-  function enviarConProgreso(formData) {
+function enviarConProgreso(formData, mensajeTemporal) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
 
     xhr.open("POST", "/inbox/responder", true);
 
     xhr.upload.onprogress = function (e) {
-      if (e.lengthComputable) {
+
+      if (e.lengthComputable && mensajeTemporal) {
+
         const percent = Math.round((e.loaded / e.total) * 100);
 
-        const progress = document.getElementById("uploadProgress");
-        const percentText = document.getElementById("uploadPercent");
-        const status = document.getElementById("uploadStatus");
+        const bar = mensajeTemporal.querySelector(".wa-upload-bar-fill");
 
-        if (progress) progress.style.width = percent + "%";
-        if (percentText) percentText.innerText = percent + "%";
+        const text = mensajeTemporal.querySelector(".wa-upload-percent");
 
-        if (status) {
-          status.innerText =
-            percent < 100
-              ? "Subiendo archivo..."
-              : "Procesando envío...";
+        if (bar) {
+          bar.style.width = percent + "%";
         }
+
+        if (text) {
+          text.innerText = percent + "%";
+        }
+
       }
+
     };
 
     xhr.onload = function () {
+
       if (xhr.status >= 200 && xhr.status < 400) {
-        const status = document.getElementById("uploadStatus");
-        if (status) status.innerText = "✅ Enviado correctamente";
+
+        if (mensajeTemporal) {
+
+          const percent = mensajeTemporal.querySelector(".wa-upload-percent");
+
+          const status = mensajeTemporal.querySelector(".time");
+
+          if (percent) {
+            percent.innerText = "100%";
+          }
+
+          if (status) {
+            status.innerText = "ahora ✓";
+          }
+
+        }
+
         resolve(xhr.responseText);
+
       } else {
+
         reject(new Error("Error enviando"));
+
       }
+
     };
 
     xhr.onerror = function () {
-      reject(new Error("Error de conexión"));
+
+      reject(new Error("Error conexión"));
+
     };
 
     xhr.send(formData);
+
   });
 }
 });

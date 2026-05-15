@@ -777,3 +777,71 @@ body{
   opacity: 1;
   transform: translateY(0);
 }
+/* UPLOAD TIPO WHATSAPP */
+
+.wa-upload-card {
+  position: relative;
+  width: 280px;
+  max-width: 100%;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #111b21;
+  margin-bottom: 6px;
+}
+
+.wa-upload-media {
+  width: 100%;
+  max-height: 360px;
+  object-fit: cover;
+  display: block;
+  opacity: .75;
+}
+
+.wa-upload-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,.28);
+  color: white;
+  font-size: 20px;
+  font-weight: bold;
+}
+
+.wa-upload-bar {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  width: calc(100% - 20px);
+  height: 6px;
+  background: rgba(255,255,255,.25);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.wa-upload-bar-fill {
+  width: 0%;
+  height: 100%;
+  background: #25d366;
+  border-radius: 999px;
+  transition: width .15s linear;
+}
+
+.wa-upload-doc {
+  width: 280px;
+  background: #202c33;
+  border-radius: 14px;
+  padding: 14px;
+  color: white;
+  position: relative;
+  margin-bottom: 6px;
+}
+
+.wa-upload-doc .wa-upload-bar {
+  position: relative;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  margin-top: 10px;
+}
