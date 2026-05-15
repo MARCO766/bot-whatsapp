@@ -196,7 +196,7 @@ function enviarConProgreso(formData, mensajeTemporal) {
           }
 
           if (status) {
-            status.innerHTML = 'ahora <span class="msg-status sent">✓</span>';
+            status.innerHTML = 'ahora <span class="msg-status delivered">✓✓</span>';
           }
           activarPreviewArchivo(mensajeTemporal);
 
