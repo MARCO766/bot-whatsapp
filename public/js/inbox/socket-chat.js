@@ -7,6 +7,7 @@ const CHAT_ACTUAL = appCRM.dataset.chat;
 socket.emit("join-user", USUARIO_ID);
 
 socket.on("nuevo-mensaje", function(msg){
+    moverChatArriba(msg.cliente_numero);
   if(msg.cliente_numero !== CHAT_ACTUAL) return;
 
   const mensajes = document.getElementById("mensajes");
@@ -45,3 +46,12 @@ socket.on("mensaje-estado", function(data){
   status.className = "msg-status sent";
   status.innerText = "✓";
 });
+
+function moverChatArriba(numero) {
+  const chatList = document.querySelector(".chat-list");
+  const item = document.querySelector(`.chat-item[data-numero="${numero}"]`);
+
+  if (!chatList || !item) return;
+
+  chatList.prepend(item);
+}

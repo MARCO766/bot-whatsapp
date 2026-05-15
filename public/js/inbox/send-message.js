@@ -12,12 +12,15 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const texto = textarea.value.trim();
     const archivo = archivoInput?.files?.[0];
+    const appCRM = document.querySelector(".whatsapp");
+    const numeroActual = appCRM?.dataset?.chat;
 
     if (!texto && !archivo) return;
 
     const formData = new FormData(form);
 
     const mensajeTemporal = agregarMensajeSaliente(texto, archivo);
+    moverChatArriba(numeroActual);
 
     textarea.value = "";
 
