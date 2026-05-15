@@ -92,7 +92,14 @@ if (value?.statuses) {
         }
       }
     );
+const io = req.app.get("io");
 
+if (io && usuarioIdWebhook) {
+  io.to("user-" + usuarioIdWebhook).emit("mensaje-estado", {
+    whatsapp_message_id: whatsappMessageId,
+    estado_envio: estado
+  });
+}
   }
 
   return res.sendStatus(200);

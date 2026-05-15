@@ -132,7 +132,10 @@
 
       <% conversaciones[chatActual].forEach(msg => { %>
 
-        <div class="message <%= msg.direccion === 'saliente' ? 'saliente' : 'entrante' %>">
+        <div
+  class="message <%= msg.direccion === 'saliente' ? 'saliente' : 'entrante' %>"
+  data-whatsapp-id="<%= msg.whatsapp_message_id || '' %>"
+>
 
           <% if ((msg.tipo === "image" || msg.tipo === "imagen") && msg.imagen_url) { %>
             <img src="<%= msg.imagen_url %>" style="max-width:260px;border-radius:10px;display:block;margin-bottom:6px;">
