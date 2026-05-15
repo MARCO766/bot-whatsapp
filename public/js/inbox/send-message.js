@@ -31,10 +31,7 @@ document.addEventListener("DOMContentLoaded", () => {
         btnEnviar.innerHTML = "✓";
       }
 
-      const res = await fetch("/inbox/responder", {
-        method: "POST",
-        body: formData
-      });
+      await enviarConProgreso(formData);
 
       if (!res.ok) {
         alert("❌ Error enviando mensaje");
@@ -128,4 +125,47 @@ document.addEventListener("DOMContentLoaded", () => {
     div.innerText = text || "";
     return div.innerHTML;
   }
+  function enviarConProgreso(formData) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+
+    xhr.open("POST", "/inbox/responder", true);
+
+    xhr.upload.onprogress = function (e) {
+      if (e.lengthComputable) {
+        const percent = Math.round((e.loaded / e.total) * 100);
+
+        const progress = document.getElementById("uploadProgress");
+        const percentText = document.getElementById("uploadPercent");
+        const status = document.getElementById("uploadStatus");
+
+        if (progress) progress.style.width = percent + "%";
+        if (percentText) percentText.innerText = percent + "%";
+
+        if (status) {
+          status.innerText =
+            percent < 100
+              ? "Subiendo archivo..."
+              : "Procesando envío...";
+        }
+      }
+    };
+
+    xhr.onload = function () {
+      if (xhr.status >= 200 && xhr.status < 400) {
+        const status = document.getElementById("uploadStatus");
+        if (status) status.innerText = "✅ Enviado correctamente";
+        resolve(xhr.responseText);
+      } else {
+        reject(new Error("Error enviando"));
+      }
+    };
+
+    xhr.onerror = function () {
+      reject(new Error("Error de conexión"));
+    };
+
+    xhr.send(formData);
+  });
+}
 });
