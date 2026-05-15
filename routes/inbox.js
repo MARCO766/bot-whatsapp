@@ -113,7 +113,12 @@ mensajes.forEach(msg => {
   conversaciones[numero].push(msg);
 
 });
-let numeros = Object.keys(conversaciones);
+let numeros = [
+  ...new Set([
+    ...Object.keys(mapaConversaciones),
+    ...Object.keys(conversaciones)
+  ])
+];
 numeros.sort((a, b) => {
 
   const fechaA =
