@@ -871,6 +871,26 @@ router.get("/eliminar-chat", protegerPanel, async (req, res) => {
       }
     );
 
+await axios.delete(
+  `${SUPABASE_URL}/rest/v1/conversaciones?cliente_numero=eq.${numero}&usuario_id=eq.${req.session.usuario.id}`,
+  {
+    headers: {
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${SUPABASE_KEY}`
+    }
+  }
+);
+
+await axios.delete(
+  `${SUPABASE_URL}/rest/v1/clientes?numero=eq.${numero}&usuario_id=eq.${req.session.usuario.id}`,
+  {
+    headers: {
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${SUPABASE_KEY}`
+    }
+  }
+);
+
     res.redirect("/inbox");
 
   } catch (error) {
