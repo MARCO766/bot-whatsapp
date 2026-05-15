@@ -140,21 +140,7 @@ const chatActual =
     ? chatSeleccionado
     : "";
 
-if (chatActual) {
-  await axios.patch(
-    `${SUPABASE_URL}/rest/v1/conversaciones?cliente_numero=eq.${chatActual}&usuario_id=eq.${req.session.usuario.id}`,
-    {
-      unread_count: 0
-    },
-    {
-      headers: {
-        apikey: SUPABASE_KEY,
-        Authorization: `Bearer ${SUPABASE_KEY}`,
-        "Content-Type": "application/json"
-      }
-    }
-  );
-}
+
 
 function horaBolivia(fecha) {
   if (!fecha) return "";
