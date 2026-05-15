@@ -15,6 +15,7 @@ async function cargarChatSinRecargar(numero) {
   try {
     const res = await fetch("/inbox/chat-json?numero=" + numero);
     const data = await res.json();
+    window.chatAbiertoManual = true;
 
     appCRM.dataset.chat = numero;
     const numeroResponder = document.getElementById("numeroResponder");
@@ -30,7 +31,9 @@ const item = document.querySelector(
 if (item) {
   item.classList.add("chat-selected");
 }
-    limpiarBadgeNuevo(numero);
+    if (window.chatAbiertoManual) {
+  limpiarBadgeNuevo(numero);
+}
 
     const titulo = document.querySelector(".chat-top h3");
     const numeroSmall = document.querySelector(".chat-top small");
