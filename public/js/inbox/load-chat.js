@@ -18,6 +18,7 @@ async function cargarChatSinRecargar(numero) {
     window.chatAbiertoManual = true;
 
     appCRM.dataset.chat = numero;
+    limpiarBadgeNuevo(numero);
     const numeroResponder = document.getElementById("numeroResponder");
 if (numeroResponder) numeroResponder.value = numero;
     document
@@ -104,4 +105,16 @@ function formatearHora(fecha) {
     minute: "2-digit",
     hour12: true
   });
+}
+
+function limpiarBadgeNuevo(numero) {
+  const item = document.querySelector('.chat-item[data-numero="' + numero + '"]');
+  if (!item) return;
+
+  const badge = item.querySelector(".unread-badge");
+  if (badge) badge.remove();
+
+  const badges = JSON.parse(localStorage.getItem("macbot_badges") || "{}");
+  delete badges[numero];
+  localStorage.setItem("macbot_badges", JSON.stringify(badges));
 }
