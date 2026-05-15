@@ -7,7 +7,7 @@ const CHAT_ACTUAL = appCRM.dataset.chat;
 socket.emit("join-user", USUARIO_ID);
 
 socket.on("nuevo-mensaje", function(msg){
-    moverChatArriba(msg.cliente_numero);
+    moverChatArriba(msg.cliente_numero, msg);
     actualizarUltimoMensajeLista(
   msg.cliente_numero,
   msg.contenido || msg.tipo || ""
@@ -51,21 +51,53 @@ socket.on("mensaje-estado", function(data){
   status.innerText = "✓";
 });
 
-function moverChatArriba(numero) {
+function moverChatArriba(numero, msg = null) {
   const chatList = document.querySelector(".chat-list");
-  const item = document.querySelector(`.chat-item[data-numero="${numero}"]`);
 
-  if (!chatList || !item) return;
+  if (!chatList) return;
+
+  let item = document.querySelector(`.chat-item[data-numero="${numero}"]`);
+
+  if (!item) {
+    item = crearChatItemRealtime(numero, msg);
+  }
 
   chatList.prepend(item);
 }
 
-function actualizarUltimoMensajeLista(numero, texto) {
-  const preview = document.querySelector(
-    '.chat-last-message[data-numero="' + numero + '"]'
-  );
+function crearChatItemRealtime(numero, msg) {
+  const item = document.createElement("div");
 
-  if (!preview) return;
+  item.className = "chat-item";
+  item.dataset.numero = numero;
 
-  preview.innerText = (texto || "").substring(0, 30);
+  item.onclick = function () {
+    cargarChatSinRecargar(numero);
+  };
+
+  item.innerHTML = `
+    <div class="avatar"></div>
+
+    <div class="chat-info">
+      <h4>${msg?.nombre || numero}</h4>
+      <small style="color:#8f9ba8;">${numero}</small>
+
+      <p class="chat-last-message" data-numero="${numero}">
+        ${(msg?.contenido || msg?.tipo || "").substring(0, 30)}
+      </p>
+    </div>
+
+    <div class="chat-actions" onclick="event.stopPropagation()">
+      <button class="chat-dots" onclick='toggleChatMenu("${numero}")'>⋮</button>
+
+      <div class="chat-menu" id="chat_menu_${numero}">
+        <a href="/chat-etiqueta?numero=${numero}">🏷️ Etiqueta</a>
+        <a href="/bloquear-chat?numero=${numero}" onclick="return confirm('¿Bloquear este chat?')">🚫 Bloquear</a>
+        <a href="/desbloquear-chat?numero=${numero}">✅ Desbloquear</a>
+        <a class="danger" href="/eliminar-chat?numero=${numero}" onclick="return confirm('¿Eliminar este chat?')">🗑️ Eliminar</a>
+      </div>
+    </div>
+  `;
+
+  return item;
 }

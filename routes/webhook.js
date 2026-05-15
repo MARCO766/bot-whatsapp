@@ -244,6 +244,7 @@ const io = req.app.get("io");
 if (io && usuarioIdWebhook) {
   io.to("user_" + usuarioIdWebhook).emit("nuevo-mensaje", {
     cliente_numero: from,
+    nombre: nombre,
     usuario_id: usuarioIdWebhook,
     direccion: "entrante",
     tipo: message.type,
