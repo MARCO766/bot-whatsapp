@@ -169,18 +169,20 @@ function incrementarBadgeNuevo(numero) {
     badge.dataset.numero = numero;
     badge.innerText = "1 nuevo";
 
-    badge.style.background = "#ff3b30";
-    badge.style.color = "white";
-    badge.style.padding = "3px 8px";
-    badge.style.borderRadius = "999px";
-    badge.style.fontSize = "12px";
-    badge.style.fontWeight = "bold";
-    badge.style.display = "inline-block";
-    badge.style.marginTop = "5px";
+   
 
-    const last = info.querySelector(".chat-last-message");
-    if (last) info.insertBefore(badge, last);
-    else info.appendChild(badge);
+    const actions = item.querySelector(".chat-actions");
+
+badge.style.position = "absolute";
+badge.style.right = "55px";
+badge.style.top = "18px";
+badge.style.zIndex = "5";
+
+item.style.position = "relative";
+
+if (actions) {
+  item.appendChild(badge);
+}
 
     return;
   }
