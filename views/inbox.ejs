@@ -51,7 +51,8 @@
           <div class="avatar"></div>
 
           <div class="chat-info">
-            <h4><%= numero %></h4>
+            <h4><%= mapaClientes[numero]?.nombre || numero %></h4>
+            <small style="color:#8f9ba8;"><%= numero %></small>
 
             <% if (mapaUnread[numero] > 0) { %>
               <span style="
@@ -121,7 +122,8 @@
     <div class="avatar"></div>
 
     <div>
-      <h3><%= chatActual || "Selecciona un chat" %></h3>
+      <h3><%= mapaClientes[chatActual]?.nombre || chatActual || "Selecciona un chat" %></h3>
+<small style="color:#8f9ba8;"><%= chatActual %></small>
       <small style="color:#25d366;">en línea</small>
     </div>
   </div>

@@ -56,6 +56,23 @@ const etiquetasClientes = responseEtiquetas.data || [];
 const etiquetasUnicas = [...new Set(etiquetasClientes.map(e => e.etiqueta))];
 const conversaciones = {};
 const mensajes = response.data || [];
+const responseClientes = await axios.get(
+  `${SUPABASE_URL}/rest/v1/clientes?usuario_id=eq.${req.session.usuario.id}&select=*`,
+  {
+    headers: {
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${SUPABASE_KEY}`
+    }
+  }
+);
+
+const clientes = responseClientes.data || [];
+
+const mapaClientes = {};
+
+clientes.forEach(c => {
+  mapaClientes[c.numero] = c;
+});
 
 const responseConversaciones = await axios.get(
   `${SUPABASE_URL}/rest/v1/conversaciones?usuario_id=eq.${req.session.usuario.id}&select=*`,
@@ -409,6 +426,7 @@ res.render("inbox", {
   numeros,
   chatActual,
   mapaUnread,
+  mapaClientes,
   horaBolivia,
   usuarioId: req.session.usuario.id
 });
