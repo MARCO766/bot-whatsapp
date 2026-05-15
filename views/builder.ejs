@@ -1,49 +1,32 @@
 <link rel="stylesheet" href="/css/crm.css">
 
-<div class="builder-layout">
+<div class="builder-page">
 
   <!-- SIDEBAR -->
   <aside class="builder-sidebar">
 
-    <div class="sidebar-top">
-      <h1>⚡ MacBot Flujos</h1>
-      <p>
-        Automatizaciones visuales para WhatsApp
-      </p>
-    </div>
+    <h1>⚡ MacBot Flujos</h1>
 
-    <div class="node-buttons">
+    <p>
+      Automatizaciones visuales para WhatsApp
+    </p>
 
-      <button onclick="crearNodo('texto')">
-        💬 Texto
+    <div class="builder-buttons">
+
+      <button onclick="agregarNodo('contenido')">
+        💬 Contenido
       </button>
 
-      <button onclick="crearNodo('imagen')">
-        🖼 Imagen
-      </button>
-
-      <button onclick="crearNodo('audio')">
-        🎧 Audio
-      </button>
-
-      <button onclick="crearNodo('delay')">
+      <button onclick="agregarNodo('espera')">
         ⏱ Espera
       </button>
 
-      <button onclick="crearNodo('condicion')">
-        🔀 Condición
-      </button>
-
-      <button onclick="crearNodo('ia')">
-        🤖 IA
-      </button>
-
-      <button onclick="crearNodo('etiqueta')">
+      <button onclick="agregarNodo('etiqueta')">
         🏷 Etiqueta
       </button>
 
-      <button onclick="crearNodo('webhook')">
-        🔗 Webhook
+      <button onclick="agregarNodo('seguimiento')">
+        🔁 Seguimiento
       </button>
 
     </div>
@@ -51,50 +34,13 @@
   </aside>
 
   <!-- CANVAS -->
-  <main id="builder-canvas">
+  <main id="canvasWrapper">
 
-    <div id="canvas-area">
-
-      <!-- GRID -->
-      <div class="grid-bg"></div>
+    <div id="canvasFlujo">
 
     </div>
 
   </main>
-
-  <!-- PANEL DERECHO -->
-  <aside id="config-panel">
-
-    <div class="panel-header">
-
-      <h2 id="panel-title">
-        Configuración
-      </h2>
-
-      <button onclick="cerrarPanel()">
-        ✕
-      </button>
-
-    </div>
-
-    <div class="panel-content">
-
-      <label>
-        Contenido
-      </label>
-
-      <textarea
-        id="node-content"
-        placeholder="Escribe aquí..."
-      ></textarea>
-
-      <button class="save-node-btn">
-        Guardar Nodo
-      </button>
-
-    </div>
-
-  </aside>
 
 </div>
 
