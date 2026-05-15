@@ -753,3 +753,27 @@ body{
     transform: translateY(0);
   }
 }
+/* TOAST */
+
+.macbot-toast{
+  position: fixed;
+  bottom: 30px;
+  right: 30px;
+  background: rgba(17,27,33,.96);
+  color: white;
+  padding: 14px 18px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,.08);
+  box-shadow: 0 12px 35px rgba(0,0,0,.35);
+  z-index: 999999;
+  opacity: 0;
+  transform: translateY(20px);
+  transition: .25s ease;
+  font-size: 14px;
+  backdrop-filter: blur(10px);
+}
+
+.macbot-toast.show{
+  opacity: 1;
+  transform: translateY(0);
+}

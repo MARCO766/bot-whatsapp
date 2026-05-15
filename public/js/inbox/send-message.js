@@ -44,7 +44,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     } catch (error) {
       console.log("ERROR ENVIANDO:", error);
-      alert("❌ Error de conexión");
+      mostrarToast("❌ Error enviando mensaje");
 
       const btnEnviar = form.querySelector('button[type="submit"]');
       if (btnEnviar) {
@@ -169,3 +169,29 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 }
 });
+
+function mostrarToast(texto){
+
+  const toast = document.createElement("div");
+
+  toast.className = "macbot-toast";
+
+  toast.innerText = texto;
+
+  document.body.appendChild(toast);
+
+  setTimeout(() => {
+    toast.classList.add("show");
+  }, 50);
+
+  setTimeout(() => {
+
+    toast.classList.remove("show");
+
+    setTimeout(() => {
+      toast.remove();
+    }, 300);
+
+  }, 2500);
+
+}
