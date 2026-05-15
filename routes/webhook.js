@@ -402,16 +402,29 @@ if (io && usuarioIdWebhook) {
   });
 }
 
+const responseConversacionActual = await axios.get(
+  `${SUPABASE_URL}/rest/v1/conversaciones?cliente_numero=eq.${from}&usuario_id=eq.${usuarioIdWebhook}&select=unread_count`,
+  {
+    headers: {
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${SUPABASE_KEY}`
+    }
+  }
+);
+
+const unreadActual =
+  responseConversacionActual.data?.[0]?.unread_count || 0;
+
 await axios.post(
   `${SUPABASE_URL}/rest/v1/conversaciones`,
   {
-  cliente_numero: from,
-  usuario_id: usuarioIdWebhook,
-  ultimo_mensaje: text || message.type,
-  ultimo_mensaje_en: new Date().toISOString(),
-  estado: "abierta",
-  unread_count: 1
-},
+    cliente_numero: from,
+    usuario_id: usuarioIdWebhook,
+    ultimo_mensaje: text || message.type,
+    ultimo_mensaje_en: new Date().toISOString(),
+    estado: "abierta",
+    unread_count: unreadActual + 1
+  },
   {
     headers: {
       apikey: SUPABASE_KEY,
