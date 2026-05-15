@@ -19,6 +19,14 @@ async function cargarChatSinRecargar(numero) {
 
     appCRM.dataset.chat = numero;
     limpiarBadgeNuevo(numero);
+await fetch("/inbox/marcar-leido", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json"
+  },
+  body: JSON.stringify({ numero })
+});
+    limpiarBadgeNuevo(numero);
     const numeroResponder = document.getElementById("numeroResponder");
 if (numeroResponder) numeroResponder.value = numero;
     document

@@ -168,7 +168,6 @@ function incrementarBadgeNuevo(numero) {
 
     item.appendChild(badge);
 
-    guardarBadgeLocal(numero, 1);
     return;
   }
 
@@ -176,31 +175,5 @@ function incrementarBadgeNuevo(numero) {
   const nuevo = actual + 1;
 
   badge.innerText = nuevo + " nuevo";
-  guardarBadgeLocal(numero, nuevo);
 }
 
-function guardarBadgeLocal(numero, cantidad) {
-  const badges = JSON.parse(localStorage.getItem("macbot_badges") || "{}");
-  badges[numero] = cantidad;
-  localStorage.setItem("macbot_badges", JSON.stringify(badges));
-}
-
-document.addEventListener("DOMContentLoaded", () => {
-  const badges = JSON.parse(localStorage.getItem("macbot_badges") || "{}");
-
-  Object.keys(badges).forEach(numero => {
-    const item = document.querySelector('.chat-item[data-numero="' + numero + '"]');
-    if (!item) return;
-
-    let badge = item.querySelector(".unread-badge");
-
-    if (!badge) {
-      badge = document.createElement("span");
-      badge.className = "unread-badge";
-      badge.dataset.numero = numero;
-      item.appendChild(badge);
-    }
-
-    badge.innerText = badges[numero] + " nuevo";
-  });
-});

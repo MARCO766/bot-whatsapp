@@ -483,5 +483,33 @@ router.get("/inbox/chat-json", protegerPanel, async (req, res) => {
     res.status(500).json({ ok: false });
   }
 });
+router.post("/inbox/marcar-leido", protegerPanel, async (req, res) => {
+  try {
+    const { numero } = req.body;
 
+    if (!numero) {
+      return res.json({ ok: false });
+    }
+
+    await axios.patch(
+      `${SUPABASE_URL}/rest/v1/conversaciones?cliente_numero=eq.${numero}&usuario_id=eq.${req.session.usuario.id}`,
+      {
+        unread_count: 0
+      },
+      {
+        headers: {
+          apikey: SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_KEY}`,
+          "Content-Type": "application/json"
+        }
+      }
+    );
+
+    res.json({ ok: true });
+
+  } catch (error) {
+    console.log("ERROR MARCANDO LEIDO:", error.response?.data || error.message);
+    res.json({ ok: false });
+  }
+});
 module.exports = router;
