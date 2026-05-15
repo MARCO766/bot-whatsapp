@@ -17,6 +17,7 @@ async function cargarChatSinRecargar(numero) {
     const data = await res.json();
 
     appCRM.dataset.chat = numero;
+    limpiarBadgeNuevo(numero);
 
     const titulo = document.querySelector(".chat-top h3");
     const numeroSmall = document.querySelector(".chat-top small");
@@ -87,4 +88,12 @@ function formatearHora(fecha) {
     minute: "2-digit",
     hour12: true
   });
+}
+
+function limpiarBadgeNuevo(numero) {
+  const item = document.querySelector('.chat-item[data-numero="' + numero + '"]');
+  if (!item) return;
+
+  const badge = item.querySelector(".unread-badge");
+  if (badge) badge.remove();
 }

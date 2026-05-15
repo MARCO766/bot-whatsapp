@@ -33,6 +33,10 @@ socket.on("nuevo-mensaje", function(msg){
 
   const chatActual = getChatActual();
 
+  if (numero !== chatActual) {
+  incrementarBadgeNuevo(numero);
+}
+
   if (numero !== chatActual) return;
 
   const mensajes = document.getElementById("mensajes");
@@ -148,4 +152,39 @@ function crearChatItemRealtime(numero, msg) {
   `;
 
   return item;
+}
+
+function incrementarBadgeNuevo(numero) {
+  const item = document.querySelector('.chat-item[data-numero="' + numero + '"]');
+  if (!item) return;
+
+  let badge = item.querySelector(".unread-badge");
+
+  if (!badge) {
+    const info = item.querySelector(".chat-info");
+    if (!info) return;
+
+    badge = document.createElement("span");
+    badge.className = "unread-badge";
+    badge.dataset.numero = numero;
+    badge.innerText = "1 nuevo";
+
+    badge.style.background = "#ff3b30";
+    badge.style.color = "white";
+    badge.style.padding = "3px 8px";
+    badge.style.borderRadius = "999px";
+    badge.style.fontSize = "12px";
+    badge.style.fontWeight = "bold";
+    badge.style.display = "inline-block";
+    badge.style.marginTop = "5px";
+
+    const last = info.querySelector(".chat-last-message");
+    if (last) info.insertBefore(badge, last);
+    else info.appendChild(badge);
+
+    return;
+  }
+
+  const actual = parseInt(badge.innerText) || 0;
+  badge.innerText = (actual + 1) + " nuevo";
 }
