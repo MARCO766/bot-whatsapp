@@ -33,9 +33,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
       await enviarConProgreso(formData, mensajeTemporal);
 
-      if (!res.ok) {
-        alert("❌ Error enviando mensaje");
-      }
+
 
       if (btnEnviar) {
         btnEnviar.disabled = false;
