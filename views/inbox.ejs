@@ -91,24 +91,22 @@ let previewTexto =
   ultimoMsg?.tipo ||
   "";
 
-if (previewTexto.startsWith("http")) {
+if (ultimoMsg?.tipo === "image") {
+  previewTexto = "📷 Imagen";
+}
 
-  if (ultimoMsg?.tipo === "image") {
-    previewTexto = "📷 Imagen";
-  }
+else if (ultimoMsg?.tipo === "audio") {
+  previewTexto = "🎧 Audio";
+}
 
-  else if (ultimoMsg?.tipo === "audio") {
-    previewTexto = "🎧 Audio";
-  }
+else if (ultimoMsg?.tipo === "document") {
+  previewTexto = "📄 Documento";
+}
 
-  else if (ultimoMsg?.tipo === "document") {
-    previewTexto = "📄 Documento";
-  }
-
-  else {
-    previewTexto = "📎 Archivo";
-  }
-
+else if (
+  ultimoMsg?.tipo === "video"
+) {
+  previewTexto = "🎥 Video";
 }
 %>
 
