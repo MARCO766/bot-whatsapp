@@ -117,7 +117,7 @@ document.addEventListener("DOMContentLoaded", () => {
     ) {
 
       mediaHtml = `
-        <div class="wa-upload-doc">
+        <div class="wa-upload-doc" data-url="${urlLocal}">
 
           <div>📄 ${archivo.name}</div>
 
@@ -197,6 +197,7 @@ function enviarConProgreso(formData, mensajeTemporal) {
           if (status) {
             status.innerText = "ahora ✓";
           }
+          activarPreviewArchivo(mensajeTemporal);
 
         }
 
@@ -246,4 +247,47 @@ function mostrarToast(texto){
 
   }, 2500);
 
+}
+
+function activarPreviewArchivo(mensajeTemporal) {
+  if (!mensajeTemporal) return;
+
+  const overlay = mensajeTemporal.querySelector(".wa-upload-overlay");
+  const bar = mensajeTemporal.querySelector(".wa-upload-bar");
+
+  if (overlay) overlay.remove();
+  if (bar) bar.remove();
+
+  const video = mensajeTemporal.querySelector("video");
+
+  if (video) {
+    video.setAttribute("controls", "true");
+    video.muted = false;
+    video.style.opacity = "1";
+  }
+
+  const img = mensajeTemporal.querySelector("img");
+
+  if (img) {
+    img.style.opacity = "1";
+    img.style.cursor = "pointer";
+
+    img.onclick = () => {
+      window.open(img.src, "_blank");
+    };
+  }
+
+  const doc = mensajeTemporal.querySelector(".wa-upload-doc");
+
+  if (doc) {
+    doc.style.cursor = "pointer";
+
+    const link = doc.dataset.url;
+
+    if (link) {
+      doc.onclick = () => {
+        window.open(link, "_blank");
+      };
+    }
+  }
 }
