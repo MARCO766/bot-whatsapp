@@ -868,6 +868,7 @@ window.MACBOT_BUILDER = {
 };
 </script>
 
+
 <script src="/js/builder.js"></script>
 
 <div class="modal" id="modalSeguimiento" style="display:none;">

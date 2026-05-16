@@ -205,8 +205,10 @@ function soltarConexion(e){
   nodoArrastrando = null;
   lineaTemporal = null;
 }
-let flujoEditandoId = "${flujoId}";
-let flujoCargado = ${JSON.stringify(flujoActual ? flujoActual.data : null)};
+const MACBOT_BUILDER = window.MACBOT_BUILDER || {};
+
+let flujoEditandoId = MACBOT_BUILDER.flujoEditandoId || "";
+let flujoCargado = MACBOT_BUILDER.flujoCargado || null;
 
 function cargarFlujoGuardado(){
 
@@ -1359,8 +1361,8 @@ function editarNombreFlujo(id, nombreActual){
     location.reload();
   });
 }
-const activadoresData = ${JSON.stringify(activadores)};
-const etiquetasData = ${JSON.stringify(etiquetas)};
+const activadoresData = MACBOT_BUILDER.activadoresData || [];
+const etiquetasData = MACBOT_BUILDER.etiquetasData || [];
 
 function toggleMenuActivador(id){
   document.querySelectorAll(".menu-flujo").forEach(menu => {
