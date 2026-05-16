@@ -632,23 +632,44 @@ overflow:auto;
 💾 Guardar flujo
 </button>
 
-<div id="canvasWrapper" style="
-  height:85vh;
-  overflow:hidden;
-  border-radius:24px;
-  position:relative;
-">
+<div style="display:flex;gap:18px;align-items:stretch;">
 
-  <div 
-    class="builder" 
-    id="canvasFlujo"
-    style="
-      height:3000px;
-      width:3000px;
-      position:relative;
-      transform-origin:0 0;
-    "
-  ></div>
+  <div id="canvasWrapper" style="
+    height:85vh;
+    overflow:hidden;
+    border-radius:24px;
+    position:relative;
+    flex:1;
+  ">
+
+    <div 
+      class="builder" 
+      id="canvasFlujo"
+      style="
+        height:3000px;
+        width:3000px;
+        position:relative;
+        transform-origin:0 0;
+      "
+    ></div>
+
+  </div>
+
+  <div id="panelNodo" class="panel-nodo">
+    <div class="panel-nodo-header">
+      <h3>⚙️ Configuración</h3>
+
+      <button onclick="cerrarPanelNodo()">
+        ×
+      </button>
+    </div>
+
+    <div id="panelNodoContenido">
+      <p style="color:#8f9ba8;">
+        Selecciona un nodo.
+      </p>
+    </div>
+  </div>
 
 </div>
   </div>

@@ -670,3 +670,95 @@ overflow:hidden;
     transform:scale(.8);
   }
 }
+
+/* PANEL DERECHO NODO */
+
+.panel-nodo{
+  width:340px;
+  height:85vh;
+  background:linear-gradient(180deg,#111827,#0b1018);
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:22px;
+  padding:18px;
+  box-shadow:0 15px 45px rgba(0,0,0,.45);
+  display:none;
+  overflow:auto;
+}
+
+.panel-nodo.activo{
+  display:block;
+  animation:panelNodoIn .2s ease;
+}
+
+.panel-nodo-header{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  margin-bottom:18px;
+}
+
+.panel-nodo-header h3{
+  color:#39ff14;
+  margin:0;
+}
+
+.panel-nodo-header button{
+  width:34px;
+  height:34px;
+  border:none;
+  border-radius:10px;
+  background:#ef4444;
+  color:white;
+  font-weight:bold;
+  cursor:pointer;
+}
+
+.panel-campo{
+  margin-bottom:16px;
+}
+
+.panel-campo label{
+  display:block;
+  font-size:13px;
+  color:#9ca3af;
+  margin-bottom:7px;
+}
+
+.panel-campo input,
+.panel-campo textarea,
+.panel-campo select{
+  width:100%;
+  background:#0f1117;
+  color:white;
+  border:1px solid #2d3748;
+  border-radius:12px;
+  padding:12px;
+  outline:none;
+}
+
+.panel-campo textarea{
+  min-height:110px;
+  resize:vertical;
+}
+
+.panel-btn{
+  width:100%;
+  background:#39ff14;
+  color:#061018;
+  border:none;
+  border-radius:14px;
+  padding:13px;
+  font-weight:bold;
+  cursor:pointer;
+}
+
+@keyframes panelNodoIn{
+  from{
+    opacity:0;
+    transform:translateX(20px);
+  }
+  to{
+    opacity:1;
+    transform:translateX(0);
+  }
+}
