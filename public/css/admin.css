@@ -547,112 +547,126 @@ overflow:hidden;
   -ms-user-select:none;
 }
 /* =====================================
-   LINEAS ESTILO MANYCHAT / RESPOND.IO
+   LINEAS PUNTEADAS + CHISPA AMARILLA
 ===================================== */
 
 .linea{
-  position:absolute;
-
+  position:absolute !important;
   height:3px !important;
-
-  border-radius:999px;
+  border-top:none !important;
+  border-radius:999px !important;
 
   background:
-  repeating-linear-gradient(
-    90deg,
-    #00ffd5 0px,
-    #00ffd5 10px,
-    transparent 10px,
-    transparent 18px
-  ) !important;
+    repeating-linear-gradient(
+      90deg,
+      #25ff72 0px,
+      #25ff72 8px,
+      transparent 8px,
+      transparent 16px
+    ) !important;
 
-  background-size:200% 100% !important;
+  background-size:32px 100% !important;
 
-  animation:flowLine 2s linear infinite;
+  animation:lineaPunteada 1.2s linear infinite !important;
 
   box-shadow:
-    0 0 10px rgba(0,255,200,.45),
-    0 0 25px rgba(0,255,150,.2);
+    0 0 8px rgba(37,255,114,.75),
+    0 0 18px rgba(37,255,114,.35) !important;
 
   overflow:visible !important;
 }
 
-/* BRILLO QUE VIAJA */
-
+/* chispa amarilla recorriendo */
 .linea::after{
   content:"";
-
   position:absolute;
+  top:-7px;
+  left:-22px;
 
-  top:-4px;
-  left:-40px;
-
-  width:50px;
-  height:10px;
-
+  width:22px;
+  height:16px;
   border-radius:999px;
 
-  background:linear-gradient(
-    90deg,
-    transparent,
-    #ffffff,
-    #00fff2,
-    transparent
-  );
+  background:
+    radial-gradient(circle,
+      #ffffff 0%,
+      #fff200 25%,
+      #ffb300 55%,
+      transparent 75%
+    );
 
-  filter:blur(1px);
+  box-shadow:
+    0 0 10px #fff200,
+    0 0 22px #ffb300,
+    0 0 34px rgba(255,179,0,.9);
 
-  animation:electricMove 1.2s linear infinite;
+  animation:chispaAmarilla 1s linear infinite;
 }
 
-/* ANIMACION PUNTEADO */
+/* pequeño rayo dentro de la chispa */
+.linea::before{
+  content:"⚡";
+  position:absolute;
+  top:-13px;
+  left:-20px;
 
-@keyframes flowLine{
+  font-size:16px;
+  color:#fff200;
+
+  text-shadow:
+    0 0 8px #fff200,
+    0 0 18px #ffb300;
+
+  animation:chispaIcono 1s linear infinite;
+}
+
+/* mueve el punteado */
+@keyframes lineaPunteada{
   from{
     background-position:0 0;
   }
-
   to{
-    background-position:200px 0;
+    background-position:32px 0;
   }
 }
 
-/* FLUJO ELECTRICO */
-
-@keyframes electricMove{
+/* mueve la luz */
+@keyframes chispaAmarilla{
   from{
-    left:-50px;
+    left:-22px;
+    opacity:0;
   }
-
+  8%{
+    opacity:1;
+  }
+  90%{
+    opacity:1;
+  }
   to{
     left:100%;
+    opacity:0;
   }
 }
 
-/* BOTON X LINEA */
-
-.borrar-linea{
-  width:24px;
-  height:24px;
-
-  border:none;
-  border-radius:50%;
-
-  background:#ff4d4d;
-
-  color:white;
-
-  font-weight:bold;
-
-  box-shadow:
-    0 0 15px rgba(255,0,0,.5);
-
-  transition:.2s;
-}
-
-.borrar-linea:hover{
-  transform:scale(1.1);
-
-  box-shadow:
-    0 0 22px rgba(255,0,0,.8);
+/* mueve el rayo */
+@keyframes chispaIcono{
+  from{
+    left:-20px;
+    opacity:0;
+    transform:scale(.8);
+  }
+  8%{
+    opacity:1;
+  }
+  50%{
+    transform:scale(1.15);
+  }
+  90%{
+    opacity:1;
+  }
+  to{
+    left:100%;
+    opacity:0;
+    transform:scale(.8);
+  }
 }
