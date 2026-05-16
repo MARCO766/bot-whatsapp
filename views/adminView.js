@@ -632,7 +632,25 @@ overflow:auto;
 💾 Guardar flujo
 </button>
 
-<div class="builder" id="canvasFlujo" style="height:85vh;"></div>
+<div id="canvasWrapper" style="
+  height:85vh;
+  overflow:hidden;
+  border-radius:24px;
+  position:relative;
+">
+
+  <div 
+    class="builder" 
+    id="canvasFlujo"
+    style="
+      height:3000px;
+      width:3000px;
+      position:relative;
+      transform-origin:0 0;
+    "
+  ></div>
+
+</div>
   </div>
 </div>
 ` : ""}
