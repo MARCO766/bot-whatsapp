@@ -307,3 +307,144 @@ overflow:hidden;
   background:#38bdf8;
   border-radius:10px;
 }
+
+/* =========================
+   NODOS ULTRA PRO MACBOT
+========================= */
+
+.node{
+  position:absolute;
+  min-width:240px;
+  min-height:120px;
+  background:linear-gradient(145deg,#0f172a,#111827);
+  border:1px solid rgba(0,255,140,.15);
+  border-radius:24px;
+  padding:18px;
+  color:white;
+  box-shadow:
+    0 0 25px rgba(0,255,120,.12),
+    inset 0 1px 0 rgba(255,255,255,.04);
+  backdrop-filter:blur(8px);
+  transition:.25s;
+  cursor:grab;
+}
+
+.node:hover{
+  transform:translateY(-2px);
+  box-shadow:
+    0 0 35px rgba(0,255,120,.22),
+    inset 0 1px 0 rgba(255,255,255,.05);
+}
+
+.node-title{
+  font-size:18px;
+  font-weight:700;
+  margin-bottom:10px;
+  color:#39ff14;
+}
+
+.node-desc{
+  font-size:13px;
+  line-height:1.5;
+  opacity:.8;
+}
+
+/* =========================
+   NODO INICIO
+========================= */
+
+.node.start{
+  background:
+    radial-gradient(circle at top left,
+      rgba(57,255,20,.25),
+      transparent 40%
+    ),
+    linear-gradient(145deg,#0f172a,#111827);
+
+  border:1px solid rgba(57,255,20,.35);
+
+  box-shadow:
+    0 0 45px rgba(57,255,20,.28);
+}
+
+/* =========================
+   PUERTOS
+========================= */
+
+.port{
+  width:18px;
+  height:18px;
+  border-radius:50%;
+  position:absolute;
+  background:#ff9900;
+  border:3px solid white;
+  box-shadow:0 0 15px rgba(255,153,0,.8);
+  transition:.2s;
+}
+
+.port:hover{
+  transform:scale(1.2);
+  box-shadow:0 0 25px rgba(255,153,0,1);
+}
+
+/* =========================
+   BOTONES NODO
+========================= */
+
+.node-actions{
+  position:absolute;
+  top:10px;
+  right:10px;
+  display:flex;
+  gap:8px;
+}
+
+.edit-node,
+.delete-node{
+  width:32px;
+  height:32px;
+  border:none;
+  border-radius:12px;
+  cursor:pointer;
+  transition:.2s;
+  font-size:14px;
+  color:white;
+}
+
+.edit-node{
+  background:#2563eb;
+}
+
+.edit-node:hover{
+  transform:scale(1.08);
+  box-shadow:0 0 15px rgba(37,99,235,.7);
+}
+
+.delete-node{
+  background:#dc2626;
+}
+
+.delete-node:hover{
+  transform:scale(1.08);
+  box-shadow:0 0 15px rgba(220,38,38,.7);
+}
+
+/* =========================
+   ANIMACION
+========================= */
+
+@keyframes aparecerNodo{
+  from{
+    opacity:0;
+    transform:scale(.8);
+  }
+
+  to{
+    opacity:1;
+    transform:scale(1);
+  }
+}
+
+.node{
+  animation:aparecerNodo .25s ease;
+}
