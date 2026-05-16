@@ -1359,8 +1359,8 @@ function editarNombreFlujo(id, nombreActual){
     location.reload();
   });
 }
-const activadoresData = ${JSON.stringify(activadores)};
-const etiquetasData = ${JSON.stringify(etiquetas)};
+const activadoresData = window.activadoresData || [];
+const etiquetasData = window.etiquetasData || [];
 
 function toggleMenuActivador(id){
   document.querySelectorAll(".menu-flujo").forEach(menu => {

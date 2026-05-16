@@ -854,7 +854,10 @@ overflow:auto;
 
   </div>
 </div>
-
+<script>
+  window.activadoresData = ${JSON.stringify(activadores)};
+  window.etiquetasData = ${JSON.stringify(etiquetas)};
+</script>
 <script src="/js/builder.js"></script>
 
 <div class="modal" id="modalSeguimiento" style="display:none;">
