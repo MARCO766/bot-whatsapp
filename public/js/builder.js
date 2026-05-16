@@ -1,4 +1,3 @@
-
 let nodoCount = 0;
 
 let variantesContenido = [[]];
@@ -1568,3 +1567,7 @@ document.addEventListener(
 ========================= */
 
 actualizarTransformCanvas();
+
+alert("✅ BUILDER JS NUEVO CARGADO");
+
+alert("BUILDER NUEVO CARGADO");
