@@ -1570,3 +1570,5 @@ document.addEventListener(
 actualizarTransformCanvas();
 
 alert("✅ BUILDER JS NUEVO CARGADO");
+
+alert("BUILDER NUEVO CARGADO");
