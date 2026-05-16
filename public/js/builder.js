@@ -1359,8 +1359,8 @@ function editarNombreFlujo(id, nombreActual){
     location.reload();
   });
 }
-const activadoresData = window.activadoresData || [];
-const etiquetasData = window.etiquetasData || [];
+const activadoresData = ${JSON.stringify(activadores)};
+const etiquetasData = ${JSON.stringify(etiquetas)};
 
 function toggleMenuActivador(id){
   document.querySelectorAll(".menu-flujo").forEach(menu => {
@@ -1434,59 +1434,94 @@ function cerrarModalConexion(){
    CANVAS INFINITO MACBOT
 ========================= */
 
-const canvasWrapperInfinito =
+const canvasWrapper =
   document.getElementById("canvasWrapper");
 
-const canvasFlujoInfinito =
+const canvasFlujo =
   document.getElementById("canvasFlujo");
 
-if(canvasWrapperInfinito && canvasFlujoInfinito){
+/* ZOOM */
 
-  let scale = 1;
-  let panX = 0;
-  let panY = 0;
+let scale = 1;
 
-  let isPanning = false;
+/* POSICION */
 
-  let startX = 0;
-  let startY = 0;
+let panX = 0;
+let panY = 0;
 
-  function actualizarTransformCanvas(){
+/* MOVER */
 
-    canvasFlujoInfinito.style.transform =
-      `translate(${panX}px, ${panY}px) scale(${scale})`;
+let isPanning = false;
 
-  }
+let startX = 0;
+let startY = 0;
 
-  canvasWrapperInfinito.addEventListener("wheel", function(e){
+/* =========================
+   TRANSFORM
+========================= */
+
+function actualizarTransformCanvas(){
+
+  canvasFlujo.style.transform =
+    `translate(${panX}px, ${panY}px) scale(${scale})`;
+
+}
+
+/* =========================
+   ZOOM RUEDA
+========================= */
+
+canvasWrapper.addEventListener(
+  "wheel",
+  function(e){
 
     e.preventDefault();
 
-    const delta = e.deltaY > 0 ? -1 : 1;
+    const zoomSpeed = 0.1;
 
-    const zoom = Math.exp(delta * 0.02);
+    const delta =
+      e.deltaY > 0 ? -1 : 1;
+
+    const zoom =
+      Math.exp(delta * zoomSpeed * 0.2);
 
     scale *= zoom;
 
-    if(scale < 0.35) scale = 0.35;
-    if(scale > 2) scale = 2;
+    /* LIMITES */
+
+    if(scale < 0.35){
+      scale = 0.35;
+    }
+
+    if(scale > 2){
+      scale = 2;
+    }
 
     actualizarTransformCanvas();
 
-    if(typeof actualizarLineas === "function"){
-      actualizarLineas();
-    }
+    actualizarLineas();
 
-  }, { passive:false });
+  },
+  { passive:false }
+);
 
-  canvasWrapperInfinito.addEventListener("mousedown", function(e){
+/* =========================
+   MOVER CANVAS
+========================= */
+
+canvasWrapper.addEventListener(
+  "mousedown",
+  function(e){
+
+    /* NO mover si toca nodo */
 
     if(
       e.target.closest(".node") ||
       e.target.closest(".port") ||
       e.target.closest("button") ||
       e.target.closest("textarea") ||
-      e.target.closest("input")
+      e.target.closest("input") ||
+      e.target.closest("select")
     ){
       return;
     }
@@ -1496,11 +1531,14 @@ if(canvasWrapperInfinito && canvasFlujoInfinito){
     startX = e.clientX - panX;
     startY = e.clientY - panY;
 
-    canvasWrapperInfinito.style.cursor = "grabbing";
+    canvasWrapper.style.cursor = "grabbing";
 
-  });
+  }
+);
 
-  document.addEventListener("mousemove", function(e){
+document.addEventListener(
+  "mousemove",
+  function(e){
 
     if(!isPanning) return;
 
@@ -1509,24 +1547,24 @@ if(canvasWrapperInfinito && canvasFlujoInfinito){
 
     actualizarTransformCanvas();
 
-    if(typeof actualizarLineas === "function"){
-      actualizarLineas();
-    }
+    actualizarLineas();
 
-  });
+  }
+);
 
-  document.addEventListener("mouseup", function(){
+document.addEventListener(
+  "mouseup",
+  function(){
 
     isPanning = false;
 
-    canvasWrapperInfinito.style.cursor = "grab";
+    canvasWrapper.style.cursor = "grab";
 
-  });
+  }
+);
 
-  actualizarTransformCanvas();
+/* =========================
+   INICIO
+========================= */
 
-}
-
-alert("✅ BUILDER JS NUEVO CARGADO");
-
-alert("BUILDER NUEVO CARGADO");
+actualizarTransformCanvas();
