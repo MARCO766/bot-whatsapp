@@ -546,55 +546,113 @@ overflow:hidden;
   -moz-user-select:none;
   -ms-user-select:none;
 }
-/* HILO ELÉCTRICO RECORRIENDO LA LÍNEA */
+/* =====================================
+   LINEAS ESTILO MANYCHAT / RESPOND.IO
+===================================== */
 
 .linea{
-  border-top:none !important;
-  height:5px !important;
-  border-radius:999px !important;
+  position:absolute;
+
+  height:3px !important;
+
+  border-radius:999px;
 
   background:
-    linear-gradient(90deg,
-      rgba(57,255,20,.45),
-      rgba(0,255,180,.45)
-    ) !important;
+  repeating-linear-gradient(
+    90deg,
+    #00ffd5 0px,
+    #00ffd5 10px,
+    transparent 10px,
+    transparent 18px
+  ) !important;
 
-  overflow:hidden !important;
+  background-size:200% 100% !important;
+
+  animation:flowLine 2s linear infinite;
 
   box-shadow:
-    0 0 10px rgba(57,255,20,.6),
-    0 0 24px rgba(0,255,200,.35) !important;
+    0 0 10px rgba(0,255,200,.45),
+    0 0 25px rgba(0,255,150,.2);
+
+  overflow:visible !important;
 }
+
+/* BRILLO QUE VIAJA */
 
 .linea::after{
   content:"";
+
   position:absolute;
+
   top:-4px;
-  left:-35px;
+  left:-40px;
 
-  width:45px;
-  height:13px;
+  width:50px;
+  height:10px;
 
-  background:linear-gradient(90deg,
+  border-radius:999px;
+
+  background:linear-gradient(
+    90deg,
     transparent,
     #ffffff,
-    #00f5ff,
-    #39ff14,
+    #00fff2,
     transparent
   );
 
   filter:blur(1px);
-  border-radius:999px;
 
-  animation:electricFlow .9s linear infinite;
+  animation:electricMove 1.2s linear infinite;
 }
 
-@keyframes electricFlow{
+/* ANIMACION PUNTEADO */
+
+@keyframes flowLine{
   from{
-    left:-45px;
+    background-position:0 0;
+  }
+
+  to{
+    background-position:200px 0;
+  }
+}
+
+/* FLUJO ELECTRICO */
+
+@keyframes electricMove{
+  from{
+    left:-50px;
   }
 
   to{
     left:100%;
   }
+}
+
+/* BOTON X LINEA */
+
+.borrar-linea{
+  width:24px;
+  height:24px;
+
+  border:none;
+  border-radius:50%;
+
+  background:#ff4d4d;
+
+  color:white;
+
+  font-weight:bold;
+
+  box-shadow:
+    0 0 15px rgba(255,0,0,.5);
+
+  transition:.2s;
+}
+
+.borrar-linea:hover{
+  transform:scale(1.1);
+
+  box-shadow:
+    0 0 22px rgba(255,0,0,.8);
 }
