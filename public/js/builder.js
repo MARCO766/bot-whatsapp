@@ -1434,27 +1434,36 @@ function cerrarModalConexion(){
    CANVAS INFINITO MACBOT
 ========================= */
 
-const canvasWrapper = document.getElementById("canvasWrapper");
-const canvasFlujo = document.getElementById("canvasFlujo");
+const canvasWrapperInfinito =
+  document.getElementById("canvasWrapper");
 
-if(canvasWrapper && canvasFlujo){
+const canvasFlujoInfinito =
+  document.getElementById("canvasFlujo");
+
+if(canvasWrapperInfinito && canvasFlujoInfinito){
 
   let scale = 1;
   let panX = 0;
   let panY = 0;
+
   let isPanning = false;
+
   let startX = 0;
   let startY = 0;
 
   function actualizarTransformCanvas(){
-    canvasFlujo.style.transform =
+
+    canvasFlujoInfinito.style.transform =
       `translate(${panX}px, ${panY}px) scale(${scale})`;
+
   }
 
-  canvasWrapper.addEventListener("wheel", function(e){
+  canvasWrapperInfinito.addEventListener("wheel", function(e){
+
     e.preventDefault();
 
     const delta = e.deltaY > 0 ? -1 : 1;
+
     const zoom = Math.exp(delta * 0.02);
 
     scale *= zoom;
@@ -1463,42 +1472,59 @@ if(canvasWrapper && canvasFlujo){
     if(scale > 2) scale = 2;
 
     actualizarTransformCanvas();
-    if(typeof actualizarLineas === "function") actualizarLineas();
+
+    if(typeof actualizarLineas === "function"){
+      actualizarLineas();
+    }
 
   }, { passive:false });
 
-  canvasWrapper.addEventListener("mousedown", function(e){
+  canvasWrapperInfinito.addEventListener("mousedown", function(e){
+
     if(
       e.target.closest(".node") ||
       e.target.closest(".port") ||
       e.target.closest("button") ||
       e.target.closest("textarea") ||
-      e.target.closest("input") ||
-      e.target.closest("select")
-    ) return;
+      e.target.closest("input")
+    ){
+      return;
+    }
 
     isPanning = true;
+
     startX = e.clientX - panX;
     startY = e.clientY - panY;
-    canvasWrapper.style.cursor = "grabbing";
+
+    canvasWrapperInfinito.style.cursor = "grabbing";
+
   });
 
   document.addEventListener("mousemove", function(e){
+
     if(!isPanning) return;
 
     panX = e.clientX - startX;
     panY = e.clientY - startY;
 
     actualizarTransformCanvas();
-    if(typeof actualizarLineas === "function") actualizarLineas();
+
+    if(typeof actualizarLineas === "function"){
+      actualizarLineas();
+    }
+
   });
 
   document.addEventListener("mouseup", function(){
+
     isPanning = false;
-    canvasWrapper.style.cursor = "grab";
+
+    canvasWrapperInfinito.style.cursor = "grab";
+
   });
 
   actualizarTransformCanvas();
+
 }
 
 alert("✅ BUILDER JS NUEVO CARGADO");

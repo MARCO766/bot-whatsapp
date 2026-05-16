@@ -858,6 +858,16 @@ overflow:auto;
   window.activadoresData = ${JSON.stringify(activadores)};
   window.etiquetasData = ${JSON.stringify(etiquetas)};
 </script>
+
+<script>
+window.MACBOT_BUILDER = {
+  flujoEditandoId: ${JSON.stringify(flujoId || "")},
+  flujoCargado: ${JSON.stringify(flujoActual ? flujoActual.data : null)},
+  activadoresData: ${JSON.stringify(activadores || [])},
+  etiquetasData: ${JSON.stringify(etiquetas || [])}
+};
+</script>
+
 <script src="/js/builder.js"></script>
 
 <div class="modal" id="modalSeguimiento" style="display:none;">
