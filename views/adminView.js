@@ -28,7 +28,7 @@ function renderAdminPage({
   <div class="menu" id="menuPrincipal" style="${builder ? "display:none;" : "display:flex;"}">
     <a href="/admin?tab=inicio" class="${tab === "inicio" ? "active" : ""}">🏠 Inicio</a>
     <a href="/admin?tab=chat" class="${tab === "chat" ? "active" : ""}">💬 Chat</a>
-    <a href="/admin?tab=flujos" onclick="alert('FLUJOS CONECTADO')" class="${tab === "flujos" ? "active" : ""}">🔀 Flujos</a>
+    <a href="/admin?tab=flujos" class="${tab === "flujos" ? "active" : ""}">🔀 Flujos</a>
     <a href="/admin?tab=activadores" class="${tab === "activadores" ? "active" : ""}">⚡ Activadores</a>
     <a href="/admin?tab=etiquetas" class="${tab === "etiquetas" ? "active" : ""}">🏷️ Etiquetas</a>
     <a href="/admin?tab=conexiones" class="${tab === "conexiones" ? "active" : ""}">
@@ -449,7 +449,7 @@ ${tab === "conexiones" ? `
         </div>
 
         <div style="position:relative;">
-          <button onclick="toggleMenuFlujo('${f.id}')" style="background:#1c212c;color:white;border:none;border-radius:8px;padding:8px 12px;cursor:pointer;">
+          <button onclick="alert('BOTON FUNCIONA')" style="background:#1c212c;color:white;border:none;border-radius:8px;padding:8px 12px;cursor:pointer;">
             ⋮
           </button>
 
