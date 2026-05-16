@@ -449,7 +449,7 @@ ${tab === "conexiones" ? `
         </div>
 
         <div style="position:relative;">
-          <button onclick="alert('BOTON FUNCIONA')" style="background:#1c212c;color:white;border:none;border-radius:8px;padding:8px 12px;cursor:pointer;">
+          <button onclick="abrirMenuFlujo('${f.id}')" style="background:#1c212c;color:white;border:none;border-radius:8px;padding:8px 12px;cursor:pointer;">
             ⋮
           </button>
 
@@ -893,7 +893,19 @@ overflow:auto;
 
   </div>
 </div>
+<script>
+function abrirMenuFlujo(id){
+  const menu = document.getElementById("menu_" + id);
 
+  document.querySelectorAll(".menu-flujo").forEach(m => {
+    if(m !== menu) m.style.display = "none";
+  });
+
+  if(menu){
+    menu.style.display = menu.style.display === "block" ? "none" : "block";
+  }
+}
+</script>
 </body>
 </html>
 
