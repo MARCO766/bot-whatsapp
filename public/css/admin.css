@@ -546,41 +546,55 @@ overflow:hidden;
   -moz-user-select:none;
   -ms-user-select:none;
 }
-/* LINEA ANIMADA PRO */
+/* HILO ELÉCTRICO RECORRIENDO LA LÍNEA */
 
 .linea{
   border-top:none !important;
-  height:4px !important;
+  height:5px !important;
   border-radius:999px !important;
 
-  background:linear-gradient(
-    90deg,
-    #39ff14 0%,
-    #00f5ff 35%,
-    #ffffff 50%,
-    #00f5ff 65%,
-    #39ff14 100%
-  ) !important;
+  background:
+    linear-gradient(90deg,
+      rgba(57,255,20,.45),
+      rgba(0,255,180,.45)
+    ) !important;
 
-  background-size:220% 100% !important;
-
-  animation:flujoLinea 1.4s linear infinite !important;
+  overflow:hidden !important;
 
   box-shadow:
-    0 0 10px rgba(57,255,20,.7),
-    0 0 22px rgba(0,245,255,.45) !important;
+    0 0 10px rgba(57,255,20,.6),
+    0 0 24px rgba(0,255,200,.35) !important;
 }
 
-@keyframes flujoLinea{
+.linea::after{
+  content:"";
+  position:absolute;
+  top:-4px;
+  left:-35px;
+
+  width:45px;
+  height:13px;
+
+  background:linear-gradient(90deg,
+    transparent,
+    #ffffff,
+    #00f5ff,
+    #39ff14,
+    transparent
+  );
+
+  filter:blur(1px);
+  border-radius:999px;
+
+  animation:electricFlow .9s linear infinite;
+}
+
+@keyframes electricFlow{
   from{
-    background-position:0% 50%;
+    left:-45px;
   }
 
   to{
-    background-position:220% 50%;
+    left:100%;
   }
-}
-
-.borrar-linea{
-  box-shadow:0 0 14px rgba(255,60,60,.7) !important;
 }
