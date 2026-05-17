@@ -30,6 +30,14 @@ function detectarTipoNodo(nodo) {
     return "etiqueta";
   }
 
+  if (
+    html.includes("💰 Conversión") ||
+    html.includes("💰 Conversion") ||
+    nodo.dataset?.tipo === "conversion"
+  ) {
+    return "conversion";
+  }
+
   if (html.includes("🔗 Conectar flujo")) {
     return "conectar";
   }

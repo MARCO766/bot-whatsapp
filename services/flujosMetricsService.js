@@ -1,12 +1,11 @@
 /**
  * Métricas reales para pantalla Flujos — solo Supabase, sin mocks.
+ * Ventas/conversiones: tabla crm_conversiones (nunca etiquetas).
  */
 const axios = require("axios");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
-
-const ETIQUETAS_VENTA = ["pagó", "compró", "pago", "pago confirmado", "compro"];
 
 function headers(extra = {}) {
   return {
@@ -20,11 +19,6 @@ function startOfTodayIso() {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
   return d.toISOString();
-}
-
-function esEtiquetaVenta(etiqueta) {
-  const e = String(etiqueta || "").trim().toLowerCase();
-  return ETIQUETAS_VENTA.some((t) => e === t || e.includes("pag") || e.includes("compr"));
 }
 
 async function supabaseCount(table, filterQuery) {
@@ -76,6 +70,17 @@ async function fetchSeguimientosRows(usuarioId) {
   );
 }
 
+async function fetchConversionesRows(usuarioId) {
+  const uid = encodeURIComponent(usuarioId);
+  return (
+    (await supabaseSelect(
+      "crm_conversiones",
+      `usuario_id=eq.${uid}&order=creado_en.desc`,
+      "flujo_id,valor,moneda,cliente_numero,creado_en,origen"
+    )) || []
+  );
+}
+
 function metricasVacias() {
   return {
     clientesEnFlujo: 0,
@@ -86,16 +91,30 @@ function metricasVacias() {
     seguimientosProgramados: 0,
     mensajesWhatsapp: 0,
     respuestasWhatsapp: 0,
+    conversiones: 0,
+    ventasMonto: 0,
     ventas: 0,
-    ventasSinRelacion: true,
     ultimaEjecucion: null,
   };
 }
 
+function agregarMetricasConversiones(byFlow, conversionesRows) {
+  if (!Array.isArray(conversionesRows)) return;
+
+  conversionesRows.forEach((row) => {
+    if (!row.flujo_id || !byFlow[row.flujo_id]) return;
+    const m = byFlow[row.flujo_id];
+    m.conversiones += 1;
+    m.ventas = m.conversiones;
+    const v = parseFloat(row.valor);
+    if (Number.isFinite(v)) m.ventasMonto += v;
+  });
+}
+
 /**
- * Métricas por flujo: seguimientos + mensajes WA de clientes del flujo + ventas por etiqueta.
+ * Métricas por flujo: seguimientos + mensajes WA + conversiones reales.
  */
-function computePerFlowMetrics(flowIds, segRows, etiquetasRows, mensajesRows) {
+function computePerFlowMetrics(flowIds, segRows, conversionesRows, mensajesRows) {
   const hoy = startOfTodayIso();
   const byFlow = {};
   flowIds.forEach((id) => {
@@ -136,24 +155,11 @@ function computePerFlowMetrics(flowIds, segRows, etiquetasRows, mensajesRows) {
     delete m._leadsHoySet;
   });
 
-  const clientesConVenta = new Set();
-  if (Array.isArray(etiquetasRows)) {
-    etiquetasRows.forEach((row) => {
-      if (row.cliente_numero && esEtiquetaVenta(row.etiqueta)) {
-        clientesConVenta.add(row.cliente_numero);
-      }
-    });
-  }
+  agregarMetricasConversiones(byFlow, conversionesRows);
 
   flowIds.forEach((fid) => {
     const m = byFlow[fid];
     const clientes = clientesPorFlujo[fid];
-    let ventas = 0;
-    clientes.forEach((num) => {
-      if (clientesConVenta.has(num)) ventas += 1;
-    });
-    m.ventas = ventas;
-    m.ventasSinRelacion = false;
 
     if (Array.isArray(mensajesRows)) {
       mensajesRows.forEach((msg) => {
@@ -162,6 +168,8 @@ function computePerFlowMetrics(flowIds, segRows, etiquetasRows, mensajesRows) {
         if (msg.direccion === "entrante") m.respuestasWhatsapp += 1;
       });
     }
+
+    m.ventasMonto = Math.round(m.ventasMonto * 100) / 100;
   });
 
   return byFlow;
@@ -190,7 +198,7 @@ async function fetchMensajesParaClientes(usuarioId, segRows) {
   return all;
 }
 
-async function computeGlobalStats(usuarioId, flujos, activadores) {
+async function computeGlobalStats(usuarioId, flujos, activadores, conversionesRows) {
   const uid = encodeURIComponent(usuarioId);
   const hoy = encodeURIComponent(startOfTodayIso());
 
@@ -207,8 +215,8 @@ async function computeGlobalStats(usuarioId, flujos, activadores) {
     respuestas,
     mensajesHoyRows,
     clientesHoyDb,
-    etiquetasVenta,
     seguimientosRows,
+    conversionesCount,
   ] = await Promise.all([
     supabaseCount("clientes", `usuario_id=eq.${uid}&estado=neq.bloqueado`),
     supabaseCount("conversaciones", `usuario_id=eq.${uid}`),
@@ -216,8 +224,8 @@ async function computeGlobalStats(usuarioId, flujos, activadores) {
     supabaseCount("mensajes", `usuario_id=eq.${uid}&direccion=eq.entrante`),
     supabaseSelect("mensajes", `usuario_id=eq.${uid}&creado_en=gte.${hoy}`, "direccion,cliente_numero"),
     supabaseCount("clientes", `usuario_id=eq.${uid}&creado_en=gte.${hoy}`),
-    supabaseSelect("clientes_etiquetas", `usuario_id=eq.${uid}`, "cliente_numero,etiqueta"),
     fetchSeguimientosRows(usuarioId),
+    supabaseCount("crm_conversiones", `usuario_id=eq.${uid}`),
   ]);
 
   let clientesPotencialesHoy = clientesHoyDb ?? 0;
@@ -231,18 +239,16 @@ async function computeGlobalStats(usuarioId, flujos, activadores) {
     }
   }
 
-  let ventas = 0;
-  let ventasConectadas = false;
-  if (Array.isArray(etiquetasVenta)) {
-    ventasConectadas = true;
-    const unicos = new Set();
-    etiquetasVenta.forEach((row) => {
-      if (row.cliente_numero && esEtiquetaVenta(row.etiqueta)) {
-        unicos.add(row.cliente_numero);
-      }
+  let ventas = conversionesCount ?? 0;
+  let ventasMonto = 0;
+  if (Array.isArray(conversionesRows)) {
+    conversionesRows.forEach((row) => {
+      const v = parseFloat(row.valor);
+      if (Number.isFinite(v)) ventasMonto += v;
     });
-    ventas = unicos.size;
+    if (conversionesCount === null) ventas = conversionesRows.length;
   }
+  ventasMonto = Math.round(ventasMonto * 100) / 100;
 
   let seguimientosActivos = 0;
   (seguimientosRows || []).forEach((row) => {
@@ -263,7 +269,8 @@ async function computeGlobalStats(usuarioId, flujos, activadores) {
     leadsVivos: leadsVivos ?? 0,
     conversaciones: conversaciones ?? 0,
     ventas,
-    ventasConectadas,
+    ventasMonto,
+    conversiones: ventas,
     clientesPotencialesHoy,
     mensajesEnviados: enviados,
     respuestas: resp,
@@ -277,35 +284,36 @@ async function computeGlobalStats(usuarioId, flujos, activadores) {
 /** Carga datos compartidos para lista + stats en una sola pasada. */
 async function loadFlujosDashboardData(usuarioId, flujos, activadores) {
   const flowIds = flujos.map((f) => f.id);
-  const [segRows, etiquetasRows] = await Promise.all([
+  const [segRows, conversionesRows] = await Promise.all([
     fetchSeguimientosRows(usuarioId),
-    supabaseSelect(
-      "clientes_etiquetas",
-      `usuario_id=eq.${encodeURIComponent(usuarioId)}`,
-      "cliente_numero,etiqueta"
-    ),
+    fetchConversionesRows(usuarioId),
   ]);
 
   const mensajesRows = await fetchMensajesParaClientes(usuarioId, segRows || []);
   const perFlow = computePerFlowMetrics(
     flowIds,
     segRows || [],
-    etiquetasRows || [],
+    conversionesRows || [],
     mensajesRows
   );
-  const stats = await computeGlobalStats(usuarioId, flujos, activadores);
+  const stats = await computeGlobalStats(
+    usuarioId,
+    flujos,
+    activadores,
+    conversionesRows || []
+  );
 
-  return { segRows: segRows || [], perFlow, stats, mensajesRows };
+  return { segRows: segRows || [], conversionesRows: conversionesRows || [], perFlow, stats, mensajesRows };
 }
 
 module.exports = {
   startOfTodayIso,
   resolveEstado,
   fetchSeguimientosRows,
+  fetchConversionesRows,
   fetchMensajesParaClientes,
   computePerFlowMetrics,
   computeGlobalStats,
   loadFlujosDashboardData,
   metricasVacias,
-  esEtiquetaVenta,
 };

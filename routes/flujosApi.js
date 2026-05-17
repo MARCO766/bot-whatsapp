@@ -10,6 +10,7 @@ const {
   loadFlujosDashboardData,
   metricasVacias,
 } = require("../services/flujosMetricsService");
+const { registrarConversion } = require("../services/conversionService");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
@@ -68,9 +69,11 @@ function buildPreview(data) {
         ? "inicio"
         : (n.className || "").includes("follow-node")
           ? "seguimiento"
-          : (n.className || "").includes("wait")
-            ? "espera"
-            : (n.dataset && n.dataset.tipo) || "contenido";
+          : (n.className || "").includes("conversion-node")
+            ? "conversion"
+            : (n.className || "").includes("wait")
+              ? "espera"
+              : (n.dataset && n.dataset.tipo) || "contenido";
 
     const left = parseInt(String(n.left || "0").replace("px", ""), 10) || i * 40;
     const top = parseInt(String(n.top || "0").replace("px", ""), 10) || i * 28;
@@ -448,6 +451,51 @@ router.delete("/api/flujos/:id", protegerApi, async (req, res) => {
   }
 });
 
+// POST /api/flujos/conversiones — registro manual o webhook (Hotmart, Stripe, etc.)
+router.post("/api/flujos/conversiones", protegerApi, async (req, res) => {
+  try {
+    const usuarioId = req.session.usuario.id;
+    const body = req.body || {};
+    const clienteNumero = (body.cliente_numero || body.clienteNumero || "").trim();
+
+    if (!clienteNumero) {
+      return res.status(400).json({ ok: false, error: "cliente_numero requerido" });
+    }
+
+    let flujoId = body.flujo_id || body.flujoId || null;
+    if (flujoId) {
+      const owned = await axios.get(
+        `${SUPABASE_URL}/rest/v1/flujos_builder?id=eq.${flujoId}&usuario_id=eq.${usuarioId}&select=id`,
+        { headers: supabaseHeaders() }
+      );
+      if (!owned.data?.[0]) flujoId = null;
+    }
+
+    const row = await registrarConversion({
+      usuarioId,
+      flujoId,
+      nodoId: body.nodo_id || body.nodoId || null,
+      clienteNumero,
+      valor: body.valor,
+      moneda: body.moneda,
+      origen: body.origen || "manual",
+      metadata: body.metadata || {},
+    });
+
+    if (!row) {
+      return res.status(500).json({
+        ok: false,
+        error: "No se pudo registrar (¿tabla crm_conversiones creada en Supabase?)",
+      });
+    }
+
+    res.json({ ok: true, conversion: row });
+  } catch (error) {
+    log("POST conversiones ERROR", error.message);
+    res.status(500).json({ ok: false, error: "Error registrando conversión" });
+  }
+});
+
 // GET /api/flujos/:id/timeline
 router.get("/api/flujos/:id/timeline", protegerApi, async (req, res) => {
   try {
@@ -462,12 +510,20 @@ router.get("/api/flujos/:id/timeline", protegerApi, async (req, res) => {
       return res.status(404).json({ ok: false, error: "Flujo no encontrado", events: [] });
     }
 
-    const resSeg = await axios.get(
-      `${SUPABASE_URL}/rest/v1/seguimientos_programados?flujo_id=eq.${id}&usuario_id=eq.${usuarioId}&order=creado_en.desc&limit=20&select=estado,nodo_id,cliente_numero,creado_en,actualizado_en,enviado_en,mensaje_tipo`,
-      { headers: supabaseHeaders() }
-    );
+    const [resSeg, resConv] = await Promise.all([
+      axios.get(
+        `${SUPABASE_URL}/rest/v1/seguimientos_programados?flujo_id=eq.${id}&usuario_id=eq.${usuarioId}&order=creado_en.desc&limit=15&select=estado,nodo_id,cliente_numero,creado_en,actualizado_en,enviado_en,mensaje_tipo`,
+        { headers: supabaseHeaders() }
+      ),
+      axios
+        .get(
+          `${SUPABASE_URL}/rest/v1/crm_conversiones?flujo_id=eq.${id}&usuario_id=eq.${usuarioId}&order=creado_en.desc&limit=10&select=valor,moneda,origen,cliente_numero,nodo_id,creado_en`,
+          { headers: supabaseHeaders() }
+        )
+        .catch(() => ({ data: [] })),
+    ]);
 
-    const events = (resSeg.data || []).map((row) => {
+    const eventsSeg = (resSeg.data || []).map((row) => {
       let tipo = "nodo_ejecutado";
       let titulo = `Seguimiento: ${row.estado}`;
 
@@ -494,6 +550,31 @@ router.get("/api/flujos/:id/timeline", protegerApi, async (req, res) => {
         fecha: row.enviado_en || row.actualizado_en || row.creado_en,
       };
     });
+
+    const eventsConv = (resConv.data || []).map((row) => {
+      const valor = parseFloat(row.valor);
+      const monto =
+        Number.isFinite(valor) && valor > 0
+          ? `${valor} ${row.moneda || "USD"}`
+          : row.moneda || "";
+      return {
+        tipo: "conversion_registrada",
+        titulo: "💰 Conversión registrada",
+        detalle: [
+          row.cliente_numero ? `Cliente ${row.cliente_numero}` : null,
+          monto ? monto : null,
+          row.origen && row.origen !== "flujo" ? `Origen: ${row.origen}` : null,
+          row.nodo_id ? `Nodo ${row.nodo_id}` : null,
+        ]
+          .filter(Boolean)
+          .join(" · "),
+        fecha: row.creado_en,
+      };
+    });
+
+    const events = [...eventsSeg, ...eventsConv]
+      .sort((a, b) => new Date(b.fecha) - new Date(a.fecha))
+      .slice(0, 20);
 
     res.json({ ok: true, events });
   } catch (error) {

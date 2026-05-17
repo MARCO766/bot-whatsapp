@@ -1,0 +1,37 @@
+/* Nodo 💰 Conversión — MacBot builder */
+#builderArea .node.conversion-node,
+.conversion-node.node {
+  border: 2px solid rgba(250, 204, 21, 0.55);
+  background: linear-gradient(145deg, rgba(30, 25, 10, 0.95), rgba(15, 23, 42, 0.92));
+  box-shadow: 0 0 24px rgba(250, 204, 21, 0.12);
+  min-width: 220px;
+}
+
+#builderArea .node.conversion-node:hover,
+.conversion-node.node:hover {
+  border-color: rgba(250, 204, 21, 0.85);
+  box-shadow: 0 0 32px rgba(250, 204, 21, 0.22);
+}
+
+#builderArea .node.conversion-node.selected {
+  border-color: #facc15;
+  box-shadow: 0 0 0 2px rgba(250, 204, 21, 0.35), 0 12px 40px rgba(0, 0, 0, 0.4);
+}
+
+.conversion-node .node-title {
+  color: #fde047;
+}
+
+.conversion-node .conversion-hint,
+.conversion-node .node-desc {
+  font-size: 12px;
+  color: #94a3b8;
+  margin: 4px 0 8px;
+}
+
+.conversion-node .conversion-valor,
+.conversion-node .conversion-moneda,
+.conversion-node .conversion-origen {
+  width: 100%;
+  margin: 6px 0;
+}

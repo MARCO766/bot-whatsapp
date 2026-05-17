@@ -49,5 +49,6 @@ export const NODE_PREVIEW_COLORS = {
   seguimiento: "#ff6b35",
   espera: "#8b5cf6",
   etiqueta: "#3b82f6",
+  conversion: "#facc15",
   conectar: "#22c55e",
 };

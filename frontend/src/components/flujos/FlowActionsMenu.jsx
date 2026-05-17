@@ -60,19 +60,15 @@ export default function FlowActionsMenu({
       if (e.key === "Escape") close();
     }
 
-    function onScroll() {
-      close();
-    }
-
     document.addEventListener("mousedown", onPointerDown);
     document.addEventListener("keydown", onKey);
-    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("scroll", updatePosition, true);
     window.addEventListener("resize", updatePosition);
 
     return () => {
       document.removeEventListener("mousedown", onPointerDown);
       document.removeEventListener("keydown", onKey);
-      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("scroll", updatePosition, true);
       window.removeEventListener("resize", updatePosition);
     };
   }, [isOpen, close, updatePosition]);

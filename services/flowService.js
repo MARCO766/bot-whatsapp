@@ -4,6 +4,10 @@ const { enviarTextoWhatsApp, enviarMediaWhatsApp } = require("./whatsappService"
 const { esperarSegundos } = require("../utils/timers");
 const { detectarTipoNodo } = require("./seguimiento/detectarTipoNodo");
 const { ejecutarSeguimientoEnFlujo } = require("./seguimiento/ejecutarSeguimientoEnFlujo");
+const {
+  registrarConversion,
+  parseConversionFromNodo,
+} = require("./conversionService");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
@@ -68,6 +72,26 @@ async function ejecutarFlujo(numero, flujoData, usuarioId = null, flujoId = null
     const tipoNodo = detectarTipoNodo(nodo);
 
     console.log("[FLUJO] ▶ Nodo actual:", nodoId, "| tipo detectado:", tipoNodo);
+
+    if (tipoNodo === "conversion") {
+      const { valor, moneda, origen } = parseConversionFromNodo(nodo);
+      await registrarConversion({
+        usuarioId,
+        flujoId,
+        nodoId,
+        clienteNumero: numero,
+        valor,
+        moneda,
+        origen,
+        metadata: { trigger: "nodo_flujo" },
+      });
+
+      const siguientesConv = conexiones.filter((c) => c.desde === nodoId);
+      for (const siguiente of siguientesConv) {
+        await ejecutarNodo(siguiente.hasta, new Set(visitados));
+      }
+      return;
+    }
 
     if (tipoNodo === "seguimiento") {
       try {
@@ -323,5 +347,6 @@ async function buscarYEjecutarActivador(numero, textoCliente, usuarioId = null) 
 module.exports = {
   agregarEtiquetaCliente,
   ejecutarFlujo,
-  buscarYEjecutarActivador
+  buscarYEjecutarActivador,
+  registrarConversion,
 };

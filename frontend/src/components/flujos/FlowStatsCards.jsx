@@ -6,12 +6,9 @@ const ITEMS = [
   { key: "conversaciones", label: "Conversaciones", accent: "" },
   {
     key: "ventas",
-    label: "Ventas (etiquetas)",
+    label: "Ventas reales",
     accent: "accentGreen",
-    format: (s) =>
-      s.ventasConectadas === false
-        ? "Sin ventas conectadas"
-        : formatNumber(s.ventas ?? 0),
+    format: (s) => formatNumber(s.conversiones ?? s.ventas ?? 0),
   },
   { key: "total", label: "Total flujos", accent: "" },
   { key: "activos", label: "Activos", accent: "accentGreen" },

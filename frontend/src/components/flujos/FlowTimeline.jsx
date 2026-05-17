@@ -9,6 +9,7 @@ const DOT_COLORS = {
   seguimiento_programado: "#8b5cf6",
   lead_respondio: "#a855f7",
   etiqueta_aplicada: "#3b82f6",
+  conversion_registrada: "#facc15",
 };
 
 export default function FlowTimeline({ flowId, expanded }) {

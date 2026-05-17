@@ -19,7 +19,7 @@ function renderAdminPage({
 
 <link rel="stylesheet" href="/css/admin.css">
 <link rel="stylesheet" href="/css/flow-builder.css">
-${builder ? '<link rel="stylesheet" href="/css/seguimiento.css">' : ""}
+${builder ? '<link rel="stylesheet" href="/css/seguimiento.css"><link rel="stylesheet" href="/css/conversion-node.css">' : ""}
 </head>
 
 <body>
@@ -46,6 +46,7 @@ ${builder ? '<link rel="stylesheet" href="/css/seguimiento.css">' : ""}
     <button type="button" class="menu-nodo-btn" onclick="agregarNodo('seguimiento')">🔔 Seguimiento</button>
     <button type="button" class="menu-nodo-btn" onclick="agregarNodo('espera')">⏳ Espera</button>
     <button type="button" class="menu-nodo-btn" onclick="agregarNodo('etiqueta')">🏷️ Etiqueta</button>
+    <button type="button" class="menu-nodo-btn" onclick="agregarNodo('conversion')">💰 Conversión</button>
   </div>
 </div>
 

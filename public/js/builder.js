@@ -287,6 +287,38 @@ function agregarNodo(tipo){
     `;
   }
 
+  if(tipo === "conversion"){
+    nodo.classList.add("conversion-node");
+
+    contenido = `
+      <div class="node-actions">
+        <button type="button" class="edit-node" onclick="event.stopPropagation(); editarNodo('${nodo.id}')">✎</button>
+        <button type="button" class="delete-node" onclick="event.stopPropagation(); borrarNodo('${nodo.id}')">×</button>
+      </div>
+      <h3 class="node-title">💰 Conversión</h3>
+      <p class="node-desc conversion-hint">Registra venta real · no usa etiquetas</p>
+      <input type="number" class="conversion-valor" min="0" step="0.01" value="0" placeholder="Valor">
+      <select class="conversion-moneda node-select">
+        <option value="USD" selected>USD</option>
+        <option value="MXN">MXN</option>
+        <option value="ARS">ARS</option>
+        <option value="COP">COP</option>
+        <option value="EUR">EUR</option>
+        <option value="BRL">BRL</option>
+      </select>
+      <select class="conversion-origen node-select">
+        <option value="flujo" selected>Flujo (automático)</option>
+        <option value="manual">Manual</option>
+        <option value="hotmart">Hotmart</option>
+        <option value="stripe">Stripe</option>
+        <option value="mercadopago">MercadoPago</option>
+        <option value="qr">QR</option>
+        <option value="webhook">Webhook</option>
+      </select>
+      <textarea class="conversion-data" style="display:none;">{"valor":0,"moneda":"USD","origen":"flujo"}</textarea>
+    `;
+  }
+
   if(tipo === "etiqueta"){
     const opcionesEtiquetas = etiquetasData.map(e => {
       return `<option value="${e.nombre}">${e.nombre}</option>`;
@@ -1803,6 +1835,11 @@ function abrirPanelNodo(nodo){
     return;
   }
 
+  if(nodo.dataset.tipo === "conversion" || nodo.classList.contains("conversion-node")){
+    renderPanelConversion(nodo);
+    return;
+  }
+
   const titulo = nodo.querySelector("h3")?.innerText || "Nodo";
   const tipo = nodo.dataset.tipo || "nodo";
 
@@ -1830,10 +1867,103 @@ function abrirPanelNodo(nodo){
   document.getElementById("panelTituloNodo")?.addEventListener("input", macbotRecordHistoryDebounced);
 }
 
+function syncConversionDataToNodo(nodo){
+  if(!nodo) return;
+
+  const valor = parseFloat(nodo.querySelector(".conversion-valor")?.value) || 0;
+  const moneda = nodo.querySelector(".conversion-moneda")?.value || "USD";
+  const origen = nodo.querySelector(".conversion-origen")?.value || "flujo";
+  const data = { valor, moneda, origen };
+
+  const ta = nodo.querySelector(".conversion-data");
+  if(ta) ta.value = JSON.stringify(data);
+
+  const hint = nodo.querySelector(".conversion-hint");
+  if(hint){
+    hint.textContent = valor > 0
+      ? `Venta: ${valor} ${moneda} · ${origen}`
+      : "Registra venta real · no usa etiquetas";
+  }
+}
+
+function renderPanelConversion(nodo){
+  nodoSeleccionadoPanel = nodo;
+
+  const panel = document.getElementById("panelNodo");
+  const contenido = document.getElementById("panelNodoContenido");
+  if(!panel || !contenido) return;
+
+  panel.classList.add("activo");
+  marcarNodoSeleccionado(nodo);
+
+  let data = { valor: 0, moneda: "USD", origen: "flujo" };
+  try {
+    const raw = nodo.querySelector(".conversion-data")?.value;
+    if(raw) data = { ...data, ...JSON.parse(raw) };
+  } catch(e){ /* ignore */ }
+
+  contenido.innerHTML = `
+    <div class="panel-campo">
+      <label>Valor de la venta</label>
+      <input id="panelConversionValor" type="number" min="0" step="0.01" value="${data.valor}">
+    </div>
+    <div class="panel-campo">
+      <label>Moneda</label>
+      <select id="panelConversionMoneda">
+        <option value="USD" ${data.moneda === "USD" ? "selected" : ""}>USD</option>
+        <option value="MXN" ${data.moneda === "MXN" ? "selected" : ""}>MXN</option>
+        <option value="ARS" ${data.moneda === "ARS" ? "selected" : ""}>ARS</option>
+        <option value="COP" ${data.moneda === "COP" ? "selected" : ""}>COP</option>
+        <option value="EUR" ${data.moneda === "EUR" ? "selected" : ""}>EUR</option>
+        <option value="BRL" ${data.moneda === "BRL" ? "selected" : ""}>BRL</option>
+      </select>
+    </div>
+    <div class="panel-campo">
+      <label>Origen (integraciones futuras)</label>
+      <select id="panelConversionOrigen">
+        <option value="flujo" ${data.origen === "flujo" ? "selected" : ""}>Flujo automático</option>
+        <option value="manual" ${data.origen === "manual" ? "selected" : ""}>Manual</option>
+        <option value="hotmart" ${data.origen === "hotmart" ? "selected" : ""}>Hotmart</option>
+        <option value="stripe" ${data.origen === "stripe" ? "selected" : ""}>Stripe</option>
+        <option value="mercadopago" ${data.origen === "mercadopago" ? "selected" : ""}>MercadoPago</option>
+        <option value="qr" ${data.origen === "qr" ? "selected" : ""}>QR</option>
+        <option value="webhook" ${data.origen === "webhook" ? "selected" : ""}>Webhook</option>
+      </select>
+    </div>
+    <p class="panel-hint">Solo este nodo suma ventas en KPIs. Las etiquetas no cuentan como venta.</p>
+    <button class="panel-btn" onclick="guardarPanelConversion()">Guardar conversión</button>
+  `;
+}
+
+function guardarPanelConversion(){
+  if(!nodoSeleccionadoPanel) return;
+
+  registrarHistorialBuilder();
+
+  const valor = parseFloat(document.getElementById("panelConversionValor")?.value) || 0;
+  const moneda = document.getElementById("panelConversionMoneda")?.value || "USD";
+  const origen = document.getElementById("panelConversionOrigen")?.value || "flujo";
+
+  const inputValor = nodoSeleccionadoPanel.querySelector(".conversion-valor");
+  const selMoneda = nodoSeleccionadoPanel.querySelector(".conversion-moneda");
+  const selOrigen = nodoSeleccionadoPanel.querySelector(".conversion-origen");
+
+  if(inputValor) inputValor.value = valor;
+  if(selMoneda) selMoneda.value = moneda;
+  if(selOrigen) selOrigen.value = origen;
+
+  syncConversionDataToNodo(nodoSeleccionadoPanel);
+}
+
 function guardarPanelNodo(){
   if(!nodoSeleccionadoPanel || !document.body.contains(nodoSeleccionadoPanel)) return;
 
   registrarHistorialBuilder();
+
+  if(nodoSeleccionadoPanel.dataset.tipo === "conversion"){
+    guardarPanelConversion();
+    return;
+  }
 
   const nuevoTitulo = document.getElementById("panelTituloNodo")?.value.trim();
 

@@ -89,13 +89,9 @@ function FlowCard({
           <b>{formatMetric(m.respuestasWhatsapp)}</b>
           <span>WA respuestas</span>
         </div>
-        <div className="flMetric" title="Clientes con etiqueta de venta en este flujo">
-          <b>
-            {m.ventasSinRelacion
-              ? "0"
-              : formatMetric(m.ventas)}
-          </b>
-          <span>Ventas</span>
+        <div className="flMetric" title="Conversiones registradas por nodo 💰 en este flujo">
+          <b>{formatMetric(m.conversiones ?? m.ventas ?? 0)}</b>
+          <span>Conversiones</span>
         </div>
         <div className="flMetric" title="Seguimientos en estado pendiente">
           <b>{formatMetric(m.seguimientosActivos)}</b>

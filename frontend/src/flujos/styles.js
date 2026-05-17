@@ -270,7 +270,7 @@ export const flujosStyles = `
 }
 
 .flCard.flCardMenuOpen {
-  z-index: 20;
+  z-index: 30;
   border-color: rgba(34,197,94,.45);
   box-shadow: 0 16px 48px rgba(0,0,0,.45), 0 0 0 1px rgba(34,197,94,.15);
 }
@@ -449,7 +449,8 @@ export const flujosStyles = `
   position: fixed;
   inset: 0;
   z-index: 10040;
-  background: transparent;
+  background: rgba(2, 6, 23, 0.35);
+  backdrop-filter: blur(2px);
 }
 
 .flMenuPortal {
