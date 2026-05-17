@@ -1,8 +1,8 @@
-import React from "react";
+import React, { memo, useState } from "react";
 import FlowCard from "./FlowCard";
 import EmptyState from "./EmptyState";
 
-export default function FlowList({
+function FlowList({
   flows,
   loading,
   viewMode,
@@ -16,11 +16,13 @@ export default function FlowList({
   onImport,
   apiOnline,
 }) {
+  const [openMenuId, setOpenMenuId] = useState(null);
+
   if (loading) {
-    const skeletons = Array.from({ length: 6 });
+    const skeletons = Array.from({ length: 6 }, (_, i) => i);
     return (
       <div className={viewMode === "cards" ? "flGrid" : "flList"}>
-        {skeletons.map((_, i) => (
+        {skeletons.map((i) => (
           <div key={i} className="flSkeleton" />
         ))}
       </div>
@@ -40,6 +42,8 @@ export default function FlowList({
           key={flow.id}
           flow={flow}
           listMode={listMode}
+          openMenuId={openMenuId}
+          onMenuOpenChange={setOpenMenuId}
           onToggleEstado={onToggleEstado}
           onDuplicate={onDuplicate}
           onDelete={onDelete}
@@ -51,3 +55,5 @@ export default function FlowList({
     </div>
   );
 }
+
+export default memo(FlowList);

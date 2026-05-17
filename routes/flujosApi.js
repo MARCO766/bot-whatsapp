@@ -7,9 +7,7 @@ const router = express.Router();
 const axios = require("axios");
 const {
   resolveEstado,
-  aggregateSeguimientosPorFlujo,
-  fetchSeguimientosRows,
-  computeGlobalStats,
+  loadFlujosDashboardData,
   metricasVacias,
 } = require("../services/flujosMetricsService");
 
@@ -146,19 +144,18 @@ router.get("/api/flujos", protegerApi, async (req, res) => {
   log(`GET /api/flujos usuario=${usuario.id} (${usuario.email || usuario.nombre || "—"})`);
 
   try {
-    const [flujos, activadores, segRows] = await Promise.all([
+    const [flujos, activadores] = await Promise.all([
       fetchFlujos(usuario.id),
       fetchActivadores(usuario.id),
-      fetchSeguimientosRows(usuario.id),
     ]);
 
-    const segPorFlujo = aggregateSeguimientosPorFlujo(segRows);
+    const { perFlow } = await loadFlujosDashboardData(usuario.id, flujos, activadores);
     log(`flujos encontrados=${flujos.length} activadores=${activadores.length}`);
 
     const flows = flujos.map((f) => {
       const metaRaw = extractMeta(f.data);
       const acts = activadores.filter((a) => a.flujo_id === f.id);
-      const metricas = { ...metricasVacias(), ...(segPorFlujo[f.id] || {}) };
+      const metricas = { ...metricasVacias(), ...(perFlow[f.id] || {}) };
 
       if (metaRaw.ultima_ejecucion && !metricas.ultimaEjecucion) {
         metricas.ultimaEjecucion = metaRaw.ultima_ejecucion;
@@ -215,7 +212,7 @@ router.get("/api/flujos/stats", protegerApi, async (req, res) => {
       fetchActivadores(usuario.id),
     ]);
 
-    const stats = await computeGlobalStats(usuario.id, flujos, activadores);
+    const { stats } = await loadFlujosDashboardData(usuario.id, flujos, activadores);
     log("stats calculadas", stats);
 
     res.json({ ok: true, stats });

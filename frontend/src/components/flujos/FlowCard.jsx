@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { memo, useState } from "react";
 import { builderUrl } from "../../flujos/api";
 import { folderLabel, formatDate, formatMetric, stateMeta } from "../../flujos/utils";
 import FlowActionsMenu from "./FlowActionsMenu";
@@ -6,9 +6,11 @@ import FlowCampaignsPanel from "./FlowCampaignsPanel";
 import FlowPreviewMini from "./FlowPreviewMini";
 import FlowTimeline from "./FlowTimeline";
 
-export default function FlowCard({
+function FlowCard({
   flow,
   listMode,
+  openMenuId,
+  onMenuOpenChange,
   onToggleEstado,
   onDuplicate,
   onDelete,
@@ -19,13 +21,14 @@ export default function FlowCard({
   const [showTimeline, setShowTimeline] = useState(false);
   const st = stateMeta(flow.meta?.estado);
   const m = flow.metricas || {};
+  const isMenuOpen = openMenuId === flow.id;
 
   return (
-    <article className={`flCard ${listMode ? "listMode" : ""}`}>
+    <article className={`flCard ${listMode ? "listMode" : ""} ${isMenuOpen ? "flCardMenuOpen" : ""}`}>
       <div className="flCardHead">
         <div>
           <h3 className="flCardTitle">{flow.nombre}</h3>
-          <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <div className="flCardMeta">
             <span
               className="flBadge"
               style={{
@@ -37,18 +40,17 @@ export default function FlowCard({
               <span className="flBadgeDot" style={{ background: st.color }} />
               {st.label}
             </span>
-            <span style={{ fontSize: "0.75rem", color: "#64748b" }}>
-              📁 {folderLabel(flow.meta?.carpeta)}
+            <span className="flCardMetaItem">📁 {folderLabel(flow.meta?.carpeta)}</span>
+            <span className="flCardMetaItem">
+              ⚡ {flow.activadores?.filter((a) => a.activo).length || 0}/
+              {flow.activadores?.length || 0} activadores
             </span>
-            {flow.activadores?.length > 0 && (
-              <span style={{ fontSize: "0.75rem", color: "#64748b" }}>
-                ⚡ {flow.activadores.filter((a) => a.activo).length}/{flow.activadores.length} activadores
-              </span>
-            )}
           </div>
         </div>
         <FlowActionsMenu
           flow={flow}
+          isOpen={isMenuOpen}
+          onOpenChange={onMenuOpenChange}
           onToggleEstado={onToggleEstado}
           onDuplicate={onDuplicate}
           onDelete={onDelete}
@@ -63,37 +65,49 @@ export default function FlowCard({
       </div>
 
       <div className="flMetrics">
-        <div className="flMetric">
-          <b>{formatMetric(m.clientesEnFlujo, { pendiente: false })}</b>
-          <span>Clientes en flujo</span>
+        <div className="flMetric" title="Clientes únicos en seguimientos de este flujo">
+          <b>{formatMetric(m.clientesEnFlujo)}</b>
+          <span>En flujo</span>
         </div>
-        <div className="flMetric">
+        <div className="flMetric" title="Entradas registradas hoy">
           <b>{formatMetric(m.leadsHoy)}</b>
-          <span>Entradas hoy</span>
+          <span>Hoy</span>
         </div>
-        <div className="flMetric">
-          <b>{formatMetric(m.mensajesEnviados)}</b>
+        <div className="flMetric" title="Pasos de seguimiento enviados">
+          <b>{formatMetric(m.seguimientosEnviados)}</b>
           <span>Seg. enviados</span>
         </div>
-        <div className="flMetric">
-          <b>{formatMetric(m.respuestas)}</b>
-          <span>Respuestas</span>
+        <div className="flMetric" title="Seguimientos marcados como respondidos">
+          <b>{formatMetric(m.seguimientosRespondidos)}</b>
+          <span>Seg. respuestas</span>
         </div>
-        <div className="flMetric">
-          <b>{formatMetric(m.conversiones, { pendiente: m.ventasPendiente, emptyLabel: "0" })}</b>
+        <div className="flMetric" title="Mensajes WhatsApp salientes a clientes del flujo">
+          <b>{formatMetric(m.mensajesWhatsapp)}</b>
+          <span>WA enviados</span>
+        </div>
+        <div className="flMetric" title="Mensajes WhatsApp entrantes de clientes del flujo">
+          <b>{formatMetric(m.respuestasWhatsapp)}</b>
+          <span>WA respuestas</span>
+        </div>
+        <div className="flMetric" title="Clientes con etiqueta de venta en este flujo">
+          <b>
+            {m.ventasSinRelacion
+              ? "0"
+              : formatMetric(m.ventas)}
+          </b>
           <span>Ventas</span>
         </div>
-        <div className="flMetric">
+        <div className="flMetric" title="Seguimientos en estado pendiente">
           <b>{formatMetric(m.seguimientosActivos)}</b>
           <span>Seg. activos</span>
         </div>
         <div className="flMetric">
-          <b>{flow.nodosCount || 0}</b>
+          <b>{flow.nodosCount ?? 0}</b>
           <span>Nodos</span>
         </div>
         <div className="flMetric">
-          <b>{flow.conexionesCount || 0}</b>
-          <span>Conexiones</span>
+          <b>{flow.conexionesCount ?? 0}</b>
+          <span>Enlaces</span>
         </div>
       </div>
 
@@ -131,3 +145,5 @@ export default function FlowCard({
     </article>
   );
 }
+
+export default memo(FlowCard);

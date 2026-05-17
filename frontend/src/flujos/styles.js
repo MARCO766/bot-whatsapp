@@ -5,6 +5,8 @@ export const flujosStyles = `
   gap: 20px;
   min-height: 0;
   animation: flFadeIn .35s ease;
+  position: relative;
+  z-index: 0;
 }
 
 @keyframes flFadeIn {
@@ -242,6 +244,8 @@ export const flujosStyles = `
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
   gap: 16px;
+  position: relative;
+  z-index: 0;
 }
 
 .flList {
@@ -251,8 +255,8 @@ export const flujosStyles = `
 }
 
 .flCard {
-  background: rgba(15,23,42,.78);
-  border: 1px solid rgba(148,163,184,.12);
+  background: rgba(15,23,42,.82);
+  border: 1px solid rgba(148,163,184,.14);
   border-radius: 20px;
   padding: 18px;
   display: flex;
@@ -260,15 +264,26 @@ export const flujosStyles = `
   gap: 14px;
   transition: border-color .2s, box-shadow .2s, transform .2s;
   position: relative;
-  overflow: hidden;
+  overflow: visible;
+  isolation: isolate;
+  backdrop-filter: blur(10px);
+}
+
+.flCard.flCardMenuOpen {
+  z-index: 20;
+  border-color: rgba(34,197,94,.45);
+  box-shadow: 0 16px 48px rgba(0,0,0,.45), 0 0 0 1px rgba(34,197,94,.15);
 }
 
 .flCard::before {
   content: "";
   position: absolute;
   inset: 0;
-  background: radial-gradient(circle at top right, rgba(34,197,94,.06), transparent 55%);
+  border-radius: inherit;
+  background: radial-gradient(circle at top right, rgba(34,197,94,.07), transparent 55%);
   pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
 }
 
 .flCard:hover {
@@ -290,7 +305,20 @@ export const flujosStyles = `
   align-items: flex-start;
   gap: 10px;
   position: relative;
-  z-index: 1;
+  z-index: 2;
+}
+
+.flCardMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+  align-items: center;
+}
+
+.flCardMetaItem {
+  font-size: 0.75rem;
+  color: #64748b;
 }
 
 .flCardTitle {
@@ -391,44 +419,75 @@ export const flujosStyles = `
   color: #86efac;
 }
 
-.flMenuWrap { position: relative; z-index: 2; }
+.flMenuWrap {
+  position: relative;
+  z-index: 5;
+  flex-shrink: 0;
+}
 
 .flMenuBtn {
   width: 36px;
   height: 36px;
   border-radius: 12px;
-  border: 1px solid rgba(148,163,184,.2);
-  background: rgba(15,23,42,.8);
+  border: 1px solid rgba(148,163,184,.22);
+  background: rgba(15,23,42,.9);
   color: #e2e8f0;
   cursor: pointer;
-  font-size: 1.1rem;
+  font-size: 1.15rem;
+  line-height: 1;
+  transition: background .15s, border-color .15s, box-shadow .15s;
 }
 
-.flMenuDropdown {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 6px);
-  min-width: 200px;
-  background: #0f172a;
-  border: 1px solid rgba(148,163,184,.2);
-  border-radius: 14px;
+.flMenuBtn:hover,
+.flMenuBtn.active {
+  background: rgba(34,197,94,.15);
+  border-color: rgba(34,197,94,.45);
+  box-shadow: 0 0 20px rgba(34,197,94,.2);
+}
+
+.flMenuBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10040;
+  background: transparent;
+}
+
+.flMenuPortal {
+  background: rgba(12,18,32,.97);
+  border: 1px solid rgba(148,163,184,.22);
+  border-radius: 16px;
   padding: 6px;
-  box-shadow: 0 20px 50px rgba(0,0,0,.5);
-  z-index: 50;
-  animation: flMenuIn .15s ease;
+  box-shadow:
+    0 24px 64px rgba(0,0,0,.55),
+    0 0 0 1px rgba(255,255,255,.04),
+    0 0 40px rgba(34,197,94,.08);
+  backdrop-filter: blur(16px);
+  animation: flMenuIn .18s cubic-bezier(.2,.8,.2,1);
+  max-height: min(70vh, 420px);
+  display: flex;
+  flex-direction: column;
+}
+
+.flMenuPortalUp {
+  animation-name: flMenuInUp;
 }
 
 @keyframes flMenuIn {
-  from { opacity: 0; transform: translateY(-4px); }
-  to { opacity: 1; transform: none; }
+  from { opacity: 0; transform: translateY(-6px) scale(.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
-.flMenuDropdown button,
-.flMenuDropdown a {
+@keyframes flMenuInUp {
+  from { opacity: 0; transform: translateY(-100%) translateY(6px) scale(.98); }
+  to { opacity: 1; transform: translateY(-100%) scale(1); }
+}
+
+.flMenuPortal a,
+.flMenuPortal button {
   display: flex;
   width: 100%;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   padding: 10px 12px;
   border: 0;
   background: transparent;
@@ -436,16 +495,66 @@ export const flujosStyles = `
   text-decoration: none;
   border-radius: 10px;
   cursor: pointer;
-  font-size: 0.85rem;
+  font-size: 0.86rem;
   text-align: left;
+  transition: background .12s, color .12s;
 }
 
-.flMenuDropdown button:hover,
-.flMenuDropdown a:hover {
-  background: rgba(34,197,94,.12);
+.flMenuPortal a:hover,
+.flMenuPortal button:hover {
+  background: rgba(148,163,184,.1);
 }
 
-.flMenuDropdown .danger { color: #f87171; }
+.flMenuPortal button.active {
+  background: rgba(34,197,94,.14);
+  color: #86efac;
+}
+
+.flMenuIcon {
+  width: 22px;
+  text-align: center;
+  flex-shrink: 0;
+  opacity: 0.9;
+}
+
+.flMenuDivider {
+  height: 1px;
+  background: rgba(148,163,184,.15);
+  margin: 4px 8px;
+}
+
+.flMenuSection {
+  padding: 6px 12px 4px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #64748b;
+}
+
+.flMenuScroll {
+  max-height: 180px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 2px;
+}
+
+.flMenuScroll::-webkit-scrollbar {
+  width: 5px;
+}
+
+.flMenuScroll::-webkit-scrollbar-thumb {
+  background: rgba(148,163,184,.3);
+  border-radius: 4px;
+}
+
+.flMenuDanger {
+  color: #fca5a5 !important;
+}
+
+.flMenuDanger:hover {
+  background: rgba(127,29,29,.35) !important;
+}
 
 .flCampaigns {
   display: flex;
