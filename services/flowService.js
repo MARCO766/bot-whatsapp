@@ -369,45 +369,99 @@ if (html.includes("🏷️ Etiqueta")) {
   await ejecutarNodo("nodo_inicio");
 }
 
-async function buscarYEjecutarActivador(numero, textoCliente, usuarioId = null) {
-  if (!textoCliente) return false;
+function supabaseHeaders(extra = {}) {
+  return {
+    apikey: SUPABASE_KEY,
+    Authorization: `Bearer ${SUPABASE_KEY}`,
+    ...extra,
+  };
+}
 
-  const responseActivadores = await axios.get(
-    `${SUPABASE_URL}/rest/v1/activadores?select=*&activo=eq.true&usuario_id=eq.${usuarioId}`,
-    {
-      headers: {
-        apikey: SUPABASE_KEY,
-        Authorization: `Bearer ${SUPABASE_KEY}`
+function coincideActivador(textoNorm, activador) {
+  const frase = (activador.frase || "").toLowerCase().trim();
+  if (!frase) return false;
+  const modo = activador.coincidencia === "exacta" ? "exacta" : "contiene";
+  if (modo === "exacta") {
+    return textoNorm === frase;
+  }
+  return textoNorm.includes(frase);
+}
+
+async function registrarUsoActivador(activador) {
+  const veces = (Number(activador.veces_usado) || 0) + 1;
+  const ahora = new Date().toISOString();
+  try {
+    await axios.patch(
+      `${SUPABASE_URL}/rest/v1/activadores?id=eq.${activador.id}`,
+      { veces_usado: veces, ultima_ejecucion: ahora },
+      {
+        headers: supabaseHeaders({
+          "Content-Type": "application/json",
+          Prefer: "return=minimal",
+        }),
       }
-    }
-  );
+    );
+  } catch (e) {
+    // Columnas extendidas pueden no existir aún
+  }
+}
 
-  const activadores = responseActivadores.data || [];
+async function buscarYEjecutarActivador(numero, textoCliente, usuarioId = null, messageId = null) {
+  if (!textoCliente || !usuarioId) return false;
 
-  const activador = activadores.find(a => {
-    const frase = (a.frase || "").toLowerCase().trim();
-    return frase && textoCliente.includes(frase);
+  const textoNorm = String(textoCliente).toLowerCase().trim();
+  if (!textoNorm) return false;
+
+  let activadores = [];
+  try {
+    const responseActivadores = await axios.get(
+      `${SUPABASE_URL}/rest/v1/activadores?select=id,frase,flujo_id,activo,prioridad,coincidencia,veces_usado,repetible&activo=eq.true&usuario_id=eq.${usuarioId}`,
+      { headers: supabaseHeaders() }
+    );
+    activadores = responseActivadores.data || [];
+  } catch (e) {
+    const responseActivadores = await axios.get(
+      `${SUPABASE_URL}/rest/v1/activadores?select=id,frase,flujo_id,activo,repetible&activo=eq.true&usuario_id=eq.${usuarioId}`,
+      { headers: supabaseHeaders() }
+    );
+    activadores = responseActivadores.data || [];
+  }
+
+  if (!activadores.length) return false;
+
+  activadores.sort((a, b) => {
+    const pa = Number(a.prioridad) || 0;
+    const pb = Number(b.prioridad) || 0;
+    if (pb !== pa) return pb - pa;
+    return (b.frase || "").length - (a.frase || "").length;
   });
 
+  const activador = activadores.find((a) => coincideActivador(textoNorm, a));
   if (!activador) return false;
 
+  console.log(
+    "[ACTIVADOR] palabra detectada:",
+    activador.frase,
+    "| usuario:",
+    usuarioId,
+    messageId ? `| msg:${messageId}` : ""
+  );
+
   const responseFlujo = await axios.get(
-    `${SUPABASE_URL}/rest/v1/flujos_builder?id=eq.${activador.flujo_id}&select=*`,
-    {
-      headers: {
-        apikey: SUPABASE_KEY,
-        Authorization: `Bearer ${SUPABASE_KEY}`
-      }
-    }
+    `${SUPABASE_URL}/rest/v1/flujos_builder?id=eq.${activador.flujo_id}&usuario_id=eq.${usuarioId}&select=*`,
+    { headers: supabaseHeaders() }
   );
 
   const flujo = responseFlujo.data?.[0];
+  if (!flujo || !flujo.data) {
+    console.log("[ACTIVADOR] flujo no encontrado o vacío:", activador.flujo_id);
+    return false;
+  }
 
-  if (!flujo || !flujo.data) return false;
-
-  console.log("[FLUJO] Ejecutando flujo:", flujo.id, "| activador:", activador.frase);
+  console.log("[ACTIVADOR] flujo ejecutado:", flujo.id, "| nombre:", flujo.nombre || "—");
 
   await ejecutarFlujo(numero, flujo.data, usuarioId, flujo.id);
+  await registrarUsoActivador(activador);
 
   return true;
 }

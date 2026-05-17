@@ -505,7 +505,16 @@ await enviarEventoMeta(usuarioIdWebhook, "Lead", from);
 
 await cancelarSeguimientosPorRespuesta(from, usuarioIdWebhook, io);
 
-await buscarYEjecutarActivador(from, text, usuarioIdWebhook);
+const textoParaActivador =
+  message.type === "text" && message.text?.body
+    ? message.text.body
+    : text;
+await buscarYEjecutarActivador(
+  from,
+  textoParaActivador,
+  usuarioIdWebhook,
+  message.id
+);
 
 return res.sendStatus(200);
 

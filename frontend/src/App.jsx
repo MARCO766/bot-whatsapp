@@ -6,6 +6,7 @@ import Campañas from "./Campañas";
 import Clientes from "./Clientes";
 import Ajustes from "./Ajustes";
 import Metricas from "./Metricas";
+import Activadores from "./Activadores";
 
 export default function App() {
   const [vista, setVista] = useState(() => localStorage.getItem("macbot_vista") || "panel");
@@ -39,6 +40,7 @@ export default function App() {
       color: "green",
     },
     { id: "flujos", nombre: "Flujos", icono: "🧩", badge: "4", color: "purple" },
+    { id: "activadores", nombre: "Activadores", icono: "⚡", badge: null, color: "yellow" },
     {
   id: "metricas",
   nombre: "Metricas",
@@ -65,6 +67,7 @@ export default function App() {
     if (vista === "inbox")
       return <Bandeja onUnreadChange={setInboxUnread} />;
     if (vista === "flujos") return <Flujos />;
+    if (vista === "activadores") return <Activadores />;
     if (vista === "metricas") return <Metricas />;
     if (vista === "campañas") return <Campañas />;
     if (vista === "clientes") return <Clientes />;
@@ -437,6 +440,7 @@ nav {
 .navBtn.orange .navAura { background: linear-gradient(135deg, rgba(249,115,22,.24), transparent); }
 .navBtn.pink .navAura { background: linear-gradient(135deg, rgba(236,72,153,.24), transparent); }
 .navBtn.blue .navAura { background: linear-gradient(135deg, rgba(59,130,246,.24), transparent); }
+.navBtn.yellow .navAura { background: linear-gradient(135deg, rgba(250,204,21,.24), transparent); }
 
 .navBtn:hover .navAura,
 .navBtn.active .navAura {
@@ -601,6 +605,7 @@ nav {
 .pageIcon.orange { background: linear-gradient(135deg, #f97316, #facc15); }
 .pageIcon.pink { background: linear-gradient(135deg, #ec4899, #a855f7); }
 .pageIcon.blue { background: linear-gradient(135deg, #3b82f6, #06b6d4); }
+.pageIcon.yellow { background: linear-gradient(135deg, #facc15, #f97316); }
 
 .topbar h1 {
   margin: 0;
