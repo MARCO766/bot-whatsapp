@@ -5,13 +5,18 @@
 const express = require("express");
 const router = express.Router();
 const axios = require("axios");
+const {
+  validateActivadorBody,
+  bodyToActivadorFields,
+  mapActivadorRow,
+} = require("../services/activadorUtils");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
 
 const SELECT_BASE =
   "id,usuario_id,nombre,flujo_id,conexion,frase,activo,repetible,creado_en";
-const SELECT_EXTENDED = `${SELECT_BASE},prioridad,coincidencia,veces_usado,ultima_ejecucion`;
+const SELECT_EXTENDED = `${SELECT_BASE},prioridad,coincidencia,veces_usado,ultima_ejecucion,tipo_activador,palabras_clave_array`;
 
 function log(msg, extra) {
   if (extra !== undefined) console.log(`[activadoresApi] ${msg}`, extra);
@@ -31,59 +36,9 @@ function supabaseHeaders(extra = {}) {
   };
 }
 
-function mapRow(row, flujosById = {}) {
-  const flujo = flujosById[row.flujo_id];
-  return {
-    id: row.id,
-    usuario_id: row.usuario_id,
-    nombre: row.nombre || "",
-    palabra_clave: row.frase || "",
-    frase: row.frase || "",
-    flujo_id: row.flujo_id,
-    flujo_nombre: flujo?.nombre || null,
-    conexion: row.conexion || "",
-    estado: row.activo ? "activo" : "pausado",
-    activo: Boolean(row.activo),
-    repetible: row.repetible !== false,
-    coincidencia: row.coincidencia === "exacta" ? "exacta" : "contiene",
-    prioridad: Number(row.prioridad) || 0,
-    veces_usado: Number(row.veces_usado) || 0,
-    ultima_ejecucion: row.ultima_ejecucion || null,
-    creado_en: row.creado_en || null,
-  };
-}
-
-function bodyToDb(body, usuarioId) {
-  const palabra = String(body.palabra_clave ?? body.frase ?? "").trim();
-  const nombre =
-    String(body.nombre ?? "").trim() ||
-    (palabra ? `Activador: ${palabra}` : "Activador");
-
-  const activo =
-    body.estado === "activo"
-      ? true
-      : body.estado === "pausado"
-        ? false
-        : body.activo !== false && body.activo !== "false";
-
-  const payload = {
-    nombre,
-    frase: palabra,
-    flujo_id: body.flujo_id,
-    conexion: body.conexion || "WhatsApp",
-    activo,
-    repetible: body.repetible !== false && body.repetible !== "false",
-    usuario_id: usuarioId,
-  };
-
-  if (body.coincidencia === "exacta" || body.coincidencia === "contiene") {
-    payload.coincidencia = body.coincidencia;
-  }
-  if (body.prioridad !== undefined && body.prioridad !== null && body.prioridad !== "") {
-    payload.prioridad = Number(body.prioridad) || 0;
-  }
-
-  return payload;
+function stripExtendedFields(payload) {
+  const { coincidencia, prioridad, tipo_activador, palabras_clave_array, ...core } = payload;
+  return core;
 }
 
 async function fetchActivadoresRaw(usuarioId) {
@@ -163,7 +118,7 @@ router.get("/api/activadores", protegerApi, async (req, res) => {
       fetchFlujosMini(usuario.id),
     ]);
     const flujosById = Object.fromEntries(flujos.map((f) => [f.id, f]));
-    const activadores = rows.map((r) => mapRow(r, flujosById));
+    const activadores = rows.map((r) => mapActivadorRow(r, flujosById));
     res.json({
       ok: true,
       activadores,
@@ -179,16 +134,16 @@ router.get("/api/activadores", protegerApi, async (req, res) => {
 // POST /api/activadores
 router.post("/api/activadores", protegerApi, async (req, res) => {
   const usuario = req.session.usuario;
-  const palabra = String(req.body.palabra_clave ?? req.body.frase ?? "").trim();
-  if (!palabra) {
-    return res.status(400).json({ ok: false, error: "La palabra clave es obligatoria" });
-  }
-  if (!req.body.flujo_id) {
-    return res.status(400).json({ ok: false, error: "Debes asignar un flujo" });
+  const validation = validateActivadorBody(req.body);
+  if (!validation.ok) {
+    return res.status(400).json({ ok: false, error: validation.error });
   }
 
   try {
-    const payload = { ...bodyToDb(req.body, usuario.id), creado_en: new Date().toISOString() };
+    const payload = {
+      ...bodyToActivadorFields(req.body, usuario.id),
+      creado_en: new Date().toISOString(),
+    };
     let created;
     try {
       const r = await supabaseWrite(
@@ -198,15 +153,18 @@ router.post("/api/activadores", protegerApi, async (req, res) => {
       );
       created = r.data?.[0];
     } catch (e) {
-      const { coincidencia, prioridad, ...core } = payload;
-      const r = await supabaseWrite("POST", `${SUPABASE_URL}/rest/v1/activadores`, core);
+      const r = await supabaseWrite(
+        "POST",
+        `${SUPABASE_URL}/rest/v1/activadores`,
+        stripExtendedFields(payload)
+      );
       created = r.data?.[0];
     }
 
     const flujos = await fetchFlujosMini(usuario.id);
     const flujosById = Object.fromEntries(flujos.map((f) => [f.id, f]));
-    log(`creado id=${created?.id} frase=${palabra}`);
-    res.status(201).json({ ok: true, activador: mapRow(created, flujosById) });
+    log(`creado id=${created?.id} tipo=${payload.tipo_activador || "palabra_unica"}`);
+    res.status(201).json({ ok: true, activador: mapActivadorRow(created, flujosById) });
   } catch (e) {
     log("POST error", e.response?.data || e.message);
     res.status(500).json({ ok: false, error: "No se pudo crear el activador" });
@@ -223,7 +181,12 @@ router.patch("/api/activadores/:id", protegerApi, async (req, res) => {
       return res.status(404).json({ ok: false, error: "Activador no encontrado" });
     }
 
-    const payload = bodyToDb(req.body, usuario.id);
+    const validation = validateActivadorBody(req.body);
+    if (!validation.ok) {
+      return res.status(400).json({ ok: false, error: validation.error });
+    }
+
+    const payload = bodyToActivadorFields(req.body, usuario.id);
     delete payload.usuario_id;
 
     let updated;
@@ -235,18 +198,17 @@ router.patch("/api/activadores/:id", protegerApi, async (req, res) => {
       );
       updated = r.data?.[0];
     } catch (e) {
-      const { coincidencia, prioridad, ...core } = payload;
       const r = await supabaseWrite(
         "PATCH",
         `${SUPABASE_URL}/rest/v1/activadores?id=eq.${id}&usuario_id=eq.${usuario.id}`,
-        core
+        stripExtendedFields(payload)
       );
       updated = r.data?.[0];
     }
 
     const flujos = await fetchFlujosMini(usuario.id);
     const flujosById = Object.fromEntries(flujos.map((f) => [f.id, f]));
-    res.json({ ok: true, activador: mapRow(updated, flujosById) });
+    res.json({ ok: true, activador: mapActivadorRow(updated, flujosById) });
   } catch (e) {
     log("PATCH error", e.response?.data || e.message);
     res.status(500).json({ ok: false, error: "No se pudo actualizar el activador" });
@@ -301,7 +263,7 @@ router.post("/api/activadores/:id/toggle", protegerApi, async (req, res) => {
     const flujosById = Object.fromEntries(flujos.map((f) => [f.id, f]));
     res.json({
       ok: true,
-      activador: mapRow(updated, flujosById),
+      activador: mapActivadorRow(updated, flujosById),
       estado: nuevoActivo ? "activo" : "pausado",
     });
   } catch (e) {

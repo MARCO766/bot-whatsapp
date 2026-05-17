@@ -377,15 +377,11 @@ function supabaseHeaders(extra = {}) {
   };
 }
 
-function coincideActivador(textoNorm, activador) {
-  const frase = (activador.frase || "").toLowerCase().trim();
-  if (!frase) return false;
-  const modo = activador.coincidencia === "exacta" ? "exacta" : "contiene";
-  if (modo === "exacta") {
-    return textoNorm === frase;
-  }
-  return textoNorm.includes(frase);
-}
+const {
+  TIPOS,
+  matchActivador,
+  sortActivadores,
+} = require("./activadorUtils");
 
 async function registrarUsoActivador(activador) {
   const veces = (Number(activador.veces_usado) || 0) + 1;
@@ -415,13 +411,13 @@ async function buscarYEjecutarActivador(numero, textoCliente, usuarioId = null, 
   let activadores = [];
   try {
     const responseActivadores = await axios.get(
-      `${SUPABASE_URL}/rest/v1/activadores?select=id,frase,flujo_id,activo,prioridad,coincidencia,veces_usado,repetible&activo=eq.true&usuario_id=eq.${usuarioId}`,
+      `${SUPABASE_URL}/rest/v1/activadores?select=id,frase,flujo_id,activo,prioridad,coincidencia,veces_usado,repetible,tipo_activador,palabras_clave_array&activo=eq.true&usuario_id=eq.${usuarioId}`,
       { headers: supabaseHeaders() }
     );
     activadores = responseActivadores.data || [];
   } catch (e) {
     const responseActivadores = await axios.get(
-      `${SUPABASE_URL}/rest/v1/activadores?select=id,frase,flujo_id,activo,repetible&activo=eq.true&usuario_id=eq.${usuarioId}`,
+      `${SUPABASE_URL}/rest/v1/activadores?select=id,frase,flujo_id,activo,repetible,prioridad,coincidencia,veces_usado&activo=eq.true&usuario_id=eq.${usuarioId}`,
       { headers: supabaseHeaders() }
     );
     activadores = responseActivadores.data || [];
@@ -429,23 +425,45 @@ async function buscarYEjecutarActivador(numero, textoCliente, usuarioId = null, 
 
   if (!activadores.length) return false;
 
-  activadores.sort((a, b) => {
-    const pa = Number(a.prioridad) || 0;
-    const pb = Number(b.prioridad) || 0;
-    if (pb !== pa) return pb - pa;
-    return (b.frase || "").length - (a.frase || "").length;
-  });
+  const ordenados = sortActivadores(activadores);
+  let activador = null;
+  let matchInfo = null;
 
-  const activador = activadores.find((a) => coincideActivador(textoNorm, a));
-  if (!activador) return false;
+  for (const a of ordenados) {
+    const result = matchActivador(textoNorm, a);
+    if (result.matched) {
+      activador = a;
+      matchInfo = result;
+      break;
+    }
+  }
 
-  console.log(
-    "[ACTIVADOR] palabra detectada:",
-    activador.frase,
-    "| usuario:",
-    usuarioId,
-    messageId ? `| msg:${messageId}` : ""
-  );
+  if (!activador || !matchInfo) return false;
+
+  if (matchInfo.tipo === TIPOS.CUALQUIER) {
+    console.log(
+      "[ACTIVADOR] tipo: cualquier_mensaje",
+      "| usuario:",
+      usuarioId,
+      messageId ? `| msg:${messageId}` : ""
+    );
+  } else if (matchInfo.tipo === TIPOS.MULTIPLES) {
+    console.log(
+      "[ACTIVADOR] coincidencia múltiple encontrada:",
+      matchInfo.detalle,
+      "| usuario:",
+      usuarioId,
+      messageId ? `| msg:${messageId}` : ""
+    );
+  } else {
+    console.log(
+      "[ACTIVADOR] palabra detectada:",
+      matchInfo.detalle || activador.frase,
+      "| usuario:",
+      usuarioId,
+      messageId ? `| msg:${messageId}` : ""
+    );
+  }
 
   const responseFlujo = await axios.get(
     `${SUPABASE_URL}/rest/v1/flujos_builder?id=eq.${activador.flujo_id}&usuario_id=eq.${usuarioId}&select=*`,

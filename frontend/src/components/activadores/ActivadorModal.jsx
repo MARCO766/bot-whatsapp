@@ -1,8 +1,11 @@
 import React, { useEffect, useState } from "react";
+import { TIPOS_ACTIVADOR } from "../../activadores/constants";
 
 const EMPTY = {
   nombre: "",
+  tipo_activador: "palabra_unica",
   palabra_clave: "",
+  palabras_clave_text: "",
   flujo_id: "",
   estado: "activo",
   coincidencia: "contiene",
@@ -18,9 +21,19 @@ export default function ActivadorModal({ open, activador, flujos, onSave, onClos
   useEffect(() => {
     if (!open) return;
     if (activador) {
+      const tipo = activador.tipo_activador || "palabra_unica";
       setForm({
         nombre: activador.nombre || "",
-        palabra_clave: activador.palabra_clave || activador.frase || "",
+        tipo_activador: tipo,
+        palabra_clave:
+          tipo === "palabra_unica" ? activador.palabra_clave || activador.frase || "" : "",
+        palabras_clave_text:
+          tipo === "multiples_palabras"
+            ? activador.palabras_clave_text ||
+              activador.palabras_clave_array?.join(", ") ||
+              activador.frase ||
+              ""
+            : "",
         flujo_id: activador.flujo_id || "",
         estado: activador.estado || (activador.activo ? "activo" : "pausado"),
         coincidencia: activador.coincidencia || "contiene",
@@ -35,16 +48,52 @@ export default function ActivadorModal({ open, activador, flujos, onSave, onClos
 
   if (!open) return null;
 
+  const esCualquier = form.tipo_activador === "cualquier_mensaje";
+  const esMultiples = form.tipo_activador === "multiples_palabras";
+  const esUnica = form.tipo_activador === "palabra_unica";
+
   function setField(key, value) {
     setForm((f) => ({ ...f, [key]: value }));
   }
 
+  function buildPayload() {
+    const base = {
+      nombre: form.nombre,
+      tipo_activador: form.tipo_activador,
+      flujo_id: form.flujo_id,
+      estado: form.estado,
+      coincidencia: form.coincidencia,
+      prioridad: form.prioridad,
+      conexion: form.conexion,
+      repetible: form.repetible,
+    };
+
+    if (esCualquier) return base;
+    if (esMultiples) {
+      return { ...base, palabras_clave_text: form.palabras_clave_text };
+    }
+    return { ...base, palabra_clave: form.palabra_clave };
+  }
+
+  function validate() {
+    if (!form.flujo_id) return false;
+    if (esCualquier) return true;
+    if (esMultiples) {
+      return (
+        form.palabras_clave_text
+          .split(",")
+          .map((p) => p.trim())
+          .filter(Boolean).length > 0
+      );
+    }
+    return Boolean(form.palabra_clave.trim());
+  }
+
   async function handleSubmit(e) {
     e.preventDefault();
-    if (!form.palabra_clave.trim()) return;
-    if (!form.flujo_id) return;
+    if (!validate()) return;
     setSaving(true);
-    const ok = await onSave(form, activador?.id);
+    const ok = await onSave(buildPayload(), activador?.id);
     setSaving(false);
     if (ok) onClose();
   }
@@ -54,7 +103,7 @@ export default function ActivadorModal({ open, activador, flujos, onSave, onClos
       <div className="actModal" onClick={(e) => e.stopPropagation()} role="dialog">
         <h2>{activador ? "Editar activador" : "Nuevo activador"}</h2>
         <p className="sub">
-          La palabra clave dispara el flujo cuando el lead escribe por WhatsApp.
+          Define cómo se dispara el flujo cuando el lead escribe por WhatsApp.
         </p>
 
         <form onSubmit={handleSubmit}>
@@ -63,19 +112,53 @@ export default function ActivadorModal({ open, activador, flujos, onSave, onClos
             <input
               value={form.nombre}
               onChange={(e) => setField("nombre", e.target.value)}
-              placeholder="Ej: Info productos"
+              placeholder="Ej: Bienvenida automática"
             />
           </div>
 
           <div className="actField">
-            <label>Palabra clave *</label>
-            <input
-              value={form.palabra_clave}
-              onChange={(e) => setField("palabra_clave", e.target.value)}
-              placeholder="Ej: info"
-              required
-            />
+            <label>Tipo de activador</label>
+            <select
+              value={form.tipo_activador}
+              onChange={(e) => setField("tipo_activador", e.target.value)}
+            >
+              {TIPOS_ACTIVADOR.map((t) => (
+                <option key={t.value} value={t.value}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
           </div>
+
+          {esUnica && (
+            <div className="actField">
+              <label>Palabra clave *</label>
+              <input
+                value={form.palabra_clave}
+                onChange={(e) => setField("palabra_clave", e.target.value)}
+                placeholder="Ej: info"
+                required
+              />
+            </div>
+          )}
+
+          {esMultiples && (
+            <div className="actField">
+              <label>Palabras clave (separadas por coma) *</label>
+              <textarea
+                value={form.palabras_clave_text}
+                onChange={(e) => setField("palabras_clave_text", e.target.value)}
+                placeholder="info,precio,costo,curso"
+                required
+              />
+            </div>
+          )}
+
+          {esCualquier && (
+            <p className="actHint">
+              Se activará con cualquier mensaje de texto entrante (hola, info, emojis, etc.).
+            </p>
+          )}
 
           <div className="actField">
             <label>Flujo asignado *</label>
@@ -93,18 +176,33 @@ export default function ActivadorModal({ open, activador, flujos, onSave, onClos
             </select>
           </div>
 
-          <div className="actRow2">
-            <div className="actField">
-              <label>Coincidencia</label>
-              <select
-                value={form.coincidencia}
-                onChange={(e) => setField("coincidencia", e.target.value)}
-              >
-                <option value="contiene">Contiene</option>
-                <option value="exacta">Exacta</option>
-              </select>
-            </div>
+          {!esCualquier && (
+            <div className="actRow2">
+              <div className="actField">
+                <label>Coincidencia</label>
+                <select
+                  value={form.coincidencia}
+                  onChange={(e) => setField("coincidencia", e.target.value)}
+                >
+                  <option value="contiene">Contiene</option>
+                  <option value="exacta">Exacta</option>
+                </select>
+              </div>
 
+              <div className="actField">
+                <label>Prioridad</label>
+                <input
+                  type="number"
+                  min={0}
+                  max={999}
+                  value={form.prioridad}
+                  onChange={(e) => setField("prioridad", Number(e.target.value))}
+                />
+              </div>
+            </div>
+          )}
+
+          {esCualquier && (
             <div className="actField">
               <label>Prioridad</label>
               <input
@@ -115,7 +213,7 @@ export default function ActivadorModal({ open, activador, flujos, onSave, onClos
                 onChange={(e) => setField("prioridad", Number(e.target.value))}
               />
             </div>
-          </div>
+          )}
 
           <div className="actRow2">
             <div className="actField">

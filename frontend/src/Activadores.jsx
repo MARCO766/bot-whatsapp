@@ -4,6 +4,7 @@ import ActivadorDeleteModal from "./components/activadores/ActivadorDeleteModal"
 import { activadoresStyles } from "./activadores/styles";
 import { useActivadores } from "./activadores/useActivadores";
 import { loginUrl } from "./activadores/api";
+import { displayActivadorTrigger, labelTipoActivador } from "./activadores/constants";
 
 function formatFecha(iso) {
   if (!iso) return "—";
@@ -173,16 +174,29 @@ export default function Activadores() {
           {activadores.map((a) => (
             <article key={a.id} className="actCard">
               <div className="actCardTop">
-                <div className="actKeyword">&quot;{a.palabra_clave}&quot;</div>
+                <div>
+                  <div className="actTipoBadge">{labelTipoActivador(a.tipo_activador)}</div>
+                  <div className="actKeyword">
+                    {a.tipo_activador === "cualquier_mensaje"
+                      ? "Cualquier mensaje"
+                      : `"${displayActivadorTrigger(a)}"`}
+                  </div>
+                </div>
                 <span className={`actBadge ${a.estado}`}>{a.estado}</span>
               </div>
               <div className="actMeta">
                 <div>
                   Flujo: <b>{a.flujo_nombre || a.flujo_id || "—"}</b>
                 </div>
-                <div>
-                  Coincidencia: <b>{a.coincidencia}</b> · Prioridad: <b>{a.prioridad}</b>
-                </div>
+                {a.tipo_activador !== "cualquier_mensaje" ? (
+                  <div>
+                    Coincidencia: <b>{a.coincidencia}</b> · Prioridad: <b>{a.prioridad}</b>
+                  </div>
+                ) : (
+                  <div>
+                    Prioridad: <b>{a.prioridad}</b>
+                  </div>
+                )}
                 <div>
                   Usos: <b>{a.veces_usado}</b> · Última: <b>{formatFecha(a.ultima_ejecucion)}</b>
                 </div>
@@ -220,7 +234,11 @@ export default function Activadores() {
 
       <ActivadorDeleteModal
         open={Boolean(confirmDelete)}
-        palabra={confirmDelete?.palabra_clave || confirmDelete?.frase}
+        palabra={
+          confirmDelete?.tipo_activador === "cualquier_mensaje"
+            ? "Cualquier mensaje"
+            : displayActivadorTrigger(confirmDelete || {})
+        }
         deleting={deleting}
         onCancel={() => {
           if (!deleting) setConfirmDelete(null);

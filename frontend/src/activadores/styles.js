@@ -293,6 +293,26 @@ export const activadoresStyles = `
   line-height: 1.55;
 }
 
+.actHint {
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(250, 204, 21, .08);
+  border: 1px solid rgba(250, 204, 21, .2);
+  color: #fde68a;
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+
+.actTipoBadge {
+  font-size: 0.7rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: #94a3b8;
+  margin-bottom: 4px;
+}
+
 .actModal {
   width: 100%;
   max-width: 480px;

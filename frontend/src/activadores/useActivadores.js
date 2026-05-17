@@ -66,9 +66,12 @@ export function useActivadores() {
         const hay = [
           a.nombre,
           a.palabra_clave,
+          a.palabras_clave_text,
+          ...(a.palabras_clave_array || []),
           a.frase,
           a.flujo_nombre,
           a.conexion,
+          a.tipo_activador,
         ]
           .filter(Boolean)
           .join(" ")
