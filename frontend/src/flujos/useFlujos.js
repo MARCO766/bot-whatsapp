@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  ApiError,
   createFlow,
   deleteFlow,
   duplicateFlow,
@@ -7,6 +8,7 @@ import {
   fetchFlows,
   importFlowTemplate,
   patchFlowMeta,
+  resolveApiUrl,
 } from "./api";
 import {
   countByEstado,
@@ -18,11 +20,26 @@ import {
   sortFlows,
 } from "./utils";
 
+const EMPTY_STATS = {
+  total: 0,
+  activos: 0,
+  pausados: 0,
+  borradores: 0,
+  errores: 0,
+  leadsHoy: 0,
+  mensajesEnviados: 0,
+  respuestas: 0,
+  seguimientosActivos: 0,
+  conversionEstimada: 0,
+};
+
 export function useFlujos() {
   const [flows, setFlows] = useState([]);
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [apiOnline, setApiOnline] = useState(false);
+  const [apiError, setApiError] = useState(null);
+  const [apiUrl, setApiUrl] = useState("");
   const [toast, setToast] = useState(null);
 
   const [query, setQuery] = useState("");
@@ -40,27 +57,28 @@ export function useFlujos() {
 
   const load = useCallback(async () => {
     setLoading(true);
+    setApiError(null);
+    setApiUrl(resolveApiUrl("/api/flujos"));
+
     try {
       const [flowsRes, statsRes] = await Promise.all([fetchFlows(), fetchFlowStats()]);
       const merged = mergeLocalMeta(flowsRes.flows || []);
       setFlows(merged);
-      setStats(statsRes.stats || null);
+      setStats(statsRes.stats || EMPTY_STATS);
       setApiOnline(true);
+      setApiError(null);
     } catch (err) {
-      console.log("[Flujos] API no disponible:", err.message);
+      const apiErr = err instanceof ApiError ? err : new ApiError(err.message, "SERVER");
+      console.warn("[Flujos] API:", apiErr.code, apiErr.message, apiErr.details);
+
       setApiOnline(false);
       setFlows([]);
-      setStats({
-        total: 0,
-        activos: 0,
-        pausados: 0,
-        borradores: 0,
-        errores: 0,
-        leadsHoy: 0,
-        mensajesEnviados: 0,
-        respuestas: 0,
-        seguimientosActivos: 0,
-        conversionEstimada: 0,
+      setStats(EMPTY_STATS);
+      setApiError({
+        code: apiErr.code,
+        message: apiErr.message,
+        status: apiErr.status,
+        url: apiErr.details?.url || resolveApiUrl("/api/flujos"),
       });
     } finally {
       setLoading(false);
@@ -94,7 +112,7 @@ export function useFlujos() {
       );
 
       if (!apiOnline) {
-        showToast("Guardado localmente (sin sesión API)");
+        showToast("Sin sesión API — cambio solo local", "error");
         return;
       }
 
@@ -193,6 +211,8 @@ export function useFlujos() {
     stats,
     loading,
     apiOnline,
+    apiError,
+    apiUrl,
     toast,
     query,
     setQuery,

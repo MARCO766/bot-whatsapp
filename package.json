@@ -3,6 +3,8 @@
   "version": "1.0.0",
   "main": "server.js",
   "scripts": {
+    "build:frontend": "npm install --prefix frontend && npm run build --prefix frontend",
+    "build": "npm run build:frontend",
     "start": "node server.js"
   },
   "dependencies": {

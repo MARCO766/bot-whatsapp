@@ -8,6 +8,7 @@ import { FLOW_STATES } from "./flujos/constants";
 import { flujosStyles } from "./flujos/styles";
 import { SORT_OPTIONS } from "./flujos/constants";
 import { useFlujos } from "./flujos/useFlujos";
+import { loginUrl, resolveApiUrl } from "./flujos/api";
 
 export default function Flujos() {
   const {
@@ -15,6 +16,8 @@ export default function Flujos() {
     stats,
     loading,
     apiOnline,
+    apiError,
+    apiUrl,
     toast,
     query,
     setQuery,
@@ -57,7 +60,7 @@ export default function Flujos() {
   function handleEditName(flow) {
     const nombre = prompt("Nuevo nombre del flujo:", flow.nombre);
     if (!nombre?.trim()) return;
-    fetch(`/editar-nombre-flujo/${flow.id}`, {
+    fetch(resolveApiUrl(`/editar-nombre-flujo/${flow.id}`), {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
@@ -96,13 +99,28 @@ export default function Flujos() {
         </div>
       </div>
 
-      {!apiOnline && !loading && (
-        <div className="flApiBanner">
-          Modo sin sesión: inicia sesión en{" "}
-          <a href="/login" style={{ color: "#86efac" }}>
-            el panel MacBot
-          </a>{" "}
-          para ver flujos reales. Las acciones de crear/eliminar requieren autenticación.
+      {!apiOnline && !loading && apiError && (
+        <div className={`flApiBanner ${apiError.code !== "NO_AUTH" ? "error" : ""}`}>
+          <strong>
+            {apiError.code === "NO_AUTH" && "Sesión requerida"}
+            {apiError.code === "NETWORK" && "Sin conexión al backend"}
+            {apiError.code === "API_UNAVAILABLE" && "API no disponible en esta URL"}
+            {apiError.code === "SERVER" && "Error del servidor"}
+          </strong>
+          <p style={{ margin: "8px 0 0" }}>{apiError.message}</p>
+          <p style={{ margin: "6px 0 0", opacity: 0.85 }}>
+            Endpoint: <code>{apiUrl}</code>
+          </p>
+          <div className="flApiBannerActions">
+            <button type="button" className="flBtn flBtnGhost" onClick={load}>
+              Reintentar
+            </button>
+            {apiError.code === "NO_AUTH" && (
+              <a href={loginUrl()} className="flBtn flBtnPrimary" style={{ textDecoration: "none" }}>
+                Iniciar sesión
+              </a>
+            )}
+          </div>
         </div>
       )}
 

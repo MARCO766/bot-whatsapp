@@ -7,9 +7,17 @@ export default defineConfig({
     react(),
     tailwindcss(),
   ],
+  build: {
+    outDir: 'dist',
+    emptyOutDir: true,
+  },
   server: {
     proxy: {
-      '/api': 'http://localhost:3000'
-    }
-  }
+      '/api': {
+        target: process.env.VITE_DEV_API || 'http://localhost:3000',
+        changeOrigin: true,
+        secure: false,
+      },
+    },
+  },
 })

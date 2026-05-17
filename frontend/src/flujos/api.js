@@ -1,31 +1,67 @@
+import { getBackendOrigin, resolveApiUrl } from "./apiBase";
+
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
-async function request(path, options = {}) {
-  const res = await fetch(path, {
-    credentials: "include",
-    headers: JSON_HEADERS,
-    ...options,
-  });
+export class ApiError extends Error {
+  constructor(message, code, status = 0, details = null) {
+    super(message);
+    this.name = "ApiError";
+    this.code = code;
+    this.status = status;
+    this.details = details;
+  }
+}
 
-  if (res.status === 401) {
-    const err = new Error("NO_AUTH");
-    err.code = "NO_AUTH";
-    throw err;
+async function request(path, options = {}) {
+  const url = resolveApiUrl(path);
+
+  let res;
+  try {
+    res = await fetch(url, {
+      credentials: "include",
+      headers: JSON_HEADERS,
+      ...options,
+    });
+  } catch (networkErr) {
+    console.error("[Flujos API] Red:", url, networkErr);
+    throw new ApiError(
+      "No se pudo conectar al servidor. Revisa que el backend esté en línea.",
+      "NETWORK",
+      0,
+      { url }
+    );
   }
 
   const contentType = res.headers.get("content-type") || "";
+
+  if (res.status === 401) {
+    throw new ApiError(
+      "Sesión no válida. Inicia sesión en el panel MacBot.",
+      "NO_AUTH",
+      401,
+      { url }
+    );
+  }
+
   if (!contentType.includes("application/json")) {
-    const err = new Error("NO_AUTH");
-    err.code = "NO_AUTH";
-    throw err;
+    const hint =
+      res.status === 404
+        ? "Ruta API no encontrada en este dominio."
+        : "El servidor no devolvió JSON (¿frontend y backend en dominios distintos sin VITE_API_BASE_URL?).";
+    throw new ApiError(hint, "API_UNAVAILABLE", res.status, { url });
   }
 
   const data = await res.json().catch(() => ({}));
+
   if (!res.ok) {
-    const err = new Error(data.error || "Error de API");
-    err.status = res.status;
-    throw err;
+    throw new ApiError(
+      data.error || `Error del servidor (${res.status})`,
+      "SERVER",
+      res.status,
+      { url, data }
+    );
   }
+
   return data;
 }
 
@@ -35,6 +71,10 @@ export function fetchFlows() {
 
 export function fetchFlowStats() {
   return request("/api/flujos/stats");
+}
+
+export function fetchApiStatus() {
+  return request("/api/flujos/status");
 }
 
 export function patchFlowMeta(id, meta) {
@@ -71,11 +111,17 @@ export function fetchFlowTimeline(id) {
 }
 
 export function builderUrl(flow) {
-  const base = typeof window !== "undefined" ? window.location.origin.replace(/:\d+$/, ":3000") : "";
+  const base = getBackendOrigin();
   return `${base}/admin?tab=flujos&builder=1&flujo_id=${flow.id}&nombre=${encodeURIComponent(flow.nombre)}`;
 }
 
 export function exportFlowUrl(id) {
-  const base = typeof window !== "undefined" ? window.location.origin.replace(/:\d+$/, ":3000") : "";
+  const base = getBackendOrigin();
   return `${base}/exportar-flujo/${id}`;
 }
+
+export function loginUrl() {
+  return `${getBackendOrigin()}/login`;
+}
+
+export { resolveApiUrl, getBackendOrigin };

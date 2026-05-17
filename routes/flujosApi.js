@@ -181,6 +181,17 @@ function inferEstado(flow, meta, activadoresDelFlujo) {
   return meta.estado || "borrador";
 }
 
+// GET /api/flujos/status — diagnóstico (sin auth)
+router.get("/api/flujos/status", (req, res) => {
+  res.json({
+    ok: true,
+    authenticated: Boolean(req.session?.usuario),
+    usuario_id: req.session?.usuario?.id || null,
+    supabase: Boolean(SUPABASE_URL && SUPABASE_KEY),
+    timestamp: new Date().toISOString(),
+  });
+});
+
 // GET /api/flujos
 router.get("/api/flujos", protegerApi, async (req, res) => {
   try {

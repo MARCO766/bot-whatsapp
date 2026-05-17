@@ -67,12 +67,34 @@ export const flujosStyles = `
 }
 
 .flApiBanner {
-  padding: 10px 14px;
+  padding: 12px 16px;
   border-radius: 14px;
   background: rgba(245,158,11,.12);
   border: 1px solid rgba(245,158,11,.35);
   color: #fcd34d;
   font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.flApiBanner.error {
+  background: rgba(127,29,29,.2);
+  border-color: rgba(248,113,113,.4);
+  color: #fecaca;
+}
+
+.flApiBanner code {
+  font-size: 0.78rem;
+  background: rgba(0,0,0,.35);
+  padding: 2px 6px;
+  border-radius: 6px;
+  word-break: break-all;
+}
+
+.flApiBannerActions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  flex-wrap: wrap;
 }
 
 .flStatsGrid {

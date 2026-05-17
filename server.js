@@ -1,6 +1,8 @@
 console.log("🔥 SERVER NUEVO ACTIVO");
 require("dotenv").config();
 const express = require('express');
+const path = require('path');
+const fs = require('fs');
 const axios = require('axios');
 const bodyParser = require('body-parser');
 const session = require('express-session');
@@ -21,6 +23,11 @@ const flowsRoutes = require("./routes/flows");
 const flujosApiRoutes = require("./routes/flujosApi");
 
 const app = express();
+const isProduction = process.env.NODE_ENV === "production";
+
+if (isProduction || process.env.TRUST_PROXY === "true") {
+  app.set("trust proxy", 1);
+}
 
 app.set("view engine", "ejs");
 app.set("views", "views");
@@ -29,13 +36,29 @@ app.use(express.static("public"));
 app.use(bodyParser.json());
 app.use(express.urlencoded({ extended: true }));
 
+if (process.env.CORS_ORIGIN) {
+  const cors = require("cors");
+  const origins = process.env.CORS_ORIGIN.split(",").map((o) => o.trim()).filter(Boolean);
+  app.use(
+    "/api",
+    cors({
+      origin: origins,
+      credentials: true,
+    })
+  );
+  console.log("🌐 CORS API habilitado para:", origins.join(", "));
+}
+
 app.use(session({
   secret: process.env.SESSION_SECRET || "macbot-secreto-cambiar",
   resave: false,
   saveUninitialized: false,
   cookie: {
-    maxAge: 1000 * 60 * 60 * 24 * 7
-  }
+    maxAge: 1000 * 60 * 60 * 24 * 7,
+    httpOnly: true,
+    sameSite: "lax",
+    secure: isProduction,
+  },
 }));
 
 app.use(authRoutes);
@@ -46,7 +69,45 @@ app.use("/", builderRoutes);
 app.use(flowsRoutes);
 app.use(flujosApiRoutes);
 
+// ─── CRM React (frontend/dist) — mismo origen que /api en producción ───
+const frontendDist = path.join(__dirname, "frontend", "dist");
+const frontendIndex = path.join(frontendDist, "index.html");
+const hasFrontendBuild = fs.existsSync(frontendIndex);
 
+if (hasFrontendBuild) {
+  console.log("✅ Sirviendo CRM React desde", frontendDist);
+  app.use(express.static(frontendDist, { index: false }));
+
+  const backendOnlyPrefixes = [
+    "/api",
+    "/admin",
+    "/login",
+    "/logout",
+    "/inbox",
+    "/builder",
+    "/webhook",
+    "/crear-",
+    "/guardar-",
+    "/eliminar-",
+    "/duplicar-",
+    "/exportar-",
+    "/editar-",
+    "/subir-",
+    "/bloquear-",
+    "/desbloquear-",
+    "/chat-",
+    "/debug-",
+  ];
+
+  app.get("/{*splat}", (req, res, next) => {
+    if (req.method !== "GET") return next();
+    if (backendOnlyPrefixes.some((p) => req.path.startsWith(p))) return next();
+    if (req.path.includes(".") && !req.path.endsWith(".html")) return next();
+    return res.sendFile(frontendIndex);
+  });
+} else {
+  console.log("⚠️ frontend/dist no encontrado — ejecuta: npm run build:frontend");
+}
 
 
 // 🔑 VARIABLES (Railway)
