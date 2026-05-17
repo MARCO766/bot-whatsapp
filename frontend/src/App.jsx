@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import Inbox from "./Inbox";
+import Bandeja from "./pages/Bandeja";
 import Panel from "./Panel";
 import Flujos from "./Flujos";
 import Campañas from "./Campañas";
@@ -13,6 +13,7 @@ export default function App() {
   const [search, setSearch] = useState("");
   const [now, setNow] = useState(new Date());
   const [showActivity, setShowActivity] = useState(false);
+  const [inboxUnread, setInboxUnread] = useState(null);
 
   useEffect(() => {
     localStorage.setItem("macbot_vista", vista);
@@ -25,7 +26,18 @@ export default function App() {
 
   const menu = [
     { id: "panel", nombre: "Panel", icono: "🏠", badge: null, color: "cyan" },
-    { id: "inbox", nombre: "Bandeja", icono: "💬", badge: "12", color: "green" },
+    {
+      id: "inbox",
+      nombre: "Bandeja",
+      icono: "💬",
+      badge:
+        inboxUnread == null
+          ? null
+          : inboxUnread > 99
+            ? "99+"
+            : String(inboxUnread),
+      color: "green",
+    },
     { id: "flujos", nombre: "Flujos", icono: "🧩", badge: "4", color: "purple" },
     {
   id: "metricas",
@@ -50,7 +62,8 @@ export default function App() {
 
   function renderVista() {
     if (vista === "panel") return <Panel cambiarVista={setVista} />;
-    if (vista === "inbox") return <Inbox />;
+    if (vista === "inbox")
+      return <Bandeja onUnreadChange={setInboxUnread} />;
     if (vista === "flujos") return <Flujos />;
     if (vista === "metricas") return <Metricas />;
     if (vista === "campañas") return <Campañas />;

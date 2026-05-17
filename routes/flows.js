@@ -27,6 +27,21 @@ const seguimientoRoutes = require("./seguimiento");
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
 
+function wantsInboxJson(req) {
+  return (
+    req.get("X-Inbox-Api") === "1" ||
+    (req.get("Accept") || "").includes("application/json")
+  );
+}
+
+function finishInbox(req, res, numero) {
+  if (wantsInboxJson(req)) {
+    return res.json({ ok: true, numero: numero || null });
+  }
+  if (numero) return res.redirect("/inbox?numero=" + numero);
+  return res.redirect("/inbox");
+}
+
 router.use(seguimientoRoutes);
 router.post("/subir-archivo", protegerPanel, upload.single("archivo"), async (req, res) => {
   try {
@@ -130,7 +145,7 @@ router.post("/inbox/responder", protegerPanel, upload.single("archivo"), async (
     if (!req.file) {
 
       if (!respuesta || !respuesta.trim()) {
-        return res.redirect("/inbox?numero=" + numero);
+        return finishInbox(req, res, numero);
       }
 
       await enviarTextoWhatsApp(
@@ -156,7 +171,7 @@ router.post("/inbox/responder", protegerPanel, upload.single("archivo"), async (
   }
 );
 
-      return res.redirect("/inbox?numero=" + numero);
+      return finishInbox(req, res, numero);
     }
 
     // =========================
@@ -394,7 +409,7 @@ else if (mime.startsWith("audio/")) {
   }
 );
 
-    res.redirect("/inbox?numero=" + numero);
+    return finishInbox(req, res, numero);
 
   }
 
@@ -405,6 +420,9 @@ else if (mime.startsWith("audio/")) {
       error.response?.data || error.message
     );
 
+    if (wantsInboxJson(req)) {
+      return res.status(500).json({ ok: false, error: "Error enviando archivo" });
+    }
     res.send("Error enviando archivo");
 
   }
@@ -1082,10 +1100,13 @@ const etiqueta = body.etiqueta;
     }
   );
 
-  return res.redirect("/inbox?numero=" + numero);
+  return finishInbox(req, res, numero);
 
 } catch (error) {
   console.log("ERROR GUARDANDO ETIQUETA CHAT:", error.response?.data || error.message);
+  if (wantsInboxJson(req)) {
+    return res.status(500).json({ ok: false });
+  }
   return res.redirect("/inbox?numero=" + req.body.numero);
 }
 });
@@ -1105,10 +1126,13 @@ const numero = body.numero;
       }
     );
 
-    res.redirect("/inbox?numero=" + numero);
+    return finishInbox(req, res, numero);
 
   } catch (error) {
     console.log("ERROR QUITANDO ETIQUETA:", error.response?.data || error.message);
+    if (wantsInboxJson(req)) {
+      return res.status(500).json({ ok: false });
+    }
     res.send("Error quitando etiqueta");
   }
 });

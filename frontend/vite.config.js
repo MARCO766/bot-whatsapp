@@ -18,6 +18,17 @@ export default defineConfig({
         changeOrigin: true,
         secure: false,
       },
+      '/inbox': {
+        target: process.env.VITE_DEV_API || 'http://localhost:3000',
+        changeOrigin: true,
+        secure: false,
+      },
+      '/socket.io': {
+        target: process.env.VITE_DEV_API || 'http://localhost:3000',
+        changeOrigin: true,
+        ws: true,
+        secure: false,
+      },
     },
   },
 })
