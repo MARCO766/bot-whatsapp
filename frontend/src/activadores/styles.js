@@ -223,7 +223,7 @@ export const activadoresStyles = `
   position: fixed;
   bottom: 24px;
   right: 24px;
-  z-index: 100;
+  z-index: 10001;
   padding: 14px 20px;
   border-radius: 14px;
   font-weight: 800;
@@ -257,16 +257,40 @@ export const activadoresStyles = `
   font-size: 0.85rem;
 }
 
-.actModalOverlay {
+.actModalOverlay,
+.actConfirmOverlay {
   position: fixed;
   inset: 0;
-  z-index: 50;
-  background: rgba(2,6,23,.75);
-  backdrop-filter: blur(6px);
+  z-index: 9998;
+  background: rgba(2,6,23,.78);
+  backdrop-filter: blur(8px);
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 20px;
+  animation: actFadeIn .2s ease;
+}
+
+.actConfirmModal {
+  width: min(440px, 100%);
+  border-radius: 24px;
+  background: rgba(15,23,42,.98);
+  border: 1px solid rgba(248,113,113,.25);
+  padding: 26px;
+  box-shadow: 0 32px 90px rgba(0,0,0,.5);
+}
+
+.actConfirmModal h2 {
+  margin: 0 0 12px;
+  font-size: 1.2rem;
+  color: #f8fafc;
+}
+
+.actConfirmText {
+  margin: 0 0 22px;
+  color: #94a3b8;
+  font-size: 0.92rem;
+  line-height: 1.55;
 }
 
 .actModal {

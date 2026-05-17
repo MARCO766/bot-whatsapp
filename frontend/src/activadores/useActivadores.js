@@ -106,13 +106,18 @@ export function useActivadores() {
 
   const eliminar = useCallback(
     async (id) => {
-      if (!apiOnline) return showToast("Sin sesión API", "error");
+      if (!apiOnline) {
+        showToast("Sin sesión API", "error");
+        return false;
+      }
       try {
         await deleteActivador(id);
-        showToast("Activador eliminado");
+        showToast("Activador eliminado correctamente");
         await load();
+        return true;
       } catch (e) {
-        showToast(e.message || "Error al eliminar", "error");
+        showToast(e.message || "No se pudo eliminar el activador", "error");
+        return false;
       }
     },
     [apiOnline, load, showToast]

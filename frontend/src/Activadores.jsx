@@ -1,6 +1,6 @@
 import React, { useState } from "react";
-import ConfirmModal from "./components/flujos/ConfirmModal";
 import ActivadorModal from "./components/activadores/ActivadorModal";
+import ActivadorDeleteModal from "./components/activadores/ActivadorDeleteModal";
 import { activadoresStyles } from "./activadores/styles";
 import { useActivadores } from "./activadores/useActivadores";
 import { loginUrl } from "./activadores/api";
@@ -43,6 +43,7 @@ export default function Activadores() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editItem, setEditItem] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
+  const [deleting, setDeleting] = useState(false);
 
   function openCreate() {
     setEditItem(null);
@@ -52,6 +53,14 @@ export default function Activadores() {
   function openEdit(item) {
     setEditItem(item);
     setModalOpen(true);
+  }
+
+  async function handleConfirmDelete() {
+    if (!confirmDelete || deleting) return;
+    setDeleting(true);
+    const ok = await eliminar(confirmDelete.id);
+    setDeleting(false);
+    if (ok) setConfirmDelete(null);
   }
 
   return (
@@ -209,21 +218,14 @@ export default function Activadores() {
         }}
       />
 
-      <ConfirmModal
+      <ActivadorDeleteModal
         open={Boolean(confirmDelete)}
-        title="Eliminar activador"
-        message={
-          confirmDelete
-            ? `¿Eliminar el activador "${confirmDelete.palabra_clave}"? Esta acción no se puede deshacer.`
-            : ""
-        }
-        confirmLabel="Eliminar"
-        danger
-        onCancel={() => setConfirmDelete(null)}
-        onConfirm={async () => {
-          if (confirmDelete) await eliminar(confirmDelete.id);
-          setConfirmDelete(null);
+        palabra={confirmDelete?.palabra_clave || confirmDelete?.frase}
+        deleting={deleting}
+        onCancel={() => {
+          if (!deleting) setConfirmDelete(null);
         }}
+        onConfirm={handleConfirmDelete}
       />
     </div>
   );
