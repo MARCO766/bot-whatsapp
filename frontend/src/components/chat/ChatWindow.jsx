@@ -79,8 +79,6 @@ export default function ChatWindow({
         className="messages"
         aria-label="Mensajes del chat"
       >
-          <div className="messagesTopSpacer" aria-hidden />
-
           {cargando && (
             <div className="loadingChat">Cargando conversación...</div>
           )}

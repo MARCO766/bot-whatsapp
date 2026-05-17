@@ -1,8 +1,37 @@
-/* ─── Layout página Bandeja ─── */
+/* ─── Layout página Bandeja (altura fija, sin crecer con mensajes) ─── */
+.appShell:has(.bandejaPage) {
+  height: 100vh;
+  overflow: hidden;
+}
+
+.appShell:has(.bandejaPage) .main {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.appShell:has(.bandejaPage) .topbar {
+  flex: 0 0 auto;
+}
+
+.appShell:has(.bandejaPage) .page,
+.appShell:has(.bandejaPage) .pageAnimation {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
 .bandejaPage {
   display: flex;
   flex-direction: column;
-  min-height: calc(100vh - 200px);
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
 }
 
 .bandejaTop {
@@ -33,19 +62,25 @@
   border: 1px solid rgba(248, 113, 113, 0.35);
   color: #fecaca;
   margin-bottom: 16px;
+  flex: 0 0 auto;
 }
 
 .bandejaLayout {
   display: grid;
   grid-template-columns: minmax(300px, 360px) 1fr;
+  grid-template-rows: minmax(0, 1fr);
   gap: 18px;
-  flex: 1;
+  flex: 1 1 auto;
   min-height: 0;
-  height: calc(100vh - 220px);
+  height: 100%;
+  overflow: hidden;
 }
 
 .bandejaLayout > * {
   min-height: 0;
+  height: 100%;
+  max-height: 100%;
+  overflow: hidden;
 }
 
 .chatSidebar,
@@ -57,6 +92,8 @@
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.22);
   height: 100%;
   min-height: 0;
+  max-height: 100%;
+  overflow: hidden;
 }
 
 /* ─── Lista izquierda ─── */
@@ -363,16 +400,18 @@
   background: rgba(127, 29, 29, 0.35);
 }
 
-/* ─── Ventana de chat ─── */
+/* ─── Ventana de chat (columna fija: header | scroll | composer) ─── */
 .chatWindow {
   display: flex;
   flex-direction: column;
   height: 100%;
   min-height: 0;
+  max-height: 100%;
+  overflow: hidden;
 }
 
 .chatHeader {
-  flex-shrink: 0;
+  flex: 0 0 auto;
   min-height: 64px;
   padding: 12px 18px;
   border-bottom: 1px solid rgba(148, 163, 184, 0.1);
@@ -418,7 +457,7 @@
 }
 
 .blockedBanner {
-  flex-shrink: 0;
+  flex: 0 0 auto;
   padding: 8px 16px;
   background: rgba(127, 29, 29, 0.9);
   text-align: center;
@@ -428,29 +467,21 @@
 }
 
 .messages {
-  flex: 1;
+  flex: 1 1 auto;
   min-height: 0;
+  max-height: 100%;
   overflow-y: auto;
   overflow-x: hidden;
   padding: 12px 5% 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
   background-color: #0b141a;
   background-image:
     radial-gradient(circle at 20% 18%, rgba(34, 197, 94, 0.04), transparent 42%),
     radial-gradient(circle at 80% 82%, rgba(6, 182, 212, 0.04), transparent 40%);
 }
 
-.messagesTopSpacer {
-  flex: 1 1 auto;
-  min-height: 0;
-  pointer-events: none;
-}
-
 .messagesEnd {
-  height: 2px;
-  flex-shrink: 0;
+  height: 1px;
+  pointer-events: none;
 }
 
 .loadingChat {
@@ -460,7 +491,6 @@
   padding: 24px;
   color: #64748b;
   font-size: 14px;
-  flex-shrink: 0;
 }
 
 .chatWindow > .empty {
