@@ -2,6 +2,7 @@ const crypto = require("crypto");
 const { parseSeguimientoFromHtml } = require("./parseSeguimientoNode");
 const { insertarProgramados } = require("./seguimientoRepository");
 const { ESTADOS_SEGUIMIENTO } = require("./constants");
+const { nowUtc, toTimestamptzUtc } = require("./timestamps");
 
 async function programarSeguimientoNodo({
   numero,
@@ -18,13 +19,13 @@ async function programarSeguimientoNodo({
   }
 
   const campanaId = crypto.randomUUID();
-  const checkpointAt = new Date().toISOString();
+  const checkpointAt = nowUtc();
   let acumuladoSegundos = 0;
   const rows = [];
 
   config.pasos.forEach((paso, index) => {
     acumuladoSegundos += paso.segundos;
-    const runAt = new Date(Date.now() + acumuladoSegundos * 1000).toISOString();
+    const runAt = toTimestamptzUtc(Date.now() + acumuladoSegundos * 1000);
 
     rows.push({
       campana_id: campanaId,
