@@ -19,7 +19,7 @@ function renderAdminPage({
 
 <link rel="stylesheet" href="/css/admin.css">
 <link rel="stylesheet" href="/css/flow-builder.css">
-<link rel="stylesheet" href="/css/seguimiento.css">
+${builder ? '<link rel="stylesheet" href="/css/seguimiento.css">' : ""}
 </head>
 
 <body>
@@ -843,18 +843,22 @@ ${tab === "flujos" && builder ? `
   window.etiquetasData = ${JSON.stringify(etiquetas)};
 </script>
 
+<script type="application/json" id="macbot-builder-data">${JSON.stringify({
+  flujoEditandoId: flujoId || "",
+  flujoCargado: flujoActual ? flujoActual.data : null,
+  activadoresData: activadores || [],
+  etiquetasData: etiquetas || []
+}).replace(/</g, "\\u003c")}</script>
 <script>
-window.MACBOT_BUILDER = {
-  flujoEditandoId: ${JSON.stringify(flujoId || "")},
-  flujoCargado: ${JSON.stringify(flujoActual ? flujoActual.data : null)},
-  activadoresData: ${JSON.stringify(activadores || [])},
-  etiquetasData: ${JSON.stringify(etiquetas || [])}
-};
+(function () {
+  var el = document.getElementById("macbot-builder-data");
+  window.MACBOT_BUILDER = el ? JSON.parse(el.textContent) : {};
+})();
 </script>
-
-
+${builder ? `
 <script src="/js/builder/seguimiento.js"></script>
 <script src="/js/builder.js"></script>
+` : ""}
 
 <div class="modal" id="modalSeguimiento" style="display:none;">
   <div style="width:90%;max-width:1000px;height:78vh;background:#151515;border-radius:14px;overflow:hidden;border:1px solid #333;display:flex;">

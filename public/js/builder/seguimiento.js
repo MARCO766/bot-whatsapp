@@ -1,5 +1,5 @@
 /**
- * MacBot — Editor de nodo Seguimiento CRM (panel derecho + preview en canvas)
+ * MacBot — Editor de nodo Seguimiento CRM
  */
 window.MacBotSeguimiento = (function () {
   const UNIDADES = ["minutos", "horas", "dias"];
@@ -11,6 +11,15 @@ window.MacBotSeguimiento = (function () {
     respondido: "Respondido",
   };
 
+  function crearConfigVacia() {
+    return {
+      version: 2,
+      soloSiNoRespondio: true,
+      detenerSiResponde: true,
+      pasos: [],
+    };
+  }
+
   let nodoActivo = null;
   let configActiva = crearConfigVacia();
   let pasoActivoIndex = 0;
@@ -21,15 +30,6 @@ window.MacBotSeguimiento = (function () {
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;");
-  }
-
-  function crearConfigVacia() {
-    return {
-      version: 2,
-      soloSiNoRespondio: true,
-      detenerSiResponde: true,
-      pasos: [],
-    };
   }
 
   function normalizarUnidad(unidad) {
@@ -53,7 +53,7 @@ window.MacBotSeguimiento = (function () {
     const v = delay.valor;
     const u = normalizarUnidad(delay.unidad);
     const map = { minutos: "min", horas: "h", dias: "d" };
-    return v + " " + map[u];
+    return v + " " + (map[u] || u);
   }
 
   function formatearDuracionTotal(segundos) {
@@ -88,7 +88,8 @@ window.MacBotSeguimiento = (function () {
   }
 
   function normalizarPaso(paso, index) {
-    if (!paso) return null;
+    if (!paso || typeof paso !== "object") return null;
+
     const delay = paso.delay || {};
     const valor = delay.valor != null ? delay.valor : paso.minutos;
     const unidad = normalizarUnidad(delay.unidad || "minutos");
@@ -123,6 +124,7 @@ window.MacBotSeguimiento = (function () {
           )
         )
         .filter(Boolean);
+
       return {
         version: 2,
         soloSiNoRespondio: true,
@@ -135,6 +137,7 @@ window.MacBotSeguimiento = (function () {
       const pasos = (data.pasos || [])
         .map((p, i) => normalizarPaso(p, i))
         .filter(Boolean);
+
       return {
         version: 2,
         soloSiNoRespondio: data.soloSiNoRespondio !== false,
@@ -146,12 +149,20 @@ window.MacBotSeguimiento = (function () {
     return crearConfigVacia();
   }
 
+  function leerTextareaJson(box) {
+    const raw = (box.value || box.textContent || box.innerHTML || "[]").trim();
+    if (!raw) return [];
+    return JSON.parse(raw);
+  }
+
   function leerConfigDeNodo(nodo) {
-    const box = nodo?.querySelector(".seguimiento-data");
+    const box = nodo && nodo.querySelector(".seguimiento-data");
     if (!box) return crearConfigVacia();
+
     try {
-      return normalizarConfig(JSON.parse(box.value || "[]"));
+      return normalizarConfig(leerTextareaJson(box));
     } catch (e) {
+      console.warn("Seguimiento: JSON inválido en nodo", nodo.id, e.message);
       return crearConfigVacia();
     }
   }
@@ -159,7 +170,9 @@ window.MacBotSeguimiento = (function () {
   function guardarConfigEnNodo(nodo, config) {
     const box = nodo.querySelector(".seguimiento-data");
     if (box) {
-      box.value = JSON.stringify(config);
+      const json = JSON.stringify(config);
+      box.value = json;
+      box.textContent = json;
     }
     renderPreviewNodo(nodo, config);
   }
@@ -183,21 +196,15 @@ window.MacBotSeguimiento = (function () {
     }
 
     const timeline = calcularTimeline(config.pasos);
-    const maxSeg = timeline[timeline.length - 1]?.acumulado || 1;
-    const pct = 100;
-
     let html =
-      '<motion class="follow-title">Automatización · ' +
+      '<div class="follow-title">Automatización · ' +
       config.pasos.length +
-      " paso(s)</div>";
-
-    html += '<div class="follow-steps">';
+      " paso(s)</div><div class=\"follow-steps\">";
 
     timeline.forEach((item, index) => {
       const p = item.paso;
       html +=
-        '<div class="follow-step">' +
-        '<motion class="follow-step-meta">' +
+        '<div class="follow-step"><div class="follow-step-meta">' +
         '<span class="follow-step-name">Paso ' +
         (index + 1) +
         " · " +
@@ -205,26 +212,21 @@ window.MacBotSeguimiento = (function () {
         "</span>" +
         '<span class="follow-step-delay">⏱ ' +
         esc(formatearDelay(p.delay)) +
-        " después del anterior</span>" +
+        "</span>" +
         '<span class="follow-step-tipo">' +
         iconoTipo(p.mensaje.tipo) +
         " " +
         esc(p.mensaje.tipo) +
-        "</span>" +
-        "</div>" +
+        "</span></div>" +
         '<span class="follow-badge">' +
         esc(ESTADOS_LABEL[p.estado] || "pendiente") +
-        "</span>" +
-        "</div>";
+        "</span></div>";
     });
 
-    html += "</motion>";
     html +=
-      '<div class="follow-timer-bar"><div class="follow-timer-fill" style="width:' +
-      pct +
-      '%"></div></div>';
+      '</div><div class="follow-timer-bar"><div class="follow-timer-fill" style="width:100%"></div></div>';
 
-    body.innerHTML = html.replace(/<motion/g, "<div").replace(/<\/motion>/g, "</div>");
+    body.innerHTML = html;
   }
 
   function crearPasoVacio() {
@@ -237,88 +239,138 @@ window.MacBotSeguimiento = (function () {
     };
   }
 
+  function asegurarPaso(paso) {
+    if (!paso.delay) paso.delay = { valor: 15, unidad: "minutos" };
+    if (!paso.mensaje) paso.mensaje = { tipo: "texto", texto: "", url: "", caption: "" };
+    return paso;
+  }
+
   function syncPasoDesdeFormulario() {
     const paso = configActiva.pasos[pasoActivoIndex];
     if (!paso) return;
 
-    paso.delay.valor =
-      parseInt(document.getElementById("segDelayValor")?.value, 10) || 1;
+    asegurarPaso(paso);
+
+    paso.delay.valor = parseInt(document.getElementById("segDelayValor")?.value, 10) || 1;
     paso.delay.unidad = document.getElementById("segDelayUnidad")?.value || "minutos";
     paso.segundos = delayToSeconds(paso.delay.valor, paso.delay.unidad);
     paso.mensaje.tipo =
       document.querySelector(".seg-tipo-tab.active")?.dataset.tipo || "texto";
     paso.mensaje.texto = document.getElementById("segTexto")?.value.trim() || "";
     paso.mensaje.caption = document.getElementById("segCaption")?.value.trim() || "";
+
     const urlPreview = document.getElementById("segUrlPreview");
-    if (urlPreview?.dataset.url) {
+    if (urlPreview && urlPreview.dataset.url) {
       paso.mensaje.url = urlPreview.dataset.url;
     }
   }
 
-  function renderFormularioPaso() {
-    const paso = configActiva.pasos[pasoActivoIndex];
-    const wrap = document.getElementById("segFormPaso");
-    if (!wrap || !paso) {
-      if (wrap) wrap.innerHTML = '<p class="seg-panel-desc">Agrega un paso de seguimiento.</p>';
+  function renderCamposMensaje(paso) {
+    const box = document.getElementById("segCamposMensaje");
+    if (!box) return;
+
+    asegurarPaso(paso);
+
+    if (paso.mensaje.tipo === "texto") {
+      box.innerHTML =
+        '<div class="seg-field"><label>Texto WhatsApp</label>' +
+        '<textarea id="segTexto" placeholder="Escribe el mensaje">' +
+        esc(paso.mensaje.texto) +
+        "</textarea></div>";
+      document.getElementById("segTexto")?.addEventListener("input", onFormChange);
       return;
     }
+
+    const captionField =
+      paso.mensaje.tipo === "imagen" || paso.mensaje.tipo === "pdf"
+        ? '<div class="seg-field"><label>Leyenda (opcional)</label><input id="segCaption" value="' +
+          esc(paso.mensaje.caption) +
+          '"></div>'
+        : "";
+
+    box.innerHTML =
+      '<div class="seg-field"><label>Archivo (' +
+      esc(paso.mensaje.tipo) +
+      ")</label>" +
+      '<div class="seg-upload-row">' +
+      '<input type="file" id="segArchivo" accept="' +
+      getAccept(paso.mensaje.tipo) +
+      '">' +
+      '<span class="seg-upload-preview" id="segUrlPreview" data-url="' +
+      esc(paso.mensaje.url) +
+      '">' +
+      (paso.mensaje.url ? "✓ Archivo cargado" : "Sin archivo") +
+      "</span></div></div>" +
+      captionField;
+
+    document.getElementById("segArchivo")?.addEventListener("change", subirArchivo);
+    document.getElementById("segCaption")?.addEventListener("input", onFormChange);
+  }
+
+  function renderFormularioPaso() {
+    const wrap = document.getElementById("segFormPaso");
+    if (!wrap) return;
+
+    const paso = configActiva.pasos[pasoActivoIndex];
+    if (!paso) {
+      wrap.innerHTML = '<p class="seg-panel-desc">Agrega un paso de seguimiento.</p>';
+      return;
+    }
+
+    asegurarPaso(paso);
 
     const timeline = calcularTimeline(configActiva.pasos);
     const item = timeline[pasoActivoIndex];
     const acumulado = item ? item.acumulado : paso.segundos;
 
+    const opcionesUnidad = UNIDADES.map(function (u) {
+      return (
+        '<option value="' +
+        u +
+        '"' +
+        (paso.delay.unidad === u ? " selected" : "") +
+        ">" +
+        u +
+        "</option>"
+      );
+    }).join("");
+
+    const tabsTipo = TIPOS.map(function (t) {
+      return (
+        '<button type="button" class="seg-tipo-tab' +
+        (paso.mensaje.tipo === t ? " active" : "") +
+        '" data-tipo="' +
+        t +
+        '">' +
+        iconoTipo(t) +
+        " " +
+        t +
+        "</button>"
+      );
+    }).join("");
+
     wrap.innerHTML =
-      '<div class="seg-visual-timer">' +
-      "<strong>⏱ Temporizador acumulado</strong>" +
+      '<div class="seg-visual-timer"><strong>⏱ Temporizador acumulado</strong>' +
       "<span>Se envía ~" +
       esc(formatearDuracionTotal(acumulado)) +
-      " después de activar el nodo</span>" +
-      "</div>" +
-      '<motion class="seg-delay-row">' +
-      '<motion class="seg-field"><label>Retraso</label><input id="segDelayValor" type="number" min="1" value="' +
+      " después de activar el nodo</span></div>" +
+      '<div class="seg-delay-row">' +
+      '<div class="seg-field"><label>Retraso</label><input id="segDelayValor" type="number" min="1" value="' +
       esc(paso.delay.valor) +
       '"></div>' +
-      '<motion class="seg-field"><label>Unidad</label><select id="segDelayUnidad">' +
-      UNIDADES.map(
-        (u) =>
-          '<option value="' +
-          u +
-          '"' +
-          (paso.delay.unidad === u ? " selected" : "") +
-          ">" +
-          u +
-          "</option>"
-      ).join("") +
-      "</select></motion>" +
-      "</div>" +
-      '<motion class="seg-field"><label>Tipo de mensaje</label><div class="seg-tipo-tabs">' +
-      TIPOS.map(
-        (t) =>
-          '<button type="button" class="seg-tipo-tab' +
-          (paso.mensaje.tipo === t ? " active" : "") +
-          '" data-tipo="' +
-          t +
-          '">' +
-          iconoTipo(t) +
-          " " +
-          t +
-          "</button>"
-      ).join("") +
-      "</div></div>" +
-      '<div id="segCamposMensaje"></motion>' +
-      "</motion>";
-
-    wrap.innerHTML = wrap.innerHTML.replace(/<motion/g, "<motion").replace(/<\/motion>/g, "</motion>");
-    wrap.innerHTML = wrap.innerHTML
-      .replace(/<motion/g, "<div")
-      .replace(/<\/motion>/g, "</motion>")
-      .replace(/<\/motion>/g, "</div>");
+      '<div class="seg-field"><label>Unidad</label><select id="segDelayUnidad">' +
+      opcionesUnidad +
+      "</select></div></div>" +
+      '<div class="seg-field"><label>Tipo de mensaje</label><div class="seg-tipo-tabs">' +
+      tabsTipo +
+      '</div></div></div><div id="segCamposMensaje"></div>';
 
     renderCamposMensaje(paso);
 
     document.getElementById("segDelayValor")?.addEventListener("input", onFormChange);
     document.getElementById("segDelayUnidad")?.addEventListener("change", onFormChange);
-    wrap.querySelectorAll(".seg-tipo-tab").forEach((btn) => {
+
+    wrap.querySelectorAll(".seg-tipo-tab").forEach(function (btn) {
       btn.addEventListener("click", function () {
         syncPasoDesdeFormulario();
         paso.mensaje.tipo = btn.dataset.tipo;
@@ -331,47 +383,6 @@ window.MacBotSeguimiento = (function () {
     });
   }
 
-  function renderCamposMensaje(paso) {
-    const box = document.getElementById("segCamposMensaje");
-    if (!box) return;
-
-    if (paso.mensaje.tipo === "texto") {
-      box.innerHTML =
-        '<motion class="seg-field"><label>Texto WhatsApp</label>' +
-        '<textarea id="segTexto" placeholder="Escribe el mensaje de seguimiento">' +
-        esc(paso.mensaje.texto) +
-        "</textarea></div>";
-    } else {
-      box.innerHTML =
-        '<motion class="seg-field"><label>Archivo (' +
-        paso.mensaje.tipo +
-        ")</label>" +
-        '<div class="seg-upload-row">' +
-        '<input type="file" id="segArchivo" accept="' +
-        getAccept(paso.mensaje.tipo) +
-        '">' +
-        '<span class="seg-upload-preview" id="segUrlPreview" data-url="' +
-        esc(paso.mensaje.url) +
-        '">' +
-        (paso.mensaje.url ? "✓ Archivo cargado" : "Sin archivo") +
-        "</span></div></div>" +
-        (paso.mensaje.tipo === "imagen" || paso.mensaje.tipo === "pdf"
-          ? '<motion class="seg-field"><label>Leyenda (opcional)</label><input id="segCaption" value="' +
-            esc(paso.mensaje.caption) +
-            '"></div>'
-          : "");
-
-      box.innerHTML = box.innerHTML
-        .replace(/<motion/g, "<div")
-        .replace(/<\/motion>/g, "</div>");
-
-      document.getElementById("segArchivo")?.addEventListener("change", subirArchivo);
-    }
-
-    document.getElementById("segTexto")?.addEventListener("input", onFormChange);
-    document.getElementById("segCaption")?.addEventListener("input", onFormChange);
-  }
-
   function getAccept(tipo) {
     if (tipo === "imagen") return "image/*";
     if (tipo === "audio") return "audio/*";
@@ -380,7 +391,7 @@ window.MacBotSeguimiento = (function () {
   }
 
   function subirArchivo(e) {
-    const file = e.target.files?.[0];
+    const file = e.target.files && e.target.files[0];
     if (!file) return;
 
     const formData = new FormData();
@@ -390,8 +401,10 @@ window.MacBotSeguimiento = (function () {
     if (preview) preview.textContent = "Subiendo…";
 
     fetch("/subir-archivo", { method: "POST", body: formData })
-      .then((r) => r.json())
-      .then((data) => {
+      .then(function (r) {
+        return r.json();
+      })
+      .then(function (data) {
         if (!data.url) {
           alert("Error subiendo archivo");
           return;
@@ -405,20 +418,21 @@ window.MacBotSeguimiento = (function () {
         }
         onFormChange();
       })
-      .catch(() => alert("Error de red al subir"));
+      .catch(function () {
+        alert("Error de red al subir");
+      });
   }
 
   function onFormChange() {
     syncPasoDesdeFormulario();
     renderListaPasos();
     if (nodoActivo) renderPreviewNodo(nodoActivo, configActiva);
+
     const timerLabel = document.getElementById("segTimerLabel");
     if (timerLabel) {
       const timeline = calcularTimeline(configActiva.pasos);
       const item = timeline[pasoActivoIndex];
-      timerLabel.textContent = item
-        ? "~" + formatearDuracionTotal(item.acumulado)
-        : "—";
+      timerLabel.textContent = item ? "~" + formatearDuracionTotal(item.acumulado) : "—";
     }
   }
 
@@ -434,8 +448,8 @@ window.MacBotSeguimiento = (function () {
     const timeline = calcularTimeline(configActiva.pasos);
 
     lista.innerHTML = configActiva.pasos
-      .map((paso, index) => {
-        const acum = timeline[index]?.acumulado || 0;
+      .map(function (paso, index) {
+        const acum = (timeline[index] && timeline[index].acumulado) || 0;
         return (
           '<div class="seg-step-card' +
           (index === pasoActivoIndex ? " active" : "") +
@@ -445,33 +459,30 @@ window.MacBotSeguimiento = (function () {
           '<div class="seg-step-head" data-action="select">' +
           "<strong>Paso " +
           (index + 1) +
-          "</strong>" +
-          "<small>⏱ " +
+          "</strong><small>⏱ " +
           esc(formatearDuracionTotal(acum)) +
-          "</small>" +
-          "</div>" +
-          '<div class="seg-step-body">' +
-          '<span class="seg-panel-desc">' +
+          "</small></div>" +
+          '<div class="seg-step-body"><span class="seg-panel-desc">' +
           iconoTipo(paso.mensaje.tipo) +
           " · " +
           esc(formatearDelay(paso.delay)) +
-          "</span>" +
-          '<button type="button" class="seg-btn seg-btn-danger" data-action="delete">Eliminar paso</button>' +
-          "</div>" +
-          "</div>"
+          '</span><button type="button" class="seg-btn seg-btn-danger" data-action="delete">Eliminar paso</button></div></div>'
         );
       })
-      .join("");
+      .join("")
+      ;
 
-    lista.querySelectorAll(".seg-step-card").forEach((card) => {
+    lista.querySelectorAll(".seg-step-card").forEach(function (card) {
       const index = parseInt(card.dataset.index, 10);
-      card.querySelector('[data-action="select"]')?.addEventListener("click", () => {
+
+      card.querySelector('[data-action="select"]')?.addEventListener("click", function () {
         syncPasoDesdeFormulario();
         pasoActivoIndex = index;
         renderListaPasos();
         renderFormularioPaso();
       });
-      card.querySelector('[data-action="delete"]')?.addEventListener("click", (ev) => {
+
+      card.querySelector('[data-action="delete"]')?.addEventListener("click", function (ev) {
         ev.stopPropagation();
         configActiva.pasos.splice(index, 1);
         pasoActivoIndex = Math.max(0, pasoActivoIndex - 1);
@@ -482,57 +493,62 @@ window.MacBotSeguimiento = (function () {
     });
   }
 
-  async function cargarEstadosLive(nodo) {
+  function cargarEstadosLive(nodo) {
     const box = document.getElementById("segEstadosLive");
     if (!box) return;
 
-    const flujoId = window.MACBOT_BUILDER?.flujoEditandoId;
+    const flujoId =
+      window.MACBOT_BUILDER && window.MACBOT_BUILDER.flujoEditandoId;
+
     if (!flujoId) {
       box.innerHTML =
         '<p class="seg-panel-desc">Guarda el flujo para ver ejecuciones en vivo.</p>';
       return;
     }
 
-    try {
-      const res = await fetch(
-        "/api/seguimientos/nodo?flujo_id=" +
-          encodeURIComponent(flujoId) +
-          "&nodo_id=" +
-          encodeURIComponent(nodo.id)
-      );
-      const data = await res.json();
-      const items = data.items || [];
+    fetch(
+      "/api/seguimientos/nodo?flujo_id=" +
+        encodeURIComponent(flujoId) +
+        "&nodo_id=" +
+        encodeURIComponent(nodo.id)
+    )
+      .then(function (r) {
+        return r.json();
+      })
+      .then(function (data) {
+        const items = data.items || [];
 
-      if (!items.length) {
-        box.innerHTML =
-          '<p class="seg-panel-desc">Aún no hay seguimientos ejecutados para este nodo.</p>';
-        return;
-      }
+        if (!items.length) {
+          box.innerHTML =
+            '<p class="seg-panel-desc">Aún no hay seguimientos ejecutados para este nodo.</p>';
+          return;
+        }
 
-      box.innerHTML = items
-        .slice(0, 12)
-        .map(
-          (item) =>
-            '<div class="seg-estado-item">' +
-            "<span>#" +
-            (item.paso_index + 1) +
-            " · " +
-            esc(item.cliente_numero) +
-            "</span>" +
-            '<span class="seg-estado-pill ' +
-            esc(item.estado) +
-            '">' +
-            esc(ESTADOS_LABEL[item.estado] || item.estado) +
-            "</span>" +
-            "</div>"
-        )
-        .join("");
-    } catch (e) {
-      box.innerHTML = '<p class="seg-panel-desc">No se pudieron cargar estados.</p>';
-    }
+        box.innerHTML = items
+          .slice(0, 12)
+          .map(function (item) {
+            return (
+              '<div class="seg-estado-item"><span>#' +
+              (item.paso_index + 1) +
+              " · " +
+              esc(item.cliente_numero) +
+              '</span><span class="seg-estado-pill ' +
+              esc(item.estado) +
+              '">' +
+              esc(ESTADOS_LABEL[item.estado] || item.estado) +
+              "</span></div>"
+            );
+          })
+          .join("");
+      })
+      .catch(function () {
+        box.innerHTML = '<p class="seg-panel-desc">No se pudieron cargar estados.</p>';
+      });
   }
 
   function renderPanel(nodo) {
+    if (!nodo) return;
+
     nodoActivo = nodo;
     configActiva = leerConfigDeNodo(nodo);
     pasoActivoIndex = 0;
@@ -543,36 +559,26 @@ window.MacBotSeguimiento = (function () {
     contenido.innerHTML =
       '<div class="seg-panel">' +
       "<h4>⏱ Seguimiento CRM</h4>" +
-      '<p class="seg-panel-desc">Automatiza recordatorios si el lead no responde. Los mensajes se programan en segundo plano y se envían por WhatsApp.</p>' +
+      '<p class="seg-panel-desc">Automatiza recordatorios si el lead no responde.</p>' +
       '<div class="seg-toggle-row">' +
       '<label class="seg-toggle"><input type="checkbox" id="segSoloNoRespondio"' +
       (configActiva.soloSiNoRespondio ? " checked" : "") +
-      "> Solo enviar si el lead <strong>no respondió</strong></label>" +
+      "> Solo si el lead <strong>no respondió</strong></label>" +
       '<label class="seg-toggle"><input type="checkbox" id="segDetenerSiResponde"' +
       (configActiva.detenerSiResponde ? " checked" : "") +
-      "> Detener seguimiento si <strong>respondió</strong></label>" +
-      "</motion>" +
-      '<div class="seg-visual-timer" id="segTimerBox">' +
-      "<strong>Temporizador del paso activo</strong>" +
-      '<span id="segTimerLabel">—</span>' +
+      "> Detener si <strong>respondió</strong></label>" +
       "</div>" +
+      '<div class="seg-visual-timer" id="segTimerBox"><strong>Temporizador del paso</strong> ' +
+      '<span id="segTimerLabel">—</span></div>' +
       '<div id="segListaPasos" class="seg-steps-list"></div>' +
-      '<div class="seg-actions">' +
-      '<button type="button" class="seg-btn seg-btn-ghost" id="segAddPaso">+ Agregar paso</button>' +
-      "</div>" +
-      '<motion id="segFormPaso"></motion>' +
+      '<div class="seg-actions"><button type="button" class="seg-btn seg-btn-ghost" id="segAddPaso">+ Agregar paso</button></div>' +
+      '<div id="segFormPaso"></div>' +
       "<h4>Estados en vivo</h4>" +
-      '<div id="segEstadosLive" class="seg-estados-live"></motion>' +
-      '<div class="seg-actions">' +
-      '<button type="button" class="seg-btn seg-btn-primary" id="segGuardarPanel">Guardar seguimiento</button>' +
-      "</div>" +
+      '<div id="segEstadosLive" class="seg-estados-live"></div>' +
+      '<div class="seg-actions"><button type="button" class="seg-btn seg-btn-primary" id="segGuardarPanel">Guardar seguimiento</button></div>' +
       "</div>";
 
-    contenido.innerHTML = contenido.innerHTML
-      .replace(/<motion/g, "<div")
-      .replace(/<\/motion>/g, "</div>");
-
-    document.getElementById("segAddPaso")?.addEventListener("click", () => {
+    document.getElementById("segAddPaso")?.addEventListener("click", function () {
       syncPasoDesdeFormulario();
       configActiva.pasos.push(crearPasoVacio());
       pasoActivoIndex = configActiva.pasos.length - 1;
@@ -591,23 +597,24 @@ window.MacBotSeguimiento = (function () {
 
   function guardarDesdePanel() {
     if (!nodoActivo) return;
-    syncPasoDesdeFormulario();
 
+    syncPasoDesdeFormulario();
     configActiva.soloSiNoRespondio = !!document.getElementById("segSoloNoRespondio")?.checked;
     configActiva.detenerSiResponde = !!document.getElementById("segDetenerSiResponde")?.checked;
-
     configActiva.pasos = configActiva.pasos
-      .map((p, i) => normalizarPaso(p, i))
+      .map(function (p, i) {
+        return normalizarPaso(p, i);
+      })
       .filter(Boolean);
 
     guardarConfigEnNodo(nodoActivo, configActiva);
-    alert("Seguimiento guardado en el nodo. Recuerda guardar el flujo completo.");
+    alert("Seguimiento guardado. Recuerda guardar el flujo completo.");
   }
 
   function esNodoSeguimiento(nodo) {
     return (
-      nodo?.dataset?.tipo === "seguimiento" ||
-      nodo?.classList?.contains("follow-node")
+      nodo &&
+      (nodo.dataset.tipo === "seguimiento" || nodo.classList.contains("follow-node"))
     );
   }
 
@@ -616,22 +623,25 @@ window.MacBotSeguimiento = (function () {
   }
 
   function refrescarNodoCargado(nodo) {
-    const config = leerConfigDeNodo(nodo);
-    guardarConfigEnNodo(nodo, config);
+    try {
+      guardarConfigEnNodo(nodo, leerConfigDeNodo(nodo));
+    } catch (e) {
+      console.warn("Seguimiento: error refrescando nodo", e.message);
+    }
   }
 
   return {
-    crearConfigVacia,
-    leerConfigDeNodo,
-    guardarConfigEnNodo,
-    renderPreviewNodo,
-    renderPanel,
-    esNodoSeguimiento,
-    initNodoRecienCreado,
-    refrescarNodoCargado,
+    crearConfigVacia: crearConfigVacia,
+    leerConfigDeNodo: leerConfigDeNodo,
+    guardarConfigEnNodo: guardarConfigEnNodo,
+    renderPreviewNodo: renderPreviewNodo,
+    renderPanel: renderPanel,
+    esNodoSeguimiento: esNodoSeguimiento,
+    initNodoRecienCreado: initNodoRecienCreado,
+    refrescarNodoCargado: refrescarNodoCargado,
     abrirEditorSeguimiento: function (id) {
-      const nodo = document.getElementById(id);
-      if (nodo) renderPanel(nodo);
+      const n = document.getElementById(id);
+      if (n) renderPanel(n);
     },
   };
 })();

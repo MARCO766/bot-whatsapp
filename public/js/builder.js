@@ -206,8 +206,12 @@ function cargarFlujoGuardado(){
   }
 
   document.querySelectorAll(".follow-node").forEach((nodo) => {
-    if(window.MacBotSeguimiento){
-      window.MacBotSeguimiento.refrescarNodoCargado(nodo);
+    try {
+      if(window.MacBotSeguimiento){
+        window.MacBotSeguimiento.refrescarNodoCargado(nodo);
+      }
+    } catch (e) {
+      console.warn("Seguimiento: error al refrescar nodo cargado", e);
     }
   });
 
