@@ -64,7 +64,7 @@ function FlowCard({
         <FlowPreviewMini preview={flow.preview} />
       </div>
 
-      <div className="flMetrics">
+      <div className="flMetrics flMetricsCompact">
         <div className="flMetric" title="Clientes únicos en seguimientos de este flujo">
           <b>{formatMetric(m.clientesEnFlujo)}</b>
           <span>En flujo</span>
@@ -73,37 +73,13 @@ function FlowCard({
           <b>{formatMetric(m.leadsHoy)}</b>
           <span>Hoy</span>
         </div>
-        <div className="flMetric" title="Pasos de seguimiento enviados">
-          <b>{formatMetric(m.seguimientosEnviados)}</b>
-          <span>Seg. enviados</span>
+        <div className="flMetric" title="Seguimientos respondidos en este flujo">
+          <b>{formatMetric(m.respuestas)}</b>
+          <span>Respuestas</span>
         </div>
-        <div className="flMetric" title="Seguimientos marcados como respondidos">
-          <b>{formatMetric(m.seguimientosRespondidos)}</b>
-          <span>Seg. respuestas</span>
-        </div>
-        <div className="flMetric" title="Mensajes WhatsApp salientes a clientes del flujo">
-          <b>{formatMetric(m.mensajesWhatsapp)}</b>
-          <span>WA enviados</span>
-        </div>
-        <div className="flMetric" title="Mensajes WhatsApp entrantes de clientes del flujo">
-          <b>{formatMetric(m.respuestasWhatsapp)}</b>
-          <span>WA respuestas</span>
-        </div>
-        <div className="flMetric" title="Conversiones registradas por nodo 💰 en este flujo">
-          <b>{formatMetric(m.conversiones ?? m.ventas ?? 0)}</b>
+        <div className="flMetric" title="Conversiones del nodo 💰 (crm_conversiones)">
+          <b>{formatMetric(m.conversiones ?? 0)}</b>
           <span>Conversiones</span>
-        </div>
-        <div className="flMetric" title="Seguimientos en estado pendiente">
-          <b>{formatMetric(m.seguimientosActivos)}</b>
-          <span>Seg. activos</span>
-        </div>
-        <div className="flMetric">
-          <b>{flow.nodosCount ?? 0}</b>
-          <span>Nodos</span>
-        </div>
-        <div className="flMetric">
-          <b>{flow.conexionesCount ?? 0}</b>
-          <span>Enlaces</span>
         </div>
       </div>
 

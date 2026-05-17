@@ -47,9 +47,7 @@ export function sortFlows(flows, sortBy) {
       );
     case "conversiones":
       return list.sort(
-        (a, b) =>
-          (b.metricas?.conversiones ?? b.metricas?.ventas ?? 0) -
-          (a.metricas?.conversiones ?? a.metricas?.ventas ?? 0)
+        (a, b) => (b.metricas?.conversiones ?? 0) - (a.metricas?.conversiones ?? 0)
       );
     case "usados":
       return list.sort((a, b) => (b.nodosCount || 0) - (a.nodosCount || 0));

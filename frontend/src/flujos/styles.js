@@ -105,6 +105,22 @@ export const flujosStyles = `
   gap: 12px;
 }
 
+.flStatsGridCompact {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+@media (max-width: 900px) {
+  .flStatsGridCompact {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 480px) {
+  .flStatsGridCompact {
+    grid-template-columns: 1fr;
+  }
+}
+
 .flStatsGrid .flStatValue {
   font-size: 1.15rem;
   line-height: 1.2;
@@ -352,6 +368,14 @@ export const flujosStyles = `
   gap: 8px;
   position: relative;
   z-index: 1;
+}
+
+.flMetricsCompact .flMetric {
+  padding: 10px 8px;
+}
+
+.flMetricsCompact .flMetric b {
+  font-size: 1.1rem;
 }
 
 .flMetric {
