@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useCallback, useEffect, useRef } from "react";
 import MessageBubble from "./MessageBubble";
 import ChatComposer from "./ChatComposer";
 
@@ -11,14 +11,43 @@ export default function ChatWindow({
   onPatchMensaje,
   moverChatArriba,
 }) {
-  const bottomRef = useRef(null);
+  const scrollRef = useRef(null);
   const numero = chat?.numero || chatMeta?.numero;
   const nombre = chatMeta?.nombre || chat?.nombre || numero;
   const bloqueado = chatMeta?.bloqueado ?? chat?.bloqueado;
 
+  const scrollToBottom = useCallback((instant = false) => {
+    const el = scrollRef.current;
+    if (!el) return;
+
+    const run = () => {
+      if (instant) {
+        el.scrollTop = el.scrollHeight;
+        return;
+      }
+      el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    };
+
+    requestAnimationFrame(() => {
+      run();
+      requestAnimationFrame(run);
+    });
+  }, []);
+
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [mensajes, cargando]);
+    if (!numero) return;
+    scrollToBottom(true);
+  }, [numero, scrollToBottom]);
+
+  useEffect(() => {
+    if (!numero || cargando) return;
+    scrollToBottom(false);
+  }, [mensajes, cargando, numero, scrollToBottom]);
+
+  useEffect(() => {
+    if (!numero || cargando) return;
+    scrollToBottom(true);
+  }, [cargando, numero, scrollToBottom]);
 
   if (!numero) {
     return (
@@ -45,8 +74,14 @@ export default function ChatWindow({
         <div className="blockedBanner">Este contacto está bloqueado</div>
       )}
 
-      <div className="messagesArea">
-        <div className="messages bandejaScroll">
+      <div className="chatBody">
+        <div
+          ref={scrollRef}
+          className="messages bandejaScroll"
+          aria-label="Mensajes del chat"
+        >
+          <div className="messagesTopSpacer" aria-hidden />
+
           {cargando && (
             <div className="loadingChat">Cargando conversación...</div>
           )}
@@ -60,7 +95,7 @@ export default function ChatWindow({
               />
             ))}
 
-          <div ref={bottomRef} className="messagesEnd" />
+          <div className="messagesEnd" />
         </div>
       </div>
 
