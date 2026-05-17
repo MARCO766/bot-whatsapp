@@ -199,6 +199,29 @@ window.MacBotSeguimiento = (function () {
     renderPreviewNodo(nodo, config);
   }
 
+  const FOLLOW_COMPACT_FROM = 5;
+  const FOLLOW_SCROLL_FROM = 8;
+
+  function notificarLayoutCanvas() {
+    requestAnimationFrame(function () {
+      document.dispatchEvent(new CustomEvent("macbot:nodo-layout"));
+    });
+  }
+
+  function aplicarLayoutDinamicoNodo(nodo, pasoCount) {
+    if (!nodo) return;
+
+    const body = nodo.querySelector(".follow-body");
+    const count = pasoCount || 0;
+
+    nodo.classList.toggle("follow-node--compact", count >= FOLLOW_COMPACT_FROM);
+    if (body) {
+      body.classList.toggle("follow-body--scroll", count >= FOLLOW_SCROLL_FROM);
+    }
+
+    notificarLayoutCanvas();
+  }
+
   function calcularTimeline(pasos) {
     let acum = 0;
     return pasos.map((paso) => {
@@ -214,6 +237,9 @@ window.MacBotSeguimiento = (function () {
     if (!config.pasos.length) {
       body.innerHTML =
         '<p class="follow-empty">Configura pasos de seguimiento en el panel →</p>';
+      body.classList.remove("follow-body--scroll");
+      nodo.classList.remove("follow-node--compact");
+      notificarLayoutCanvas();
       return;
     }
 
@@ -246,6 +272,7 @@ window.MacBotSeguimiento = (function () {
     html += "</div>";
 
     body.innerHTML = html;
+    aplicarLayoutDinamicoNodo(nodo, config.pasos.length);
   }
 
   function crearPasoVacio() {

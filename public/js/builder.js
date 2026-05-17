@@ -1381,6 +1381,11 @@ function resizeWorldSurface(){
   canvas.style.height = maxY + "px";
 }
 
+document.addEventListener("macbot:nodo-layout", function () {
+  resizeWorldSurface();
+  actualizarLineas();
+});
+
 function screenPointToCanvas(clientX, clientY){
   const wrap = getCanvasViewport();
   if(!wrap){
