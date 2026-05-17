@@ -46,7 +46,7 @@ export default function ChatList({
         </div>
       </div>
 
-      <div className="chatListScroll bandejaScroll">
+      <div className="chatListScroll">
         {chats.length === 0 && (
           <p className="emptyList">Sin conversaciones</p>
         )}

@@ -74,12 +74,11 @@ export default function ChatWindow({
         <div className="blockedBanner">Este contacto está bloqueado</div>
       )}
 
-      <div className="chatBody">
-        <div
-          ref={scrollRef}
-          className="messages bandejaScroll"
-          aria-label="Mensajes del chat"
-        >
+      <div
+        ref={scrollRef}
+        className="messages"
+        aria-label="Mensajes del chat"
+      >
           <div className="messagesTopSpacer" aria-hidden />
 
           {cargando && (
@@ -95,8 +94,7 @@ export default function ChatWindow({
               />
             ))}
 
-          <div className="messagesEnd" />
-        </div>
+        <div className="messagesEnd" />
       </div>
 
       <ChatComposer
