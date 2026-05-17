@@ -16,15 +16,27 @@ function headers(extra = {}) {
 async function insertarProgramados(rows) {
   if (!rows.length) return [];
 
-  const response = await axios.post(
-    `${SUPABASE_URL}/rest/v1/seguimientos_programados`,
-    rows,
-    {
-      headers: headers({ Prefer: "return=representation" }),
-    }
-  );
+  try {
+    const response = await axios.post(
+      `${SUPABASE_URL}/rest/v1/seguimientos_programados`,
+      rows,
+      {
+        headers: headers({ Prefer: "return=representation" }),
+      }
+    );
 
-  return response.data || [];
+    const insertados = response.data || [];
+    console.log("[SEGUIMIENTO] Supabase POST OK:", insertados.length, "fila(s)");
+    return insertados;
+  } catch (error) {
+    const detalle = error.response?.data || error.message;
+    console.error(
+      "[SEGUIMIENTO] Supabase POST ERROR:",
+      error.response?.status || "sin status",
+      typeof detalle === "object" ? JSON.stringify(detalle) : detalle
+    );
+    throw error;
+  }
 }
 
 async function obtenerPendientesVencidos(limite = 40) {

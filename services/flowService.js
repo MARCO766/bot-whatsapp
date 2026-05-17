@@ -2,8 +2,8 @@ const axios = require("axios");
 
 const { enviarTextoWhatsApp, enviarMediaWhatsApp } = require("./whatsappService");
 const { esperarSegundos } = require("../utils/timers");
-const { programarSeguimientoNodo } = require("./seguimiento/scheduleSeguimiento");
-const { esNodoSeguimiento } = require("./seguimiento/parseSeguimientoNode");
+const { detectarTipoNodo } = require("./seguimiento/detectarTipoNodo");
+const { ejecutarSeguimientoEnFlujo } = require("./seguimiento/ejecutarSeguimientoEnFlujo");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
@@ -59,9 +59,46 @@ async function ejecutarFlujo(numero, flujoData, usuarioId = null, flujoId = null
     visitados.add(nodoId);
 
     const nodo = nodos.find(n => n.id === nodoId);
-    if (!nodo) return;
+    if (!nodo) {
+      console.log("[FLUJO] Nodo no encontrado:", nodoId);
+      return;
+    }
 
     const html = nodo.html || "";
+    const tipoNodo = detectarTipoNodo(nodo);
+
+    console.log("[FLUJO] ▶ Nodo actual:", nodoId, "| tipo detectado:", tipoNodo);
+
+    if (tipoNodo === "seguimiento") {
+      try {
+        await ejecutarSeguimientoEnFlujo({
+          numero,
+          usuarioId,
+          flujoId,
+          nodoId,
+          nodo,
+        });
+      } catch (err) {
+        console.error(
+          "[FLUJO] ✗ Error ejecutando seguimiento:",
+          err.response?.data || err.message
+        );
+      }
+
+      const siguientesSeg = conexiones.filter((c) => c.desde === nodoId);
+      const idsSiguientes = siguientesSeg.map((s) => s.hasta);
+
+      console.log(
+        "[FLUJO] → Siguientes nodos:",
+        idsSiguientes.length ? idsSiguientes.join(", ") : "(ninguno)"
+      );
+
+      for (const siguiente of siguientesSeg) {
+        await ejecutarNodo(siguiente.hasta, new Set(visitados));
+      }
+
+      return;
+    }
 
 const matchVariantesContenido = html.match(/<textarea[^>]*class="contenido-variantes-data"[^>]*>([\s\S]*?)<\/textarea>/i);
 
@@ -113,6 +150,7 @@ if (matchVariantesContenido) {
       }
 
       const siguientes = conexiones.filter(c => c.desde === nodoId);
+      console.log("[FLUJO] → Siguientes nodos (contenido):", siguientes.map(s => s.hasta).join(", ") || "(ninguno)");
 
       for (const siguiente of siguientes) {
         await ejecutarNodo(siguiente.hasta, new Set(visitados));
@@ -228,21 +266,8 @@ if (html.includes("🏷️ Etiqueta")) {
     await agregarEtiquetaCliente(numero, etiqueta, usuarioId);
   }
 }
-    if (esNodoSeguimiento(html)) {
-      try {
-        await programarSeguimientoNodo({
-          numero,
-          usuarioId,
-          flujoId,
-          nodoId,
-          html,
-        });
-      } catch (e) {
-        console.log("ERROR PROGRAMANDO SEGUIMIENTO:", e.message);
-      }
-    }
-
     const siguientes = conexiones.filter(c => c.desde === nodoId);
+    console.log("[FLUJO] → Siguientes nodos:", siguientes.map(s => s.hasta).join(", ") || "(ninguno)");
 
     for (const siguiente of siguientes) {
       await ejecutarNodo(siguiente.hasta, new Set(visitados));
@@ -287,6 +312,8 @@ async function buscarYEjecutarActivador(numero, textoCliente, usuarioId = null) 
   const flujo = responseFlujo.data?.[0];
 
   if (!flujo || !flujo.data) return false;
+
+  console.log("[FLUJO] Ejecutando flujo:", flujo.id, "| activador:", activador.frase);
 
   await ejecutarFlujo(numero, flujo.data, usuarioId, flujo.id);
 

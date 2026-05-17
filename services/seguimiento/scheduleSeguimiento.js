@@ -13,7 +13,7 @@ async function programarSeguimientoNodo({
   const config = parseSeguimientoFromHtml(html);
 
   if (!config.pasos.length) {
-    console.log("⏱️ Seguimiento sin pasos configurados:", nodoId);
+    console.log("[SEGUIMIENTO] Sin pasos válidos para programar | nodo:", nodoId);
     return { campanaId: null, programados: 0 };
   }
 
@@ -47,11 +47,11 @@ async function programarSeguimientoNodo({
   const insertados = await insertarProgramados(rows);
 
   console.log(
-    "⏱️ Seguimientos programados:",
+    "[SEGUIMIENTO] Programados:",
     insertados.length,
-    "para",
+    "paso(s) | cliente:",
     numero,
-    "campaña",
+    "| campaña:",
     campanaId
   );
 

@@ -52,7 +52,12 @@ function normalizarPaso(paso, index) {
   const unidad = normalizarUnidad(delay.unidad || "minutos");
   const valor = delay.valor != null ? delay.valor : paso.minutos;
 
-  const mensaje = normalizarMensaje(paso.mensaje, paso.mensaje || paso.texto);
+  const mensajeRaw =
+    typeof paso.mensaje === "string"
+      ? { tipo: "texto", texto: paso.mensaje }
+      : paso.mensaje;
+
+  const mensaje = normalizarMensaje(mensajeRaw, paso.texto);
 
   if (!mensaje.texto && !mensaje.url) {
     return null;
@@ -122,32 +127,81 @@ function crearConfigVacia() {
   };
 }
 
+function extraerJsonSeguimiento(html) {
+  if (!html) return null;
+
+  const matchCuerpo = html.match(
+    /<textarea[^>]*class="[^"]*seguimiento-data[^"]*"[^>]*>([\s\S]*?)<\/textarea>/i
+  );
+
+  if (matchCuerpo && matchCuerpo[1].trim()) {
+    return decodeHtmlJson(matchCuerpo[1]);
+  }
+
+  const matchValor = html.match(
+    /<textarea[^>]*class="[^"]*seguimiento-data[^"]*"[^>]*value="([^"]*)"[^>]*>/i
+  );
+
+  if (matchValor && matchValor[1].trim()) {
+    return decodeHtmlJson(matchValor[1]);
+  }
+
+  const matchValor2 = html.match(
+    /<textarea[^>]*value="([^"]*)"[^>]*class="[^"]*seguimiento-data[^"]*"[^>]*>/i
+  );
+
+  if (matchValor2 && matchValor2[1].trim()) {
+    return decodeHtmlJson(matchValor2[1]);
+  }
+
+  return null;
+}
+
 function parseSeguimientoFromHtml(html) {
   if (!html) return crearConfigVacia();
 
-  const matchData = html.match(
-    /<textarea[^>]*class="seguimiento-data"[^>]*>([\s\S]*?)<\/textarea>/i
-  );
-
-  if (!matchData) {
+  if (!html.includes("seguimiento-data")) {
     return crearConfigVacia();
   }
 
   try {
-    const parsed = JSON.parse(decodeHtmlJson(matchData[1]));
+    const raw = extraerJsonSeguimiento(html);
+    if (!raw) {
+      console.log("[SEGUIMIENTO] parse: textarea seguimiento-data vacío o no legible");
+      return crearConfigVacia();
+    }
+
+    const parsed = JSON.parse(raw);
     return normalizarConfig(parsed);
   } catch (e) {
-    console.log("ERROR parseSeguimientoFromHtml:", e.message);
+    console.log("[SEGUIMIENTO] ERROR parseSeguimientoFromHtml:", e.message);
     return crearConfigVacia();
   }
 }
 
-function esNodoSeguimiento(html) {
+function esNodoSeguimiento(nodoOrHtml) {
+  if (!nodoOrHtml) return false;
+
+  if (typeof nodoOrHtml === "object") {
+    const html = nodoOrHtml.html || "";
+    const className = String(nodoOrHtml.className || "");
+
+    return (
+      className.includes("follow-node") ||
+      html.includes("seguimiento-data") ||
+      html.includes("⏱️ Seguimiento") ||
+      html.includes("🔔 Seguimiento") ||
+      html.includes("Seguimiento CRM") ||
+      html.includes('data-tipo="seguimiento"')
+    );
+  }
+
+  const html = String(nodoOrHtml);
   return (
+    html.includes("seguimiento-data") ||
     html.includes("⏱️ Seguimiento") ||
     html.includes("🔔 Seguimiento") ||
-    html.includes('data-tipo="seguimiento"') ||
-    html.includes("follow-node")
+    html.includes("Seguimiento CRM")
   );
 }
 
