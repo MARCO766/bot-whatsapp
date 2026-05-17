@@ -479,19 +479,26 @@
   color: #cbd5e1;
 }
 
-.cnt-block-row button {
+.cnt-block-actions {
+  display: flex;
   flex-shrink: 0;
+  gap: 4px;
+}
+
+.cnt-block-row button {
   padding: 4px 8px;
   border: none;
   border-radius: 8px;
-  background: rgba(251, 113, 133, 0.2);
-  color: #fda4af;
   cursor: pointer;
   font-size: 11px;
 }
 
-/* Modal: tarjetas de bloque sin etiqueta técnica */
-#modalContenido .content-card-head span:first-child {
-  font-weight: 800;
-  letter-spacing: 0.3px;
+.cnt-block-move {
+  background: rgba(56, 189, 248, 0.15);
+  color: #67e8f9;
+}
+
+.cnt-block-row button[data-action="del"] {
+  background: rgba(251, 113, 133, 0.2);
+  color: #fda4af;
 }
