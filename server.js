@@ -18,6 +18,7 @@ const { protegerPanel } = require("./middlewares/auth");
 const inboxRoutes = require("./routes/inbox");
 const builderRoutes = require("./routes/builder");
 const flowsRoutes = require("./routes/flows");
+const flujosApiRoutes = require("./routes/flujosApi");
 
 const app = express();
 
@@ -43,6 +44,7 @@ app.use(adminRoutes);
 app.use("/", inboxRoutes);
 app.use("/", builderRoutes);
 app.use(flowsRoutes);
+app.use(flujosApiRoutes);
 
 
 

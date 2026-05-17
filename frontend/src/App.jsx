@@ -58,7 +58,7 @@ export default function App() {
     if (vista === "panel") return <Panel cambiarVista={setVista} />;
     if (vista === "inbox") return <Inbox />;
     if (vista === "flujos") return <Flujos />;
-    if (vista === "Metricas") return <Metricas />;
+    if (vista === "metricas") return <Metricas />;
     if (vista === "campañas") return <Campañas />;
     if (vista === "clientes") return <Clientes />;
     if (vista === "ajustes") return <Ajustes />;
