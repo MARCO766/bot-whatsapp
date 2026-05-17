@@ -1,10 +1,17 @@
 /**
  * API JSON para pantalla Flujos (React CRM).
- * No modifica builder ni worker. Meta vive en data.macbot_meta sin migración.
+ * Métricas 100% desde Supabase — sin mocks.
  */
 const express = require("express");
 const router = express.Router();
 const axios = require("axios");
+const {
+  resolveEstado,
+  aggregateSeguimientosPorFlujo,
+  fetchSeguimientosRows,
+  computeGlobalStats,
+  metricasVacias,
+} = require("../services/flujosMetricsService");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
@@ -21,6 +28,11 @@ const FOLDERS = [
 
 const ESTADOS = ["activo", "pausado", "borrador", "error"];
 
+function log(msg, extra) {
+  if (extra !== undefined) console.log(`[flujosApi] ${msg}`, extra);
+  else console.log(`[flujosApi] ${msg}`);
+}
+
 function protegerApi(req, res, next) {
   if (req.session?.usuario) return next();
   return res.status(401).json({ ok: false, error: "No autenticado" });
@@ -34,17 +46,11 @@ function supabaseHeaders(extra = {}) {
   };
 }
 
-function startOfTodayIso() {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d.toISOString();
-}
-
 function extractMeta(data) {
   const raw = data && typeof data === "object" ? data : {};
   const meta = raw.macbot_meta && typeof raw.macbot_meta === "object" ? raw.macbot_meta : {};
   return {
-    estado: ESTADOS.includes(meta.estado) ? meta.estado : "borrador",
+    estado: resolveEstado(data),
     carpeta: FOLDERS.includes(meta.carpeta) ? meta.carpeta : "sin_carpeta",
     etiquetas: Array.isArray(meta.etiquetas) ? meta.etiquetas : [],
     campanas: Array.isArray(meta.campanas) ? meta.campanas : [],
@@ -89,12 +95,7 @@ function buildPreview(data) {
 }
 
 function searchableText(flow, activadores) {
-  const parts = [
-    flow.nombre,
-    extractMeta(flow.data).carpeta,
-    extractMeta(flow.data).estado,
-    ...(extractMeta(flow.data).etiquetas || []),
-  ];
+  const parts = [flow.nombre, extractMeta(flow.data).carpeta, extractMeta(flow.data).estado];
   const nodos = flow.data?.nodos || [];
   nodos.forEach((n) => {
     if (n.html) parts.push(String(n.html).replace(/<[^>]+>/g, " "));
@@ -123,65 +124,12 @@ async function fetchActivadores(usuarioId) {
     );
     return res.data || [];
   } catch (e) {
-    console.log("[flujosApi] activadores no disponibles:", e.message);
+    log("activadores error", e.message);
     return [];
   }
 }
 
-async function fetchSeguimientosActivos(usuarioId) {
-  try {
-    const res = await axios.get(
-      `${SUPABASE_URL}/rest/v1/seguimientos_programados?select=flujo_id,estado&usuario_id=eq.${usuarioId}&estado=eq.pendiente`,
-      { headers: supabaseHeaders() }
-    );
-    const map = {};
-    (res.data || []).forEach((row) => {
-      if (row.flujo_id) map[row.flujo_id] = (map[row.flujo_id] || 0) + 1;
-    });
-    return map;
-  } catch (e) {
-    console.log("[flujosApi] seguimientos no disponibles:", e.message);
-    return {};
-  }
-}
-
-async function fetchMetricasPorFlujo(usuarioId, flowIds) {
-  const metricas = {};
-  flowIds.forEach((id) => {
-    metricas[id] = {
-      leadsHoy: 0,
-      mensajesEnviados: 0,
-      respuestas: 0,
-      conversiones: 0,
-      seguimientosActivos: 0,
-      ultimaEjecucion: null,
-    };
-  });
-
-  if (!flowIds.length) return metricas;
-
-  try {
-    const segMap = await fetchSeguimientosActivos(usuarioId);
-    flowIds.forEach((id) => {
-      metricas[id].seguimientosActivos = segMap[id] || 0;
-    });
-  } catch (_) {
-    /* fallback ya en 0 */
-  }
-
-  return metricas;
-}
-
-function inferEstado(flow, meta, activadoresDelFlujo) {
-  if (meta.estado && meta.estado !== "borrador") return meta.estado;
-  const nodos = flow.data?.nodos || [];
-  if (!nodos.length) return "borrador";
-  const tieneActivo = activadoresDelFlujo.some((a) => a.activo);
-  if (tieneActivo) return "activo";
-  return meta.estado || "borrador";
-}
-
-// GET /api/flujos/status — diagnóstico (sin auth)
+// GET /api/flujos/status
 router.get("/api/flujos/status", (req, res) => {
   res.json({
     ok: true,
@@ -194,26 +142,27 @@ router.get("/api/flujos/status", (req, res) => {
 
 // GET /api/flujos
 router.get("/api/flujos", protegerApi, async (req, res) => {
+  const usuario = req.session.usuario;
+  log(`GET /api/flujos usuario=${usuario.id} (${usuario.email || usuario.nombre || "—"})`);
+
   try {
-    const usuarioId = req.session.usuario.id;
-    const [flujos, activadores, segMap] = await Promise.all([
-      fetchFlujos(usuarioId),
-      fetchActivadores(usuarioId),
-      fetchSeguimientosActivos(usuarioId),
+    const [flujos, activadores, segRows] = await Promise.all([
+      fetchFlujos(usuario.id),
+      fetchActivadores(usuario.id),
+      fetchSeguimientosRows(usuario.id),
     ]);
 
-    const ids = flujos.map((f) => f.id);
-    const metricasBase = await fetchMetricasPorFlujo(usuarioId, ids);
+    const segPorFlujo = aggregateSeguimientosPorFlujo(segRows);
+    log(`flujos encontrados=${flujos.length} activadores=${activadores.length}`);
 
     const flows = flujos.map((f) => {
       const metaRaw = extractMeta(f.data);
       const acts = activadores.filter((a) => a.flujo_id === f.id);
-      const estado = inferEstado(f, metaRaw, acts);
-      const metricas = {
-        ...metricasBase[f.id],
-        seguimientosActivos: segMap[f.id] || metricasBase[f.id]?.seguimientosActivos || 0,
-        ultimaEjecucion: metaRaw.ultima_ejecucion,
-      };
+      const metricas = { ...metricasVacias(), ...(segPorFlujo[f.id] || {}) };
+
+      if (metaRaw.ultima_ejecucion && !metricas.ultimaEjecucion) {
+        metricas.ultimaEjecucion = metaRaw.ultima_ejecucion;
+      }
 
       return {
         id: f.id,
@@ -221,7 +170,6 @@ router.get("/api/flujos", protegerApi, async (req, res) => {
         creado_en: f.creado_en,
         meta: {
           ...metaRaw,
-          estado,
           actualizado_en: metaRaw.actualizado_en || f.creado_en,
         },
         metricas,
@@ -247,93 +195,36 @@ router.get("/api/flujos", protegerApi, async (req, res) => {
       source: "supabase",
     });
   } catch (error) {
-    console.log("[flujosApi] GET /api/flujos:", error.response?.data || error.message);
+    log("GET /api/flujos ERROR", error.response?.data || error.message);
     res.status(500).json({
       ok: false,
       error: "No se pudieron cargar los flujos",
       flows: [],
-      source: "fallback",
     });
   }
 });
 
 // GET /api/flujos/stats
 router.get("/api/flujos/stats", protegerApi, async (req, res) => {
+  const usuario = req.session.usuario;
+  log(`GET /api/flujos/stats usuario=${usuario.id}`);
+
   try {
-    const usuarioId = req.session.usuario.id;
-    const [flujos, activadores, segMap] = await Promise.all([
-      fetchFlujos(usuarioId),
-      fetchActivadores(usuarioId),
-      fetchSeguimientosActivos(usuarioId),
+    const [flujos, activadores] = await Promise.all([
+      fetchFlujos(usuario.id),
+      fetchActivadores(usuario.id),
     ]);
 
-    const porEstado = { activo: 0, pausado: 0, borrador: 0, error: 0 };
-    flujos.forEach((f) => {
-      const meta = extractMeta(f.data);
-      const acts = activadores.filter((a) => a.flujo_id === f.id);
-      const est = inferEstado(f, meta, acts);
-      porEstado[est] = (porEstado[est] || 0) + 1;
-    });
+    const stats = await computeGlobalStats(usuario.id, flujos, activadores);
+    log("stats calculadas", stats);
 
-    const seguimientosActivos = Object.values(segMap).reduce((a, b) => a + b, 0);
-
-    let mensajesEnviados = 0;
-    let respuestas = 0;
-    let leadsHoy = 0;
-
-    try {
-      const hoy = startOfTodayIso();
-      const msgRes = await axios.get(
-        `${SUPABASE_URL}/rest/v1/mensajes?select=direccion,cliente_numero&usuario_id=eq.${usuarioId}&creado_en=gte.${hoy}`,
-        { headers: supabaseHeaders() }
-      );
-      const msgs = msgRes.data || [];
-      mensajesEnviados = msgs.filter((m) => m.direccion === "saliente").length;
-      respuestas = msgs.filter((m) => m.direccion === "entrante").length;
-      leadsHoy = new Set(
-        msgs.filter((m) => m.direccion === "entrante" && m.cliente_numero).map((m) => m.cliente_numero)
-      ).size;
-    } catch (e) {
-      console.log("[flujosApi] métricas mensajes:", e.message);
-    }
-
-    const conversionEstimada =
-      mensajesEnviados > 0
-        ? Math.round((respuestas / Math.max(mensajesEnviados, 1)) * 1000) / 10
-        : 0;
-
-    res.json({
-      ok: true,
-      stats: {
-        total: flujos.length,
-        activos: porEstado.activo,
-        pausados: porEstado.pausado,
-        borradores: porEstado.borrador,
-        errores: porEstado.error,
-        leadsHoy,
-        mensajesEnviados,
-        respuestas,
-        seguimientosActivos,
-        conversionEstimada,
-      },
-    });
+    res.json({ ok: true, stats });
   } catch (error) {
-    console.log("[flujosApi] GET stats:", error.message);
-    res.json({
-      ok: true,
-      stats: {
-        total: 0,
-        activos: 0,
-        pausados: 0,
-        borradores: 0,
-        errores: 0,
-        leadsHoy: 0,
-        mensajesEnviados: 0,
-        respuestas: 0,
-        seguimientosActivos: 0,
-        conversionEstimada: 0,
-      },
-      fallback: true,
+    log("GET stats ERROR", error.response?.data || error.message);
+    res.status(500).json({
+      ok: false,
+      error: "No se pudieron calcular estadísticas",
+      stats: null,
     });
   }
 });
@@ -353,20 +244,29 @@ router.patch("/api/flujos/:id/meta", protegerApi, async (req, res) => {
     const flujo = flujoRes.data?.[0];
     if (!flujo) return res.status(404).json({ ok: false, error: "Flujo no encontrado" });
 
-    const data = flujo.data && typeof flujo.data === "object" ? { ...flujo.data } : { nodos: [], conexiones: [] };
+    const data =
+      flujo.data && typeof flujo.data === "object"
+        ? { ...flujo.data }
+        : { nodos: [], conexiones: [] };
     const prev = extractMeta(data);
-    const nextMeta = { ...prev };
+    const nextMeta = {
+      estado: prev.estado,
+      carpeta: prev.carpeta,
+      etiquetas: prev.etiquetas,
+      campanas: prev.campanas,
+      ultima_ejecucion: prev.ultima_ejecucion,
+      actualizado_en: new Date().toISOString(),
+    };
 
     if (patch.estado && ESTADOS.includes(patch.estado)) nextMeta.estado = patch.estado;
     if (patch.carpeta && FOLDERS.includes(patch.carpeta)) nextMeta.carpeta = patch.carpeta;
     if (Array.isArray(patch.etiquetas)) nextMeta.etiquetas = patch.etiquetas;
     if (Array.isArray(patch.campanas)) nextMeta.campanas = patch.campanas;
-    nextMeta.actualizado_en = new Date().toISOString();
 
     data.macbot_meta = nextMeta;
 
     await axios.patch(
-      `${SUPABASE_URL}/rest/v1/flujos_builder?id=eq.${id}`,
+      `${SUPABASE_URL}/rest/v1/flujos_builder?id=eq.${id}&usuario_id=eq.${usuarioId}`,
       { data },
       {
         headers: supabaseHeaders({
@@ -376,10 +276,38 @@ router.patch("/api/flujos/:id/meta", protegerApi, async (req, res) => {
       }
     );
 
+    log(`meta actualizada flujo=${id} estado=${nextMeta.estado}`);
     res.json({ ok: true, meta: nextMeta });
   } catch (error) {
-    console.log("[flujosApi] PATCH meta:", error.response?.data || error.message);
+    log("PATCH meta ERROR", error.response?.data || error.message);
     res.status(500).json({ ok: false, error: "No se pudo actualizar el flujo" });
+  }
+});
+
+// PATCH /api/flujos/:id/nombre
+router.patch("/api/flujos/:id/nombre", protegerApi, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const nombre = (req.body?.nombre || "").trim();
+    const usuarioId = req.session.usuario.id;
+
+    if (!nombre) return res.status(400).json({ ok: false, error: "Nombre vacío" });
+
+    await axios.patch(
+      `${SUPABASE_URL}/rest/v1/flujos_builder?id=eq.${id}&usuario_id=eq.${usuarioId}`,
+      { nombre },
+      {
+        headers: supabaseHeaders({
+          "Content-Type": "application/json",
+          Prefer: "return=minimal",
+        }),
+      }
+    );
+
+    res.json({ ok: true, nombre });
+  } catch (error) {
+    log("PATCH nombre ERROR", error.response?.data || error.message);
+    res.status(500).json({ ok: false, error: "No se pudo renombrar" });
   }
 });
 
@@ -416,7 +344,7 @@ router.post("/api/flujos", protegerApi, async (req, res) => {
     const row = Array.isArray(created.data) ? created.data[0] : created.data;
     res.json({ ok: true, flow: row });
   } catch (error) {
-    console.log("[flujosApi] POST flujo:", error.response?.data || error.message);
+    log("POST flujo ERROR", error.response?.data || error.message);
     res.status(500).json({ ok: false, error: "No se pudo crear el flujo" });
   }
 });
@@ -426,36 +354,12 @@ router.post("/api/flujos/import", protegerApi, async (req, res) => {
   try {
     const templateId = req.body?.templateId;
     const templates = {
-      venta_automatica: {
-        nombre: "Venta automática",
-        carpeta: "ventas_automaticas",
-        etiquetas: ["ventas"],
-      },
-      lanzamiento_domingo: {
-        nombre: "Lanzamiento domingo",
-        carpeta: "lanzamientos",
-        etiquetas: ["lanzamiento"],
-      },
-      recuperacion_carrito: {
-        nombre: "Recuperación carrito",
-        carpeta: "recuperacion",
-        etiquetas: ["recuperacion"],
-      },
-      seguimiento_whatsapp: {
-        nombre: "Seguimiento WhatsApp",
-        carpeta: "evergreen",
-        etiquetas: ["seguimiento"],
-      },
-      retargeting: {
-        nombre: "Retargeting",
-        carpeta: "retargeting",
-        etiquetas: ["retargeting"],
-      },
-      atencion_cliente: {
-        nombre: "Atención al cliente",
-        carpeta: "atencion",
-        etiquetas: ["soporte"],
-      },
+      venta_automatica: { nombre: "Venta automática", carpeta: "ventas_automaticas", etiquetas: ["ventas"] },
+      lanzamiento_domingo: { nombre: "Lanzamiento domingo", carpeta: "lanzamientos", etiquetas: ["lanzamiento"] },
+      recuperacion_carrito: { nombre: "Recuperación carrito", carpeta: "recuperacion", etiquetas: ["recuperacion"] },
+      seguimiento_whatsapp: { nombre: "Seguimiento WhatsApp", carpeta: "evergreen", etiquetas: ["seguimiento"] },
+      retargeting: { nombre: "Retargeting", carpeta: "retargeting", etiquetas: ["retargeting"] },
+      atencion_cliente: { nombre: "Atención al cliente", carpeta: "atencion", etiquetas: ["soporte"] },
     };
 
     const tpl = templates[templateId];
@@ -489,7 +393,7 @@ router.post("/api/flujos/import", protegerApi, async (req, res) => {
     const row = Array.isArray(created.data) ? created.data[0] : created.data;
     res.json({ ok: true, flow: row });
   } catch (error) {
-    console.log("[flujosApi] import:", error.message);
+    log("import ERROR", error.message);
     res.status(500).json({ ok: false, error: "No se pudo importar" });
   }
 });
@@ -534,9 +438,13 @@ router.post("/api/flujos/:id/duplicate", protegerApi, async (req, res) => {
 router.delete("/api/flujos/:id", protegerApi, async (req, res) => {
   try {
     const { id } = req.params;
-    await axios.delete(`${SUPABASE_URL}/rest/v1/flujos_builder?id=eq.${id}`, {
-      headers: supabaseHeaders(),
-    });
+    const usuarioId = req.session.usuario.id;
+
+    await axios.delete(
+      `${SUPABASE_URL}/rest/v1/flujos_builder?id=eq.${id}&usuario_id=eq.${usuarioId}`,
+      { headers: supabaseHeaders() }
+    );
+
     res.json({ ok: true });
   } catch (error) {
     res.status(500).json({ ok: false, error: "Error eliminando" });
@@ -549,32 +457,51 @@ router.get("/api/flujos/:id/timeline", protegerApi, async (req, res) => {
     const { id } = req.params;
     const usuarioId = req.session.usuario.id;
 
+    const owned = await axios.get(
+      `${SUPABASE_URL}/rest/v1/flujos_builder?id=eq.${id}&usuario_id=eq.${usuarioId}&select=id`,
+      { headers: supabaseHeaders() }
+    );
+    if (!owned.data?.[0]) {
+      return res.status(404).json({ ok: false, error: "Flujo no encontrado", events: [] });
+    }
+
     const resSeg = await axios.get(
-      `${SUPABASE_URL}/rest/v1/seguimientos_programados?flujo_id=eq.${id}&usuario_id=eq.${usuarioId}&order=creado_en.desc&limit=15&select=estado,nodo_id,cliente_numero,creado_en,actualizado_en,mensaje_tipo`,
+      `${SUPABASE_URL}/rest/v1/seguimientos_programados?flujo_id=eq.${id}&usuario_id=eq.${usuarioId}&order=creado_en.desc&limit=20&select=estado,nodo_id,cliente_numero,creado_en,actualizado_en,enviado_en,mensaje_tipo`,
       { headers: supabaseHeaders() }
     );
 
-    const events = (resSeg.data || []).map((row) => ({
-      tipo:
-        row.estado === "enviado"
-          ? "seguimiento_enviado"
-          : row.estado === "pendiente"
-            ? "seguimiento_programado"
-            : "nodo_ejecutado",
-      titulo:
-        row.estado === "enviado"
-          ? "Seguimiento enviado"
-          : row.estado === "pendiente"
-            ? "Seguimiento programado"
-            : `Seguimiento: ${row.estado}`,
-      detalle: row.cliente_numero ? `Cliente ${row.cliente_numero}` : row.nodo_id || "",
-      fecha: row.actualizado_en || row.creado_en,
-    }));
+    const events = (resSeg.data || []).map((row) => {
+      let tipo = "nodo_ejecutado";
+      let titulo = `Seguimiento: ${row.estado}`;
+
+      if (row.estado === "enviado") {
+        tipo = "seguimiento_enviado";
+        titulo = "Seguimiento enviado";
+      } else if (row.estado === "pendiente") {
+        tipo = "seguimiento_programado";
+        titulo = "Seguimiento programado";
+      } else if (row.estado === "respondido") {
+        tipo = "lead_respondio";
+        titulo = "Lead respondió";
+      } else if (row.estado === "cancelado") {
+        tipo = "nodo_ejecutado";
+        titulo = "Seguimiento cancelado";
+      }
+
+      return {
+        tipo,
+        titulo,
+        detalle: row.cliente_numero
+          ? `Cliente ${row.cliente_numero}${row.nodo_id ? ` · nodo ${row.nodo_id}` : ""}`
+          : row.nodo_id || "",
+        fecha: row.enviado_en || row.actualizado_en || row.creado_en,
+      };
+    });
 
     res.json({ ok: true, events });
   } catch (error) {
-    console.log("[flujosApi] timeline:", error.message);
-    res.json({ ok: true, events: [], fallback: true });
+    log("timeline ERROR", error.message);
+    res.json({ ok: true, events: [] });
   }
 });
 

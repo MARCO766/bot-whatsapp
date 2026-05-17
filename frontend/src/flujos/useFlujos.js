@@ -8,30 +8,16 @@ import {
   fetchFlows,
   importFlowTemplate,
   patchFlowMeta,
+  patchFlowNombre,
   resolveApiUrl,
 } from "./api";
+
 import {
   countByEstado,
   countByFolder,
   filterFlows,
-  loadLocalMeta,
-  mergeLocalMeta,
-  saveLocalMeta,
   sortFlows,
 } from "./utils";
-
-const EMPTY_STATS = {
-  total: 0,
-  activos: 0,
-  pausados: 0,
-  borradores: 0,
-  errores: 0,
-  leadsHoy: 0,
-  mensajesEnviados: 0,
-  respuestas: 0,
-  seguimientosActivos: 0,
-  conversionEstimada: 0,
-};
 
 export function useFlujos() {
   const [flows, setFlows] = useState([]);
@@ -62,9 +48,13 @@ export function useFlujos() {
 
     try {
       const [flowsRes, statsRes] = await Promise.all([fetchFlows(), fetchFlowStats()]);
-      const merged = mergeLocalMeta(flowsRes.flows || []);
-      setFlows(merged);
-      setStats(statsRes.stats || EMPTY_STATS);
+
+      if (!flowsRes.ok && !flowsRes.flows) {
+        throw new ApiError(flowsRes.error || "Error cargando flujos", "SERVER");
+      }
+
+      setFlows(flowsRes.flows || []);
+      setStats(statsRes.stats || null);
       setApiOnline(true);
       setApiError(null);
     } catch (err) {
@@ -73,7 +63,7 @@ export function useFlujos() {
 
       setApiOnline(false);
       setFlows([]);
-      setStats(EMPTY_STATS);
+      setStats(null);
       setApiError({
         code: apiErr.code,
         message: apiErr.message,
@@ -103,27 +93,27 @@ export function useFlujos() {
 
   const updateMeta = useCallback(
     async (id, patch) => {
-      const local = loadLocalMeta();
-      local[id] = { ...(local[id] || {}), ...patch };
-      saveLocalMeta(local);
+      if (!apiOnline) {
+        showToast("Sin sesión API", "error");
+        return;
+      }
 
       setFlows((prev) =>
         prev.map((f) => (f.id === id ? { ...f, meta: { ...f.meta, ...patch } } : f))
       );
 
-      if (!apiOnline) {
-        showToast("Sin sesión API — cambio solo local", "error");
-        return;
-      }
-
       try {
-        await patchFlowMeta(id, patch);
+        const res = await patchFlowMeta(id, patch);
+        setFlows((prev) =>
+          prev.map((f) => (f.id === id ? { ...f, meta: { ...f.meta, ...res.meta } } : f))
+        );
         showToast("Flujo actualizado");
       } catch {
         showToast("Error al guardar en servidor", "error");
+        await load();
       }
     },
-    [apiOnline, showToast]
+    [apiOnline, load, showToast]
   );
 
   const toggleEstado = useCallback(
@@ -139,6 +129,20 @@ export function useFlujos() {
       await updateMeta(id, { carpeta });
     },
     [updateMeta]
+  );
+
+  const renombrar = useCallback(
+    async (id, nombre) => {
+      if (!apiOnline) return showToast("Sin sesión API", "error");
+      try {
+        await patchFlowNombre(id, nombre);
+        showToast("Nombre actualizado");
+        await load();
+      } catch {
+        showToast("Error al renombrar", "error");
+      }
+    },
+    [apiOnline, load, showToast]
   );
 
   const crearFlujo = useCallback(
@@ -235,6 +239,7 @@ export function useFlujos() {
     updateMeta,
     toggleEstado,
     moveToFolder,
+    renombrar,
     crearFlujo,
     importar,
     duplicar,

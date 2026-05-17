@@ -99,8 +99,14 @@ export const flujosStyles = `
 
 .flStatsGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
   gap: 12px;
+}
+
+.flStatsGrid .flStatValue {
+  font-size: 1.15rem;
+  line-height: 1.2;
+  word-break: break-word;
 }
 
 .flStatCard {
@@ -314,7 +320,7 @@ export const flujosStyles = `
 
 .flMetrics {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 8px;
   position: relative;
   z-index: 1;

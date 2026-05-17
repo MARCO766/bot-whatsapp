@@ -84,6 +84,13 @@ export function patchFlowMeta(id, meta) {
   });
 }
 
+export function patchFlowNombre(id, nombre) {
+  return request(`/api/flujos/${id}/nombre`, {
+    method: "PATCH",
+    body: JSON.stringify({ nombre }),
+  });
+}
+
 export function createFlow(nombre, meta = {}) {
   return request("/api/flujos", {
     method: "POST",

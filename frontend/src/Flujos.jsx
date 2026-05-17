@@ -8,7 +8,7 @@ import { FLOW_STATES } from "./flujos/constants";
 import { flujosStyles } from "./flujos/styles";
 import { SORT_OPTIONS } from "./flujos/constants";
 import { useFlujos } from "./flujos/useFlujos";
-import { loginUrl, resolveApiUrl } from "./flujos/api";
+import { loginUrl } from "./flujos/api";
 
 export default function Flujos() {
   const {
@@ -41,6 +41,7 @@ export default function Flujos() {
     importar,
     duplicar,
     eliminar,
+    renombrar,
     updateMeta,
     load,
   } = useFlujos();
@@ -60,18 +61,7 @@ export default function Flujos() {
   function handleEditName(flow) {
     const nombre = prompt("Nuevo nombre del flujo:", flow.nombre);
     if (!nombre?.trim()) return;
-    fetch(resolveApiUrl(`/editar-nombre-flujo/${flow.id}`), {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ nombre: nombre.trim() }),
-    })
-      .then((r) => {
-        if (!r.ok) throw new Error();
-        showToast("Nombre actualizado");
-        load();
-      })
-      .catch(() => showToast("Error al renombrar", "error"));
+    renombrar(flow.id, nombre.trim());
   }
 
   return (

@@ -9,7 +9,7 @@ export function stateMeta(id) {
 }
 
 export function formatDate(iso) {
-  if (!iso) return "—";
+  if (!iso) return "Sin datos";
   try {
     return new Date(iso).toLocaleString("es-BO", {
       day: "2-digit",
@@ -18,7 +18,7 @@ export function formatDate(iso) {
       minute: "2-digit",
     });
   } catch {
-    return "—";
+    return "Sin datos";
   }
 }
 
@@ -29,29 +29,11 @@ export function formatNumber(n) {
   return String(v);
 }
 
-export function loadLocalMeta() {
-  try {
-    const raw = localStorage.getItem("macbot_flujos_meta_local");
-    return raw ? JSON.parse(raw) : {};
-  } catch {
-    return {};
-  }
-}
-
-export function saveLocalMeta(map) {
-  localStorage.setItem("macbot_flujos_meta_local", JSON.stringify(map));
-}
-
-export function mergeLocalMeta(flows) {
-  const local = loadLocalMeta();
-  return flows.map((f) => {
-    const extra = local[f.id];
-    if (!extra) return f;
-    return {
-      ...f,
-      meta: { ...f.meta, ...extra },
-    };
-  });
+/** Muestra número real, 0, o etiqueta cuando no hay fuente de datos. */
+export function formatMetric(value, { pendiente, emptyLabel = "Sin datos" } = {}) {
+  if (pendiente) return emptyLabel;
+  if (value === null || value === undefined) return "0";
+  return formatNumber(value);
 }
 
 export function sortFlows(flows, sortBy) {
@@ -60,11 +42,11 @@ export function sortFlows(flows, sortBy) {
     case "alfabetico":
       return list.sort((a, b) => a.nombre.localeCompare(b.nombre));
     case "leads":
-      return list.sort((a, b) => (b.metricas?.leadsHoy || 0) - (a.metricas?.leadsHoy || 0));
-    case "conversiones":
       return list.sort(
-        (a, b) => (b.metricas?.conversiones || 0) - (a.metricas?.conversiones || 0)
+        (a, b) => (b.metricas?.clientesEnFlujo || 0) - (a.metricas?.clientesEnFlujo || 0)
       );
+    case "conversiones":
+      return list.sort((a, b) => (b.metricas?.respuestas || 0) - (a.metricas?.respuestas || 0));
     case "usados":
       return list.sort((a, b) => (b.nodosCount || 0) - (a.nodosCount || 0));
     case "modificacion":

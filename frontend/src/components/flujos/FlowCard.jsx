@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { builderUrl } from "../../flujos/api";
-import { folderLabel, formatDate, formatNumber, stateMeta } from "../../flujos/utils";
+import { folderLabel, formatDate, formatMetric, stateMeta } from "../../flujos/utils";
 import FlowActionsMenu from "./FlowActionsMenu";
 import FlowCampaignsPanel from "./FlowCampaignsPanel";
 import FlowPreviewMini from "./FlowPreviewMini";
@@ -40,6 +40,11 @@ export default function FlowCard({
             <span style={{ fontSize: "0.75rem", color: "#64748b" }}>
               📁 {folderLabel(flow.meta?.carpeta)}
             </span>
+            {flow.activadores?.length > 0 && (
+              <span style={{ fontSize: "0.75rem", color: "#64748b" }}>
+                ⚡ {flow.activadores.filter((a) => a.activo).length}/{flow.activadores.length} activadores
+              </span>
+            )}
           </div>
         </div>
         <FlowActionsMenu
@@ -59,28 +64,36 @@ export default function FlowCard({
 
       <div className="flMetrics">
         <div className="flMetric">
-          <b>{formatNumber(m.leadsHoy)}</b>
-          <span>Leads hoy</span>
+          <b>{formatMetric(m.clientesEnFlujo, { pendiente: false })}</b>
+          <span>Clientes en flujo</span>
         </div>
         <div className="flMetric">
-          <b>{formatNumber(m.mensajesEnviados)}</b>
-          <span>Enviados</span>
+          <b>{formatMetric(m.leadsHoy)}</b>
+          <span>Entradas hoy</span>
         </div>
         <div className="flMetric">
-          <b>{formatNumber(m.respuestas)}</b>
+          <b>{formatMetric(m.mensajesEnviados)}</b>
+          <span>Seg. enviados</span>
+        </div>
+        <div className="flMetric">
+          <b>{formatMetric(m.respuestas)}</b>
           <span>Respuestas</span>
         </div>
         <div className="flMetric">
-          <b>{formatNumber(m.conversiones)}</b>
+          <b>{formatMetric(m.conversiones, { pendiente: m.ventasPendiente, emptyLabel: "0" })}</b>
           <span>Ventas</span>
         </div>
         <div className="flMetric">
-          <b>{formatNumber(m.seguimientosActivos)}</b>
-          <span>Seguimientos</span>
+          <b>{formatMetric(m.seguimientosActivos)}</b>
+          <span>Seg. activos</span>
         </div>
         <div className="flMetric">
           <b>{flow.nodosCount || 0}</b>
           <span>Nodos</span>
+        </div>
+        <div className="flMetric">
+          <b>{flow.conexionesCount || 0}</b>
+          <span>Conexiones</span>
         </div>
       </div>
 
@@ -105,7 +118,7 @@ export default function FlowCard({
         </span>
         <div className="flQuickActions">
           <a href={builderUrl(flow)} target="_blank" rel="noreferrer" className="flQuickBtn">
-            Builder
+            Constructor
           </a>
           <button type="button" className="flQuickBtn" onClick={() => onToggleEstado(flow)}>
             {flow.meta?.estado === "activo" ? "Pausar" : "Activar"}
