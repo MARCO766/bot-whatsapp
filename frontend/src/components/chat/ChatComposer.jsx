@@ -102,11 +102,19 @@ export default function ChatComposer({
   }
 
   return (
-    <>
+    <footer className="composerDock">
       {archivo && (
         <div className="previewBar">
-          <div>📎 {archivo.name}</div>
-          <button type="button" onClick={() => setArchivo(null)}>
+          <span className="previewFile">
+            <span className="previewIcon">📎</span>
+            {archivo.name}
+          </span>
+          <button
+            type="button"
+            className="previewRemove"
+            onClick={() => setArchivo(null)}
+            aria-label="Quitar archivo"
+          >
             ✕
           </button>
         </div>
@@ -115,11 +123,13 @@ export default function ChatComposer({
       <form className="composer" onSubmit={onSubmit}>
         <button
           type="button"
-          className="attach"
+          className="composerBtn attach"
           disabled={bloqueado || enviando}
           onClick={() => fileRef.current?.click()}
+          aria-label="Adjuntar archivo"
+          title="Adjuntar"
         >
-          +
+          <span className="composerBtnIcon">+</span>
         </button>
 
         <input
@@ -130,32 +140,43 @@ export default function ChatComposer({
           onChange={onFileChange}
         />
 
-        <textarea
-          placeholder={bloqueado ? "Bloqueado" : "Escribe..."}
-          disabled={bloqueado || enviando}
-          value={mensaje}
-          onChange={(e) => setMensaje(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              onSubmit(e);
-            }
-          }}
-        />
+        <div className="composerInputWrap">
+          <textarea
+            placeholder={bloqueado ? "Contacto bloqueado" : "Escribe un mensaje…"}
+            disabled={bloqueado || enviando}
+            value={mensaje}
+            rows={1}
+            onChange={(e) => setMensaje(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                onSubmit(e);
+              }
+            }}
+          />
+        </div>
 
         <button
           type="button"
-          className={`audioBtn ${grabando ? "recording" : ""}`}
+          className={`composerBtn audioBtn ${grabando ? "recording" : ""}`}
           disabled={bloqueado || enviando}
           onClick={toggleAudio}
+          aria-label={grabando ? "Detener grabación" : "Grabar audio"}
+          title="Audio"
         >
-          {grabando ? "⏹" : "🎤"}
+          <span className="composerBtnIcon">{grabando ? "⏹" : "🎤"}</span>
         </button>
 
-        <button type="submit" className="send" disabled={bloqueado || enviando}>
-          Enviar
+        <button
+          type="submit"
+          className="composerBtn send"
+          disabled={bloqueado || enviando}
+          aria-label="Enviar"
+          title="Enviar"
+        >
+          <span className="composerBtnIcon sendIcon">➤</span>
         </button>
       </form>
-    </>
+    </footer>
   );
 }

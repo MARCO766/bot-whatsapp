@@ -22,64 +22,69 @@ export default function ChatListItem({
 
       <div className="chatInfo">
         <div className="chatTop">
-          <strong>{chat.nombre || chat.numero}</strong>
-          <small>{formatHora(chat.ultimoMensajeEn)}</small>
+          <strong className="chatName">{chat.nombre || chat.numero}</strong>
+          <div className="chatMeta">
+            <small className="chatTime">{formatHora(chat.ultimoMensajeEn)}</small>
+            {chat.noLeidos > 0 && (
+              <span className="unreadBadge" aria-label={`${chat.noLeidos} sin leer`}>
+                {chat.noLeidos > 99 ? "99+" : chat.noLeidos}
+              </span>
+            )}
+          </div>
         </div>
 
-        <span className="numero">{chat.numero}</span>
+        <p className="preview">{chat.ultimoMensaje || "Sin mensajes"}</p>
 
-        <div className="tagRow">
-          {(chat.etiquetas || []).map((tag) => (
-            <div
-              key={tag.nombre}
-              className="tag"
-              style={{ background: tag.color, borderColor: tag.color }}
-            >
-              {tag.nombre}
-            </div>
-          ))}
-
-          {chat.noLeidos > 0 && (
-            <div className="badge">{chat.noLeidos}</div>
-          )}
-
-          {chat.bloqueado && <div className="blocked">Bloqueado</div>}
-        </div>
-
-        <p className="preview">{chat.ultimoMensaje}</p>
+        {(chat.etiquetas?.length > 0 || chat.bloqueado) && (
+          <div className="tagRow">
+            {(chat.etiquetas || []).map((tag) => (
+              <span
+                key={tag.nombre}
+                className="tag"
+                style={{ background: tag.color, borderColor: tag.color }}
+              >
+                {tag.nombre}
+              </span>
+            ))}
+            {chat.bloqueado && <span className="blocked">Bloqueado</span>}
+          </div>
+        )}
       </div>
 
-      <button
-        type="button"
-        className="dots"
-        onClick={(e) => {
-          e.stopPropagation();
-          onToggleMenu(chat.numero);
-        }}
-      >
-        ⋮
-      </button>
+      <div className="chatItemActions">
+        <button
+          type="button"
+          className={`dots ${menuAbierto ? "open" : ""}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleMenu(chat.numero);
+          }}
+          aria-label="Opciones del chat"
+        >
+          ⋮
+        </button>
 
-      {menuAbierto && (
-        <div className="menu" onClick={(e) => e.stopPropagation()}>
-          <button type="button" onClick={() => onEtiqueta(chat.numero)}>
-            🏷️ Etiqueta
-          </button>
-          <button
-            type="button"
-            onClick={() => onBloquear(chat.numero, chat.bloqueado)}
-          >
-            {chat.bloqueado ? "Desbloquear" : "Bloquear"}
-          </button>
-          <button
-            type="button"
-            className="danger"
-            onClick={() => onEliminar(chat.numero)}
-          >
-            Eliminar
-          </button>
-        </div>
-      )}
+        {menuAbierto && (
+          <div className="menu" onClick={(e) => e.stopPropagation()}>
+            <button type="button" onClick={() => onEtiqueta(chat.numero)}>
+              🏷️ Etiqueta
+            </button>
+            <button
+              type="button"
+              onClick={() => onBloquear(chat.numero, chat.bloqueado)}
+            >
+              {chat.bloqueado ? "Desbloquear" : "Bloquear"}
+            </button>
+            <button
+              type="button"
+              className="danger"
+              onClick={() => onEliminar(chat.numero)}
+            >
+              Eliminar
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

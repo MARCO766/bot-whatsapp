@@ -30,36 +30,38 @@ export default function ChatWindow({
 
   return (
     <section className="chatWindow">
-      <div className="chatHeader">
+      <header className="chatHeader">
         <div className="chatUser">
           <div className="bigAvatar">{(nombre || "?").charAt(0)}</div>
-          <div>
+          <div className="chatUserText">
             <h2>{nombre}</h2>
             <p>{numero}</p>
             <small className="online">En línea</small>
           </div>
         </div>
-      </div>
+      </header>
 
       {bloqueado && (
         <div className="blockedBanner">Este contacto está bloqueado</div>
       )}
 
-      <div className="messages">
-        {cargando && (
-          <div className="loadingChat">Cargando conversación...</div>
-        )}
+      <div className="messagesArea">
+        <div className="messages bandejaScroll">
+          {cargando && (
+            <div className="loadingChat">Cargando conversación...</div>
+          )}
 
-        {!cargando &&
-          mensajes.map((m) => (
-            <MessageBubble
-              key={m.id || `${m.creado_en}-${m.contenido}`}
-              msg={m}
-              uploadProgress={m._uploadProgress}
-            />
-          ))}
+          {!cargando &&
+            mensajes.map((m) => (
+              <MessageBubble
+                key={m.id || `${m.creado_en}-${m.contenido}`}
+                msg={m}
+                uploadProgress={m._uploadProgress}
+              />
+            ))}
 
-        <div ref={bottomRef} />
+          <div ref={bottomRef} className="messagesEnd" />
+        </div>
       </div>
 
       <ChatComposer
