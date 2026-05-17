@@ -98,8 +98,7 @@ res.send(renderAdminPage({
   flujoActual,
   activadores,
   etiquetas,
-  conexionActiva,
-  usuarioId: req.session.usuario.id
+  conexionActiva
 }));
 
 });

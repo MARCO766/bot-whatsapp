@@ -85,46 +85,8 @@
   border-radius: 999px;
   font-size: 11px;
   font-weight: 800;
-  flex-shrink: 0;
-}
-
-.follow-badge--pendiente {
-  background: rgba(251, 191, 36, 0.2);
-  color: #fbbf24;
-}
-
-.follow-badge--enviado {
-  background: rgba(57, 255, 20, 0.2);
+  background: rgba(57, 255, 20, 0.15);
   color: #39ff14;
-}
-
-.follow-badge--cancelado {
-  background: rgba(248, 113, 113, 0.2);
-  color: #f87171;
-}
-
-.follow-badge--respondido {
-  background: rgba(103, 232, 249, 0.2);
-  color: #67e8f9;
-}
-
-.follow-step-acum {
-  display: block;
-  font-size: 10px;
-  font-weight: 600;
-  color: #64748b;
-  letter-spacing: 0.02em;
-}
-
-.seg-step-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 8px;
-}
-
-.seg-step-head .seg-estado-pill {
-  margin-left: auto;
 }
 
 .follow-timer-bar {
