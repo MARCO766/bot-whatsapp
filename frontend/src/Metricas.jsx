@@ -1,186 +1,204 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
+import { useMetricas } from "./metricas/useMetricas";
+import { formatMoney, formatNum, formatPct, formatTendencia } from "./metricas/format";
 
-const campaignsData = [
-  {
-    id: "papercraft",
-    nombre: "Papercraft WhatsApp",
-    objetivo: "Mensajes",
-    estado: "Activa",
-    presupuesto: 39,
-    gastado: 118,
-    leads: 742,
-    conversaciones: 514,
-    ventas: 91,
-    ingresos: 3549,
-    ctr: 2.7,
-    cpc: 0.34,
-    cpm: 11.8,
-    costoConversacion: 1.82,
-    roas: 3.8,
-    cierre: 17.7,
-    frecuencia: 1.9,
-    respuesta: 42,
-  },
-  {
-    id: "remarketing",
-    nombre: "Remarketing 23h",
-    objetivo: "Ventas",
-    estado: "Activa",
-    presupuesto: 19,
-    gastado: 64,
-    leads: 228,
-    conversaciones: 184,
-    ventas: 42,
-    ingresos: 1638,
-    ctr: 4.1,
-    cpc: 0.22,
-    cpm: 9.4,
-    costoConversacion: 1.12,
-    roas: 5.2,
-    cierre: 22.8,
-    frecuencia: 2.4,
-    respuesta: 31,
-  },
-  {
-    id: "amigurumis",
-    nombre: "Amigurumis México",
-    objetivo: "Conversiones",
-    estado: "Aprendizaje",
-    presupuesto: 55,
-    gastado: 182,
-    leads: 381,
-    conversaciones: 276,
-    ventas: 38,
-    ingresos: 1482,
-    ctr: 1.9,
-    cpc: 0.51,
-    cpm: 15.2,
-    costoConversacion: 2.18,
-    roas: 2.6,
-    cierre: 13.7,
-    frecuencia: 2.8,
-    respuesta: 58,
-  },
-];
+const PERIODOS = ["Hoy", "7 días", "30 días"];
+
+const META_PLACEHOLDER = "Conecta Meta Ads para ver esta métrica";
+
+function Skeleton({ className = "" }) {
+  return <div className={`skel ${className}`} />;
+}
+
+function EmptyBlock({ title, hint }) {
+  return (
+    <div className="emptyBlock">
+      <span>📊</span>
+      <strong>{title}</strong>
+      <p>{hint}</p>
+    </div>
+  );
+}
+
+function TrendBadge({ value }) {
+  const t = formatTendencia(value);
+  if (!t) return <span className="trend muted">Sin datos previos</span>;
+  const pos = Number(value) >= 0;
+  return <span className={`trend ${pos ? "up" : "down"}`}>{t}</span>;
+}
+
+function MiniChart({ data, keyField, color }) {
+  if (!data?.length) return <EmptyBlock title="Sin datos" hint="Aún no hay actividad en este periodo." />;
+  const max = Math.max(...data.map((d) => d[keyField] || 0), 1);
+  const hasData = data.some((d) => (d[keyField] || 0) > 0);
+  if (!hasData) return <EmptyBlock title="Sin datos" hint="Aún no hay actividad en este periodo." />;
+
+  return (
+    <div className="miniChart">
+      {data.map((d) => (
+        <div
+          key={d.fecha}
+          className="miniBarCol"
+          title={`${d.fecha}: ${d[keyField]}`}
+        >
+          <div
+            className={`miniBar ${color}`}
+            style={{ height: `${Math.max(4, ((d[keyField] || 0) / max) * 100)}%` }}
+          />
+          <small>{d.fecha?.slice(5)}</small>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function HeatmapGrid({ heatmap }) {
+  const horas = heatmap?.horas || [];
+  const max = heatmap?.max || 0;
+  if (!max) return <EmptyBlock title="Sin actividad horaria" hint="Cuando lleguen mensajes o leads verás el mapa de calor." />;
+
+  return (
+    <div className="heatmapGrid">
+      {horas.map((h) => {
+        const intensity = max > 0 ? (h.total / max) * 100 : 0;
+        return (
+          <div
+            key={h.hora}
+            className="heatCell"
+            style={{ opacity: 0.25 + (intensity / 100) * 0.75 }}
+            title={`${h.hora}:00 — ${h.mensajes} msgs, ${h.leads} leads`}
+          >
+            <b>{h.hora}</b>
+            <small>{h.total}</small>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function MetaMetricCard({ titulo, ayuda }) {
+  return (
+    <div className="performanceCard metaPlaceholder">
+      <div>
+        <span>{titulo}</span>
+        <h3>—</h3>
+        <p>{ayuda}</p>
+      </div>
+      <b className="warning">{META_PLACEHOLDER}</b>
+    </div>
+  );
+}
 
 export default function Metricas() {
-  const [campaignId, setCampaignId] = useState("papercraft");
-  const [livePulse, setLivePulse] = useState(false);
-  const [periodo, setPeriodo] = useState("Hoy");
+  const [periodo, setPeriodo] = useState("7 días");
+  const [flujoId, setFlujoId] = useState("");
+  const { resumen, funnel, series, flujos, diagnostico, heatmap, flujosLista, loading, error, reload } =
+    useMetricas(periodo, flujoId);
 
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setLivePulse((p) => !p);
-    }, 1600);
+  const kpis = resumen?.kpis || {};
+  const salud = resumen?.salud || { score: 0, label: "Sin datos" };
+  const metaAds = resumen?.metaAds || { conectado: false, mensaje: META_PLACEHOLDER };
 
-    return () => clearInterval(timer);
-  }, []);
+  const mainCards = useMemo(
+    () => [
+      {
+        titulo: "Leads",
+        valor: formatNum(kpis.leads),
+        detalle: "Clientes registrados",
+        icono: "⚡",
+        color: "green",
+        tendencia: kpis.tendenciaLeads,
+      },
+      {
+        titulo: "Conversaciones",
+        valor: formatNum(kpis.conversaciones),
+        detalle: "Chats con actividad",
+        icono: "💬",
+        color: "cyan",
+        tendencia: kpis.tendenciaConversaciones,
+      },
+      {
+        titulo: "Ventas",
+        valor: formatNum(kpis.ventas),
+        detalle: "Conversiones CRM",
+        icono: "💎",
+        color: "purple",
+        tendencia: kpis.tendenciaVentas,
+      },
+      {
+        titulo: "Ingresos",
+        valor: formatMoney(kpis.ingresos, kpis.moneda),
+        detalle: kpis.ventas > 0 ? `Desde ${kpis.ventas} venta(s)` : "Sin ventas en el periodo",
+        icono: "🚀",
+        color: "orange",
+        tendencia: null,
+      },
+    ],
+    [kpis]
+  );
 
-  const campaign = useMemo(() => {
-    return campaignsData.find((c) => c.id === campaignId) || campaignsData[0];
-  }, [campaignId]);
+  const performanceCards = useMemo(
+    () => [
+      {
+        titulo: "Tasa de cierre",
+        valor: formatPct(kpis.tasaCierre),
+        ayuda: "Ventas / conversaciones",
+        estado: kpis.tasaCierre >= 10 ? "Fuerte" : kpis.conversaciones > 0 ? "Mejorar" : "Sin datos",
+        color: kpis.tasaCierre >= 10 ? "good" : "warning",
+        real: true,
+      },
+      {
+        titulo: "Conversión",
+        valor: formatPct(kpis.conversion),
+        ayuda: "Ventas / leads",
+        estado: kpis.conversion >= 5 ? "Buena" : kpis.leads > 0 ? "Baja" : "Sin datos",
+        color: kpis.conversion >= 5 ? "good" : "warning",
+        real: true,
+      },
+      {
+        titulo: "Mensajes enviados",
+        valor: formatNum(kpis.mensajesEnviados),
+        ayuda: "Salientes por WhatsApp",
+        estado: kpis.mensajesEnviados > 0 ? "Activo" : "Sin envíos",
+        color: kpis.mensajesEnviados > 0 ? "good" : "warning",
+        real: true,
+      },
+      {
+        titulo: "Respuestas",
+        valor: formatNum(kpis.respuestas),
+        ayuda: "Leads que respondieron",
+        estado: kpis.respuestas > 0 ? "Engagement" : "Sin respuestas",
+        color: kpis.respuestas > 0 ? "good" : "warning",
+        real: true,
+      },
+    ],
+    [kpis]
+  );
 
-  const score = useMemo(() => {
-    let puntos = 0;
-
-    if (campaign.ctr >= 2) puntos += 25;
-    if (campaign.roas >= 3) puntos += 30;
-    if (campaign.costoConversacion <= 2) puntos += 25;
-    if (campaign.cierre >= 15) puntos += 20;
-
-    return puntos;
-  }, [campaign]);
-
-  const estadoTexto =
-    score >= 80 ? "Excelente" : score >= 60 ? "Buena" : score >= 40 ? "Regular" : "Revisar";
-
-  const mainCards = [
-    {
-      titulo: "Leads",
-      valor: campaign.leads,
-      detalle: "Personas que dejaron señal",
-      icono: "⚡",
-      color: "green",
-      cambio: "+18%",
-    },
-    {
-      titulo: "Conversaciones",
-      valor: campaign.conversaciones,
-      detalle: "Chats generados por anuncios",
-      icono: "💬",
-      color: "cyan",
-      cambio: "+9%",
-    },
-    {
-      titulo: "Ventas",
-      valor: campaign.ventas,
-      detalle: "Compras atribuidas",
-      icono: "💎",
-      color: "purple",
-      cambio: "+21%",
-    },
-    {
-      titulo: "Ingresos",
-      valor: `Bs ${campaign.ingresos}`,
-      detalle: "Dinero generado",
-      icono: "🚀",
-      color: "orange",
-      cambio: "+34%",
-    },
+  const segCards = [
+    { label: "Pendientes", val: kpis.seguimientosActivos },
+    { label: "Enviados", val: kpis.seguimientosEnviados },
+    { label: "Cancelados", val: kpis.seguimientosCancelados },
+    { label: "Respondidos", val: kpis.seguimientosRespondidos },
   ];
 
-  const performanceCards = [
-    {
-      titulo: "ROAS",
-      valor: campaign.roas,
-      ayuda: "Por cada Bs 1 invertido",
-      estado: campaign.roas >= 3 ? "Rentable" : "Bajo",
-      color: campaign.roas >= 3 ? "good" : "warning",
-    },
-    {
-      titulo: "CTR",
-      valor: `${campaign.ctr}%`,
-      ayuda: "Qué tanto llama la atención",
-      estado: campaign.ctr >= 2 ? "Bueno" : "Mejorar creativo",
-      color: campaign.ctr >= 2 ? "good" : "warning",
-    },
-    {
-      titulo: "Costo conversación",
-      valor: `Bs ${campaign.costoConversacion}`,
-      ayuda: "Costo por chat iniciado",
-      estado: campaign.costoConversacion <= 2 ? "Barato" : "Caro",
-      color: campaign.costoConversacion <= 2 ? "good" : "danger",
-    },
-    {
-      titulo: "Tasa de cierre",
-      valor: `${campaign.cierre}%`,
-      ayuda: "Ventas / conversaciones",
-      estado: campaign.cierre >= 15 ? "Fuerte" : "Débil",
-      color: campaign.cierre >= 15 ? "good" : "warning",
-    },
-  ];
+  const flujoNombre = flujosLista.find((f) => f.id === flujoId)?.nombre;
 
-  const funnel = [
-    { nombre: "Impresiones", valor: 100, cantidad: "24.800", color: "blue" },
-    { nombre: "Clicks", valor: 72, cantidad: "1.920", color: "cyan" },
-    { nombre: "Conversaciones", valor: 46, cantidad: campaign.conversaciones, color: "green" },
-    { nombre: "Ventas", valor: 18, cantidad: campaign.ventas, color: "purple" },
-  ];
-
-  const diagnostico = [
-    campaign.ctr >= 2
-      ? "El anuncio llama la atención correctamente."
-      : "El CTR está bajo: prueba otro gancho, imagen o video.",
-    campaign.costoConversacion <= 2
-      ? "El costo por conversación está saludable."
-      : "El costo por conversación está alto: revisa segmentación o creativo.",
-    campaign.roas >= 3
-      ? "La campaña está recuperando inversión con margen."
-      : "El ROAS aún necesita mejorar antes de escalar.",
-    campaign.cierre >= 15
-      ? "El equipo o bot está cerrando bien por WhatsApp."
-      : "La tasa de cierre puede mejorar con mejores seguimientos.",
-  ];
+  if (error && !loading) {
+    return (
+      <div className="metricasMeta">
+        <style>{styles}</style>
+        <div className="errorPanel">
+          <h2>No se pudieron cargar las métricas</h2>
+          <p>{error}</p>
+          <button type="button" onClick={reload}>
+            Reintentar
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="metricasMeta">
@@ -188,74 +206,92 @@ export default function Metricas() {
 
       <section className="hero">
         <div>
-          <span className="eyebrow">Meta Ads Intelligence</span>
-          <h1>Métricas claras para saber si la campaña va bien</h1>
+          <span className="eyebrow">MacBot CRM Intelligence</span>
+          <h1>Métricas reales de tu embudo WhatsApp</h1>
           <p>
-            Selecciona una campaña y mira lo más importante: leads, conversaciones,
-            ventas, ingresos, ROAS, CTR, costo por conversación y cierre.
+            Leads, conversaciones, ventas e ingresos desde Supabase. Sin datos inventados.
+            {flujoNombre ? ` Filtrando: ${flujoNombre}.` : ""}
           </p>
         </div>
 
         <div className="heroScore">
-          <div className={`scoreRing ${livePulse ? "pulse" : ""}`}>
-            <strong>{score}</strong>
-            <span>/100</span>
-          </div>
-          <b>{estadoTexto}</b>
-          <small>Salud de campaña</small>
+          {loading ? (
+            <Skeleton className="scoreSkel" />
+          ) : (
+            <>
+              <div className="scoreRing">
+                <strong>{salud.score}</strong>
+                <span>/100</span>
+              </div>
+              <b>{salud.label}</b>
+              <small>Salud del embudo</small>
+            </>
+          )}
         </div>
       </section>
 
       <section className="controlBar">
         <div className="selectorBox">
-          <label>Campaña</label>
-          <select value={campaignId} onChange={(e) => setCampaignId(e.target.value)}>
-            {campaignsData.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.nombre}
+          <label>Flujo / campaña</label>
+          <select value={flujoId} onChange={(e) => setFlujoId(e.target.value)} disabled={loading}>
+            <option value="">Todos los flujos</option>
+            {flujosLista.map((f) => (
+              <option key={f.id} value={f.id}>
+                {f.nombre}
               </option>
             ))}
           </select>
         </div>
 
         <div className="periodos">
-          {["Hoy", "7 días", "30 días"].map((p) => (
+          {PERIODOS.map((p) => (
             <button
               key={p}
+              type="button"
               className={periodo === p ? "active" : ""}
               onClick={() => setPeriodo(p)}
+              disabled={loading}
             >
               {p}
             </button>
           ))}
         </div>
 
-        <div className="campaignStatus">
-          <span className={campaign.estado.toLowerCase()} />
-          <div>
-            <strong>{campaign.estado}</strong>
-            <small>{campaign.objetivo}</small>
+        <div className="controlActions">
+          <button type="button" className="refreshBtn" onClick={reload} disabled={loading}>
+            {loading ? "Cargando…" : "Actualizar"}
+          </button>
+          <div className="liveBadge">
+            <span className="liveDot" />
+            <div>
+              <strong>LIVE</strong>
+              <small>Datos Supabase</small>
+            </div>
           </div>
         </div>
       </section>
 
       <section className="mainGrid">
-        {mainCards.map((card, i) => (
-          <div
-            className={`mainCard ${card.color}`}
-            key={card.titulo}
-            style={{ animationDelay: `${i * 0.05}s` }}
-          >
-            <div className="shine" />
-            <div className="cardTop">
-              <div className="icon">{card.icono}</div>
-              <span>{card.cambio}</span>
-            </div>
-            <h2>{card.valor}</h2>
-            <strong>{card.titulo}</strong>
-            <p>{card.detalle}</p>
-          </div>
-        ))}
+        {loading
+          ? Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="mainCard skelCard" />
+            ))
+          : mainCards.map((card, i) => (
+              <div
+                className={`mainCard ${card.color}`}
+                key={card.titulo}
+                style={{ animationDelay: `${i * 0.05}s` }}
+              >
+                <div className="shine" />
+                <div className="cardTop">
+                  <div className="icon">{card.icono}</div>
+                  <TrendBadge value={card.tendencia} />
+                </div>
+                <h2>{card.valor}</h2>
+                <strong>{card.titulo}</strong>
+                <p>{card.detalle}</p>
+              </div>
+            ))}
       </section>
 
       <section className="bodyGrid">
@@ -264,100 +300,213 @@ export default function Metricas() {
             <div className="panelTop">
               <div>
                 <h2>Indicadores clave</h2>
-                <p>Lo que el cliente debe entender rápido.</p>
+                <p>Métricas internas del CRM en el periodo seleccionado.</p>
               </div>
-              <button>Actualizar</button>
             </div>
-
-            <div className="performanceGrid">
-              {performanceCards.map((item) => (
-                <div className="performanceCard" key={item.titulo}>
-                  <div>
-                    <span>{item.titulo}</span>
-                    <h3>{item.valor}</h3>
-                    <p>{item.ayuda}</p>
+            {loading ? (
+              <div className="performanceGrid">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <Skeleton key={i} className="perfSkel" />
+                ))}
+              </div>
+            ) : (
+              <div className="performanceGrid">
+                {performanceCards.map((item) => (
+                  <div className="performanceCard" key={item.titulo}>
+                    <div>
+                      <span>{item.titulo}</span>
+                      <h3>{item.valor}</h3>
+                      <p>{item.ayuda}</p>
+                    </div>
+                    <b className={item.color}>{item.estado}</b>
                   </div>
-
-                  <b className={item.color}>{item.estado}</b>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="panelCard">
             <div className="panelTop">
               <div>
-                <h2>Embudo de campaña</h2>
-                <p>De impresión a venta.</p>
+                <h2>Embudo real</h2>
+                <p>Leads → Conversaciones → Respuestas → Seguimientos → Ventas</p>
               </div>
             </div>
-
-            <div className="funnel">
-              {funnel.map((f) => (
-                <div className="funnelRow" key={f.nombre}>
-                  <div className="funnelName">
-                    <strong>{f.nombre}</strong>
-                    <span>{f.cantidad}</span>
+            {loading ? (
+              <Skeleton className="funnelSkel" />
+            ) : funnel?.vacio ? (
+              <EmptyBlock title="Embudo vacío" hint="Registra leads y conversaciones para ver el embudo." />
+            ) : (
+              <div className="funnel">
+                {(funnel?.etapas || []).map((f) => (
+                  <div className="funnelRow" key={f.nombre}>
+                    <div className="funnelName">
+                      <strong>{f.nombre}</strong>
+                      <span>{formatNum(f.cantidad)}</span>
+                    </div>
+                    <div className="funnelBar">
+                      <div className={f.color} style={{ width: `${f.porcentaje}%` }} />
+                    </div>
+                    <b>{f.tasaVsLeads > 0 ? `${f.tasaVsLeads}%` : "—"}</b>
                   </div>
+                ))}
+              </div>
+            )}
+          </div>
 
-                  <div className="funnelBar">
-                    <div className={f.color} style={{ width: `${f.valor}%` }} />
-                  </div>
-
-                  <b>{f.valor}%</b>
-                </div>
-              ))}
+          <div className="panelCard">
+            <div className="panelTop">
+              <div>
+                <h2>Tendencia diaria</h2>
+                <p>Leads, mensajes y ventas por día.</p>
+              </div>
             </div>
+            {loading ? (
+              <Skeleton className="chartSkel" />
+            ) : (
+              <div className="chartsRow">
+                <div className="chartBox">
+                  <h4>Leads</h4>
+                  <MiniChart data={series?.diario} keyField="leads" color="green" />
+                </div>
+                <div className="chartBox">
+                  <h4>Mensajes</h4>
+                  <MiniChart data={series?.diario} keyField="mensajes" color="cyan" />
+                </div>
+                <div className="chartBox">
+                  <h4>Ventas</h4>
+                  <MiniChart data={series?.diario} keyField="ventas" color="purple" />
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="panelCard">
+            <div className="panelTop">
+              <div>
+                <h2>Heatmap horario</h2>
+                <p>Horas con más mensajes y leads (hora local del navegador).</p>
+              </div>
+            </div>
+            {loading ? <Skeleton className="heatmapSkel" /> : <HeatmapGrid heatmap={heatmap?.heatmap} />}
           </div>
         </div>
 
         <div className="rightColumn">
           <div className="panelCard moneyCard">
-            <span className="eyebrow">Inversión</span>
-            <h2>Bs {campaign.gastado}</h2>
-            <p>Gastado de un presupuesto de Bs {campaign.presupuesto} diario.</p>
-
-            <div className="budgetBar">
-              <div style={{ width: `${Math.min(100, (campaign.gastado / 220) * 100)}%` }} />
-            </div>
-
-            <div className="moneyList">
-              <div>
-                <span>CPC</span>
-                <strong>Bs {campaign.cpc}</strong>
-              </div>
-              <div>
-                <span>CPM</span>
-                <strong>Bs {campaign.cpm}</strong>
-              </div>
-              <div>
-                <span>Frecuencia</span>
-                <strong>{campaign.frecuencia}</strong>
-              </div>
-            </div>
+            <span className="eyebrow">Meta Ads</span>
+            {loading ? (
+              <Skeleton className="moneySkel" />
+            ) : (
+              <>
+                <h2>{metaAds.conectado ? "Pixel conectado" : "Sin integración Ads"}</h2>
+                <p>{metaAds.mensaje}</p>
+                <div className="moneyList">
+                  <MetaMetricCard titulo="ROAS" ayuda="Ingresos / inversión publicitaria" />
+                  <MetaMetricCard titulo="CTR" ayuda="Clicks / impresiones" />
+                  <MetaMetricCard titulo="CPC" ayuda="Costo por click" />
+                </div>
+                <div className="moneyList" style={{ marginTop: 10 }}>
+                  <MetaMetricCard titulo="CPM" ayuda="Costo por mil impresiones" />
+                  <MetaMetricCard titulo="Frecuencia" ayuda="Veces que ven el anuncio" />
+                  <div className="metaNote">
+                    <span>Inversión</span>
+                    <strong>—</strong>
+                    <small>{META_PLACEHOLDER}</small>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
 
           <div className="panelCard">
-            <h2>Diagnóstico rápido</h2>
+            <h2>Seguimientos</h2>
+            {loading ? (
+              <Skeleton className="segSkel" />
+            ) : (
+              <div className="segGrid">
+                {segCards.map((s) => (
+                  <div key={s.label} className="segItem">
+                    <span>{s.label}</span>
+                    <strong>{formatNum(s.val)}</strong>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
 
-            <div className="diagnostico">
-              {diagnostico.map((d, i) => (
-                <div className="diagItem" key={i}>
-                  <span>✓</span>
-                  <p>{d}</p>
-                </div>
-              ))}
-            </div>
+          <div className="panelCard">
+            <h2>Diagnóstico inteligente</h2>
+            {loading ? (
+              <Skeleton className="diagSkel" />
+            ) : (
+              <div className="diagnostico">
+                {(diagnostico?.items || []).map((d, i) => (
+                  <div className={`diagItem ${d.tipo}`} key={i}>
+                    <span>{d.tipo === "ok" ? "✓" : d.tipo === "alerta" ? "!" : "i"}</span>
+                    <p>{d.texto}</p>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="panelCard recommendation">
             <span className="eyebrow">Recomendación</span>
-            <h2>{score >= 80 ? "Puedes escalar con cuidado" : "Optimiza antes de escalar"}</h2>
-            <p>
-              {score >= 80
-                ? "Duplica presupuesto gradualmente o crea una copia con nuevas creatividades."
-                : "Primero mejora creativo, respuesta por WhatsApp y seguimiento antes de subir presupuesto."}
-            </p>
+            {loading ? (
+              <Skeleton className="recSkel" />
+            ) : (
+              <>
+                <h2>{salud.score >= 60 ? "Embudo saludable" : "Optimiza el embudo"}</h2>
+                <p>{diagnostico?.recomendacion || "Revisa seguimientos y respuestas."}</p>
+              </>
+            )}
+          </div>
+
+          <div className="panelCard">
+            <h2>Métricas por flujo</h2>
+            {loading ? (
+              <Skeleton className="flowSkel" />
+            ) : flujos?.flujos?.length ? (
+              <div className="flowHighlights">
+                {flujos.destacados?.masLeads && (
+                  <div className="flowHighlight">
+                    <small>Más leads</small>
+                    <strong>{flujos.destacados.masLeads.nombre}</strong>
+                    <span>{formatNum(flujos.destacados.masLeads.leads)}</span>
+                  </div>
+                )}
+                {flujos.destacados?.masRespuestas && (
+                  <div className="flowHighlight">
+                    <small>Más respuestas</small>
+                    <strong>{flujos.destacados.masRespuestas.nombre}</strong>
+                    <span>{formatNum(flujos.destacados.masRespuestas.respuestas)}</span>
+                  </div>
+                )}
+                {flujos.destacados?.masConversiones && (
+                  <div className="flowHighlight">
+                    <small>Más conversiones</small>
+                    <strong>{flujos.destacados.masConversiones.nombre}</strong>
+                    <span>{formatNum(flujos.destacados.masConversiones.conversiones)}</span>
+                  </div>
+                )}
+                {flujos.destacados?.masPendientes && (
+                  <div className="flowHighlight warn">
+                    <small>Más pendientes</small>
+                    <strong>{flujos.destacados.masPendientes.nombre}</strong>
+                    <span>{formatNum(flujos.destacados.masPendientes.seguimientosPendientes)}</span>
+                  </div>
+                )}
+                {flujos.sinActividad?.length > 0 && (
+                  <div className="flowInactive">
+                    <small>Sin actividad ({flujos.sinActividad.length})</small>
+                    <p>{flujos.sinActividad.map((f) => f.nombre).join(", ")}</p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <EmptyBlock title="Sin flujos" hint="Crea flujos en el módulo Flujos para ver ranking." />
+            )}
           </div>
         </div>
       </section>
@@ -366,612 +515,125 @@ export default function Metricas() {
 }
 
 const styles = `
-.metricasMeta {
-  min-height: 100%;
-  color: #e5e7eb;
-}
-
-.hero {
-  min-height: 230px;
-  border-radius: 34px;
-  padding: 30px;
-  margin-bottom: 18px;
-  background:
-    radial-gradient(circle at 88% 18%, rgba(34,211,238,.28), transparent 28%),
-    radial-gradient(circle at 15% 90%, rgba(168,85,247,.18), transparent 30%),
-    linear-gradient(135deg, rgba(15,23,42,.86), rgba(6,182,212,.16));
-  border: 1px solid rgba(148,163,184,.16);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 24px;
-  overflow: hidden;
-  position: relative;
-  animation: fadeUp .35s ease both;
-}
-
-.hero::after {
-  content: "";
-  width: 360px;
-  height: 360px;
-  border-radius: 50%;
-  position: absolute;
-  right: -130px;
-  bottom: -170px;
-  background: conic-gradient(from 180deg, #22c55e, #06b6d4, #a855f7, #f97316, #22c55e);
-  filter: blur(45px);
-  opacity: .16;
-  animation: rotateGlow 9s linear infinite;
-}
-
-.eyebrow {
-  color: #67e8f9;
-  font-size: 12px;
-  font-weight: 1000;
-  letter-spacing: 2.4px;
-  text-transform: uppercase;
-}
-
-.hero h1 {
-  margin: 12px 0 12px;
-  font-size: 42px;
-  line-height: 1.02;
-  letter-spacing: -1.2px;
-  max-width: 850px;
-}
-
-.hero p {
-  margin: 0;
-  color: #b6c4d8;
-  max-width: 760px;
-  line-height: 1.55;
-}
-
-.heroScore {
-  width: 180px;
-  min-width: 180px;
-  height: 180px;
-  border-radius: 34px;
-  background: rgba(255,255,255,.065);
-  border: 1px solid rgba(255,255,255,.13);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  position: relative;
-  z-index: 2;
-}
-
-.scoreRing {
-  width: 92px;
-  height: 92px;
-  border-radius: 50%;
-  border: 3px solid rgba(34,211,238,.45);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 0 35px rgba(34,211,238,.12);
-}
-
-.scoreRing.pulse {
-  animation: pulse .9s ease;
-}
-
-.scoreRing strong {
-  font-size: 34px;
-}
-
-.scoreRing span {
-  color: #94a3b8;
-  font-size: 13px;
-}
-
-.heroScore b {
-  color: #86efac;
-  font-size: 18px;
-}
-
-.heroScore small {
-  color: #94a3b8;
-}
-
-.controlBar {
-  border-radius: 26px;
-  padding: 16px;
-  margin-bottom: 18px;
-  background: rgba(15,23,42,.72);
-  border: 1px solid rgba(148,163,184,.14);
-  display: grid;
-  grid-template-columns: 1fr auto auto;
-  gap: 14px;
-  align-items: center;
-  animation: fadeUp .35s ease both;
-}
-
-.selectorBox label {
-  display: block;
-  color: #94a3b8;
-  font-size: 12px;
-  margin-bottom: 7px;
-  font-weight: 900;
-}
-
-.selectorBox select {
-  width: 100%;
-  height: 48px;
-  border: 1px solid rgba(148,163,184,.14);
-  border-radius: 17px;
-  background: rgba(255,255,255,.07);
-  color: white;
-  padding: 0 14px;
-  outline: none;
-  font-weight: 900;
-}
-
-.periodos {
-  display: flex;
-  gap: 8px;
-}
-
-.periodos button {
-  height: 42px;
-  border: 0;
-  border-radius: 14px;
-  padding: 0 14px;
-  color: white;
-  background: rgba(255,255,255,.08);
-  cursor: pointer;
-  font-weight: 900;
-}
-
-.periodos button.active {
-  background: linear-gradient(135deg, #22c55e, #06b6d4);
-  color: #031827;
-}
-
-.campaignStatus {
-  height: 52px;
-  border-radius: 18px;
-  padding: 0 14px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  background: rgba(255,255,255,.06);
-}
-
-.campaignStatus span {
-  width: 11px;
-  height: 11px;
-  border-radius: 50%;
-  background: #f97316;
-  box-shadow: 0 0 13px #f97316;
-}
-
-.campaignStatus span.activa {
-  background: #22c55e;
-  box-shadow: 0 0 13px #22c55e;
-}
-
-.campaignStatus strong {
-  display: block;
-}
-
-.campaignStatus small {
-  color: #94a3b8;
-}
-
-.mainGrid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
-  margin-bottom: 18px;
-}
-
-.mainCard {
-  min-height: 170px;
-  border-radius: 28px;
-  padding: 20px;
-  overflow: hidden;
-  position: relative;
-  border: 1px solid rgba(148,163,184,.14);
-  background: rgba(15,23,42,.72);
-  animation: fadeUp .35s ease both;
-  transition: .2s;
-}
-
-.mainCard:hover {
-  transform: translateY(-4px);
-}
-
+.metricasMeta { min-height: 100%; color: #e5e7eb; }
+.hero { min-height: 200px; border-radius: 34px; padding: 30px; margin-bottom: 18px; background: radial-gradient(circle at 88% 18%, rgba(34,211,238,.28), transparent 28%), radial-gradient(circle at 15% 90%, rgba(168,85,247,.18), transparent 30%), linear-gradient(135deg, rgba(15,23,42,.86), rgba(6,182,212,.16)); border: 1px solid rgba(148,163,184,.16); display: flex; justify-content: space-between; align-items: center; gap: 24px; animation: fadeUp .35s ease both; }
+.eyebrow { color: #67e8f9; font-size: 12px; font-weight: 1000; letter-spacing: 2.4px; text-transform: uppercase; }
+.hero h1 { margin: 12px 0; font-size: 36px; line-height: 1.05; letter-spacing: -1px; max-width: 800px; }
+.hero p { margin: 0; color: #b6c4d8; max-width: 720px; line-height: 1.55; }
+.heroScore { width: 160px; min-width: 160px; padding: 16px; border-radius: 28px; background: rgba(255,255,255,.065); border: 1px solid rgba(255,255,255,.13); display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.scoreRing { width: 88px; height: 88px; border-radius: 50%; border: 3px solid rgba(34,211,238,.45); display: flex; align-items: center; justify-content: center; }
+.scoreRing strong { font-size: 32px; }
+.scoreRing span { color: #94a3b8; font-size: 12px; }
+.heroScore b { color: #86efac; }
+.heroScore small { color: #94a3b8; }
+.controlBar { border-radius: 26px; padding: 16px; margin-bottom: 18px; background: rgba(15,23,42,.72); border: 1px solid rgba(148,163,184,.14); display: grid; grid-template-columns: 1fr auto auto; gap: 14px; align-items: end; }
+.selectorBox label { display: block; color: #94a3b8; font-size: 12px; margin-bottom: 7px; font-weight: 900; }
+.selectorBox select { width: 100%; min-width: 200px; height: 48px; border: 1px solid rgba(148,163,184,.14); border-radius: 17px; background: rgba(255,255,255,.07); color: white; padding: 0 14px; font-weight: 700; }
+.periodos { display: flex; gap: 8px; flex-wrap: wrap; }
+.periodos button { height: 42px; border: 0; border-radius: 14px; padding: 0 14px; color: white; background: rgba(255,255,255,.08); cursor: pointer; font-weight: 900; }
+.periodos button.active { background: linear-gradient(135deg, #22c55e, #06b6d4); color: #031827; }
+.controlActions { display: flex; gap: 10px; align-items: center; }
+.refreshBtn { height: 42px; border: 0; border-radius: 14px; padding: 0 16px; background: rgba(255,255,255,.1); color: white; font-weight: 900; cursor: pointer; }
+.liveBadge { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 14px; background: rgba(255,255,255,.06); }
+.liveDot { width: 10px; height: 10px; border-radius: 50%; background: #22c55e; box-shadow: 0 0 10px #22c55e; animation: pulse 1.5s infinite; }
+.mainGrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 18px; }
+.mainCard { min-height: 160px; border-radius: 28px; padding: 20px; position: relative; overflow: hidden; border: 1px solid rgba(148,163,184,.14); background: rgba(15,23,42,.72); animation: fadeUp .35s ease both; }
 .mainCard.green { background: linear-gradient(135deg, rgba(34,197,94,.24), rgba(15,23,42,.78)); }
 .mainCard.cyan { background: linear-gradient(135deg, rgba(6,182,212,.24), rgba(15,23,42,.78)); }
 .mainCard.purple { background: linear-gradient(135deg, rgba(168,85,247,.24), rgba(15,23,42,.78)); }
 .mainCard.orange { background: linear-gradient(135deg, rgba(249,115,22,.24), rgba(15,23,42,.78)); }
-
-.shine {
-  position: absolute;
-  inset: -80px;
-  background: linear-gradient(120deg, transparent 35%, rgba(255,255,255,.12), transparent 65%);
-  transform: translateX(-70%);
-  animation: shine 5s infinite;
-}
-
-.cardTop {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.icon {
-  width: 46px;
-  height: 46px;
-  border-radius: 16px;
-  background: rgba(255,255,255,.09);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 21px;
-}
-
-.cardTop span {
-  color: #86efac;
-  background: rgba(34,197,94,.14);
-  padding: 6px 9px;
-  border-radius: 999px;
-  font-weight: 1000;
-  font-size: 12px;
-}
-
-.mainCard h2 {
-  margin: 20px 0 8px;
-  font-size: 34px;
-}
-
-.mainCard strong {
-  display: block;
-}
-
-.mainCard p {
-  margin: 6px 0 0;
-  color: #94a3b8;
-}
-
-.bodyGrid {
-  display: grid;
-  grid-template-columns: 1.25fr .75fr;
-  gap: 18px;
-}
-
-.leftColumn,
-.rightColumn {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-}
-
-.panelCard {
-  border-radius: 28px;
-  padding: 20px;
-  background: rgba(15,23,42,.72);
-  border: 1px solid rgba(148,163,184,.14);
-  box-shadow: 0 22px 70px rgba(0,0,0,.16);
-  animation: fadeUp .35s ease both;
-}
-
-.panelTop {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 18px;
-}
-
-.panelTop h2,
-.panelCard h2 {
-  margin: 0;
-}
-
-.panelTop p {
-  margin: 6px 0 0;
-  color: #94a3b8;
-}
-
-.panelTop button {
-  height: 42px;
-  border: 0;
-  border-radius: 14px;
-  padding: 0 14px;
-  background: rgba(255,255,255,.08);
-  color: white;
-  font-weight: 900;
-  cursor: pointer;
-}
-
-.performanceGrid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
-}
-
-.performanceCard {
-  padding: 16px;
-  border-radius: 20px;
-  background: rgba(255,255,255,.045);
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.performanceCard span {
-  color: #94a3b8;
-  font-size: 12px;
-  font-weight: 900;
-}
-
-.performanceCard h3 {
-  margin: 8px 0 4px;
-  font-size: 28px;
-}
-
-.performanceCard p {
-  margin: 0;
-  color: #94a3b8;
-  font-size: 12px;
-}
-
-.performanceCard b {
-  height: 30px;
-  padding: 0 10px;
-  border-radius: 999px;
-  display: flex;
-  align-items: center;
-  white-space: nowrap;
-  font-size: 12px;
-}
-
-.good {
-  background: rgba(34,197,94,.15);
-  color: #86efac;
-}
-
-.warning {
-  background: rgba(249,115,22,.16);
-  color: #fdba74;
-}
-
-.danger {
-  background: rgba(239,68,68,.16);
-  color: #fca5a5;
-}
-
-.funnel {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.funnelRow {
-  display: grid;
-  grid-template-columns: 170px 1fr 48px;
-  gap: 14px;
-  align-items: center;
-}
-
-.funnelName strong {
-  display: block;
-}
-
-.funnelName span {
-  color: #94a3b8;
-  font-size: 13px;
-}
-
-.funnelBar {
-  height: 14px;
-  border-radius: 999px;
-  background: rgba(255,255,255,.08);
-  overflow: hidden;
-}
-
-.funnelBar div {
-  height: 100%;
-  border-radius: inherit;
-  animation: growBar .8s ease both;
-}
-
+.shine { position: absolute; inset: -80px; background: linear-gradient(120deg, transparent 35%, rgba(255,255,255,.08), transparent 65%); animation: shine 5s infinite; }
+.cardTop { display: flex; justify-content: space-between; align-items: center; position: relative; }
+.icon { width: 44px; height: 44px; border-radius: 14px; background: rgba(255,255,255,.09); display: flex; align-items: center; justify-content: center; font-size: 20px; }
+.trend { font-size: 11px; font-weight: 900; padding: 5px 8px; border-radius: 999px; }
+.trend.up { background: rgba(34,197,94,.15); color: #86efac; }
+.trend.down { background: rgba(239,68,68,.15); color: #fca5a5; }
+.trend.muted { color: #94a3b8; background: rgba(255,255,255,.06); }
+.mainCard h2 { margin: 16px 0 6px; font-size: 32px; position: relative; }
+.mainCard p { margin: 4px 0 0; color: #94a3b8; font-size: 13px; position: relative; }
+.bodyGrid { display: grid; grid-template-columns: 1.25fr .75fr; gap: 18px; }
+.leftColumn, .rightColumn { display: flex; flex-direction: column; gap: 18px; }
+.panelCard { border-radius: 28px; padding: 20px; background: rgba(15,23,42,.72); border: 1px solid rgba(148,163,184,.14); animation: fadeUp .35s ease both; }
+.panelTop { margin-bottom: 16px; }
+.panelTop h2, .panelCard h2 { margin: 0 0 6px; font-size: 20px; }
+.panelTop p { margin: 0; color: #94a3b8; font-size: 13px; }
+.performanceGrid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+.performanceCard { padding: 16px; border-radius: 20px; background: rgba(255,255,255,.045); display: flex; justify-content: space-between; gap: 10px; }
+.performanceCard span { color: #94a3b8; font-size: 12px; font-weight: 900; }
+.performanceCard h3 { margin: 8px 0 4px; font-size: 26px; }
+.performanceCard p { margin: 0; color: #94a3b8; font-size: 12px; }
+.performanceCard b { height: 28px; padding: 0 10px; border-radius: 999px; display: flex; align-items: center; font-size: 11px; white-space: nowrap; }
+.good { background: rgba(34,197,94,.15); color: #86efac; }
+.warning { background: rgba(249,115,22,.16); color: #fdba74; }
+.metaPlaceholder h3 { color: #64748b; }
+.funnel { display: flex; flex-direction: column; gap: 14px; }
+.funnelRow { display: grid; grid-template-columns: 180px 1fr 52px; gap: 12px; align-items: center; }
+.funnelName span { color: #94a3b8; font-size: 13px; display: block; }
+.funnelBar { height: 12px; border-radius: 999px; background: rgba(255,255,255,.08); overflow: hidden; }
+.funnelBar div { height: 100%; border-radius: inherit; animation: growBar .6s ease both; }
 .funnelBar .blue { background: linear-gradient(90deg, #3b82f6, #06b6d4); }
 .funnelBar .cyan { background: linear-gradient(90deg, #06b6d4, #22c55e); }
 .funnelBar .green { background: linear-gradient(90deg, #22c55e, #84cc16); }
+.funnelBar .orange { background: linear-gradient(90deg, #f97316, #eab308); }
 .funnelBar .purple { background: linear-gradient(90deg, #a855f7, #ec4899); }
-
-.moneyCard {
-  background:
-    radial-gradient(circle at 85% 12%, rgba(34,211,238,.16), transparent 32%),
-    rgba(15,23,42,.72);
-}
-
-.moneyCard h2 {
-  font-size: 38px;
-  margin: 10px 0 6px;
-}
-
-.moneyCard p {
-  color: #94a3b8;
-  line-height: 1.5;
-}
-
-.budgetBar {
-  height: 14px;
-  border-radius: 999px;
-  overflow: hidden;
-  background: rgba(255,255,255,.08);
-  margin: 18px 0;
-}
-
-.budgetBar div {
-  height: 100%;
-  background: linear-gradient(90deg, #22c55e, #06b6d4, #a855f7);
-  border-radius: inherit;
-}
-
-.moneyList {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 11px;
-}
-
-.moneyList div {
-  padding: 12px;
+.chartsRow { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.chartBox h4 { margin: 0 0 10px; color: #94a3b8; font-size: 12px; }
+.miniChart { display: flex; align-items: flex-end; gap: 4px; height: 100px; }
+.miniBarCol { flex: 1; display: flex; flex-direction: column; align-items: center; height: 100%; justify-content: flex-end; }
+.miniBar { width: 100%; min-height: 4px; border-radius: 6px 6px 2px 2px; transition: height .3s; }
+.miniBar.green { background: linear-gradient(180deg, #22c55e, #16a34a); }
+.miniBar.cyan { background: linear-gradient(180deg, #06b6d4, #0891b2); }
+.miniBar.purple { background: linear-gradient(180deg, #a855f7, #7c3aed); }
+.miniBarCol small { font-size: 9px; color: #64748b; margin-top: 4px; }
+.heatmapGrid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; }
+.heatCell { padding: 8px 4px; border-radius: 10px; background: linear-gradient(135deg, #06b6d4, #22c55e); text-align: center; font-size: 11px; }
+.heatCell b { display: block; }
+.heatCell small { color: rgba(255,255,255,.8); }
+.moneyCard { background: radial-gradient(circle at 85% 12%, rgba(34,211,238,.12), transparent 32%), rgba(15,23,42,.72); }
+.moneyList { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
+.metaNote { padding: 10px; border-radius: 14px; background: rgba(255,255,255,.04); }
+.metaNote span { display: block; color: #94a3b8; font-size: 11px; }
+.metaNote strong { display: block; margin: 4px 0; }
+.metaNote small { color: #fdba74; font-size: 10px; line-height: 1.3; }
+.segGrid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 12px; }
+.segItem { padding: 12px; border-radius: 14px; background: rgba(255,255,255,.05); }
+.segItem span { color: #94a3b8; font-size: 12px; }
+.segItem strong { display: block; margin-top: 6px; font-size: 22px; }
+.diagnostico { margin-top: 12px; display: flex; flex-direction: column; gap: 10px; }
+.diagItem { display: flex; gap: 10px; padding: 12px; border-radius: 14px; background: rgba(255,255,255,.045); }
+.diagItem span { width: 24px; height: 24px; min-width: 24px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 12px; }
+.diagItem.ok span { background: #22c55e; color: #031827; }
+.diagItem.alerta span { background: #f97316; color: #031827; }
+.diagItem.info span { background: #06b6d4; color: #031827; }
+.diagItem p { margin: 0; color: #cbd5e1; font-size: 13px; line-height: 1.4; }
+.recommendation { background: radial-gradient(circle at 80% 12%, rgba(168,85,247,.15), transparent 32%), linear-gradient(135deg, rgba(34,197,94,.08), rgba(15,23,42,.75)); }
+.flowHighlights { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+.flowHighlight { padding: 12px; border-radius: 14px; background: rgba(255,255,255,.05); }
+.flowHighlight small { color: #94a3b8; font-size: 11px; }
+.flowHighlight strong { display: block; margin: 4px 0; }
+.flowHighlight.warn { border: 1px solid rgba(249,115,22,.3); }
+.flowInactive { padding: 12px; border-radius: 14px; background: rgba(239,68,68,.08); }
+.flowInactive p { margin: 6px 0 0; color: #94a3b8; font-size: 12px; }
+.emptyBlock { text-align: center; padding: 28px 16px; color: #94a3b8; }
+.emptyBlock span { font-size: 28px; display: block; margin-bottom: 8px; }
+.emptyBlock strong { color: #e2e8f0; display: block; margin-bottom: 6px; }
+.skel, .skelCard, .perfSkel, .funnelSkel, .chartSkel, .heatmapSkel, .moneySkel, .segSkel, .diagSkel, .recSkel, .flowSkel, .scoreSkel {
+  background: linear-gradient(90deg, rgba(255,255,255,.04) 25%, rgba(255,255,255,.1) 50%, rgba(255,255,255,.04) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.2s infinite;
   border-radius: 16px;
-  background: rgba(255,255,255,.045);
 }
-
-.moneyList span {
-  display: block;
-  color: #94a3b8;
-  font-size: 12px;
-}
-
-.moneyList strong {
-  display: block;
-  margin-top: 6px;
-}
-
-.diagnostico {
-  margin-top: 15px;
-  display: flex;
-  flex-direction: column;
-  gap: 11px;
-}
-
-.diagItem {
-  display: flex;
-  gap: 10px;
-  padding: 12px;
-  border-radius: 16px;
-  background: rgba(255,255,255,.045);
-}
-
-.diagItem span {
-  width: 26px;
-  height: 26px;
-  min-width: 26px;
-  border-radius: 10px;
-  background: linear-gradient(135deg, #22c55e, #06b6d4);
-  color: #031827;
-  font-weight: 1000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.diagItem p {
-  margin: 0;
-  color: #cbd5e1;
-  line-height: 1.45;
-}
-
-.recommendation {
-  background:
-    radial-gradient(circle at 80% 12%, rgba(168,85,247,.18), transparent 32%),
-    linear-gradient(135deg, rgba(34,197,94,.1), rgba(15,23,42,.75));
-}
-
-.recommendation h2 {
-  margin: 12px 0 8px;
-  font-size: 26px;
-}
-
-.recommendation p {
-  color: #b6c4d8;
-  line-height: 1.55;
-}
-
-@keyframes fadeUp {
-  from {
-    opacity: 0;
-    transform: translateY(16px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes shine {
-  0% {
-    transform: translateX(-70%);
-  }
-
-  45%,100% {
-    transform: translateX(70%);
-  }
-}
-
-@keyframes rotateGlow {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@keyframes pulse {
-  0%,100% {
-    transform: scale(1);
-  }
-
-  50% {
-    transform: scale(1.06);
-  }
-}
-
-@keyframes growBar {
-  from {
-    width: 0;
-  }
-}
-
-@media (max-width: 1200px) {
-  .mainGrid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  .bodyGrid {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 760px) {
-  .hero {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .heroScore {
-    width: 100%;
-    min-width: 100%;
-  }
-
-  .controlBar {
-    grid-template-columns: 1fr;
-  }
-
-  .periodos {
-    flex-wrap: wrap;
-  }
-
-  .mainGrid,
-  .performanceGrid,
-  .moneyList {
-    grid-template-columns: 1fr;
-  }
-
-  .funnelRow {
-    grid-template-columns: 1fr;
-  }
-
-  .hero h1 {
-    font-size: 32px;
-  }
-}
+.skelCard { min-height: 160px; }
+.perfSkel { height: 90px; }
+.funnelSkel, .chartSkel { height: 120px; }
+.heatmapSkel { height: 80px; }
+.errorPanel { margin: 40px auto; max-width: 480px; padding: 32px; text-align: center; border-radius: 24px; background: rgba(15,23,42,.9); border: 1px solid rgba(239,68,68,.3); }
+.errorPanel button { margin-top: 16px; height: 44px; padding: 0 20px; border: 0; border-radius: 14px; background: linear-gradient(135deg, #22c55e, #06b6d4); color: #031827; font-weight: 900; cursor: pointer; }
+@keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+@keyframes shine { 0% { transform: translateX(-70%); } 45%,100% { transform: translateX(70%); } }
+@keyframes growBar { from { width: 0; } }
+@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .5; } }
+@media (max-width: 1200px) { .mainGrid { grid-template-columns: repeat(2, 1fr); } .bodyGrid { grid-template-columns: 1fr; } .chartsRow { grid-template-columns: 1fr; } }
+@media (max-width: 760px) { .hero { flex-direction: column; align-items: flex-start; } .controlBar { grid-template-columns: 1fr; } .mainGrid, .performanceGrid, .moneyList, .heatmapGrid { grid-template-columns: 1fr; } .funnelRow { grid-template-columns: 1fr; } .hero h1 { font-size: 28px; } }
 `;

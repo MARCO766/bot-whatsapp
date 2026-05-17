@@ -386,4 +386,5 @@ module.exports = {
   loadFlujosDashboardData,
   metricasVacias,
   calcTendencia,
+  sumarVentasPorMoneda,
 };
