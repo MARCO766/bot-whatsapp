@@ -1,0 +1,71 @@
+import React from "react";
+import { formatHeaderTrend, formatHeaderVentas, formatNumber } from "../../flujos/utils";
+
+const CARDS = [
+  { key: "leadsVivos", label: "Leads vivos", icon: "⚡", trendKey: "tendenciaLeads", accent: "accentCyan" },
+  {
+    key: "conversaciones",
+    label: "Conversaciones",
+    icon: "💬",
+    trendKey: "tendenciaConversaciones",
+    accent: "",
+  },
+  {
+    key: "ventas",
+    label: "Ventas",
+    icon: "💎",
+    trendKey: "tendenciaVentas",
+    accent: "accentGreen",
+    format: (d) => formatHeaderVentas(d.ventasTotal, d.moneda),
+  },
+];
+
+export default function FlujosHeaderStats({ data, loading, error, onRetry }) {
+  if (loading) {
+    return (
+      <div className="flHeaderStats">
+        {CARDS.map((_, i) => (
+          <div key={i} className="flHeaderStatCard flSkeleton" style={{ minHeight: 88 }} />
+        ))}
+      </div>
+    );
+  }
+
+  const d = data || {};
+
+  return (
+    <>
+      {error && (
+        <div className="flHeaderStatsError">
+          <span>{error}</span>
+          {onRetry && (
+            <button type="button" className="flBtn flBtnGhost" onClick={onRetry}>
+              Reintentar
+            </button>
+          )}
+        </div>
+      )}
+      <div className="flHeaderStats">
+        {CARDS.map((card) => {
+          const trend = formatHeaderTrend(d[card.trendKey]);
+          const value = card.format
+            ? card.format(d)
+            : formatNumber(d[card.key] ?? 0);
+
+          return (
+            <div key={card.key} className="flHeaderStatCard">
+              <div className="flHeaderStatIcon">{card.icon}</div>
+              <div className="flHeaderStatBody">
+                <span className="flHeaderStatLabel">{card.label}</span>
+                <h3 className={`flHeaderStatValue ${card.accent || ""}`}>{value}</h3>
+              </div>
+              {trend && (
+                <b className={`flHeaderStatTrend ${trend.positive ? "up" : "down"}`}>{trend.text}</b>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </>
+  );
+}

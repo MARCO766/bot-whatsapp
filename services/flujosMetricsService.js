@@ -21,6 +21,145 @@ function startOfTodayIso() {
   return d.toISOString();
 }
 
+function startOfYesterdayIso() {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  d.setHours(0, 0, 0, 0);
+  return d.toISOString();
+}
+
+/** Porcentaje vs día anterior; null si no hay base comparable. */
+function calcTendencia(hoy, ayer) {
+  const a = Number(hoy) || 0;
+  const b = Number(ayer) || 0;
+  if (a === 0 && b === 0) return null;
+  if (b === 0) return a > 0 ? 100 : null;
+  return Math.round(((a - b) / b) * 1000) / 10;
+}
+
+function monedaDisplay(code) {
+  const c = String(code || "BOB").toUpperCase();
+  if (c === "BOB" || c === "BS") return "Bs";
+  return c;
+}
+
+function sumarVentasPorMoneda(rows) {
+  const totales = {};
+  (rows || []).forEach((row) => {
+    const mon = String(row.moneda || "BOB").toUpperCase();
+    const v = parseFloat(row.valor);
+    if (!Number.isFinite(v)) return;
+    totales[mon] = (totales[mon] || 0) + v;
+  });
+  return totales;
+}
+
+async function countConversacionesReales(usuarioId) {
+  const uid = encodeURIComponent(usuarioId);
+  const desdeTabla = await supabaseCount("conversaciones", `usuario_id=eq.${uid}`);
+  if (desdeTabla !== null) return desdeTabla;
+
+  const rows = await supabaseSelect(
+    "mensajes",
+    `usuario_id=eq.${uid}`,
+    "cliente_numero"
+  );
+  if (!Array.isArray(rows)) return 0;
+  const unicos = new Set(rows.map((r) => r.cliente_numero).filter(Boolean));
+  return unicos.size;
+}
+
+async function countConversacionesEnRango(usuarioId, desdeIso, hastaIso) {
+  const uid = encodeURIComponent(usuarioId);
+  const desde = encodeURIComponent(desdeIso);
+  const hasta = encodeURIComponent(hastaIso);
+
+  const desdeTabla = await supabaseCount(
+    "conversaciones",
+    `usuario_id=eq.${uid}&creado_en=gte.${desde}&creado_en=lt.${hasta}`
+  );
+  if (desdeTabla !== null) return desdeTabla;
+
+  const rows = await supabaseSelect(
+    "mensajes",
+    `usuario_id=eq.${uid}&creado_en=gte.${desde}&creado_en=lt.${hasta}`,
+    "cliente_numero"
+  );
+  if (!Array.isArray(rows)) return 0;
+  return new Set(rows.map((r) => r.cliente_numero).filter(Boolean)).size;
+}
+
+async function sumarVentasEnRango(usuarioId, desdeIso, hastaIso) {
+  const uid = encodeURIComponent(usuarioId);
+  const desde = encodeURIComponent(desdeIso);
+  const hasta = encodeURIComponent(hastaIso);
+  const rows = await supabaseSelect(
+    "crm_conversiones",
+    `usuario_id=eq.${uid}&creado_en=gte.${desde}&creado_en=lt.${hasta}`,
+    "valor,moneda"
+  );
+  if (!Array.isArray(rows)) return 0;
+  const totales = sumarVentasPorMoneda(rows);
+  const monedas = Object.keys(totales);
+  if (!monedas.length) return 0;
+  return totales[monedas[0]];
+}
+
+/**
+ * KPIs del header de Flujos — solo Supabase, sin mocks.
+ */
+async function computeHeaderStats(usuarioId) {
+  const uid = encodeURIComponent(usuarioId);
+  const hoy = startOfTodayIso();
+  const ayer = startOfYesterdayIso();
+
+  const [
+    leadsVivos,
+    conversaciones,
+    clientesHoy,
+    clientesAyer,
+    conversacionesHoy,
+    conversacionesAyer,
+    conversionesRows,
+    ventasHoy,
+    ventasAyer,
+  ] = await Promise.all([
+    supabaseCount("clientes", `usuario_id=eq.${uid}&estado=neq.bloqueado`),
+    countConversacionesReales(usuarioId),
+    supabaseCount("clientes", `usuario_id=eq.${uid}&creado_en=gte.${encodeURIComponent(hoy)}`),
+    supabaseCount(
+      "clientes",
+      `usuario_id=eq.${uid}&creado_en=gte.${encodeURIComponent(ayer)}&creado_en=lt.${encodeURIComponent(hoy)}`
+    ),
+    countConversacionesEnRango(usuarioId, hoy, new Date().toISOString()),
+    countConversacionesEnRango(usuarioId, ayer, hoy),
+    fetchConversionesRows(usuarioId),
+    sumarVentasEnRango(usuarioId, hoy, new Date().toISOString()),
+    sumarVentasEnRango(usuarioId, ayer, hoy),
+  ]);
+
+  let ventasTotal = 0;
+  let moneda = "BOB";
+  if (Array.isArray(conversionesRows) && conversionesRows.length) {
+    const totales = sumarVentasPorMoneda(conversionesRows);
+    const entries = Object.entries(totales).sort((a, b) => b[1] - a[1]);
+    if (entries.length) {
+      moneda = entries[0][0];
+      ventasTotal = Math.round(entries[0][1] * 100) / 100;
+    }
+  }
+
+  return {
+    leadsVivos: leadsVivos ?? 0,
+    conversaciones: conversaciones ?? 0,
+    ventasTotal,
+    moneda,
+    tendenciaLeads: calcTendencia(clientesHoy ?? 0, clientesAyer ?? 0),
+    tendenciaConversaciones: calcTendencia(conversacionesHoy ?? 0, conversacionesAyer ?? 0),
+    tendenciaVentas: calcTendencia(ventasHoy ?? 0, ventasAyer ?? 0),
+  };
+}
+
 async function supabaseCount(table, filterQuery) {
   const url = `${SUPABASE_URL}/rest/v1/${table}?select=id&${filterQuery}`;
   try {
@@ -195,11 +334,15 @@ async function loadFlujosDashboardData(usuarioId, flujos, activadores) {
 
 module.exports = {
   startOfTodayIso,
+  startOfYesterdayIso,
   resolveEstado,
   fetchSeguimientosRows,
   fetchConversionesRows,
   computePerFlowMetrics,
   computeGlobalStats,
+  computeHeaderStats,
   loadFlujosDashboardData,
   metricasVacias,
+  monedaDisplay,
+  calcTendencia,
 };

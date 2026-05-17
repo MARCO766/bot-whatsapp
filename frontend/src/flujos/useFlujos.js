@@ -4,7 +4,6 @@ import {
   createFlow,
   deleteFlow,
   duplicateFlow,
-  fetchFlowStats,
   fetchFlows,
   importFlowTemplate,
   patchFlowMeta,
@@ -21,7 +20,6 @@ import {
 
 export function useFlujos() {
   const [flows, setFlows] = useState([]);
-  const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [apiOnline, setApiOnline] = useState(false);
   const [apiError, setApiError] = useState(null);
@@ -47,14 +45,13 @@ export function useFlujos() {
     setApiUrl(resolveApiUrl("/api/flujos"));
 
     try {
-      const [flowsRes, statsRes] = await Promise.all([fetchFlows(), fetchFlowStats()]);
+      const flowsRes = await fetchFlows();
 
       if (!flowsRes.ok && !flowsRes.flows) {
         throw new ApiError(flowsRes.error || "Error cargando flujos", "SERVER");
       }
 
       setFlows(flowsRes.flows || []);
-      setStats(statsRes.stats || null);
       setApiOnline(true);
       setApiError(null);
     } catch (err) {
@@ -63,7 +60,6 @@ export function useFlujos() {
 
       setApiOnline(false);
       setFlows([]);
-      setStats(null);
       setApiError({
         code: apiErr.code,
         message: apiErr.message,
@@ -212,7 +208,6 @@ export function useFlujos() {
   return {
     flows,
     filtered,
-    stats,
     loading,
     apiOnline,
     apiError,

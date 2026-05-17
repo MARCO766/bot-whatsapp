@@ -1,7 +1,8 @@
 import React, { useState } from "react";
 import FlowFolders from "./components/flujos/FlowFolders";
 import FlowList from "./components/flujos/FlowList";
-import FlowStatsCards from "./components/flujos/FlowStatsCards";
+import FlujosHeaderStats from "./components/flujos/FlujosHeaderStats";
+import { useFlujosHeaderStats } from "./flujos/useFlujosHeaderStats";
 import ConfirmModal from "./components/flujos/ConfirmModal";
 import ImportFlowModal from "./components/flujos/ImportFlowModal";
 import { FLOW_STATES } from "./flujos/constants";
@@ -13,7 +14,6 @@ import { loginUrl } from "./flujos/api";
 export default function Flujos() {
   const {
     filtered,
-    stats,
     loading,
     apiOnline,
     apiError,
@@ -45,6 +45,8 @@ export default function Flujos() {
     updateMeta,
     load,
   } = useFlujos();
+
+  const headerStats = useFlujosHeaderStats(true);
 
   const [importOpen, setImportOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(null);
@@ -114,7 +116,12 @@ export default function Flujos() {
         </div>
       )}
 
-      <FlowStatsCards stats={stats} loading={loading} />
+      <FlujosHeaderStats
+        data={headerStats.data}
+        loading={headerStats.loading}
+        error={headerStats.error}
+        onRetry={headerStats.reload}
+      />
 
       <FlowFolders active={folder} onChange={setFolder} counts={folderCounts} />
 

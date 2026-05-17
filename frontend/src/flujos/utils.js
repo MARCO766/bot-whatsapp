@@ -29,6 +29,27 @@ export function formatNumber(n) {
   return String(v);
 }
 
+export function monedaSimbolo(code) {
+  const c = String(code || "BOB").toUpperCase();
+  if (c === "BOB" || c === "BS") return "Bs";
+  return c;
+}
+
+export function formatHeaderVentas(total, moneda) {
+  const v = Number(total) || 0;
+  const sym = monedaSimbolo(moneda);
+  return `${sym} ${v.toLocaleString("es-BO", { maximumFractionDigits: 2 })}`;
+}
+
+/** Tendencia % vs ayer; null si no hay dato comparable. */
+export function formatHeaderTrend(pct) {
+  if (pct === null || pct === undefined) return null;
+  const n = Number(pct);
+  if (!Number.isFinite(n)) return null;
+  const sign = n > 0 ? "+" : "";
+  return { text: `${sign}${n}%`, positive: n >= 0 };
+}
+
 /** Muestra número real, 0, o etiqueta cuando no hay fuente de datos. */
 export function formatMetric(value, { pendiente, emptyLabel = "Sin datos" } = {}) {
   if (pendiente) return emptyLabel;

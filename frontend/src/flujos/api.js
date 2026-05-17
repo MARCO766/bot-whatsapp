@@ -73,6 +73,10 @@ export function fetchFlowStats() {
   return request("/api/flujos/stats");
 }
 
+export function fetchHeaderStats() {
+  return request("/api/flujos/header-stats");
+}
+
 export function fetchApiStatus() {
   return request("/api/flujos/status");
 }

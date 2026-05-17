@@ -99,6 +99,97 @@ export const flujosStyles = `
   flex-wrap: wrap;
 }
 
+.flHeaderStats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+@media (max-width: 900px) {
+  .flHeaderStats {
+    grid-template-columns: 1fr;
+  }
+}
+
+.flHeaderStatCard {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+  border-radius: 20px;
+  background: rgba(15,23,42,.78);
+  border: 1px solid rgba(148,163,184,.14);
+  backdrop-filter: blur(12px);
+  position: relative;
+  min-height: 88px;
+}
+
+.flHeaderStatIcon {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  font-size: 1.25rem;
+  background: rgba(34,197,94,.12);
+  border: 1px solid rgba(34,197,94,.25);
+  flex-shrink: 0;
+}
+
+.flHeaderStatBody {
+  flex: 1;
+  min-width: 0;
+}
+
+.flHeaderStatLabel {
+  display: block;
+  font-size: 0.72rem;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  margin-bottom: 4px;
+}
+
+.flHeaderStatValue {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: #f1f5f9;
+  line-height: 1.2;
+}
+
+.flHeaderStatTrend {
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 4px 8px;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+
+.flHeaderStatTrend.up {
+  color: #4ade80;
+  background: rgba(34,197,94,.12);
+}
+
+.flHeaderStatTrend.down {
+  color: #f87171;
+  background: rgba(127,29,29,.25);
+}
+
+.flHeaderStatsError {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  margin-bottom: 10px;
+  border-radius: 12px;
+  background: rgba(127,29,29,.2);
+  border: 1px solid rgba(248,113,113,.3);
+  color: #fecaca;
+  font-size: 0.82rem;
+}
+
 .flStatsGrid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));

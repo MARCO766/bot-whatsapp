@@ -39,12 +39,6 @@ export default function App() {
     { id: "ajustes", nombre: "Ajustes", icono: "⚙️", badge: null, color: "blue" },
   ];
 
-  const quickStats = [
-    { label: "Leads vivos", value: "182", change: "+12%", icon: "⚡" },
-    { label: "Conversaciones", value: "742", change: "+8%", icon: "💬" },
-    { label: "Ventas", value: "Bs 3.549", change: "+21%", icon: "💎" },
-  ];
-
   const activities = [
     { text: "Nuevo mensaje desde WhatsApp", time: "Ahora", dot: "green" },
     { text: "Campaña Papercraft subió CTR", time: "2 min", dot: "cyan" },
@@ -202,19 +196,6 @@ export default function App() {
             ))}
           </div>
         )}
-
-        <section className="quickStats">
-          {quickStats.map((stat) => (
-            <div className="quickCard" key={stat.label}>
-              <div className="quickIcon">{stat.icon}</div>
-              <div>
-                <span>{stat.label}</span>
-                <h3>{stat.value}</h3>
-              </div>
-              <b>{stat.change}</b>
-            </div>
-          ))}
-        </section>
 
         <section className="page">
           <div className="pageAnimation" key={vista}>

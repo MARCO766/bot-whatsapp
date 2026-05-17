@@ -9,6 +9,7 @@ const {
   resolveEstado,
   loadFlujosDashboardData,
   metricasVacias,
+  computeHeaderStats,
 } = require("../services/flujosMetricsService");
 const { registrarConversion } = require("../services/conversionService");
 
@@ -200,6 +201,30 @@ router.get("/api/flujos", protegerApi, async (req, res) => {
       ok: false,
       error: "No se pudieron cargar los flujos",
       flows: [],
+    });
+  }
+});
+
+// GET /api/flujos/header-stats — KPIs superiores (header Flujos)
+router.get("/api/flujos/header-stats", protegerApi, async (req, res) => {
+  const usuario = req.session.usuario;
+  log(`GET /api/flujos/header-stats usuario=${usuario.id}`);
+
+  try {
+    const data = await computeHeaderStats(usuario.id);
+    res.json({ ok: true, ...data });
+  } catch (error) {
+    log("GET header-stats ERROR", error.response?.data || error.message);
+    res.status(500).json({
+      ok: false,
+      error: "No se pudieron cargar estadísticas del header",
+      leadsVivos: 0,
+      conversaciones: 0,
+      ventasTotal: 0,
+      moneda: "BOB",
+      tendenciaLeads: null,
+      tendenciaConversaciones: null,
+      tendenciaVentas: null,
     });
   }
 });
