@@ -19,7 +19,7 @@ function renderAdminPage({
 
 <link rel="stylesheet" href="/css/admin.css">
 <link rel="stylesheet" href="/css/flow-builder.css">
-${builder ? '<link rel="stylesheet" href="/css/seguimiento.css"><link rel="stylesheet" href="/css/conversion-node.css">' : ""}
+${builder ? '<link rel="stylesheet" href="/css/seguimiento.css"><link rel="stylesheet" href="/css/contenido.css"><link rel="stylesheet" href="/css/conversion-node.css">' : ""}
 </head>
 
 <body>
@@ -864,6 +864,7 @@ ${tab === "flujos" && builder ? `
 </script>
 ${builder ? `
 <script src="/js/builder/seguimiento.js"></script>
+<script src="/js/builder/contenido.js"></script>
 <script src="/js/builder.js"></script>
 ` : ""}
 

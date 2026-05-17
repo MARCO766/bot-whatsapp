@@ -225,6 +225,16 @@ function cargarFlujoGuardado(){
     }
   });
 
+  document.querySelectorAll(".node").forEach((nodo) => {
+    try {
+      if(window.MacBotContenido && window.MacBotContenido.esNodoContenido(nodo)){
+        window.MacBotContenido.refrescarNodoCargado(nodo);
+      }
+    } catch (e) {
+      console.warn("Contenido: error al refrescar nodo cargado", e);
+    }
+  });
+
   resizeWorldSurface();
 }
 
@@ -809,12 +819,35 @@ function renderContenidoBloques(){
 
   contenedor.innerHTML = "";
 
+  const etiquetaBloque = (tipo) => {
+    if(window.MacBotContenido && window.MacBotContenido.etiquetaTipo){
+      return window.MacBotContenido.etiquetaTipo(tipo);
+    }
+    const map = {
+      texto: "Texto",
+      tiempo: "Pausa",
+      imagen: "Imagen",
+      audio: "Audio",
+      video: "Video",
+      doc: "PDF / Doc",
+      boton: "Botón",
+    };
+    return map[tipo] || "Bloque";
+  };
+
+  const iconoBloque = (tipo) => {
+    if(window.MacBotContenido && window.MacBotContenido.iconoTipo){
+      return window.MacBotContenido.iconoTipo(tipo);
+    }
+    return "💬";
+  };
+
   contenidoArmado.forEach((item, index) => {
-    let icono = "💬";
+    let icono = iconoBloque(item.tipo);
     let campo = "";
 
     if(item.tipo === "texto"){
-      icono = "💬";
+      icono = iconoBloque("texto");
       campo =
         '<textarea oninput="actualizarContenidoItem(' + index + ', this.value)">' +
         escaparHTML(item.valor || "") +
@@ -822,7 +855,7 @@ function renderContenidoBloques(){
     }
 
     if(item.tipo === "tiempo"){
-      icono = "⏳";
+      icono = iconoBloque("tiempo");
       campo =
         '<input type="number" value="' +
         escaparHTML(item.valor || "") +
@@ -830,7 +863,7 @@ function renderContenidoBloques(){
     }
 
     if(item.tipo === "imagen"){
-      icono = "🖼️";
+      icono = iconoBloque("imagen");
       campo =
         '<img src="' + escaparHTML(item.valor || "") + '" style="width:180px;max-width:100%;border-radius:10px;display:block;margin:auto;">' +
         '<textarea placeholder="Descripción" oninput="actualizarDescripcionItem(' + index + ', this.value)">' +
@@ -839,7 +872,7 @@ function renderContenidoBloques(){
     }
 
     if(item.tipo === "audio"){
-      icono = "🎧";
+      icono = iconoBloque("audio");
       campo =
         '<input value="' +
         escaparHTML(item.valor || "") +
@@ -847,7 +880,7 @@ function renderContenidoBloques(){
     }
 
     if(item.tipo === "video"){
-      icono = "🎥";
+      icono = iconoBloque("video");
       campo =
         '<input value="' +
         escaparHTML(item.valor || "") +
@@ -858,7 +891,7 @@ function renderContenidoBloques(){
     }
 
     if(item.tipo === "doc"){
-      icono = "📄";
+      icono = iconoBloque("doc");
       campo =
         '<input value="' +
         escaparHTML(item.valor || "") +
@@ -868,7 +901,7 @@ function renderContenidoBloques(){
     contenedor.innerHTML +=
       '<div class="content-card ' + item.tipo + '">' +
         '<div class="content-card-head">' +
-          '<span>' + icono + ' ' + item.tipo.toUpperCase() + '</span>' +
+          '<span>' + icono + ' ' + etiquetaBloque(item.tipo) + '</span>' +
           '<div class="content-tools">' +
             '<button onclick="moverContenido(' + index + ', -1)">↑</button>' +
             '<button onclick="moverContenido(' + index + ', 1)">↓</button>' +
@@ -997,15 +1030,32 @@ function agregarContenidoFinal(){
 
   const nodo = document.createElement("div");
 
-  nodo.className = "node blue";
+  nodo.className = "node content-node";
   nodo.id = "nodo_" + nodoCount;
 
   nodo.style.left = (120 + nodoCount * 20) + "px";
   nodo.style.top = (120 + nodoCount * 20) + "px";
 
-  const htmlContenido = buildContenidoPreviewHtml(variantesValidas);
-
   nodo.dataset.tipo = "contenido";
+
+  const estado =
+    window.MacBotContenido && window.MacBotContenido.calcularEstado
+      ? window.MacBotContenido.calcularEstado(variantesValidas)
+      : "completo";
+  const estadoLabel =
+    window.MacBotContenido && window.MacBotContenido.textoEstado
+      ? window.MacBotContenido.textoEstado(estado)
+      : "Completo";
+  const previewBody =
+    window.MacBotContenido && window.MacBotContenido.buildContenidoPreviewBody
+      ? window.MacBotContenido.buildContenidoPreviewBody(variantesValidas)
+      : { html: "" };
+  const bodyHtml =
+    typeof previewBody === "string" ? previewBody : previewBody.html || "";
+  const jsonVariantes = JSON.stringify(variantesValidas)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 
   nodo.innerHTML = `
     <div class="port in" data-nodo="${nodo.id}" onmousedown="iniciarConexion(event, '${nodo.id}')"></div>
@@ -1014,11 +1064,16 @@ function agregarContenidoFinal(){
       <button type="button" class="edit-node" onclick="event.stopPropagation(); editarNodo('${nodo.id}')">✎</button>
       <button type="button" class="delete-node" onclick="event.stopPropagation(); borrarNodo('${nodo.id}')">×</button>
     </div>
-    <h3 class="node-title">💬 Contenido</h3>
-
-    <div class="node-content-scroll">
-      ${htmlContenido}
+    <div class="content-header">
+      <span class="content-header-title">💬 Contenido</span>
+      <span class="content-status content-status--${estado}" data-status="${estado}">${estadoLabel}</span>
     </div>
+
+    <div class="content-body">
+      ${bodyHtml}
+    </div>
+
+    <textarea class="contenido-variantes-data" style="display:none;">${jsonVariantes}</textarea>
 
     <div class="port out" data-nodo="${nodo.id}" onmousedown="iniciarConexion(event, '${nodo.id}')"></div>
   `;
@@ -1026,6 +1081,10 @@ function agregarContenidoFinal(){
   canvas.appendChild(nodo);
 
   hacerMovible(nodo);
+
+  if(window.MacBotContenido && window.MacBotContenido.renderPreviewNodo){
+    window.MacBotContenido.renderPreviewNodo(nodo, variantesValidas);
+  }
 
   variantesContenido = [[]];
   varianteActual = 0;
@@ -1080,7 +1139,7 @@ function editarNodo(id){
   const nodo = document.getElementById(id);
   if(!nodo) return;
 
-  if(nodo.innerHTML.includes("💬 Contenido")){
+  if(window.MacBotContenido && window.MacBotContenido.esNodoContenido(nodo)){
     const dataBox = nodo.querySelector(".contenido-variantes-data");
 
     if(dataBox){
@@ -1145,9 +1204,15 @@ function borrarNodo(id){
       ? window.MacBotSeguimiento.getNodoActivo()
       : null;
 
+  const nodoActivoCnt =
+    window.MacBotContenido && window.MacBotContenido.getNodoActivo
+      ? window.MacBotContenido.getNodoActivo()
+      : null;
+
   const eraSeleccionado =
     (nodoSeleccionadoPanel && nodoSeleccionadoPanel.id === id) ||
-    (nodoActivoSeg && nodoActivoSeg.id === id);
+    (nodoActivoSeg && nodoActivoSeg.id === id) ||
+    (nodoActivoCnt && nodoActivoCnt.id === id);
 
   registrarHistorialBuilder();
 
@@ -1333,42 +1398,20 @@ function cerrarModalConexion(){
 ========================= */
 
 function buildContenidoPreviewHtml(variantesValidas){
+  if(window.MacBotContenido && window.MacBotContenido.buildContenidoPreviewHtml){
+    return window.MacBotContenido.buildContenidoPreviewHtml(variantesValidas);
+  }
+
   const jsonVariantes = JSON.stringify(variantesValidas)
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
 
-  let html =
+  return (
     '<textarea class="contenido-variantes-data" style="display:none;">' +
     jsonVariantes +
-    "</textarea>";
-
-  html += '<div class="variantes-label">Variantes</div>';
-
-  variantesValidas.forEach((variante, index) => {
-    const preview = variante
-      .map((item) => {
-        if(item.tipo === "texto"){
-          return item.valor || "";
-        }
-
-        return item.valor || item.descripcion || item.tipo || "";
-      })
-      .filter(Boolean)
-      .join(", ") || "(vacío)";
-
-    const short =
-      preview.length > 48 ? preview.slice(0, 48) + "…" : preview;
-
-    html +=
-      '<div class="variant-chip"><span>Variante ' +
-      (index + 1) +
-      ":</span> <strong>" +
-      escaparHTML(short) +
-      "</strong></div>";
-  });
-
-  return html;
+    "</textarea>"
+  );
 }
 
 function getCanvasZoom(){
@@ -1835,6 +1878,11 @@ function abrirPanelNodo(nodo){
     return;
   }
 
+  if(window.MacBotContenido && window.MacBotContenido.esNodoContenido(nodo)){
+    window.MacBotContenido.renderPanel(nodo);
+    return;
+  }
+
   if(nodo.dataset.tipo === "conversion" || nodo.classList.contains("conversion-node")){
     renderPanelConversion(nodo);
     return;
@@ -1989,6 +2037,10 @@ function cerrarPanelNodo(){
     window.MacBotSeguimiento.clearPanelActivo();
   }
 
+  if(window.MacBotContenido && window.MacBotContenido.clearPanelActivo){
+    window.MacBotContenido.clearPanelActivo();
+  }
+
   if(panel){
     panel.classList.remove("activo");
   }
@@ -2009,6 +2061,10 @@ function cerrarPanelNodo(){
 function sincronizarPanelAntesDeSnapshot(){
   if(window.MacBotSeguimiento && window.MacBotSeguimiento.flushPanelToNode){
     window.MacBotSeguimiento.flushPanelToNode();
+  }
+
+  if(window.MacBotContenido && window.MacBotContenido.flushPanelToNode){
+    window.MacBotContenido.flushPanelToNode();
   }
 }
 
@@ -2092,6 +2148,20 @@ function restaurarSnapshotBuilder(snapshot){
         }
       } catch (err) {
         console.warn("Seguimiento: error al restaurar nodo", err.message);
+      }
+    }
+
+    if(
+      (item.className && item.className.includes("content-node")) ||
+      item.tipo === "contenido" ||
+      (item.html && item.html.includes("contenido-variantes-data"))
+    ){
+      try{
+        if(window.MacBotContenido){
+          window.MacBotContenido.refrescarNodoCargado(nodo);
+        }
+      } catch (err) {
+        console.warn("Contenido: error al restaurar nodo", err.message);
       }
     }
   });
