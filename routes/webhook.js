@@ -488,7 +488,7 @@ if (message.type === "interactive") {
 
 await enviarEventoMeta(usuarioIdWebhook, "Lead", from);
 
-const io = req.app.get("io");
+
 await cancelarSeguimientosPorRespuesta(from, usuarioIdWebhook, io);
 
 await buscarYEjecutarActivador(from, text, usuarioIdWebhook);
