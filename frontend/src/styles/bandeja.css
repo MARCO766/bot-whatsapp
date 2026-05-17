@@ -76,7 +76,11 @@
   grid-template-columns: minmax(300px, 360px) 1fr;
   gap: 18px;
   height: calc(100vh - 200px);
-  min-height: 480px;
+  min-height: 520px;
+}
+
+.bandejaLayout > * {
+  min-height: 0;
 }
 
 .chatSidebar,
@@ -393,20 +397,21 @@
   background: rgba(127, 29, 29, 0.35);
 }
 
-/* ─── Ventana de chat ─── */
+/* ─── Ventana de chat (proporciones WhatsApp Web) ─── */
 .chatWindow {
   display: flex;
   flex-direction: column;
   min-height: 0;
   height: 100%;
+  max-height: 100%;
 }
 
 .chatHeader {
   flex-shrink: 0;
-  min-height: 72px;
-  padding: 14px 20px;
+  min-height: 64px;
+  padding: 12px 18px;
   border-bottom: 1px solid rgba(148, 163, 184, 0.1);
-  background: rgba(15, 23, 42, 0.95);
+  background: #111b21;
   display: flex;
   align-items: center;
   z-index: 2;
@@ -463,10 +468,10 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background:
-    radial-gradient(circle at 12% 0%, rgba(34, 197, 94, 0.06), transparent 28%),
-    radial-gradient(circle at 88% 100%, rgba(6, 182, 212, 0.05), transparent 30%),
-    #0a0f1a;
+  background-color: #0b141a;
+  background-image:
+    radial-gradient(circle at 20% 18%, rgba(34, 197, 94, 0.04), transparent 42%),
+    radial-gradient(circle at 80% 82%, rgba(6, 182, 212, 0.04), transparent 40%);
 }
 
 .messages {
@@ -474,14 +479,15 @@
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 20px 18px 12px;
+  padding: 10px 5% 14px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  justify-content: flex-end;
+  gap: 2px;
 }
 
 .messagesEnd {
-  height: 8px;
+  height: 4px;
   flex-shrink: 0;
 }
 
@@ -495,177 +501,281 @@
   font-size: 14px;
 }
 
-/* ─── Burbujas estilo WhatsApp ─── */
+/* ─── Burbujas estilo WhatsApp Web ─── */
 .messageRow {
   display: flex;
   width: 100%;
-  margin-bottom: 2px;
+  margin-bottom: 1px;
+  padding: 1px 0;
 }
 
 .messageRow.in {
   justify-content: flex-start;
+  padding-right: 12%;
 }
 
 .messageRow.out {
   justify-content: flex-end;
+  padding-left: 12%;
 }
 
 .messageRow.system {
   justify-content: center;
-  margin: 10px 0;
+  margin: 8px 0;
+  padding: 0 8%;
 }
 
 .bubble {
-  max-width: min(420px, 72%);
+  position: relative;
+  max-width: 62%;
   width: fit-content;
-  padding: 10px 12px 8px;
-  border-radius: 16px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  min-width: 72px;
+  padding: 8px 10px 6px 11px;
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
   word-wrap: break-word;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  font-size: 14.2px;
+  line-height: 1.42;
+}
+
+.bubble.hasMedia {
+  padding: 5px;
+  max-width: 58%;
+  min-width: 120px;
 }
 
 .bubble.client {
-  background: #1e293b;
-  border-bottom-left-radius: 4px;
-  border: 1px solid rgba(148, 163, 184, 0.1);
+  background: #202c33;
+  color: #e9edef;
+  border-top-left-radius: 0;
 }
 
 .bubble.me {
-  background: linear-gradient(145deg, #25d366 0%, #128c7e 100%);
-  color: #f0fdf4;
-  border-bottom-right-radius: 4px;
+  background: #005c4b;
+  color: #e9edef;
+  border-top-right-radius: 0;
 }
 
 .bubble.system {
-  max-width: 90%;
+  max-width: 85%;
   margin: 0;
   text-align: center;
-  background: rgba(255, 255, 255, 0.06);
-  color: #94a3b8;
+  background: rgba(255, 255, 255, 0.07);
+  color: #8696a0;
   font-size: 12px;
-  padding: 8px 14px;
-  border-radius: 12px;
+  padding: 6px 12px;
+  border-radius: 8px;
   box-shadow: none;
+  min-width: 0;
+}
+
+.bubbleInner {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .bubbleText {
   margin: 0;
+  padding: 0 2px 2px 0;
   white-space: pre-wrap;
-  line-height: 1.45;
-  font-size: 14px;
+  font-size: 14.2px;
+  line-height: 1.42;
 }
 
-.bubble .time {
+.bubbleCaption {
+  margin: 0;
+  padding: 4px 6px 2px;
+  font-size: 14px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+}
+
+.bubbleMeta {
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 4px;
-  margin-top: 4px;
-  font-size: 10px;
-  opacity: 0.8;
+  margin-top: 2px;
+  padding: 0 2px 0 6px;
+  align-self: flex-end;
+  flex-shrink: 0;
 }
 
-.bubble.me .time {
-  color: rgba(240, 253, 244, 0.85);
+.metaTime {
+  font-size: 11px;
+  line-height: 1;
+  color: rgba(134, 150, 160, 0.95);
+  white-space: nowrap;
 }
 
-.bubble.client .time {
-  color: #94a3b8;
+.bubble.me .metaTime {
+  color: rgba(233, 237, 239, 0.75);
 }
 
 .msg-status {
-  font-size: 11px;
-  letter-spacing: -1px;
+  font-size: 14px;
+  line-height: 1;
+  letter-spacing: -2px;
 }
 
 .msg-status.read {
-  color: #7dd3fc;
+  color: #53bdeb;
 }
 
-.msg-status.delivered {
-  color: rgba(240, 253, 244, 0.9);
+.msg-status.delivered,
+.msg-status.sent {
+  color: rgba(233, 237, 239, 0.75);
+}
+
+/* ─── Multimedia ─── */
+.mediaCard {
+  border-radius: 6px;
+  overflow: hidden;
+  line-height: 0;
+  max-width: 100%;
 }
 
 .media-img {
-  max-width: min(280px, 100%);
-  width: 100%;
-  border-radius: 12px;
   display: block;
-  margin-bottom: 6px;
+  max-width: min(330px, 100%);
+  width: auto;
+  height: auto;
+  max-height: 340px;
+  object-fit: cover;
   cursor: pointer;
+  border-radius: 6px;
 }
 
 .media-video {
-  max-width: min(300px, 100%);
-  width: 100%;
-  border-radius: 10px;
   display: block;
-  margin-bottom: 6px;
+  width: min(330px, 100%);
+  max-width: 100%;
+  max-height: 340px;
+  border-radius: 6px;
+  background: #000;
+}
+
+.audioCard {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 260px;
+  max-width: 330px;
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.12);
+}
+
+.bubble.client .audioCard {
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.audioIcon {
+  font-size: 22px;
+  flex-shrink: 0;
+  opacity: 0.9;
 }
 
 .media-audio {
-  width: min(260px, 100%);
-  max-width: 100%;
+  flex: 1;
+  min-width: 200px;
+  height: 36px;
   display: block;
-  margin-bottom: 6px;
 }
 
-.media-doc {
-  display: block;
-  background: rgba(0, 0, 0, 0.2);
-  color: #86efac;
-  padding: 10px 12px;
-  border-radius: 10px;
+.media-audio::-webkit-media-controls-panel {
+  background: transparent;
+}
+
+.docCard {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 220px;
+  max-width: 320px;
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 6px;
   text-decoration: none;
-  margin-bottom: 6px;
-  font-size: 13px;
+  color: inherit;
+  background: rgba(0, 0, 0, 0.14);
+  transition: background 0.15s;
 }
 
-.upload-card {
-  position: relative;
-  margin-bottom: 6px;
+.docCard:hover {
+  background: rgba(0, 0, 0, 0.22);
 }
 
-.upload-media {
-  max-width: min(250px, 100%);
-  border-radius: 12px;
-  display: block;
+.bubble.me .docCard {
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.docIcon {
+  flex-shrink: 0;
+  width: 42px;
+  height: 42px;
+  border-radius: 8px;
+  background: #ef4444;
+  color: white;
+  font-size: 11px;
+  font-weight: 900;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  letter-spacing: 0.02em;
+}
+
+.docInfo {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.docName {
+  font-size: 14px;
+  font-weight: 600;
+  color: #e9edef;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.docAction {
+  font-size: 12px;
+  color: #8696a0;
+}
+
+.upload-card .upload-bar {
+  margin: 0;
+  border-radius: 0 0 6px 6px;
 }
 
 .upload-bar {
   height: 4px;
-  background: rgba(0, 0, 0, 0.25);
-  border-radius: 99px;
-  margin-top: 6px;
+  background: rgba(0, 0, 0, 0.3);
   overflow: hidden;
 }
 
 .upload-bar-fill {
   height: 100%;
-  background: rgba(255, 255, 255, 0.85);
-  border-radius: inherit;
+  background: #25d366;
   transition: width 0.15s;
 }
 
 .upload-doc {
-  background: rgba(0, 0, 0, 0.15);
-  padding: 10px;
-  border-radius: 10px;
-  margin-bottom: 6px;
-  font-size: 13px;
+  opacity: 0.95;
 }
 
-/* ─── Composer premium ─── */
+/* ─── Composer tipo WhatsApp Web ─── */
 .composerDock {
   flex-shrink: 0;
-  padding: 12px 16px 16px;
-  background: linear-gradient(
-    180deg,
-    rgba(15, 23, 42, 0.6) 0%,
-    rgba(15, 23, 42, 0.98) 24%
-  );
-  border-top: 1px solid rgba(148, 163, 184, 0.1);
+  padding: 8px 12px 10px;
+  background: #111b21;
+  border-top: 1px solid rgba(134, 150, 160, 0.12);
 }
 
 .previewBar {
@@ -718,11 +828,10 @@
   display: flex;
   align-items: flex-end;
   gap: 8px;
-  padding: 8px 10px;
-  border-radius: 20px;
-  background: rgba(17, 24, 39, 0.95);
-  border: 1px solid rgba(148, 163, 184, 0.14);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  padding: 6px 8px;
+  border-radius: 14px;
+  background: #2a3942;
+  border: 1px solid rgba(134, 150, 160, 0.08);
 }
 
 .composerInputWrap {
@@ -733,26 +842,26 @@
 .composer textarea {
   width: 100%;
   resize: none;
-  min-height: 42px;
+  min-height: 40px;
   max-height: 120px;
   border: none;
-  border-radius: 12px;
+  border-radius: 10px;
   background: transparent;
-  color: #f1f5f9;
-  padding: 11px 4px;
+  color: #e9edef;
+  padding: 10px 6px;
   outline: none;
-  font-size: 14px;
-  line-height: 1.45;
+  font-size: 15px;
+  line-height: 1.4;
   font-family: inherit;
 }
 
 .composer textarea::placeholder {
-  color: #64748b;
+  color: #8696a0;
 }
 
 .composerBtn {
-  width: 42px;
-  height: 42px;
+  width: 40px;
+  height: 40px;
   border: none;
   border-radius: 50%;
   cursor: pointer;
@@ -773,9 +882,9 @@
 }
 
 .composerBtn.attach {
-  background: rgba(255, 255, 255, 0.08);
-  color: #e2e8f0;
-  border: 1px solid rgba(148, 163, 184, 0.15);
+  background: transparent;
+  color: #aebac1;
+  border: none;
 }
 
 .composerBtn.attach .composerBtnIcon {
@@ -785,9 +894,9 @@
 }
 
 .composerBtn.audioBtn {
-  background: rgba(255, 255, 255, 0.06);
-  color: #cbd5e1;
-  border: 1px solid rgba(148, 163, 184, 0.1);
+  background: transparent;
+  color: #aebac1;
+  border: none;
 }
 
 .composerBtn.audioBtn.recording {
@@ -809,9 +918,9 @@
 }
 
 .composerBtn.send {
-  background: linear-gradient(135deg, #22c55e, #06b6d4);
-  color: #052e16;
-  box-shadow: 0 6px 20px rgba(34, 197, 94, 0.3);
+  background: #00a884;
+  color: #111b21;
+  box-shadow: none;
 }
 
 .composerBtn.send .sendIcon {
@@ -911,8 +1020,20 @@
     min-height: 520px;
   }
 
+  .messageRow.in {
+    padding-right: 6%;
+  }
+
+  .messageRow.out {
+    padding-left: 6%;
+  }
+
   .bubble {
-    max-width: min(340px, 85%);
+    max-width: 78%;
+  }
+
+  .bubble.hasMedia {
+    max-width: 82%;
   }
 
   .dots {
@@ -941,5 +1062,9 @@
 
   .bubble {
     max-width: 88%;
+  }
+
+  .audioCard {
+    min-width: 200px;
   }
 }
