@@ -2,10 +2,25 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="refresh" content="0;url=/admin?tab=flujos">
-  <title>MacBot Flujos</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MacBot — Editor de flujos</title>
+  <link rel="stylesheet" href="/css/admin.css">
+  <link rel="stylesheet" href="/css/flow-builder.css">
 </head>
 <body>
-  <p>Redirigiendo al editor de flujos… <a href="/admin?tab=flujos">Ir ahora</a></p>
+  <!--
+    Viewport infinito: #canvasWrapper (grid a pantalla completa) > #flowWorld (pan + zoom) > #canvasFlujo (superficie lógica).
+    El admin puede seguir usando #canvasSpacer; builder.js lo sustituye por #flowWorld al cargar.
+  -->
+  <template id="flowBuilderViewportTpl">
+    <div id="flowWorld" class="flow-world">
+      <div class="builder flow-canvas" id="canvasFlujo"></div>
+    </div>
+  </template>
+
+  <p style="padding:24px;color:#8f9ba8;font-family:system-ui,sans-serif;">
+    Abre el editor desde
+    <a href="/admin?tab=flujos" style="color:#39ff14;">Flujos en el admin</a>.
+  </p>
 </body>
 </html>

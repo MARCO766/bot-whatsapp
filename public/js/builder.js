@@ -16,21 +16,32 @@ let flujoCargado = MACBOT_BUILDER.flujoCargado || null;
 const activadoresData = MACBOT_BUILDER.activadoresData || [];
 const etiquetasData = MACBOT_BUILDER.etiquetasData || [];
 
-const CANVAS_BASE_WIDTH = 4200;
-const CANVAS_BASE_HEIGHT = 2800;
 const CANVAS_ZOOM_MIN = 0.25;
 const CANVAS_ZOOM_MAX = 2;
 const CANVAS_ZOOM_STEP = 0.1;
+const WORLD_GRID_SIZE = 28;
+const WORLD_SURFACE_PADDING = 6000;
+const WORLD_MIN_SURFACE = 24000;
 
-let canvasZoom = 1;
+const viewportState = {
+  panX: 0,
+  panY: 0,
+  zoom: 1,
+};
 
 /* =========================
    INICIO
 ========================= */
 
 window.addEventListener("load", function(){
+  if(!document.getElementById("builderArea")){
+    return;
+  }
+
+  ensureInfiniteViewport();
   cargarFlujoGuardado();
   crearNodoInicioAutomatico();
+  resizeWorldSurface();
   initCanvasViewport();
 
   const btnGuardarFlujo = document.getElementById("btnGuardarFlujo");
@@ -193,6 +204,8 @@ function cargarFlujoGuardado(){
       }
     });
   }
+
+  resizeWorldSurface();
 }
 
 /* =========================
@@ -328,6 +341,7 @@ function hacerMovible(nodo){
 
     actualizarLineas();
     actualizarPanelPosicion(nodo);
+    resizeWorldSurface();
   });
 
   document.addEventListener("mouseup", function(){
@@ -1377,21 +1391,105 @@ function buildContenidoPreviewHtml(variantesValidas){
 }
 
 function getCanvasZoom(){
-  return canvasZoom;
+  return viewportState.zoom;
+}
+
+function getCanvasViewport(){
+  return document.getElementById("canvasWrapper");
+}
+
+function ensureInfiniteViewport(){
+  const wrap = getCanvasViewport();
+  let canvasEl = document.getElementById("canvasFlujo");
+  if(!wrap || !canvasEl){
+    return;
+  }
+
+  let world = document.getElementById("flowWorld");
+  const spacer = document.getElementById("canvasSpacer");
+
+  if(!world){
+    world = document.createElement("div");
+    world.id = "flowWorld";
+    world.className = "flow-world";
+
+    if(spacer){
+      canvasEl = spacer.querySelector("#canvasFlujo") || canvasEl;
+      spacer.replaceWith(world);
+      world.appendChild(canvasEl);
+    }else if(canvasEl.parentElement === wrap){
+      canvasEl.remove();
+      world.appendChild(canvasEl);
+      wrap.appendChild(world);
+    }else{
+      if(canvasEl.parentElement !== world){
+        world.appendChild(canvasEl);
+      }
+      if(!wrap.contains(world)){
+        wrap.appendChild(world);
+      }
+    }
+  }else{
+    if(spacer){
+      const nested = spacer.querySelector("#canvasFlujo");
+      if(nested){
+        canvasEl = nested;
+      }
+      spacer.remove();
+    }
+    if(canvasEl.parentElement !== world){
+      world.appendChild(canvasEl);
+    }
+    if(!wrap.contains(world)){
+      wrap.appendChild(world);
+    }
+  }
+
+  if(canvasEl){
+    canvasEl.style.transform = "";
+    canvasEl.style.transformOrigin = "";
+    canvasEl.classList.add("flow-canvas");
+  }
+
+  wrap.style.overflow = "hidden";
+  wrap.scrollLeft = 0;
+  wrap.scrollTop = 0;
+  resizeWorldSurface();
+  aplicarViewportTransform();
+}
+
+function resizeWorldSurface(){
+  const wrap = getCanvasViewport();
+  const canvas = document.getElementById("canvasFlujo");
+  if(!wrap || !canvas){
+    return;
+  }
+
+  const rect = wrap.getBoundingClientRect();
+  let maxX = Math.max(rect.width * 2.5, WORLD_MIN_SURFACE);
+  let maxY = Math.max(rect.height * 2.5, WORLD_MIN_SURFACE);
+
+  canvas.querySelectorAll(".node").forEach((nodo) => {
+    maxX = Math.max(maxX, nodo.offsetLeft + nodo.offsetWidth + WORLD_SURFACE_PADDING);
+    maxY = Math.max(maxY, nodo.offsetTop + nodo.offsetHeight + WORLD_SURFACE_PADDING);
+  });
+
+  canvas.style.width = maxX + "px";
+  canvas.style.height = maxY + "px";
 }
 
 function screenPointToCanvas(clientX, clientY){
-  const canvas = document.getElementById("canvasFlujo");
-  if(!canvas){
+  const wrap = getCanvasViewport();
+  if(!wrap){
     return { x: 0, y: 0 };
   }
 
-  const rect = canvas.getBoundingClientRect();
+  const rect = wrap.getBoundingClientRect();
   const zoom = getCanvasZoom();
 
   return {
-    x: (clientX - rect.left) / zoom,
-    y: (clientY - rect.top) / zoom,
+    x: (clientX - rect.left - viewportState.panX) / zoom,
+    y: (clientY - rect.top - viewportState.panY) / zoom,
   };
 }
 
@@ -1422,27 +1520,83 @@ function actualizarZoomLabel(){
   }
 }
 
-function aplicarCanvasZoom(){
-  const canvas = document.getElementById("canvasFlujo");
-  const spacer = document.getElementById("canvasSpacer");
+function aplicarViewportTransform(){
+  const world = document.getElementById("flowWorld");
+  const wrap = getCanvasViewport();
   const zoom = getCanvasZoom();
+  const gridStep = WORLD_GRID_SIZE * zoom;
 
-  if(canvas){
-    canvas.style.transform = "scale(" + zoom + ")";
-    canvas.style.transformOrigin = "0 0";
+  if(world){
+    world.style.transform =
+      "translate(" +
+      viewportState.panX +
+      "px, " +
+      viewportState.panY +
+      "px) scale(" +
+      zoom +
+      ")";
+    world.style.transformOrigin = "0 0";
   }
 
-  if(spacer){
-    spacer.style.width = CANVAS_BASE_WIDTH * zoom + "px";
-    spacer.style.height = CANVAS_BASE_HEIGHT * zoom + "px";
+  if(wrap){
+    wrap.style.backgroundSize =
+      "auto, auto, " + gridStep + "px " + gridStep + "px, " + gridStep + "px " + gridStep + "px";
+    wrap.style.backgroundPosition =
+      "0 0, 0 0, " +
+      viewportState.panX +
+      "px " +
+      viewportState.panY +
+      "px, " +
+      viewportState.panX +
+      "px " +
+      viewportState.panY +
+      "px";
   }
 
   actualizarZoomLabel();
   actualizarLineas();
 }
 
+function centerViewportOnContent(){
+  const wrap = getCanvasViewport();
+  const canvas = document.getElementById("canvasFlujo");
+  if(!wrap || !canvas){
+    return;
+  }
+
+  const rect = wrap.getBoundingClientRect();
+  const zoom = getCanvasZoom();
+  const nodos = canvas.querySelectorAll(".node");
+
+  if(!nodos.length){
+    viewportState.panX = rect.width / 2 - 400 * zoom;
+    viewportState.panY = rect.height / 2 - 300 * zoom;
+    aplicarViewportTransform();
+    return;
+  }
+
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+
+  nodos.forEach((nodo) => {
+    minX = Math.min(minX, nodo.offsetLeft);
+    minY = Math.min(minY, nodo.offsetTop);
+    maxX = Math.max(maxX, nodo.offsetLeft + nodo.offsetWidth);
+    maxY = Math.max(maxY, nodo.offsetTop + nodo.offsetHeight);
+  });
+
+  const cx = (minX + maxX) / 2;
+  const cy = (minY + maxY) / 2;
+
+  viewportState.panX = rect.width / 2 - cx * zoom;
+  viewportState.panY = rect.height / 2 - cy * zoom;
+  aplicarViewportTransform();
+}
+
 function setCanvasZoom(nextZoom, anchorClientX, anchorClientY){
-  const wrap = document.getElementById("canvasWrapper");
+  const wrap = getCanvasViewport();
   if(!wrap){
     return;
   }
@@ -1457,23 +1611,29 @@ function setCanvasZoom(nextZoom, anchorClientX, anchorClientY){
     return;
   }
 
+  const rect = wrap.getBoundingClientRect();
+
   if(anchorClientX != null && anchorClientY != null){
-    const wrapRect = wrap.getBoundingClientRect();
-    const offsetX = anchorClientX - wrapRect.left;
-    const offsetY = anchorClientY - wrapRect.top;
-    const worldX = (wrap.scrollLeft + offsetX) / oldZoom;
-    const worldY = (wrap.scrollTop + offsetY) / oldZoom;
+    const offsetX = anchorClientX - rect.left;
+    const offsetY = anchorClientY - rect.top;
+    const worldX = (offsetX - viewportState.panX) / oldZoom;
+    const worldY = (offsetY - viewportState.panY) / oldZoom;
 
-    canvasZoom = zoom;
-    aplicarCanvasZoom();
+    viewportState.zoom = zoom;
+    viewportState.panX = offsetX - worldX * zoom;
+    viewportState.panY = offsetY - worldY * zoom;
+  }else{
+    const cx = rect.width / 2;
+    const cy = rect.height / 2;
+    const worldX = (cx - viewportState.panX) / oldZoom;
+    const worldY = (cy - viewportState.panY) / oldZoom;
 
-    wrap.scrollLeft = worldX * zoom - offsetX;
-    wrap.scrollTop = worldY * zoom - offsetY;
-    return;
+    viewportState.zoom = zoom;
+    viewportState.panX = cx - worldX * zoom;
+    viewportState.panY = cy - worldY * zoom;
   }
 
-  canvasZoom = zoom;
-  aplicarCanvasZoom();
+  aplicarViewportTransform();
 }
 
 function zoomIn(anchorClientX, anchorClientY){
@@ -1485,17 +1645,27 @@ function zoomOut(anchorClientX, anchorClientY){
 }
 
 function zoomReset(){
-  setCanvasZoom(1);
+  viewportState.zoom = 1;
+  centerViewportOnContent();
 }
 
 function initCanvasViewport(){
-  const wrap = document.getElementById("canvasWrapper");
+  const wrap = getCanvasViewport();
   if(!wrap){
     return;
   }
 
-  canvasZoom = 1;
-  aplicarCanvasZoom();
+  if(wrap.dataset.viewportReady === "1"){
+    centerViewportOnContent();
+    return;
+  }
+
+  wrap.dataset.viewportReady = "1";
+
+  viewportState.panX = 0;
+  viewportState.panY = 0;
+  viewportState.zoom = 1;
+  centerViewportOnContent();
 
   const btnIn = document.getElementById("btnCanvasZoomIn");
   const btnOut = document.getElementById("btnCanvasZoomOut");
@@ -1544,10 +1714,7 @@ function initCanvasViewport(){
   );
 
   let panning = false;
-  let startX = 0;
-  let startY = 0;
-  let scrollLeft = 0;
-  let scrollTop = 0;
+  let panStart = { x: 0, y: 0, panX: 0, panY: 0 };
 
   wrap.addEventListener("mousedown", function(e){
     if(
@@ -1565,10 +1732,12 @@ function initCanvasViewport(){
 
     panning = true;
     wrap.classList.add("panning");
-    startX = e.clientX;
-    startY = e.clientY;
-    scrollLeft = wrap.scrollLeft;
-    scrollTop = wrap.scrollTop;
+    panStart = {
+      x: e.clientX,
+      y: e.clientY,
+      panX: viewportState.panX,
+      panY: viewportState.panY,
+    };
     e.preventDefault();
   });
 
@@ -1577,13 +1746,27 @@ function initCanvasViewport(){
       return;
     }
 
-    wrap.scrollLeft = scrollLeft - (e.clientX - startX);
-    wrap.scrollTop = scrollTop - (e.clientY - startY);
+    viewportState.panX = panStart.panX + (e.clientX - panStart.x);
+    viewportState.panY = panStart.panY + (e.clientY - panStart.y);
+    aplicarViewportTransform();
   });
 
   document.addEventListener("mouseup", function(){
+    if(!panning){
+      return;
+    }
+
     panning = false;
     wrap.classList.remove("panning");
+  });
+
+  window.addEventListener("resize", function(){
+    if(!document.getElementById("builderArea")){
+      return;
+    }
+
+    resizeWorldSurface();
+    aplicarViewportTransform();
   });
 }
 
