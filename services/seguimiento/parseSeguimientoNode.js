@@ -1,4 +1,5 @@
 const { UNIDADES_DELAY, TIPOS_MENSAJE } = require("./constants");
+const { normalizarBotones } = require("./normalizarBotones");
 
 function decodeHtmlJson(raw) {
   return (raw || "")
@@ -66,12 +67,14 @@ function normalizarPaso(paso, index) {
   const segundos = delayToSeconds(valor, unidad);
   if (segundos <= 0) return null;
 
+  const pasoId = paso.id || "paso_" + (index + 1);
+
   return {
-    id: paso.id || "paso_" + (index + 1),
+    id: pasoId,
     delay: { valor: parseInt(valor, 10) || 0, unidad },
     segundos,
     mensaje,
-    estado: paso.estado || "pendiente",
+    botones: normalizarBotones(paso.botones, pasoId),
   };
 }
 

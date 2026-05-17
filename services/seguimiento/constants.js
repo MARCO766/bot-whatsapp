@@ -7,7 +7,7 @@ const ESTADOS_SEGUIMIENTO = {
 
 const UNIDADES_DELAY = ["minutos", "horas", "dias"];
 
-const TIPOS_MENSAJE = ["texto", "imagen", "audio", "pdf"];
+const TIPOS_MENSAJE = ["texto", "imagen", "audio", "pdf", "video"];
 
 module.exports = {
   ESTADOS_SEGUIMIENTO,

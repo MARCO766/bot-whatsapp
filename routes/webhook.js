@@ -8,6 +8,9 @@ const { buscarYEjecutarActivador } = require("../services/flowService");
 const {
   cancelarSeguimientosPorRespuesta,
 } = require("../services/seguimiento/cancelOnReply");
+const {
+  registrarRespuestaBotonSeguimiento,
+} = require("../services/seguimiento/registrarRespuestaBoton");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
@@ -482,8 +485,19 @@ if (text.includes("reset")) {
   return res.sendStatus(200);
 }
 
-if (message.type === "interactive") {
-  text = message.interactive.button_reply.id.toLowerCase();
+if (message.type === "interactive" && message.interactive?.button_reply) {
+  const reply = message.interactive.button_reply;
+  text = reply.title || reply.id || "";
+
+  if (String(reply.id || "").startsWith("seg_")) {
+    await registrarRespuestaBotonSeguimiento({
+      clienteNumero: from,
+      usuarioId: usuarioIdWebhook,
+      botonId: reply.id,
+      botonTexto: reply.title || reply.id,
+      whatsappMessageId: message.id,
+    });
+  }
 }
 
 await enviarEventoMeta(usuarioIdWebhook, "Lead", from);

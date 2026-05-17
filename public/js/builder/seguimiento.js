@@ -3,13 +3,10 @@
  */
 window.MacBotSeguimiento = (function () {
   const UNIDADES = ["minutos", "horas", "dias"];
-  const TIPOS = ["texto", "imagen", "audio", "pdf"];
-  const ESTADOS_LABEL = {
-    pendiente: "Pendiente",
-    enviado: "Enviado",
-    cancelado: "Cancelado",
-    respondido: "Respondido",
-  };
+  const TIPOS = ["texto", "imagen", "audio", "pdf", "video"];
+  const MAX_BOTONES = 3;
+  const MAX_TEXTO_BOTON = 20;
+  const MAX_VIDEO_MB = 15;
   function crearConfigVacia() {
     return {
       version: 2,
@@ -69,8 +66,32 @@ window.MacBotSeguimiento = (function () {
   }
 
   function iconoTipo(tipo) {
-    const map = { texto: "💬", imagen: "🖼️", audio: "🎧", pdf: "📄" };
+    const map = {
+      texto: "💬",
+      imagen: "🖼️",
+      audio: "🎧",
+      pdf: "📄",
+      video: "🎬",
+    };
     return map[tipo] || "💬";
+  }
+
+  function normalizarBotones(botones, pasoId) {
+    if (!Array.isArray(botones)) return [];
+
+    return botones
+      .slice(0, MAX_BOTONES)
+      .map(function (btn, index) {
+        const texto = String(btn?.texto || btn?.text || "")
+          .trim()
+          .slice(0, MAX_TEXTO_BOTON);
+        if (!texto) return null;
+        return {
+          id: String(btn?.id || "seg_" + pasoId + "_b" + index).slice(0, 128),
+          texto,
+        };
+      })
+      .filter(Boolean);
   }
 
   function normalizarMensaje(mensaje, legacy) {
@@ -98,12 +119,14 @@ window.MacBotSeguimiento = (function () {
     if (segundos <= 0) return null;
     if (!mensaje.texto && !mensaje.url) return null;
 
+    const pasoId = paso.id || "paso_" + (index + 1);
+
     return {
-      id: paso.id || "paso_" + (index + 1),
+      id: pasoId,
       delay: { valor: parseInt(valor, 10) || 1, unidad },
       segundos,
       mensaje,
-      estado: paso.estado || "pendiente",
+      botones: normalizarBotones(paso.botones, pasoId),
     };
   }
 
@@ -216,14 +239,11 @@ window.MacBotSeguimiento = (function () {
         iconoTipo(p.mensaje.tipo) +
         " " +
         esc(p.mensaje.tipo) +
-        "</span></div>" +
-        '<span class="follow-badge">' +
-        esc(ESTADOS_LABEL[p.estado] || "pendiente") +
-        "</span></div>";
+        ((p.botones && p.botones.length) ? " · " + p.botones.length + " btn" : "") +
+        "</span></div></div>";
     });
 
-    html +=
-      '</div><div class="follow-timer-bar"><div class="follow-timer-fill" style="width:100%"></div></div>';
+    html += "</div>";
 
     body.innerHTML = html;
   }
@@ -234,13 +254,14 @@ window.MacBotSeguimiento = (function () {
       delay: { valor: 15, unidad: "minutos" },
       segundos: 15 * 60,
       mensaje: { tipo: "texto", texto: "", url: "", caption: "" },
-      estado: "pendiente",
+      botones: [],
     };
   }
 
   function asegurarPaso(paso) {
     if (!paso.delay) paso.delay = { valor: 15, unidad: "minutos" };
     if (!paso.mensaje) paso.mensaje = { tipo: "texto", texto: "", url: "", caption: "" };
+    if (!Array.isArray(paso.botones)) paso.botones = [];
     return paso;
   }
 
@@ -262,6 +283,29 @@ window.MacBotSeguimiento = (function () {
     if (urlPreview && urlPreview.dataset.url) {
       paso.mensaje.url = urlPreview.dataset.url;
     }
+
+    paso.botones = normalizarBotones(
+      leerBotonesDesdeFormulario(paso.id),
+      paso.id
+    );
+  }
+
+  function leerBotonesDesdeFormulario(pasoId) {
+    const inputs = document.querySelectorAll(
+      '#segBotonesLista input[data-seg-boton="1"]'
+    );
+    const lista = [];
+
+    inputs.forEach(function (input, index) {
+      const texto = input.value.trim();
+      if (!texto) return;
+      lista.push({
+        id: "seg_" + pasoId + "_b" + index,
+        texto,
+      });
+    });
+
+    return lista;
   }
 
   function renderCamposMensaje(paso) {
@@ -280,12 +324,16 @@ window.MacBotSeguimiento = (function () {
       return;
     }
 
-    const captionField =
-      paso.mensaje.tipo === "imagen" || paso.mensaje.tipo === "pdf"
-        ? '<div class="seg-field"><label>Leyenda (opcional)</label><input id="segCaption" value="' +
-          esc(paso.mensaje.caption) +
-          '"></div>'
-        : "";
+    const conCaption =
+      paso.mensaje.tipo === "imagen" ||
+      paso.mensaje.tipo === "pdf" ||
+      paso.mensaje.tipo === "video";
+
+    const captionField = conCaption
+      ? '<div class="seg-field"><label>Leyenda (opcional)</label><input id="segCaption" value="' +
+        esc(paso.mensaje.caption) +
+        '"></div>'
+      : "";
 
     box.innerHTML =
       '<div class="seg-field"><label>Archivo (' +
@@ -300,10 +348,61 @@ window.MacBotSeguimiento = (function () {
       '">' +
       (paso.mensaje.url ? "✓ Archivo cargado" : "Sin archivo") +
       "</span></div></div>" +
+      (paso.mensaje.tipo === "video" && paso.mensaje.url
+        ? '<div class="seg-video-preview"><video src="' +
+          esc(paso.mensaje.url) +
+          '" controls muted playsinline></video></div>'
+        : "") +
       captionField;
 
     document.getElementById("segArchivo")?.addEventListener("change", subirArchivo);
     document.getElementById("segCaption")?.addEventListener("input", onFormChange);
+  }
+
+  function renderBotonesPaso(paso) {
+    const box = document.getElementById("segBotonesLista");
+    if (!box) return;
+
+    asegurarPaso(paso);
+    const botones = paso.botones || [];
+    const slots = Math.max(1, Math.min(MAX_BOTONES, botones.length + 1));
+
+    let html =
+      '<p class="seg-panel-desc seg-botones-hint">Solo en mensajes de texto · máx. ' +
+      MAX_BOTONES +
+      "</p>";
+
+    for (let i = 0; i < slots; i++) {
+      const btn = botones[i] || { texto: "" };
+      html +=
+        '<div class="seg-boton-row"><span class="seg-boton-num">' +
+        (i + 1) +
+        '</span><input type="text" data-seg-boton="1" maxlength="' +
+        MAX_TEXTO_BOTON +
+        '" placeholder="Ej: Sí me interesa" value="' +
+        esc(btn.texto) +
+        '"></div>';
+    }
+
+    if (botones.length < MAX_BOTONES) {
+      html +=
+        '<button type="button" class="seg-btn seg-btn-ghost seg-btn-sm" id="segAddBoton">+ Botón</button>';
+    }
+
+    box.innerHTML = html;
+
+    box.querySelectorAll('input[data-seg-boton="1"]').forEach(function (input) {
+      input.addEventListener("input", onFormChange);
+    });
+
+    document.getElementById("segAddBoton")?.addEventListener("click", function () {
+      syncPasoDesdeFormulario();
+      const p = configActiva.pasos[pasoActivoIndex];
+      if (!p || p.botones.length >= MAX_BOTONES) return;
+      p.botones.push({ id: "seg_" + p.id + "_b" + p.botones.length, texto: "" });
+      renderBotonesPaso(p);
+      onFormChange();
+    });
   }
 
   function renderFormularioPaso() {
@@ -366,6 +465,18 @@ window.MacBotSeguimiento = (function () {
 
     renderCamposMensaje(paso);
 
+    let botonesWrap = document.getElementById("segBotonesWrap");
+    if (!botonesWrap) {
+      botonesWrap = document.createElement("div");
+      botonesWrap.id = "segBotonesWrap";
+      botonesWrap.className = "seg-field seg-botones-block";
+      botonesWrap.innerHTML =
+        '<label>Botones WhatsApp</label><div id="segBotonesLista"></div>';
+      wrap.appendChild(botonesWrap);
+    }
+    botonesWrap.style.display = paso.mensaje.tipo === "texto" ? "block" : "none";
+    if (paso.mensaje.tipo === "texto") renderBotonesPaso(paso);
+
     document.getElementById("segDelayValor")?.addEventListener("input", onFormChange);
     document.getElementById("segDelayUnidad")?.addEventListener("change", onFormChange);
 
@@ -376,6 +487,7 @@ window.MacBotSeguimiento = (function () {
         paso.mensaje.texto = "";
         paso.mensaje.url = "";
         paso.mensaje.caption = "";
+        if (paso.mensaje.tipo !== "texto") paso.botones = [];
         renderFormularioPaso();
         renderListaPasos();
       });
@@ -385,6 +497,7 @@ window.MacBotSeguimiento = (function () {
   function getAccept(tipo) {
     if (tipo === "imagen") return "image/*";
     if (tipo === "audio") return "audio/*";
+    if (tipo === "video") return "video/*";
     if (tipo === "pdf") return "application/pdf,.pdf";
     return "*/*";
   }
@@ -392,6 +505,14 @@ window.MacBotSeguimiento = (function () {
   function subirArchivo(e) {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
+
+    const paso = configActiva.pasos[pasoActivoIndex];
+    const esVideo = paso && paso.mensaje.tipo === "video";
+    if (esVideo && file.size > MAX_VIDEO_MB * 1024 * 1024) {
+      alert("El video debe ser menor a " + MAX_VIDEO_MB + "MB");
+      e.target.value = "";
+      return;
+    }
 
     const formData = new FormData();
     formData.append("archivo", file);
@@ -427,12 +548,6 @@ window.MacBotSeguimiento = (function () {
     renderListaPasos();
     if (nodoActivo) renderPreviewNodo(nodoActivo, configActiva);
 
-    const timerLabel = document.getElementById("segTimerLabel");
-    if (timerLabel) {
-      const timeline = calcularTimeline(configActiva.pasos);
-      const item = timeline[pasoActivoIndex];
-      timerLabel.textContent = item ? "~" + formatearDuracionTotal(item.acumulado) : "—";
-    }
   }
 
   function renderListaPasos() {
@@ -464,7 +579,8 @@ window.MacBotSeguimiento = (function () {
           iconoTipo(paso.mensaje.tipo) +
           " · " +
           esc(formatearDelay(paso.delay)) +
-          '</span><button type="button" class="seg-btn seg-btn-danger" data-action="delete">Eliminar paso</button></div></div>'
+          ((paso.botones && paso.botones.length) ? " · " + paso.botones.length + " btn" : "") +
+          '</span><button type="button" class="seg-btn seg-btn-danger" data-action="delete">Eliminar</button></div></div>'
         );
       })
       .join("")
@@ -491,59 +607,6 @@ window.MacBotSeguimiento = (function () {
     });
   }
 
-  function cargarEstadosLive(nodo) {
-    const box = document.getElementById("segEstadosLive");
-    if (!box) return;
-
-    const flujoId =
-      window.MACBOT_BUILDER && window.MACBOT_BUILDER.flujoEditandoId;
-
-    if (!flujoId) {
-      box.innerHTML =
-        '<p class="seg-panel-desc">Guarda el flujo para ver ejecuciones en vivo.</p>';
-      return;
-    }
-
-    fetch(
-      "/api/seguimientos/nodo?flujo_id=" +
-        encodeURIComponent(flujoId) +
-        "&nodo_id=" +
-        encodeURIComponent(nodo.id)
-    )
-      .then(function (r) {
-        return r.json();
-      })
-      .then(function (data) {
-        const items = data.items || [];
-
-        if (!items.length) {
-          box.innerHTML =
-            '<p class="seg-panel-desc">Aún no hay seguimientos ejecutados para este nodo.</p>';
-          return;
-        }
-
-        box.innerHTML = items
-          .slice(0, 12)
-          .map(function (item) {
-            return (
-              '<div class="seg-estado-item"><span>#' +
-              (item.paso_index + 1) +
-              " · " +
-              esc(item.cliente_numero) +
-              '</span><span class="seg-estado-pill ' +
-              esc(item.estado) +
-              '">' +
-              esc(ESTADOS_LABEL[item.estado] || item.estado) +
-              "</span></div>"
-            );
-          })
-          .join("");
-      })
-      .catch(function () {
-        box.innerHTML = '<p class="seg-panel-desc">No se pudieron cargar estados.</p>';
-      });
-  }
-
   function renderPanel(nodo) {
     if (!nodo) return;
 
@@ -566,13 +629,9 @@ window.MacBotSeguimiento = (function () {
       (configActiva.detenerSiResponde ? " checked" : "") +
       "> Detener si <strong>respondió</strong></label>" +
       "</div>" +
-      '<div class="seg-visual-timer" id="segTimerBox"><strong>Temporizador del paso</strong> ' +
-      '<span id="segTimerLabel">—</span></div>' +
       '<div id="segListaPasos" class="seg-steps-list"></div>' +
-      '<div class="seg-actions"><button type="button" class="seg-btn seg-btn-ghost" id="segAddPaso">+ Agregar paso</button></div>' +
+      '<div class="seg-actions"><button type="button" class="seg-btn seg-btn-ghost" id="segAddPaso">+ Paso</button></div>' +
       '<div id="segFormPaso"></div>' +
-      "<h4>Estados en vivo</h4>" +
-      '<div id="segEstadosLive" class="seg-estados-live"></div>' +
       '<div class="seg-actions"><button type="button" class="seg-btn seg-btn-primary" id="segGuardarPanel">Guardar seguimiento</button></div>' +
       "</div>";
 
@@ -589,7 +648,6 @@ window.MacBotSeguimiento = (function () {
 
     renderListaPasos();
     renderFormularioPaso();
-    cargarEstadosLive(nodo);
     onFormChange();
   }
 

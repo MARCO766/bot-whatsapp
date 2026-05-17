@@ -186,7 +186,103 @@ estado_envio: "sent"
   }
 }
 
+async function enviarBotonesWhatsApp(numero, texto, botones, opciones = {}) {
+  try {
+    let tokenEnviar = TOKEN;
+    let phoneIdEnviar = PHONE_ID;
+
+    if (opciones.usuarioId) {
+      const responseConexion = await axios.get(
+        `${SUPABASE_URL}/rest/v1/conexiones_whatsapp?usuario_id=eq.${opciones.usuarioId}&activo=eq.true&select=*`,
+        {
+          headers: {
+            apikey: SUPABASE_KEY,
+            Authorization: `Bearer ${SUPABASE_KEY}`,
+          },
+        }
+      );
+
+      const conexion = responseConexion.data?.[0];
+      if (conexion) {
+        tokenEnviar = conexion.token;
+        phoneIdEnviar = conexion.phone_id;
+      }
+    }
+
+    const lista = (botones || []).slice(0, 3).filter(function (b) {
+      return b && String(b.texto || "").trim();
+    });
+
+    if (!lista.length) {
+      await enviarTextoWhatsApp(numero, texto, opciones);
+      return;
+    }
+
+    const payload = {
+      messaging_product: "whatsapp",
+      to: numero,
+      type: "interactive",
+      interactive: {
+        type: "button",
+        body: { text: texto },
+        action: {
+          buttons: lista.map(function (btn) {
+            return {
+              type: "reply",
+              reply: {
+                id: String(btn.id || btn.texto).slice(0, 128),
+                title: String(btn.texto).trim().slice(0, 20),
+              },
+            };
+          }),
+        },
+      },
+    };
+
+    const respuestaMeta = await axios.post(
+      `https://graph.facebook.com/v19.0/${phoneIdEnviar}/messages`,
+      payload,
+      {
+        headers: {
+          Authorization: `Bearer ${tokenEnviar}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    const whatsappMessageId = respuestaMeta.data?.messages?.[0]?.id || null;
+
+    await axios.post(
+      `${SUPABASE_URL}/rest/v1/mensajes`,
+      {
+        cliente_numero: numero,
+        usuario_id: opciones.usuarioId || null,
+        direccion: "saliente",
+        tipo: "interactive",
+        contenido: texto,
+        imagen_url: null,
+        whatsapp_message_id: whatsappMessageId,
+        estado_envio: "sent",
+      },
+      {
+        headers: {
+          apikey: SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_KEY}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+  } catch (error) {
+    console.log(
+      "ERROR ENVIANDO BOTONES WHATSAPP:",
+      error.response?.data || error.message
+    );
+    throw error;
+  }
+}
+
 module.exports = {
   enviarTextoWhatsApp,
-  enviarMediaWhatsApp
+  enviarMediaWhatsApp,
+  enviarBotonesWhatsApp,
 };

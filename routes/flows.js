@@ -34,6 +34,17 @@ router.post("/subir-archivo", protegerPanel, upload.single("archivo"), async (re
       return res.status(400).json({ error: "No se recibió archivo" });
     }
 
+    const esVideo = (req.file.mimetype || "").startsWith("video/");
+    const maxBytes = esVideo ? 15 * 1024 * 1024 : 50 * 1024 * 1024;
+
+    if (req.file.size > maxBytes) {
+      return res.status(400).json({
+        error: esVideo
+          ? "El video debe ser menor a 15MB"
+          : "Archivo demasiado grande",
+      });
+    }
+
     const extension = req.file.originalname.split(".").pop();
     const nombreArchivo = Date.now() + "-" + Math.random().toString(36).substring(2) + "." + extension;
 

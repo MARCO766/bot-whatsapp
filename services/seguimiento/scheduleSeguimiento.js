@@ -37,7 +37,10 @@ async function programarSeguimientoNodo({
       paso_id: paso.id,
       run_at: runAt,
       mensaje_tipo: paso.mensaje.tipo,
-      mensaje_payload: paso.mensaje,
+      mensaje_payload: {
+        ...paso.mensaje,
+        botones: paso.botones || [],
+      },
       solo_si_no_respondio: config.soloSiNoRespondio,
       detener_si_responde: config.detenerSiResponde,
       checkpoint_at: checkpointAt,

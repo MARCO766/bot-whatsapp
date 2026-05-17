@@ -1,6 +1,7 @@
 const {
   enviarTextoWhatsApp,
   enviarMediaWhatsApp,
+  enviarBotonesWhatsApp,
 } = require("../whatsappService");
 const {
   obtenerPendientesVencidos,
@@ -30,11 +31,16 @@ async function enviarMensajeSeguimiento(item) {
   const payload = item.mensaje_payload || {};
   const tipo = (item.mensaje_tipo || payload.tipo || "texto").toLowerCase();
   const opciones = { usuarioId: item.usuario_id };
+  const botones = Array.isArray(payload.botones) ? payload.botones : [];
 
   if (tipo === "texto") {
     const texto = (payload.texto || "").trim();
     if (!texto) throw new Error("Mensaje de texto vacío");
-    await enviarTextoWhatsApp(item.cliente_numero, texto, opciones);
+    if (botones.length) {
+      await enviarBotonesWhatsApp(item.cliente_numero, texto, botones, opciones);
+    } else {
+      await enviarTextoWhatsApp(item.cliente_numero, texto, opciones);
+    }
     return;
   }
 
@@ -64,6 +70,19 @@ async function enviarMensajeSeguimiento(item) {
     await enviarMediaWhatsApp(
       item.cliente_numero,
       "document",
+      url,
+      payload.caption || "",
+      opciones
+    );
+    return;
+  }
+
+  if (tipo === "video") {
+    const url = (payload.url || "").trim();
+    if (!url) throw new Error("URL de video vacía");
+    await enviarMediaWhatsApp(
+      item.cliente_numero,
+      "video",
       url,
       payload.caption || "",
       opciones
