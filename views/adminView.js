@@ -7,7 +7,8 @@ function renderAdminPage({
   flujoActual,
   activadores,
   etiquetas,
-  conexionActiva
+  conexionActiva,
+  usuarioId
 }) {
   return `
 
@@ -847,7 +848,8 @@ ${tab === "flujos" && builder ? `
   flujoEditandoId: flujoId || "",
   flujoCargado: flujoActual ? flujoActual.data : null,
   activadoresData: activadores || [],
-  etiquetasData: etiquetas || []
+  etiquetasData: etiquetas || [],
+  usuarioId: usuarioId || ""
 }).replace(/</g, "\\u003c")}</script>
 <script>
 (function () {
@@ -856,6 +858,7 @@ ${tab === "flujos" && builder ? `
 })();
 </script>
 ${builder ? `
+<script src="/socket.io/socket.io.js"></script>
 <script src="/js/builder/seguimiento.js"></script>
 <script src="/js/builder.js"></script>
 ` : ""}

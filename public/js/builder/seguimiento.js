@@ -10,6 +10,17 @@ window.MacBotSeguimiento = (function () {
     cancelado: "Cancelado",
     respondido: "Respondido",
   };
+  const ESTADO_PRIORIDAD = {
+    pendiente: 1,
+    enviado: 2,
+    cancelado: 3,
+    respondido: 4,
+  };
+
+  let liveInited = false;
+  let pollTimer = null;
+  let socketRef = null;
+  const fetchEnCurso = new Set();
 
   function crearConfigVacia() {
     return {
@@ -54,6 +65,211 @@ window.MacBotSeguimiento = (function () {
     const u = normalizarUnidad(delay.unidad);
     const map = { minutos: "min", horas: "h", dias: "d" };
     return v + " " + (map[u] || u);
+  }
+
+  function formatearDelayIncremental(delay) {
+    if (!delay) return "—";
+    const v = parseInt(delay.valor, 10) || 1;
+    const u = normalizarUnidad(delay.unidad);
+    if (u === "horas") return "+" + v + " h";
+    if (u === "dias") return "+" + v + " d";
+    return "+" + v + " min";
+  }
+
+  function formatearAcumuladoCorto(segundos) {
+    if (!segundos) return "0m";
+    const totalMins = Math.max(1, Math.round(segundos / 60));
+    if (totalMins < 60) return totalMins + "m";
+    const horas = Math.floor(totalMins / 60);
+    const mins = totalMins % 60;
+    return mins ? horas + "h" + mins + "m" : horas + "h";
+  }
+
+  function textoAcumuladoTimeline(timeline, index) {
+    const cur = formatearAcumuladoCorto(timeline[index].acumulado);
+    if (index === 0) return cur + " total";
+    const prev = formatearAcumuladoCorto(timeline[index - 1].acumulado);
+    return prev + " → " + cur + " total";
+  }
+
+  function claseBadgeEstado(estado) {
+    const e = String(estado || "pendiente").toLowerCase();
+    return "follow-badge follow-badge--" + e;
+  }
+
+  function resolverEstadoParaPaso(items, pasoIndex) {
+    const rows = (items || []).filter(function (item) {
+      return item.paso_index === pasoIndex && item.estado;
+    });
+    if (!rows.length) return null;
+
+    let mejor = rows[0];
+    rows.forEach(function (row) {
+      const pRow = ESTADO_PRIORIDAD[row.estado] || 0;
+      const pMejor = ESTADO_PRIORIDAD[mejor.estado] || 0;
+      if (pRow > pMejor) mejor = row;
+    });
+    return mejor.estado;
+  }
+
+  function sincronizarEstadosDesdeItems(nodo, items) {
+    const cfg = leerConfigDeNodo(nodo);
+    let cambio = false;
+
+    cfg.pasos.forEach(function (paso, index) {
+      const nuevo = resolverEstadoParaPaso(items, index);
+      if (nuevo && paso.estado !== nuevo) {
+        paso.estado = nuevo;
+        cambio = true;
+      }
+    });
+
+    if (nodo === nodoActivo) configActiva = cfg;
+
+    if (cambio) {
+      guardarConfigEnNodo(nodo, cfg);
+    } else {
+      renderPreviewNodo(nodo, cfg);
+    }
+
+    if (nodo === nodoActivo) renderListaPasos();
+    return cfg;
+  }
+
+  function aplicarEstadoEnNodo(nodo, pasoIndex, estado) {
+    const cfg = leerConfigDeNodo(nodo);
+    const paso = cfg.pasos[pasoIndex];
+    if (!paso || !estado) return;
+
+    if (paso.estado === estado) {
+      renderPreviewNodo(nodo, cfg);
+      return;
+    }
+
+    paso.estado = estado;
+    if (nodo === nodoActivo) configActiva = cfg;
+    guardarConfigEnNodo(nodo, cfg);
+    if (nodo === nodoActivo) renderListaPasos();
+  }
+
+  function renderEstadosLivePanel(items) {
+    const box = document.getElementById("segEstadosLive");
+    if (!box) return;
+
+    if (!items.length) {
+      box.innerHTML =
+        '<p class="seg-panel-desc">Aún no hay seguimientos ejecutados para este nodo.</p>';
+      return;
+    }
+
+    box.innerHTML = items
+      .slice(0, 12)
+      .map(function (item) {
+        return (
+          '<div class="seg-estado-item"><span>#' +
+          (item.paso_index + 1) +
+          " · " +
+          esc(item.cliente_numero) +
+          '</span><span class="seg-estado-pill ' +
+          esc(item.estado) +
+          '">' +
+          esc(ESTADOS_LABEL[item.estado] || item.estado) +
+          "</span></div>"
+        );
+      })
+      .join("");
+  }
+
+  function refrescarEstadosNodo(nodo) {
+    const flujoId =
+      window.MACBOT_BUILDER && window.MACBOT_BUILDER.flujoEditandoId;
+    if (!flujoId || !nodo || !nodo.id) return;
+
+    const key = nodo.id;
+    if (fetchEnCurso.has(key)) return;
+    fetchEnCurso.add(key);
+
+    fetch(
+      "/api/seguimientos/nodo?flujo_id=" +
+        encodeURIComponent(flujoId) +
+        "&nodo_id=" +
+        encodeURIComponent(nodo.id)
+    )
+      .then(function (r) {
+        return r.json();
+      })
+      .then(function (data) {
+        const items = data.items || [];
+        sincronizarEstadosDesdeItems(nodo, items);
+        if (nodo === nodoActivo) renderEstadosLivePanel(items);
+      })
+      .catch(function () {
+        /* silencioso en poll */
+      })
+      .finally(function () {
+        fetchEnCurso.delete(key);
+      });
+  }
+
+  function sincronizarTodosLosNodos() {
+    const flujoId =
+      window.MACBOT_BUILDER && window.MACBOT_BUILDER.flujoEditandoId;
+    if (!flujoId) return;
+
+    document.querySelectorAll(".follow-node").forEach(function (nodo) {
+      refrescarEstadosNodo(nodo);
+    });
+  }
+
+  function onSeguimientoEstadoSocket(data) {
+    if (!data) return;
+
+    const flujoId =
+      window.MACBOT_BUILDER && window.MACBOT_BUILDER.flujoEditandoId;
+
+    if (
+      data.motivo === "respuesta_cliente" ||
+      (data.estado === "respondido" && !data.nodo_id)
+    ) {
+      sincronizarTodosLosNodos();
+      return;
+    }
+
+    if (flujoId && data.flujo_id && data.flujo_id !== flujoId) return;
+
+    if (data.nodo_id && data.paso_index != null && data.estado) {
+      const nodo = document.getElementById(data.nodo_id);
+      if (nodo && esNodoSeguimiento(nodo)) {
+        aplicarEstadoEnNodo(nodo, data.paso_index, data.estado);
+        if (nodo === nodoActivo) cargarEstadosLive(nodo);
+      }
+      return;
+    }
+
+    if (data.nodo_id) {
+      const nodo = document.getElementById(data.nodo_id);
+      if (nodo) refrescarEstadosNodo(nodo);
+    }
+  }
+
+  function initLiveSync() {
+    if (liveInited) return;
+    if (!document.getElementById("builderArea")) return;
+    liveInited = true;
+
+    sincronizarTodosLosNodos();
+
+    if (!pollTimer) {
+      pollTimer = setInterval(sincronizarTodosLosNodos, 6000);
+    }
+
+    if (typeof io !== "function" || socketRef) return;
+
+    const usuarioId =
+      window.MACBOT_BUILDER && window.MACBOT_BUILDER.usuarioId;
+    socketRef = io();
+    if (usuarioId) socketRef.emit("join-user", usuarioId);
+    socketRef.on("seguimiento-estado", onSeguimientoEstadoSocket);
   }
 
   function formatearDuracionTotal(segundos) {
@@ -207,18 +423,21 @@ window.MacBotSeguimiento = (function () {
         '<div class="follow-step"><div class="follow-step-meta">' +
         '<span class="follow-step-name">Paso ' +
         (index + 1) +
-        " · " +
-        esc(formatearDuracionTotal(item.acumulado)) +
         "</span>" +
-        '<span class="follow-step-delay">⏱ ' +
-        esc(formatearDelay(p.delay)) +
+        '<span class="follow-step-delay">' +
+        esc(formatearDelayIncremental(p.delay)) +
+        "</span>" +
+        '<span class="follow-step-acum">' +
+        esc(textoAcumuladoTimeline(timeline, index)) +
         "</span>" +
         '<span class="follow-step-tipo">' +
         iconoTipo(p.mensaje.tipo) +
         " " +
         esc(p.mensaje.tipo) +
         "</span></div>" +
-        '<span class="follow-badge">' +
+        '<span class="' +
+        claseBadgeEstado(p.estado) +
+        '">' +
         esc(ESTADOS_LABEL[p.estado] || "pendiente") +
         "</span></div>";
     });
@@ -449,7 +668,6 @@ window.MacBotSeguimiento = (function () {
 
     lista.innerHTML = configActiva.pasos
       .map(function (paso, index) {
-        const acum = (timeline[index] && timeline[index].acumulado) || 0;
         return (
           '<div class="seg-step-card' +
           (index === pasoActivoIndex ? " active" : "") +
@@ -459,13 +677,19 @@ window.MacBotSeguimiento = (function () {
           '<div class="seg-step-head" data-action="select">' +
           "<strong>Paso " +
           (index + 1) +
-          "</strong><small>⏱ " +
-          esc(formatearDuracionTotal(acum)) +
-          "</small></div>" +
+          "</strong><small>" +
+          esc(formatearDelayIncremental(paso.delay)) +
+          " · " +
+          esc(textoAcumuladoTimeline(timeline, index)) +
+          '</small><span class="seg-estado-pill ' +
+          esc(paso.estado || "pendiente") +
+          '">' +
+          esc(ESTADOS_LABEL[paso.estado] || "pendiente") +
+          "</span></div>" +
           '<div class="seg-step-body"><span class="seg-panel-desc">' +
           iconoTipo(paso.mensaje.tipo) +
           " · " +
-          esc(formatearDelay(paso.delay)) +
+          esc(paso.mensaje.tipo) +
           '</span><button type="button" class="seg-btn seg-btn-danger" data-action="delete">Eliminar paso</button></div></div>'
         );
       })
@@ -517,29 +741,8 @@ window.MacBotSeguimiento = (function () {
       })
       .then(function (data) {
         const items = data.items || [];
-
-        if (!items.length) {
-          box.innerHTML =
-            '<p class="seg-panel-desc">Aún no hay seguimientos ejecutados para este nodo.</p>';
-          return;
-        }
-
-        box.innerHTML = items
-          .slice(0, 12)
-          .map(function (item) {
-            return (
-              '<div class="seg-estado-item"><span>#' +
-              (item.paso_index + 1) +
-              " · " +
-              esc(item.cliente_numero) +
-              '</span><span class="seg-estado-pill ' +
-              esc(item.estado) +
-              '">' +
-              esc(ESTADOS_LABEL[item.estado] || item.estado) +
-              "</span></div>"
-            );
-          })
-          .join("");
+        sincronizarEstadosDesdeItems(nodo, items);
+        renderEstadosLivePanel(items);
       })
       .catch(function () {
         box.innerHTML = '<p class="seg-panel-desc">No se pudieron cargar estados.</p>';
@@ -592,6 +795,7 @@ window.MacBotSeguimiento = (function () {
     renderListaPasos();
     renderFormularioPaso();
     cargarEstadosLive(nodo);
+    initLiveSync();
     onFormChange();
   }
 
@@ -639,9 +843,21 @@ window.MacBotSeguimiento = (function () {
     esNodoSeguimiento: esNodoSeguimiento,
     initNodoRecienCreado: initNodoRecienCreado,
     refrescarNodoCargado: refrescarNodoCargado,
+    initLiveSync: initLiveSync,
+    sincronizarTodosLosNodos: sincronizarTodosLosNodos,
     abrirEditorSeguimiento: function (id) {
       const n = document.getElementById(id);
       if (n) renderPanel(n);
     },
   };
 })();
+
+if (document.getElementById("builderArea")) {
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", function () {
+      if (window.MacBotSeguimiento) window.MacBotSeguimiento.initLiveSync();
+    });
+  } else if (window.MacBotSeguimiento) {
+    window.MacBotSeguimiento.initLiveSync();
+  }
+}

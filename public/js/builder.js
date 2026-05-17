@@ -215,6 +215,13 @@ function cargarFlujoGuardado(){
     }
   });
 
+  if (window.MacBotSeguimiento) {
+    if (window.MacBotSeguimiento.initLiveSync) window.MacBotSeguimiento.initLiveSync();
+    if (window.MacBotSeguimiento.sincronizarTodosLosNodos) {
+      window.MacBotSeguimiento.sincronizarTodosLosNodos();
+    }
+  }
+
   resizeWorldSurface();
 }
 
