@@ -1,0 +1,337 @@
+/* MacBot flow builder */
+
+body:has(#builderArea) .main {
+  padding: 0;
+  overflow: hidden;
+}
+
+.flow-builder {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  min-height: 0;
+  background: #060b12;
+}
+
+.flow-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(12, 18, 28, 0.95);
+}
+
+.flow-toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.flow-back {
+  border: none;
+  background: #1c212c;
+  color: #fff;
+  padding: 10px 16px;
+  border-radius: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.flow-back:hover {
+  background: #263042;
+}
+
+.flow-title {
+  margin: 0;
+  font-size: 22px;
+  color: #39ff14;
+}
+
+.flow-hint {
+  margin: 6px 0 0;
+  color: #8f9ba8;
+  font-size: 13px;
+}
+
+.flow-save {
+  white-space: nowrap;
+  box-shadow: 0 8px 28px rgba(57, 255, 20, 0.25);
+}
+
+.flow-workspace {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  gap: 0;
+}
+
+.flow-canvas-wrap {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  position: relative;
+  cursor: grab;
+  background:
+    radial-gradient(circle at 18% 12%, rgba(57, 255, 20, 0.1), transparent 32%),
+    radial-gradient(circle at 88% 78%, rgba(56, 189, 248, 0.08), transparent 30%),
+    #060b12;
+}
+
+.flow-canvas-wrap.panning {
+  cursor: grabbing;
+}
+
+.flow-canvas-hint {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 5;
+  width: fit-content;
+  max-width: calc(100% - 200px);
+  padding: 8px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #8f9ba8;
+  background: rgba(15, 23, 42, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  pointer-events: none;
+}
+
+.flow-zoom-controls {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px;
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+
+.flow-zoom-controls button {
+  min-width: 40px;
+  height: 38px;
+  border: none;
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #e5e7eb;
+  font-size: 18px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: 0.15s ease;
+}
+
+.flow-zoom-controls button:hover {
+  background: rgba(57, 255, 20, 0.18);
+  color: #fff;
+}
+
+#btnCanvasZoomReset {
+  min-width: 58px;
+  font-size: 13px;
+  font-weight: 900;
+  color: #39ff14;
+}
+
+.flow-canvas-spacer {
+  position: relative;
+  display: block;
+}
+
+#builderArea .flow-canvas {
+  width: 4200px;
+  height: 2800px;
+  position: absolute;
+  top: 0;
+  left: 0;
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  transform-origin: 0 0;
+  will-change: transform;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+  background-size: 36px 36px;
+}
+
+#builderArea .linea-dashed {
+  border-top: 3px dashed #39ff14 !important;
+  background: none !important;
+  opacity: 0.95;
+  filter: drop-shadow(0 0 6px rgba(57, 255, 20, 0.45));
+}
+
+#builderArea .node.selected {
+  outline: 2px solid #38bdf8;
+  outline-offset: 3px;
+  box-shadow:
+    0 0 0 6px rgba(56, 189, 248, 0.12),
+    0 18px 45px rgba(0, 0, 0, 0.45);
+}
+
+#builderArea .node-start {
+  width: 300px;
+  min-height: 120px;
+  background: linear-gradient(135deg, #39ff14, #16c60c) !important;
+  border: 1px solid rgba(156, 255, 46, 0.95) !important;
+  box-shadow:
+    0 0 20px rgba(57, 255, 20, 0.55),
+    0 0 45px rgba(57, 255, 20, 0.28) !important;
+}
+
+#builderArea .node-start::before {
+  display: none;
+}
+
+#builderArea .node-title-start {
+  color: #061018 !important;
+  margin-bottom: 10px;
+}
+
+#builderArea .node-desc-start {
+  color: #061018 !important;
+  font-weight: 700;
+  opacity: 0.92;
+}
+
+#builderArea .variantes-label {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: #67e8f9;
+  margin: 8px 0 10px;
+}
+
+#builderArea .variant-chip {
+  padding: 8px 10px;
+  margin-bottom: 6px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+#builderArea .variant-chip span {
+  color: #94a3b8;
+}
+
+#builderArea .variant-chip strong {
+  color: #e5e7eb;
+}
+
+.menu-nodos {
+  gap: 8px;
+}
+
+.menu-nodos-title {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: #67e8f9;
+  padding: 4px 6px 10px;
+}
+
+.menu-nodo-btn {
+  width: 100%;
+  border: none;
+  background: #1c212c;
+  color: #fff;
+  padding: 14px 16px;
+  border-radius: 14px;
+  font-size: 16px;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+  transition: 0.18s ease;
+}
+
+.menu-nodo-btn:hover:not(:disabled) {
+  background: #263042;
+  transform: translateX(4px);
+}
+
+.menu-nodo-btn.active {
+  background: #39ff14;
+  color: #061018;
+}
+
+.menu-nodo-btn:disabled {
+  cursor: default;
+  opacity: 1;
+}
+
+.flow-panel.panel-nodo {
+  display: flex;
+  flex-direction: column;
+  width: 360px;
+  min-width: 360px;
+  height: auto;
+  max-height: none;
+  margin: 0;
+  border-radius: 0;
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: none;
+  border-right: none;
+  border-bottom: none;
+}
+
+.flow-panel .panel-nodo-body {
+  flex: 1;
+  overflow: auto;
+}
+
+.flow-panel .panel-empty {
+  color: #8f9ba8;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.flow-panel .panel-close {
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: 10px;
+  background: rgba(239, 68, 68, 0.2);
+  color: #fecaca;
+  font-size: 20px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.flow-panel .panel-hint p {
+  margin: 0;
+  color: #94a3b8;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+@media (max-width: 1100px) {
+  .flow-workspace {
+    flex-direction: column;
+  }
+
+  .flow-panel.panel-nodo {
+    width: 100%;
+    min-width: 0;
+    max-height: 42vh;
+    border-left: none;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .flow-canvas-wrap {
+    min-height: 52vh;
+  }
+}

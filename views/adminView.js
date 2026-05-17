@@ -18,6 +18,7 @@ function renderAdminPage({
 <title>MacBot CRM</title>
 
 <link rel="stylesheet" href="/css/admin.css">
+<link rel="stylesheet" href="/css/flow-builder.css">
 </head>
 
 <body>
@@ -37,13 +38,13 @@ function renderAdminPage({
     <a href="/logout">🚪 Salir</a>
   </div>
 
-  <div class="menu" id="menuNodos" style="${builder ? "display:flex;" : "display:none;"}">
-    <a class="active">🧩 Nodos</a>
-    
-    <a onclick="abrirContenido()">💬 Contenido</a>
-    <a onclick="agregarNodo('seguimiento')">🔔 Seguimiento</a>
-    <a onclick="agregarNodo('espera')">⏳ Espera</a>
-    <a onclick="agregarNodo('etiqueta')">🏷️ Etiqueta</a>
+  <div class="menu menu-nodos" id="menuNodos" style="${builder ? "display:flex;" : "display:none;"}">
+    <span class="menu-nodos-title">Nodos</span>
+    <button type="button" class="menu-nodo-btn active" disabled>🧩 Paleta</button>
+    <button type="button" class="menu-nodo-btn" onclick="abrirContenido()">💬 Contenido</button>
+    <button type="button" class="menu-nodo-btn" onclick="agregarNodo('seguimiento')">🔔 Seguimiento</button>
+    <button type="button" class="menu-nodo-btn" onclick="agregarNodo('espera')">⏳ Espera</button>
+    <button type="button" class="menu-nodo-btn" onclick="agregarNodo('etiqueta')">🏷️ Etiqueta</button>
   </div>
 </div>
 
@@ -596,82 +597,43 @@ ${tab === "activadores" ? `
 </div>
 ` : ""}
 ${tab === "flujos" && builder ? `
-<div id="builderArea" style="
-display:block;
-width:100%;
-height:100vh;
-padding:25px;
-overflow:auto;
-">
-  <div class="card">
-    <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">
 
-  <button
-    onclick="window.location.href='/admin?tab=flujos'"
-    style="
-      background:#1c212c;
-      color:white;
-      border:none;
-      padding:10px 16px;
-      border-radius:10px;
-      cursor:pointer;
-      font-weight:bold;
-    "
-  >
-    ← Volver
-  </button>
+<div id="builderArea" class="flow-builder">
+  <header class="flow-toolbar">
+    <div class="flow-toolbar-left">
+      <button type="button" class="flow-back" onclick="window.location.href='/admin?tab=flujos'">← Volver</button>
+      <div>
+        <h2 id="tituloFlujo" class="flow-title">🔀 ${nombreBuilder || "Flujo nuevo"}</h2>
+        <p class="flow-hint">Selecciona nodos desde el panel izquierdo. Arrastra el fondo para moverte por el canvas.</p>
+      </div>
+    </div>
+    <button type="button" class="btn flow-save" id="btnGuardarFlujo">💾 Guardar flujo</button>
+  </header>
 
-  <h2 id="tituloFlujo" style="margin:0;">
-    🔀 ${nombreBuilder || "Flujo nuevo"}
-  </h2>
-
-</div>
-    <p>Selecciona nodos desde el panel izquierdo.</p>
-
-<button class="btn" id="btnGuardarFlujo" type="button" style="margin:15px 0;">
-💾 Guardar flujo
-</button>
-
-<div style="display:flex;gap:18px;align-items:stretch;">
-
-  <div id="canvasWrapper" style="
-    height:85vh;
-    overflow:hidden;
-    border-radius:24px;
-    position:relative;
-    flex:1;
-  ">
-
-    <div 
-      class="builder" 
-      id="canvasFlujo"
-      style="
-        height:3000px;
-        width:3000px;
-        position:relative;
-        transform-origin:0 0;
-      "
-    ></div>
-
-  </div>
-
-  <div id="panelNodo" class="panel-nodo">
-    <div class="panel-nodo-header">
-      <h3>⚙️ Configuración</h3>
-
-      <button onclick="cerrarPanelNodo()">
-        ×
-      </button>
+  <div class="flow-workspace">
+    <div id="canvasWrapper" class="flow-canvas-wrap">
+      <div class="flow-canvas-hint">Arrastra el fondo · Rueda o botones para zoom · Conecta nodos desde los puntos naranjas</div>
+      <div class="flow-zoom-controls" id="flowZoomControls">
+        <button type="button" id="btnCanvasZoomOut" title="Alejar" aria-label="Alejar">−</button>
+        <button type="button" id="btnCanvasZoomReset" title="Zoom 100%" aria-label="Zoom 100%">
+          <span id="flowZoomLabel">100%</span>
+        </button>
+        <button type="button" id="btnCanvasZoomIn" title="Acercar" aria-label="Acercar">+</button>
+      </div>
+      <div id="canvasSpacer" class="flow-canvas-spacer">
+        <div class="builder flow-canvas" id="canvasFlujo"></div>
+      </div>
     </div>
 
-    <div id="panelNodoContenido">
-      <p style="color:#8f9ba8;">
-        Selecciona un nodo.
-      </p>
-    </div>
-  </div>
-
-</div>
+    <aside id="panelNodo" class="panel-nodo flow-panel">
+      <div class="panel-nodo-header">
+        <h3>⚙️ Configuración</h3>
+        <button type="button" class="panel-close" onclick="cerrarPanelNodo()" title="Cerrar">×</button>
+      </div>
+      <div id="panelNodoContenido" class="panel-nodo-body">
+        <p class="panel-empty">Selecciona un nodo en el canvas para editarlo.</p>
+      </div>
+    </aside>
   </div>
 </div>
 ` : ""}

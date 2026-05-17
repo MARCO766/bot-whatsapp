@@ -16,6 +16,14 @@ let flujoCargado = MACBOT_BUILDER.flujoCargado || null;
 const activadoresData = MACBOT_BUILDER.activadoresData || [];
 const etiquetasData = MACBOT_BUILDER.etiquetasData || [];
 
+const CANVAS_BASE_WIDTH = 4200;
+const CANVAS_BASE_HEIGHT = 2800;
+const CANVAS_ZOOM_MIN = 0.25;
+const CANVAS_ZOOM_MAX = 2;
+const CANVAS_ZOOM_STEP = 0.1;
+
+let canvasZoom = 1;
+
 /* =========================
    INICIO
 ========================= */
@@ -23,6 +31,7 @@ const etiquetasData = MACBOT_BUILDER.etiquetasData || [];
 window.addEventListener("load", function(){
   cargarFlujoGuardado();
   crearNodoInicioAutomatico();
+  initCanvasViewport();
 
   const btnGuardarFlujo = document.getElementById("btnGuardarFlujo");
 
@@ -32,6 +41,11 @@ window.addEventListener("load", function(){
 
   document.getElementById("modalContenido")?.classList.remove("activo");
   document.getElementById("modalActivador")?.classList.remove("activo");
+
+  const panel = document.getElementById("panelNodo");
+  if(panel){
+    panel.classList.add("activo");
+  }
 });
 
 /* =========================
@@ -108,21 +122,16 @@ function crearNodoInicioAutomatico(){
 
   const nodo = document.createElement("div");
 
-  nodo.className = "node";
+  nodo.className = "node node-start";
   nodo.id = "nodo_inicio";
+  nodo.dataset.tipo = "inicio";
 
-  nodo.style.left = "40px";
-  nodo.style.top = "220px";
-  nodo.style.width = "280px";
-  nodo.style.background = "linear-gradient(135deg,#39ff14,#16c60c)";
-  nodo.style.border = "1px solid rgba(156,255,46,0.95)";
-  nodo.style.color = "white";
-  nodo.style.borderRadius = "24px";
-  nodo.style.boxShadow = "0 0 20px rgba(57,255,20,0.7),0 0 45px rgba(57,255,20,0.35)";
+  nodo.style.left = "120px";
+  nodo.style.top = "280px";
 
   nodo.innerHTML = `
-    <h3 style="color:#061018;margin-bottom:14px;">▶ Inicio del Flujo</h3>
-    <p style="color:#061018;font-weight:bold;">Aquí comienza tu flujo de conversación.</p>
+    <h3 class="node-title node-title-start">▶ Inicio del Flujo</h3>
+    <p class="node-desc node-desc-start">Aquí comienza tu flujo de conversación.</p>
     <div class="port out" data-nodo="nodo_inicio" onmousedown="iniciarConexion(event, 'nodo_inicio')"></div>
   `;
 
@@ -158,10 +167,8 @@ function cargarFlujoGuardado(){
       nodo.style.top = item.top || "80px";
 
       if(item.id === "nodo_inicio"){
-        nodo.style.background = "linear-gradient(135deg,#39ff14,#16c60c)";
-        nodo.style.border = "2px solid #7dff73";
-        nodo.style.boxShadow = "0 0 20px rgba(57,255,20,0.7),0 0 45px rgba(57,255,20,0.35)";
-        nodo.style.color = "white";
+        nodo.classList.add("node-start");
+        nodo.dataset.tipo = "inicio";
       }
 
       canvas.appendChild(nodo);
@@ -206,9 +213,10 @@ function agregarNodo(tipo){
 
   nodo.className = "node";
   nodo.id = "nodo_" + nodoCount;
+  nodo.dataset.tipo = tipo;
 
-  nodo.style.left = (80 + nodoCount * 35) + "px";
-  nodo.style.top = (80 + nodoCount * 35) + "px";
+  nodo.style.left = (280 + nodoCount * 40) + "px";
+  nodo.style.top = (260 + nodoCount * 30) + "px";
 
   let contenido = "";
 
@@ -235,9 +243,11 @@ function agregarNodo(tipo){
     nodo.classList.add("orange");
 
     contenido = `
-      <button class="edit-node" onclick="editarNodo('${nodo.id}')">✎</button>
-      <button class="delete-node" onclick="borrarNodo('${nodo.id}')">×</button>
-      <h3>⏳ Espera</h3>
+      <div class="node-actions">
+        <button type="button" class="edit-node" onclick="event.stopPropagation(); editarNodo('${nodo.id}')">✎</button>
+        <button type="button" class="delete-node" onclick="event.stopPropagation(); borrarNodo('${nodo.id}')">×</button>
+      </div>
+      <h3 class="node-title">⏳ Espera</h3>
       <input type="number" max="60" placeholder="Máximo 60 segundos">
     `;
   }
@@ -248,10 +258,12 @@ function agregarNodo(tipo){
     }).join("");
 
     contenido = `
-      <button class="edit-node" onclick="editarNodo('${nodo.id}')">✎</button>
-      <button class="delete-node" onclick="borrarNodo('${nodo.id}')">×</button>
-      <h3>🏷️ Etiqueta</h3>
-      <select style="width:100%;background:#0f1117;border:2px solid #333;padding:15px;border-radius:14px;color:white;margin:10px 0;font-size:16px;">
+      <div class="node-actions">
+        <button type="button" class="edit-node" onclick="event.stopPropagation(); editarNodo('${nodo.id}')">✎</button>
+        <button type="button" class="delete-node" onclick="event.stopPropagation(); borrarNodo('${nodo.id}')">×</button>
+      </div>
+      <h3 class="node-title">🏷️ Etiqueta</h3>
+      <select class="node-select" style="width:100%;background:#0f1117;border:2px solid #333;padding:15px;border-radius:14px;color:white;margin:10px 0;font-size:16px;">
         <option value="">Selecciona una etiqueta</option>
         ${opcionesEtiquetas}
       </select>
@@ -282,8 +294,10 @@ function agregarNodo(tipo){
 
 function hacerMovible(nodo){
   let moviendo = false;
-  let offsetX = 0;
-  let offsetY = 0;
+  let startX = 0;
+  let startY = 0;
+  let origLeft = 0;
+  let origTop = 0;
 
   nodo.addEventListener("mousedown", function(e){
     if(
@@ -297,17 +311,23 @@ function hacerMovible(nodo){
     }
 
     moviendo = true;
-    offsetX = e.clientX - nodo.offsetLeft;
-    offsetY = e.clientY - nodo.offsetTop;
+    startX = e.clientX;
+    startY = e.clientY;
+    origLeft = nodo.offsetLeft;
+    origTop = nodo.offsetTop;
+    marcarNodoSeleccionado(nodo);
   });
 
   document.addEventListener("mousemove", function(e){
     if(!moviendo) return;
 
-    nodo.style.left = (e.clientX - offsetX) + "px";
-    nodo.style.top = (e.clientY - offsetY) + "px";
+    const zoom = getCanvasZoom();
+
+    nodo.style.left = origLeft + (e.clientX - startX) / zoom + "px";
+    nodo.style.top = origTop + (e.clientY - startY) / zoom + "px";
 
     actualizarLineas();
+    actualizarPanelPosicion(nodo);
   });
 
   document.addEventListener("mouseup", function(){
@@ -328,7 +348,7 @@ function iniciarConexion(e, id){
   if(!canvas || !nodoArrastrando) return;
 
   lineaTemporal = document.createElement("div");
-  lineaTemporal.className = "linea";
+  lineaTemporal.className = "linea linea-dashed";
 
   canvas.appendChild(lineaTemporal);
 
@@ -339,26 +359,13 @@ function iniciarConexion(e, id){
 function moverConexionTemporal(e){
   if(!nodoArrastrando || !lineaTemporal) return;
 
-  const canvas = document.getElementById("canvasFlujo");
-  const rect = canvas.getBoundingClientRect();
-
   const puerto = nodoArrastrando.querySelector(".port.out") || nodoArrastrando.querySelector(".port");
   if(!puerto) return;
 
-  const x1 = puerto.getBoundingClientRect().left - rect.left + puerto.offsetWidth / 2;
-  const y1 = puerto.getBoundingClientRect().top - rect.top + puerto.offsetHeight / 2;
+  const inicio = getPortCanvasPoint(puerto);
+  const fin = screenPointToCanvas(e.clientX, e.clientY);
 
-  const x2 = e.clientX - rect.left;
-  const y2 = e.clientY - rect.top;
-
-  const largo = Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
-  const angulo = Math.atan2(y2 - y1, x2 - x1) * 180 / Math.PI;
-
-  lineaTemporal.style.left = x1 + "px";
-  lineaTemporal.style.top = y1 + "px";
-  lineaTemporal.style.width = largo + "px";
-  lineaTemporal.style.transform = "rotate(" + angulo + "deg)";
-  lineaTemporal.style.transformOrigin = "0 0";
+  posicionarLinea(lineaTemporal, inicio.x, inicio.y, fin.x, fin.y);
 }
 
 function soltarConexion(e){
@@ -394,7 +401,7 @@ function conectarNodos(nodo1, nodo2){
   if(!canvas || !nodo1 || !nodo2) return;
 
   const linea = document.createElement("div");
-  linea.className = "linea";
+  linea.className = "linea linea-dashed";
 
   const borrar = document.createElement("button");
   borrar.innerText = "×";
@@ -426,8 +433,6 @@ function actualizarLineas(){
   const canvas = document.getElementById("canvasFlujo");
   if(!canvas) return;
 
-  const rect = canvas.getBoundingClientRect();
-
   conexiones = conexiones.filter(c => {
     if(!c.desde || !c.hasta || !c.linea){
       c.linea?.remove();
@@ -450,24 +455,14 @@ function actualizarLineas(){
 
     if(!puertoDesde || !puertoHasta) return;
 
-    const x1 = puertoDesde.getBoundingClientRect().left - rect.left + puertoDesde.offsetWidth / 2;
-    const y1 = puertoDesde.getBoundingClientRect().top - rect.top + puertoDesde.offsetHeight / 2;
+    const inicio = getPortCanvasPoint(puertoDesde);
+    const fin = getPortCanvasPoint(puertoHasta);
 
-    const x2 = puertoHasta.getBoundingClientRect().left - rect.left + puertoHasta.offsetWidth / 2;
-    const y2 = puertoHasta.getBoundingClientRect().top - rect.top + puertoHasta.offsetHeight / 2;
-
-    const largo = Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
-    const angulo = Math.atan2(y2 - y1, x2 - x1) * 180 / Math.PI;
-
-    c.linea.style.left = x1 + "px";
-    c.linea.style.top = y1 + "px";
-    c.linea.style.width = largo + "px";
-    c.linea.style.transform = "rotate(" + angulo + "deg)";
-    c.linea.style.transformOrigin = "0 0";
+    posicionarLinea(c.linea, inicio.x, inicio.y, fin.x, fin.y);
 
     if(c.borrar){
-      c.borrar.style.left = ((x1 + x2) / 2 - 12) + "px";
-      c.borrar.style.top = ((y1 + y2) / 2 - 12) + "px";
+      c.borrar.style.left = (inicio.x + fin.x) / 2 - 12 + "px";
+      c.borrar.style.top = (inicio.y + fin.y) / 2 - 12 + "px";
     }
   });
 }
@@ -920,51 +915,18 @@ function agregarContenidoFinal(){
   nodo.style.left = (120 + nodoCount * 20) + "px";
   nodo.style.top = (120 + nodoCount * 20) + "px";
 
-  let htmlContenido = "";
+  const htmlContenido = buildContenidoPreviewHtml(variantesValidas);
 
-  const jsonVariantes = JSON.stringify(variantesValidas)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-
-  htmlContenido +=
-    '<textarea class="contenido-variantes-data" style="display:none;">' +
-    jsonVariantes +
-    '</textarea>';
-
-  htmlContenido += '<p>🔀 Variantes: ' + variantesValidas.length + '</p>';
-
-  variantesValidas.forEach((variante, index) => {
-    htmlContenido += '<p><strong>Variante ' + (index + 1) + '</strong></p>';
-
-    variante.forEach(item => {
-      if(item.tipo === "imagen" || item.tipo === "video"){
-        htmlContenido +=
-          "<p>" +
-          item.tipo +
-          ": " +
-          escaparHTML(item.valor || "") +
-          "||" +
-          escaparHTML(item.descripcion || "") +
-          "</p>";
-      } else {
-        htmlContenido +=
-          "<p>" +
-          item.tipo +
-          ": " +
-          escaparHTML(item.valor || "") +
-          "</p>";
-      }
-    });
-  });
+  nodo.dataset.tipo = "contenido";
 
   nodo.innerHTML = `
     <div class="port in" data-nodo="${nodo.id}" onmousedown="iniciarConexion(event, '${nodo.id}')"></div>
 
-    <button class="edit-node" onclick="editarNodo('${nodo.id}')">✎</button>
-    <button class="delete-node" onclick="borrarNodo('${nodo.id}')">×</button>
-
-    <h3>💬 Contenido</h3>
+    <div class="node-actions">
+      <button type="button" class="edit-node" onclick="event.stopPropagation(); editarNodo('${nodo.id}')">✎</button>
+      <button type="button" class="delete-node" onclick="event.stopPropagation(); borrarNodo('${nodo.id}')">×</button>
+    </div>
+    <h3 class="node-title">💬 Contenido</h3>
 
     <div class="node-content-scroll">
       ${htmlContenido}
@@ -1375,6 +1337,283 @@ function cerrarModalConexion(){
    UTILIDADES
 ========================= */
 
+function buildContenidoPreviewHtml(variantesValidas){
+  const jsonVariantes = JSON.stringify(variantesValidas)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+
+  let html =
+    '<textarea class="contenido-variantes-data" style="display:none;">' +
+    jsonVariantes +
+    "</textarea>";
+
+  html += '<div class="variantes-label">Variantes</div>';
+
+  variantesValidas.forEach((variante, index) => {
+    const preview = variante
+      .map((item) => {
+        if(item.tipo === "texto"){
+          return item.valor || "";
+        }
+
+        return item.valor || item.descripcion || item.tipo || "";
+      })
+      .filter(Boolean)
+      .join(", ") || "(vacío)";
+
+    const short =
+      preview.length > 48 ? preview.slice(0, 48) + "…" : preview;
+
+    html +=
+      '<div class="variant-chip"><span>Variante ' +
+      (index + 1) +
+      ":</span> <strong>" +
+      escaparHTML(short) +
+      "</strong></div>";
+  });
+
+  return html;
+}
+
+function getCanvasZoom(){
+  return canvasZoom;
+}
+
+function screenPointToCanvas(clientX, clientY){
+  const canvas = document.getElementById("canvasFlujo");
+  if(!canvas){
+    return { x: 0, y: 0 };
+  }
+
+  const rect = canvas.getBoundingClientRect();
+  const zoom = getCanvasZoom();
+
+  return {
+    x: (clientX - rect.left) / zoom,
+    y: (clientY - rect.top) / zoom,
+  };
+}
+
+function getPortCanvasPoint(puerto){
+  const rect = puerto.getBoundingClientRect();
+
+  return screenPointToCanvas(
+    rect.left + rect.width / 2,
+    rect.top + rect.height / 2
+  );
+}
+
+function posicionarLinea(linea, x1, y1, x2, y2){
+  const largo = Math.hypot(x2 - x1, y2 - y1);
+  const angulo = (Math.atan2(y2 - y1, x2 - x1) * 180) / Math.PI;
+
+  linea.style.left = x1 + "px";
+  linea.style.top = y1 + "px";
+  linea.style.width = largo + "px";
+  linea.style.transform = "rotate(" + angulo + "deg)";
+  linea.style.transformOrigin = "0 0";
+}
+
+function actualizarZoomLabel(){
+  const label = document.getElementById("flowZoomLabel");
+  if(label){
+    label.textContent = Math.round(getCanvasZoom() * 100) + "%";
+  }
+}
+
+function aplicarCanvasZoom(){
+  const canvas = document.getElementById("canvasFlujo");
+  const spacer = document.getElementById("canvasSpacer");
+  const zoom = getCanvasZoom();
+
+  if(canvas){
+    canvas.style.transform = "scale(" + zoom + ")";
+    canvas.style.transformOrigin = "0 0";
+  }
+
+  if(spacer){
+    spacer.style.width = CANVAS_BASE_WIDTH * zoom + "px";
+    spacer.style.height = CANVAS_BASE_HEIGHT * zoom + "px";
+  }
+
+  actualizarZoomLabel();
+  actualizarLineas();
+}
+
+function setCanvasZoom(nextZoom, anchorClientX, anchorClientY){
+  const wrap = document.getElementById("canvasWrapper");
+  if(!wrap){
+    return;
+  }
+
+  const oldZoom = getCanvasZoom();
+  const zoom = Math.min(
+    CANVAS_ZOOM_MAX,
+    Math.max(CANVAS_ZOOM_MIN, nextZoom)
+  );
+
+  if(zoom === oldZoom){
+    return;
+  }
+
+  if(anchorClientX != null && anchorClientY != null){
+    const wrapRect = wrap.getBoundingClientRect();
+    const offsetX = anchorClientX - wrapRect.left;
+    const offsetY = anchorClientY - wrapRect.top;
+    const worldX = (wrap.scrollLeft + offsetX) / oldZoom;
+    const worldY = (wrap.scrollTop + offsetY) / oldZoom;
+
+    canvasZoom = zoom;
+    aplicarCanvasZoom();
+
+    wrap.scrollLeft = worldX * zoom - offsetX;
+    wrap.scrollTop = worldY * zoom - offsetY;
+    return;
+  }
+
+  canvasZoom = zoom;
+  aplicarCanvasZoom();
+}
+
+function zoomIn(anchorClientX, anchorClientY){
+  setCanvasZoom(getCanvasZoom() + CANVAS_ZOOM_STEP, anchorClientX, anchorClientY);
+}
+
+function zoomOut(anchorClientX, anchorClientY){
+  setCanvasZoom(getCanvasZoom() - CANVAS_ZOOM_STEP, anchorClientX, anchorClientY);
+}
+
+function zoomReset(){
+  setCanvasZoom(1);
+}
+
+function initCanvasViewport(){
+  const wrap = document.getElementById("canvasWrapper");
+  if(!wrap){
+    return;
+  }
+
+  canvasZoom = 1;
+  aplicarCanvasZoom();
+
+  const btnIn = document.getElementById("btnCanvasZoomIn");
+  const btnOut = document.getElementById("btnCanvasZoomOut");
+  const btnReset = document.getElementById("btnCanvasZoomReset");
+
+  if(btnIn){
+    btnIn.addEventListener("click", function(e){
+      e.preventDefault();
+      const rect = wrap.getBoundingClientRect();
+      zoomIn(rect.left + rect.width / 2, rect.top + rect.height / 2);
+    });
+  }
+
+  if(btnOut){
+    btnOut.addEventListener("click", function(e){
+      e.preventDefault();
+      const rect = wrap.getBoundingClientRect();
+      zoomOut(rect.left + rect.width / 2, rect.top + rect.height / 2);
+    });
+  }
+
+  if(btnReset){
+    btnReset.addEventListener("click", function(e){
+      e.preventDefault();
+      zoomReset();
+    });
+  }
+
+  wrap.addEventListener(
+    "wheel",
+    function(e){
+      if(!document.getElementById("builderArea")){
+        return;
+      }
+
+      if(e.target.closest(".flow-zoom-controls")){
+        return;
+      }
+
+      e.preventDefault();
+
+      const delta = e.deltaY < 0 ? CANVAS_ZOOM_STEP : -CANVAS_ZOOM_STEP;
+      setCanvasZoom(getCanvasZoom() + delta, e.clientX, e.clientY);
+    },
+    { passive: false }
+  );
+
+  let panning = false;
+  let startX = 0;
+  let startY = 0;
+  let scrollLeft = 0;
+  let scrollTop = 0;
+
+  wrap.addEventListener("mousedown", function(e){
+    if(
+      e.target.closest(".node") ||
+      e.target.closest(".port") ||
+      e.target.closest(".borrar-linea") ||
+      e.target.closest(".flow-zoom-controls")
+    ){
+      return;
+    }
+
+    if(e.button !== 0){
+      return;
+    }
+
+    panning = true;
+    wrap.classList.add("panning");
+    startX = e.clientX;
+    startY = e.clientY;
+    scrollLeft = wrap.scrollLeft;
+    scrollTop = wrap.scrollTop;
+    e.preventDefault();
+  });
+
+  document.addEventListener("mousemove", function(e){
+    if(!panning){
+      return;
+    }
+
+    wrap.scrollLeft = scrollLeft - (e.clientX - startX);
+    wrap.scrollTop = scrollTop - (e.clientY - startY);
+  });
+
+  document.addEventListener("mouseup", function(){
+    panning = false;
+    wrap.classList.remove("panning");
+  });
+}
+
+function marcarNodoSeleccionado(nodo){
+  document.querySelectorAll(".node.selected").forEach((el) => {
+    el.classList.remove("selected");
+  });
+
+  if(nodo){
+    nodo.classList.add("selected");
+  }
+}
+
+function actualizarPanelPosicion(nodo){
+  if(!nodo || nodo !== nodoSeleccionadoPanel){
+    return;
+  }
+
+  const posX = document.getElementById("panelPosX");
+  const posY = document.getElementById("panelPosY");
+
+  if(posX){
+    posX.value = parseInt(nodo.style.left || 0, 10) + "px";
+  }
+
+  if(posY){
+    posY.value = parseInt(nodo.style.top || 0, 10) + "px";
+  }
+}
+
 function escaparHTML(texto){
   return String(texto)
     .replace(/&/g, "&amp;")
@@ -1415,8 +1654,10 @@ function abrirPanelNodo(nodo){
   if(!panel || !contenido) return;
 
   panel.classList.add("activo");
+  marcarNodoSeleccionado(nodo);
 
   const titulo = nodo.querySelector("h3")?.innerText || "Nodo";
+  const tipo = nodo.dataset.tipo || "nodo";
 
   contenido.innerHTML = `
     <div class="panel-campo">
@@ -1426,12 +1667,12 @@ function abrirPanelNodo(nodo){
 
     <div class="panel-campo">
       <label>Posición X</label>
-      <input value="${parseInt(nodo.style.left || 0)}px" disabled>
+      <input id="panelPosX" value="${parseInt(nodo.style.left || 0, 10)}px" disabled>
     </div>
 
     <div class="panel-campo">
       <label>Posición Y</label>
-      <input value="${parseInt(nodo.style.top || 0)}px" disabled>
+      <input id="panelPosY" value="${parseInt(nodo.style.top || 0, 10)}px" disabled>
     </div>
 
     <button class="panel-btn" onclick="guardarPanelNodo()">
@@ -1451,15 +1692,27 @@ function guardarPanelNodo(){
     h3.innerText = nuevoTitulo;
   }
 
-  alert("Nodo actualizado");
+  const panelEtiqueta = document.getElementById("panelEtiqueta");
+  const selectNodo = nodoSeleccionadoPanel.querySelector("select");
+
+  if(panelEtiqueta && selectNodo){
+    selectNodo.value = panelEtiqueta.value;
+  }
 }
 
 function cerrarPanelNodo(){
   const panel = document.getElementById("panelNodo");
+  const contenido = document.getElementById("panelNodoContenido");
 
   if(panel){
     panel.classList.remove("activo");
   }
 
+  if(contenido && document.getElementById("builderArea")){
+    contenido.innerHTML =
+      '<p class="panel-empty">Selecciona un nodo en el canvas para editarlo.</p>';
+  }
+
+  marcarNodoSeleccionado(null);
   nodoSeleccionadoPanel = null;
 }
