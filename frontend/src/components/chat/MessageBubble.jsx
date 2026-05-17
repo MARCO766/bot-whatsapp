@@ -1,12 +1,32 @@
 import React from "react";
 import { formatHora, messageChecks } from "../../utils/chatFormat";
-import { mediaKind, docDisplayName, docExtension } from "../../utils/chatMedia";
+import {
+  resolveMediaKind,
+  mediaUrl,
+  docDisplayName,
+  docExtension,
+  visibleCaption,
+} from "../../utils/chatMedia";
+
+function messageMime(msg) {
+  return String(
+    msg?.mime_type ||
+      msg?.mimeType ||
+      msg?.mimetype ||
+      msg?.mediaType ||
+      msg?.media_type ||
+      msg?._localPreview?.mimeType ||
+      ""
+  ).trim();
+}
 
 export default function MessageBubble({ msg, uploadProgress }) {
   const isMe = msg.direccion === "saliente";
   const isSystem = msg.direccion === "sistema";
-  const kind = mediaKind(msg);
+  const kind = resolveMediaKind(msg);
   const hasMedia = Boolean(kind) || Boolean(msg._localPreview);
+  const url = mediaUrl(msg);
+  const mime = messageMime(msg);
   const checks =
     isMe && uploadProgress == null ? messageChecks(msg.estado_envio) : null;
 
@@ -15,17 +35,8 @@ export default function MessageBubble({ msg, uploadProgress }) {
       ? `${uploadProgress}%`
       : formatHora(msg.creado_en) || "ahora";
 
-  const textContent =
-    msg.contenido && !String(msg.contenido).startsWith("http")
-      ? msg.contenido
-      : null;
-
-  const docName = kind === "document" ? docDisplayName(msg) : "";
-  const captionBelowMedia =
-    textContent && kind && ["image", "video", "audio"].includes(kind);
-  const textOnly = textContent && !kind;
-  const docExtraText =
-    textContent && kind === "document" && textContent !== docName;
+  const caption = visibleCaption(msg, kind);
+  const textOnly = caption && !kind && !msg._localPreview;
 
   if (isSystem) {
     return (
@@ -38,71 +49,71 @@ export default function MessageBubble({ msg, uploadProgress }) {
   return (
     <div className={`messageRow ${isMe ? "out" : "in"}`}>
       <div
-        className={`bubble ${isMe ? "me" : "client"} ${hasMedia ? "hasMedia" : ""}`}
+        className={`bubble ${isMe ? "me" : "client"}${hasMedia ? " hasMedia" : ""}`}
       >
-        <div className="bubbleInner">
-          {msg._localPreview && uploadProgress != null && (
-            <UploadPreview preview={msg._localPreview} progress={uploadProgress} />
-          )}
+        {msg._localPreview && uploadProgress != null && (
+          <UploadPreview preview={msg._localPreview} progress={uploadProgress} />
+        )}
 
-          {!msg._localPreview && kind === "image" && (
-            <div className="mediaCard">
-              <img
-                src={msg.imagen_url}
-                alt=""
-                className="media-img"
-                onClick={() => window.open(msg.imagen_url, "_blank")}
-              />
-            </div>
-          )}
+        {!msg._localPreview && kind === "image" && url && (
+          <a
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mediaCard"
+          >
+            <img src={url} alt="" className="media-img" loading="lazy" />
+          </a>
+        )}
 
-          {!msg._localPreview && kind === "video" && (
-            <div className="mediaCard">
-              <video controls className="media-video" preload="metadata">
-                <source src={msg.imagen_url} />
-              </video>
-            </div>
-          )}
-
-          {!msg._localPreview && kind === "audio" && (
-            <div className="audioCard">
-              <span className="audioIcon" aria-hidden>
-                🎧
-              </span>
-              <audio controls className="media-audio" preload="metadata">
-                <source src={msg.imagen_url} />
-              </audio>
-            </div>
-          )}
-
-          {!msg._localPreview && kind === "document" && (
-            <a
-              href={msg.imagen_url}
-              target="_blank"
-              rel="noreferrer"
-              className="docCard"
+        {!msg._localPreview && kind === "video" && url && (
+          <div className="mediaCard">
+            <video
+              src={url}
+              controls
+              className="media-video"
+              preload="metadata"
+              playsInline
             >
-              <span className="docIcon">{docExtension(docName)}</span>
-              <span className="docInfo">
-                <span className="docName">{docName}</span>
-                <span className="docAction">Toca para abrir</span>
-              </span>
-            </a>
-          )}
-
-          {textOnly && <p className="bubbleText">{textContent}</p>}
-          {captionBelowMedia && <p className="bubbleCaption">{textContent}</p>}
-          {docExtraText && <p className="bubbleCaption">{textContent}</p>}
-
-          <div className="bubbleMeta">
-            <span className="metaTime">{timeLabel}</span>
-            {checks && (
-              <span className={`msg-status ${checks.className}`}>{checks.text}</span>
-            )}
-            {isMe && uploadProgress != null && uploadProgress >= 100 && !checks && (
-              <span className="msg-status delivered">✓✓</span>
-            )}
+              {mime ? <source src={url} type={mime} /> : null}
+            </video>
           </div>
+        )}
+
+        {!msg._localPreview && kind === "audio" && url && (
+          <div className="audioCard">
+            <span className="audioIcon" aria-hidden>
+              🎵
+            </span>
+            <audio controls className="media-audio" preload="metadata">
+              <source src={url} type={mime || undefined} />
+            </audio>
+          </div>
+        )}
+
+        {!msg._localPreview && kind === "document" && url && (
+          <a
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="docCard"
+          >
+            <span className="docIcon">{docExtension(docDisplayName(msg))}</span>
+            <span className="docInfo">
+              <span className="docName">{docDisplayName(msg)}</span>
+              <span className="docAction">Abrir documento</span>
+            </span>
+          </a>
+        )}
+
+        {textOnly && <p className="bubbleText">{caption}</p>}
+        {caption && kind && <p className="bubbleText bubbleCaption">{caption}</p>}
+
+        <div className={`meta${hasMedia ? " metaMedia" : ""}`}>
+          <span className="metaTime">{timeLabel}</span>
+          {checks && (
+            <span className={`msg-status ${checks.className}`}>{checks.text}</span>
+          )}
         </div>
       </div>
     </div>
@@ -110,22 +121,57 @@ export default function MessageBubble({ msg, uploadProgress }) {
 }
 
 function UploadPreview({ preview, progress }) {
-  if (preview.kind === "image") {
+  const mime = preview.mimeType || "";
+
+  if (preview.kind === "image" && preview.url) {
     return (
-      <div className="mediaCard upload-card">
+      <div className="mediaCard">
         <img src={preview.url} alt="" className="media-img" />
-        <div className="upload-bar">
-          <div className="upload-bar-fill" style={{ width: `${progress}%` }} />
-        </div>
+        {progress < 100 && <span className="uploadPct">{progress}%</span>}
       </div>
     );
   }
+
+  if (preview.kind === "video" && preview.url) {
+    return (
+      <div className="mediaCard">
+        <video
+          src={preview.url}
+          controls
+          className="media-video"
+          preload="metadata"
+          playsInline
+        >
+          {mime ? <source src={preview.url} type={mime} /> : null}
+        </video>
+        {progress < 100 && <span className="uploadPct">{progress}%</span>}
+      </div>
+    );
+  }
+
+  if (preview.kind === "audio" && preview.url) {
+    return (
+      <div className="audioCard">
+        <span className="audioIcon" aria-hidden>
+          🎵
+        </span>
+        <audio controls className="media-audio" preload="metadata">
+          <source src={preview.url} type={mime || undefined} />
+        </audio>
+        {progress < 100 && <span className="uploadPct">{progress}%</span>}
+      </div>
+    );
+  }
+
+  const name = preview.name || "Documento";
   return (
-    <div className="docCard upload-doc">
-      <span className="docIcon">FILE</span>
+    <div className="docCard docCardStatic">
+      <span className="docIcon">{docExtension(name)}</span>
       <span className="docInfo">
-        <span className="docName">{preview.name}</span>
-        <span className="docAction">{progress}%</span>
+        <span className="docName">{name}</span>
+        <span className="docAction">
+          {progress < 100 ? `Subiendo ${progress}%` : "Documento"}
+        </span>
       </span>
     </div>
   );

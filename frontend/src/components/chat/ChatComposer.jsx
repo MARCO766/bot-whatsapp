@@ -3,6 +3,7 @@ import {
   buildMessageFormData,
   sendMessageWithProgress,
 } from "../../services/chatService";
+import { previewKindFromFile, tipoFromFile } from "../../utils/chatMedia";
 
 export default function ChatComposer({
   numero,
@@ -21,10 +22,17 @@ export default function ChatComposer({
 
   function localPreview(file) {
     if (!file) return null;
-    if (file.type.startsWith("image/")) {
-      return { kind: "image", url: URL.createObjectURL(file), name: file.name };
+    const mimeType = (file.type || "").toLowerCase();
+    const kind = previewKindFromFile(file);
+    if (kind === "document") {
+      return { kind: "document", name: file.name, mimeType };
     }
-    return { kind: "file", name: file.name };
+    return {
+      kind,
+      url: URL.createObjectURL(file),
+      name: file.name,
+      mimeType,
+    };
   }
 
   async function enviar(texto, file) {
@@ -37,7 +45,7 @@ export default function ChatComposer({
     const tempMsg = {
       id: tempId,
       direccion: "saliente",
-      tipo: file ? (file.type.startsWith("image/") ? "image" : "document") : "texto",
+      tipo: file ? tipoFromFile(file) : "texto",
       contenido: texto || "",
       creado_en: new Date().toISOString(),
       _localPreview: preview,
