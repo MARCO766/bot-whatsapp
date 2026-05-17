@@ -300,9 +300,10 @@ async function computeHeaderStats(usuarioId, flujos = []) {
     clientesAyer,
     conversacionesHoy,
     conversacionesAyer,
+    conversionesCount,
+    conversionesCountHoy,
+    conversionesCountAyer,
     conversionesRows,
-    ventasHoy,
-    ventasAyer,
   ] = await Promise.all([
     supabaseCount("clientes", `usuario_id=eq.${uid}&estado=neq.bloqueado`),
     countConversacionesReales(usuarioId),
@@ -313,31 +314,40 @@ async function computeHeaderStats(usuarioId, flujos = []) {
     ),
     countConversacionesEnRango(usuarioId, hoy, new Date().toISOString()),
     countConversacionesEnRango(usuarioId, ayer, hoy),
+    supabaseCount("crm_conversiones", `usuario_id=eq.${uid}`),
+    supabaseCount(
+      "crm_conversiones",
+      `usuario_id=eq.${uid}&creado_en=gte.${encodeURIComponent(hoy)}`
+    ),
+    supabaseCount(
+      "crm_conversiones",
+      `usuario_id=eq.${uid}&creado_en=gte.${encodeURIComponent(ayer)}&creado_en=lt.${encodeURIComponent(hoy)}`
+    ),
     fetchConversionesRows(usuarioId),
-    sumarVentasEnRango(usuarioId, hoy, new Date().toISOString()),
-    sumarVentasEnRango(usuarioId, ayer, hoy),
   ]);
 
-  let ventasTotal = 0;
-  let moneda = "BOB";
+  let ventasMonto = 0;
   if (Array.isArray(conversionesRows) && conversionesRows.length) {
     const totales = sumarVentasPorMoneda(conversionesRows);
-    const entries = Object.entries(totales).sort((a, b) => b[1] - a[1]);
-    if (entries.length) {
-      moneda = entries[0][0];
-      ventasTotal = Math.round(entries[0][1] * 100) / 100;
-    }
+    ventasMonto = Math.round(
+      Object.values(totales).reduce((acc, v) => acc + v, 0) * 100
+    ) / 100;
+  }
+
+  let ventasCantidad = conversionesCount ?? 0;
+  if (conversionesCount === null && Array.isArray(conversionesRows)) {
+    ventasCantidad = conversionesRows.length;
   }
 
   return {
     leadsVivos: leadsVivos ?? 0,
     conversaciones: conversaciones ?? 0,
-    ventasTotal,
-    moneda,
+    ventasCantidad,
+    ventasMonto,
     flujosActivos: countFlujosActivos(flujos),
     tendenciaLeads: calcTendencia(clientesHoy ?? 0, clientesAyer ?? 0),
     tendenciaConversaciones: calcTendencia(conversacionesHoy ?? 0, conversacionesAyer ?? 0),
-    tendenciaVentas: calcTendencia(ventasHoy ?? 0, ventasAyer ?? 0),
+    tendenciaVentas: calcTendencia(conversionesCountHoy ?? 0, conversionesCountAyer ?? 0),
   };
 }
 

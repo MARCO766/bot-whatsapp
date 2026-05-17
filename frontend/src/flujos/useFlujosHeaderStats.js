@@ -4,8 +4,8 @@ import { ApiError, fetchHeaderStats } from "./api";
 const EMPTY = {
   leadsVivos: 0,
   conversaciones: 0,
-  ventasTotal: 0,
-  moneda: "BOB",
+  ventasCantidad: 0,
+  ventasMonto: 0,
   flujosActivos: 0,
   tendenciaLeads: null,
   tendenciaConversaciones: null,
@@ -26,8 +26,8 @@ export function useFlujosHeaderStats(enabled = true) {
       setData({
         leadsVivos: res.leadsVivos ?? 0,
         conversaciones: res.conversaciones ?? 0,
-        ventasTotal: res.ventasTotal ?? 0,
-        moneda: res.moneda || "BOB",
+        ventasCantidad: res.ventasCantidad ?? 0,
+        ventasMonto: res.ventasMonto ?? 0,
         tendenciaLeads: res.tendenciaLeads ?? null,
         tendenciaConversaciones: res.tendenciaConversaciones ?? null,
         tendenciaVentas: res.tendenciaVentas ?? null,

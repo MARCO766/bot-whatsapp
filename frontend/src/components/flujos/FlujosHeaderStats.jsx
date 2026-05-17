@@ -1,5 +1,5 @@
 import React from "react";
-import { formatHeaderTrend, formatHeaderVentas, formatNumber } from "../../flujos/utils";
+import { formatHeaderTrend, formatNumber } from "../../flujos/utils";
 
 const CARDS = [
   { key: "leadsVivos", label: "Leads vivos", icon: "⚡", trendKey: "tendenciaLeads", accent: "accentCyan" },
@@ -11,12 +11,11 @@ const CARDS = [
     accent: "",
   },
   {
-    key: "ventas",
+    key: "ventasCantidad",
     label: "Ventas",
     icon: "💎",
     trendKey: "tendenciaVentas",
     accent: "accentGreen",
-    format: (d) => formatHeaderVentas(d.ventasTotal, d.moneda),
   },
   { key: "flujosActivos", label: "Flujos activos", icon: "🧩", accent: "accentGreen" },
 ];
