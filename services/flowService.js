@@ -2,6 +2,8 @@ const axios = require("axios");
 
 const { enviarTextoWhatsApp, enviarMediaWhatsApp } = require("./whatsappService");
 const { esperarSegundos } = require("../utils/timers");
+const { programarSeguimientoNodo } = require("./seguimiento/scheduleSeguimiento");
+const { esNodoSeguimiento } = require("./seguimiento/parseSeguimientoNode");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
@@ -40,7 +42,7 @@ async function agregarEtiquetaCliente(numero, etiqueta, usuarioId = null) {
 }
 
 
-async function ejecutarFlujo(numero, flujoData, usuarioId = null) {
+async function ejecutarFlujo(numero, flujoData, usuarioId = null, flujoId = null) {
   if (!flujoData || !flujoData.nodos || !flujoData.conexiones) return;
 
   const nodos = flujoData.nodos;
@@ -226,48 +228,19 @@ if (html.includes("🏷️ Etiqueta")) {
     await agregarEtiquetaCliente(numero, etiqueta, usuarioId);
   }
 }
-    if (html.includes("⏱️ Seguimiento") || html.includes("🔔 Seguimiento")) {
-
-  const matchData = html.match(/<textarea[^>]*class="seguimiento-data"[^>]*>([\s\S]*?)<\/textarea>/i);
-
-  if (matchData) {
-    let seguimientos = [];
-
-    try {
-      seguimientos = JSON.parse(
-        matchData[1]
-          .replace(/&quot;/g, '"')
-          .replace(/&#34;/g, '"')
-          .replace(/&amp;/g, '&')
-      );
-    } catch (e) {
-      console.log("ERROR LEYENDO SEGUIMIENTOS:", e.message);
-      seguimientos = [];
-    }
-
-    for (const seg of seguimientos) {
-      const minutos = parseInt(seg.minutos);
-      const mensaje = (seg.mensaje || "").trim();
-
-      if (!isNaN(minutos) && minutos > 0 && mensaje) {
-        await esperarSegundos(minutos * 60);
-        await enviarTextoWhatsApp(numero, mensaje, {
-          usuarioId
+    if (esNodoSeguimiento(html)) {
+      try {
+        await programarSeguimientoNodo({
+          numero,
+          usuarioId,
+          flujoId,
+          nodoId,
+          html,
         });
+      } catch (e) {
+        console.log("ERROR PROGRAMANDO SEGUIMIENTO:", e.message);
       }
     }
-
-  } else {
-    const matchTexto = html.match(/<textarea[^>]*>([\s\S]*?)<\/textarea>/i);
-    const texto = matchTexto ? matchTexto[1].trim() : "";
-
-    if (texto) {
-      await enviarTextoWhatsApp(numero, texto, {
-        usuarioId
-      });
-    }
-  }
-}
 
     const siguientes = conexiones.filter(c => c.desde === nodoId);
 
@@ -315,7 +288,7 @@ async function buscarYEjecutarActivador(numero, textoCliente, usuarioId = null) 
 
   if (!flujo || !flujo.data) return false;
 
-  await ejecutarFlujo(numero, flujo.data, usuarioId);
+  await ejecutarFlujo(numero, flujo.data, usuarioId, flujo.id);
 
   return true;
 }

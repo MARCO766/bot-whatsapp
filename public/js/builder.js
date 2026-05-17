@@ -205,6 +205,12 @@ function cargarFlujoGuardado(){
     });
   }
 
+  document.querySelectorAll(".follow-node").forEach((nodo) => {
+    if(window.MacBotSeguimiento){
+      window.MacBotSeguimiento.refrescarNodoCargado(nodo);
+    }
+  });
+
   resizeWorldSurface();
 }
 
@@ -238,17 +244,17 @@ function agregarNodo(tipo){
 
     contenido = `
       <div class="follow-header">
-        <span>⏱️ Seguimiento</span>
+        <span>⏱️ Seguimiento CRM</span>
       </div>
 
       <button class="edit-node" onclick="event.stopPropagation(); abrirEditorSeguimiento('${nodo.id}')">✎</button>
       <button class="delete-node" onclick="event.stopPropagation(); borrarNodo('${nodo.id}')">×</button>
 
       <div class="follow-body">
-        <div class="follow-title">Sin seguimientos todavía</div>
+        <p class="follow-empty">Configura en el panel →</p>
       </div>
 
-      <textarea class="seguimiento-data" style="display:none;">[]</textarea>
+      <textarea class="seguimiento-data" style="display:none;">{"version":2,"soloSiNoRespondio":true,"detenerSiResponde":true,"pasos":[]}</textarea>
     `;
   }
 
@@ -298,6 +304,11 @@ function agregarNodo(tipo){
   `;
 
   canvas.appendChild(nodo);
+
+  if(tipo === "seguimiento" && window.MacBotSeguimiento){
+    window.MacBotSeguimiento.initNodoRecienCreado(nodo);
+  }
+
   hacerMovible(nodo);
 }
 
@@ -970,143 +981,31 @@ function agregarContenidoFinal(){
 }
 
 /* =========================
-   SEGUIMIENTO
+   SEGUIMIENTO (MacBotSeguimiento)
 ========================= */
-
-let seguimientoNodoEditando = null;
-let seguimientoIndexEditando = 0;
-let seguimientoDatosActuales = [];
 
 function abrirEditorSeguimiento(id){
   const nodo = document.getElementById(id);
   if(!nodo) return;
 
-  seguimientoNodoEditando = nodo;
-
-  const dataBox = nodo.querySelector(".seguimiento-data");
-
-  try{
-    seguimientoDatosActuales = JSON.parse(dataBox?.value || "[]");
-  }catch(e){
-    seguimientoDatosActuales = [];
+  if(window.MacBotSeguimiento){
+    window.MacBotSeguimiento.renderPanel(nodo);
+    const panel = document.getElementById("panelNodo");
+    if(panel) panel.classList.add("activo");
+    marcarNodoSeleccionado(nodo);
   }
-
-  const modal = document.getElementById("modalSeguimiento");
-
-  if(modal){
-    modal.style.display = "flex";
-    modal.classList.add("activo");
-  }
-
-  renderListaSeguimientos();
-
-  if(seguimientoDatosActuales.length > 0){
-    cargarSegmentoSeguimiento(0);
-  } else {
-    const min = document.getElementById("segMinutos");
-    const msg = document.getElementById("segMensaje");
-
-    if(min) min.value = "";
-    if(msg) msg.value = "";
-  }
-}
-
-function renderListaSeguimientos(){
-  const lista = document.getElementById("listaSeguimientos");
-  if(!lista) return;
-
-  lista.innerHTML = "";
-
-  seguimientoDatosActuales.forEach((seg, index) => {
-    lista.innerHTML +=
-      '<div onclick="cargarSegmentoSeguimiento(' + index + ')" style="' +
-      'padding:12px;margin-bottom:8px;border-radius:8px;cursor:pointer;' +
-      'background:' + (index === seguimientoIndexEditando ? '#123f5c' : '#1c1c1c') + ';color:white;">' +
-        '<strong>Segmento ' + (index + 1) + '</strong><br>' +
-        '<small>' + escaparHTML(seg.minutos || "") + ' minutos</small>' +
-      '</div>';
-  });
-}
-
-function cargarSegmentoSeguimiento(index){
-  seguimientoIndexEditando = index;
-
-  const seg = seguimientoDatosActuales[index];
-
-  const min = document.getElementById("segMinutos");
-  const msg = document.getElementById("segMensaje");
-
-  if(min) min.value = seg?.minutos || "";
-  if(msg) msg.value = seg?.mensaje || "";
-
-  renderListaSeguimientos();
 }
 
 function agregarSegmentoSeguimiento(){
-  seguimientoDatosActuales.push({
-    minutos: "",
-    mensaje: ""
-  });
-
-  cargarSegmentoSeguimiento(seguimientoDatosActuales.length - 1);
+  document.getElementById("segAddPaso")?.click();
 }
 
 function guardarSeguimiento(){
-  if(!seguimientoNodoEditando) return;
-
-  if(seguimientoDatosActuales.length === 0){
-    seguimientoDatosActuales.push({
-      minutos: "",
-      mensaje: ""
-    });
-
-    seguimientoIndexEditando = 0;
-  }
-
-  seguimientoDatosActuales[seguimientoIndexEditando].minutos =
-    document.getElementById("segMinutos")?.value || "";
-
-  seguimientoDatosActuales[seguimientoIndexEditando].mensaje =
-    document.getElementById("segMensaje")?.value || "";
-
-  const dataBox = seguimientoNodoEditando.querySelector(".seguimiento-data");
-
-  if(dataBox){
-    dataBox.value = JSON.stringify(seguimientoDatosActuales);
-  }
-
-  const body = seguimientoNodoEditando.querySelector(".follow-body");
-
-  if(body){
-    let html = "";
-
-    if(seguimientoDatosActuales.length === 0){
-      html = '<div class="follow-title">Sin seguimientos todavía</div>';
-    } else {
-      html = '<div class="follow-title">Configuración de tiempos:</div>';
-
-      seguimientoDatosActuales.forEach((seg, index) => {
-        html +=
-          '<div class="follow-item">' +
-            '<span>Tiempo ' + (index + 1) + ' (' + escaparHTML(seg.minutos || "") + ' min)</span>' +
-            '<span class="follow-badge">' + (seg.mensaje ? '1' : '0') + '</span>' +
-          '</div>';
-      });
-    }
-
-    body.innerHTML = html;
-  }
-
-  cerrarSeguimiento();
+  document.getElementById("segGuardarPanel")?.click();
 }
 
 function cerrarSeguimiento(){
-  const modal = document.getElementById("modalSeguimiento");
-
-  if(modal){
-    modal.style.display = "none";
-    modal.classList.remove("activo");
-  }
+  cerrarPanelNodo();
 }
 
 /* =========================
@@ -1838,6 +1737,11 @@ function abrirPanelNodo(nodo){
 
   panel.classList.add("activo");
   marcarNodoSeleccionado(nodo);
+
+  if(window.MacBotSeguimiento && window.MacBotSeguimiento.esNodoSeguimiento(nodo)){
+    window.MacBotSeguimiento.renderPanel(nodo);
+    return;
+  }
 
   const titulo = nodo.querySelector("h3")?.innerText || "Nodo";
   const tipo = nodo.dataset.tipo || "nodo";

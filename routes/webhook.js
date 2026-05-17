@@ -5,6 +5,9 @@ const axios = require("axios");
 
 const { enviarEventoMeta } = require("../services/metaService");
 const { buscarYEjecutarActivador } = require("../services/flowService");
+const {
+  cancelarSeguimientosPorRespuesta,
+} = require("../services/seguimiento/cancelOnReply");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
@@ -484,6 +487,9 @@ if (message.type === "interactive") {
 }
 
 await enviarEventoMeta(usuarioIdWebhook, "Lead", from);
+
+const io = req.app.get("io");
+await cancelarSeguimientosPorRespuesta(from, usuarioIdWebhook, io);
 
 await buscarYEjecutarActivador(from, text, usuarioIdWebhook);
 

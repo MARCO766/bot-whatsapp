@@ -19,6 +19,7 @@ function renderAdminPage({
 
 <link rel="stylesheet" href="/css/admin.css">
 <link rel="stylesheet" href="/css/flow-builder.css">
+<link rel="stylesheet" href="/css/seguimiento.css">
 </head>
 
 <body>
@@ -852,6 +853,7 @@ window.MACBOT_BUILDER = {
 </script>
 
 
+<script src="/js/builder/seguimiento.js"></script>
 <script src="/js/builder.js"></script>
 
 <div class="modal" id="modalSeguimiento" style="display:none;">

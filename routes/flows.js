@@ -22,9 +22,12 @@ const {
   enviarTextoWhatsApp,
   enviarMediaWhatsApp
 } = require("../services/whatsappService");
+const seguimientoRoutes = require("./seguimiento");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
+
+router.use(seguimientoRoutes);
 router.post("/subir-archivo", protegerPanel, upload.single("archivo"), async (req, res) => {
   try {
     if (!req.file) {

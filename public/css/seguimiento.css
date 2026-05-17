@@ -1,0 +1,366 @@
+/* Nodo Seguimiento CRM — MacBot */
+
+.follow-node {
+  width: 320px !important;
+  min-height: 140px;
+  padding: 0 !important;
+  overflow: hidden;
+  border: 1px solid rgba(103, 232, 249, 0.45) !important;
+  background: linear-gradient(160deg, rgba(12, 24, 40, 0.98), rgba(8, 14, 24, 0.98)) !important;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45) !important;
+}
+
+.follow-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  color: #67e8f9;
+  font-weight: 800;
+  font-size: 14px;
+}
+
+.follow-body {
+  padding: 12px 14px 16px;
+}
+
+.follow-title {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: #94a3b8;
+  margin-bottom: 10px;
+}
+
+.follow-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.follow-step {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.follow-step-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.follow-step-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: #e5e7eb;
+}
+
+.follow-step-delay {
+  font-size: 12px;
+  color: #67e8f9;
+  font-weight: 700;
+}
+
+.follow-step-tipo {
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.follow-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  background: rgba(57, 255, 20, 0.15);
+  color: #39ff14;
+}
+
+.follow-timer-bar {
+  margin-top: 10px;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.follow-timer-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #39ff14, #67e8f9);
+  transition: width 0.3s ease;
+}
+
+.follow-empty {
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+/* Panel derecho */
+.seg-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.seg-panel h4 {
+  margin: 0;
+  color: #39ff14;
+  font-size: 15px;
+}
+
+.seg-panel-desc {
+  margin: 0;
+  color: #94a3b8;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.seg-toggle-row {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.seg-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #e5e7eb;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.seg-toggle input {
+  width: auto;
+  margin: 0;
+  accent-color: #39ff14;
+}
+
+.seg-steps-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.seg-step-card {
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(8, 14, 24, 0.9);
+  overflow: hidden;
+}
+
+.seg-step-card.active {
+  border-color: rgba(57, 255, 20, 0.45);
+  box-shadow: 0 0 0 1px rgba(57, 255, 20, 0.2);
+}
+
+.seg-step-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  cursor: pointer;
+}
+
+.seg-step-head strong {
+  color: #e5e7eb;
+  font-size: 13px;
+}
+
+.seg-step-head small {
+  color: #67e8f9;
+  font-weight: 700;
+}
+
+.seg-step-body {
+  padding: 12px;
+  display: none;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.seg-step-card.active .seg-step-body {
+  display: flex;
+}
+
+.seg-field label {
+  display: block;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: #94a3b8;
+  margin-bottom: 6px;
+}
+
+.seg-field input,
+.seg-field select,
+.seg-field textarea {
+  width: 100%;
+  margin: 0;
+  background: #0f1724;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  color: #fff;
+  padding: 10px 12px;
+  font-size: 14px;
+}
+
+.seg-field textarea {
+  min-height: 90px;
+  resize: vertical;
+}
+
+.seg-delay-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.seg-tipo-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.seg-tipo-tab {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+  color: #cbd5e1;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.seg-tipo-tab.active {
+  background: rgba(57, 255, 20, 0.18);
+  border-color: rgba(57, 255, 20, 0.5);
+  color: #39ff14;
+}
+
+.seg-upload-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.seg-upload-row input[type="file"] {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.seg-upload-preview {
+  font-size: 12px;
+  color: #67e8f9;
+  word-break: break-all;
+}
+
+.seg-visual-timer {
+  padding: 12px;
+  border-radius: 12px;
+  background: rgba(57, 255, 20, 0.08);
+  border: 1px dashed rgba(57, 255, 20, 0.35);
+}
+
+.seg-visual-timer strong {
+  display: block;
+  color: #39ff14;
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+
+.seg-visual-timer span {
+  color: #e5e7eb;
+  font-size: 13px;
+}
+
+.seg-estados-live {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 160px;
+  overflow: auto;
+}
+
+.seg-estado-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 12px;
+}
+
+.seg-estado-pill {
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-weight: 800;
+  text-transform: uppercase;
+  font-size: 10px;
+}
+
+.seg-estado-pill.pendiente { background: rgba(251, 191, 36, 0.2); color: #fbbf24; }
+.seg-estado-pill.enviado { background: rgba(57, 255, 20, 0.2); color: #39ff14; }
+.seg-estado-pill.cancelado { background: rgba(248, 113, 113, 0.2); color: #f87171; }
+.seg-estado-pill.respondido { background: rgba(103, 232, 249, 0.2); color: #67e8f9; }
+
+.seg-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.seg-btn {
+  border: none;
+  border-radius: 12px;
+  padding: 12px 16px;
+  font-weight: 800;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.seg-btn-primary {
+  background: #39ff14;
+  color: #061018;
+}
+
+.seg-btn-secondary {
+  background: rgba(255, 255, 255, 0.08);
+  color: #e5e7eb;
+}
+
+.seg-btn-ghost {
+  background: transparent;
+  color: #67e8f9;
+  border: 1px dashed rgba(103, 232, 249, 0.4);
+}
+
+.seg-btn-danger {
+  background: rgba(239, 68, 68, 0.15);
+  color: #fecaca;
+}

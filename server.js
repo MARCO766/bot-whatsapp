@@ -116,5 +116,7 @@ io.on("connection", (socket) => {
 });
 
 server.listen(PORT, () => {
+  const { startSeguimientoWorker } = require("./jobs/seguimientoWorker");
+  startSeguimientoWorker(app);
   console.log("🚀 Servidor corriendo en puerto", PORT);
 });

@@ -78,6 +78,27 @@ socket.on("mensaje-estado", function(data){
 
 });
 
+socket.on("seguimiento-estado", function (data) {
+  const numero = data.cliente_numero;
+  if (!numero) return;
+
+  const chatActual = getChatActual();
+  if (numero !== chatActual) return;
+
+  const mensajes = document.getElementById("mensajes");
+  if (!mensajes) return;
+
+  const aviso = document.createElement("div");
+  aviso.className = "msg-system seguimiento-estado-aviso";
+  aviso.textContent =
+    "⏱ Seguimiento paso " +
+    ((data.paso_index || 0) + 1) +
+    ": " +
+    (data.estado || "actualizado");
+  mensajes.appendChild(aviso);
+  mensajes.scrollTop = mensajes.scrollHeight;
+});
+
 function moverChatArriba(numero, msg = null) {
   const chatList = document.querySelector(".chat-list");
   if (!chatList || !numero) return;
