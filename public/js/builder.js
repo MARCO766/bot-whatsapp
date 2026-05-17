@@ -29,6 +29,14 @@ const viewportState = {
   zoom: 1,
 };
 
+const BUILDER_HISTORY_MAX = 50;
+const builderHistorial = {
+  undoStack: [],
+  redoStack: [],
+  restaurando: false,
+  debounceTimer: null,
+};
+
 /* =========================
    INICIO
 ========================= */
@@ -49,6 +57,8 @@ window.addEventListener("load", function(){
   if(btnGuardarFlujo){
     btnGuardarFlujo.addEventListener("click", guardarFlujo);
   }
+
+  initBuilderHistory();
 
   document.getElementById("modalContenido")?.classList.remove("activo");
   document.getElementById("modalActivador")?.classList.remove("activo");
@@ -230,6 +240,8 @@ function agregarNodo(tipo){
     return;
   }
 
+  registrarHistorialBuilder();
+
   nodoCount++;
 
   const nodo = document.createElement("div");
@@ -326,6 +338,7 @@ function hacerMovible(nodo){
   let startY = 0;
   let origLeft = 0;
   let origTop = 0;
+  let historialDragRegistrado = false;
 
   nodo.addEventListener("mousedown", function(e){
     if(
@@ -336,6 +349,11 @@ function hacerMovible(nodo){
       e.target.classList.contains("port")
     ){
       return;
+    }
+
+    if(!historialDragRegistrado){
+      registrarHistorialBuilder();
+      historialDragRegistrado = true;
     }
 
     moviendo = true;
@@ -360,6 +378,9 @@ function hacerMovible(nodo){
   });
 
   document.addEventListener("mouseup", function(){
+    if(moviendo){
+      historialDragRegistrado = false;
+    }
     moviendo = false;
   });
 }
@@ -407,6 +428,8 @@ function soltarConexion(e){
     const nodoDestino = document.getElementById(destino.dataset.nodo);
 
     if(nodoDestino && nodoDestino.id !== nodoArrastrando.id){
+      registrarHistorialBuilder();
+
       if(destino.classList.contains("in")){
         conectarNodos(nodoArrastrando, nodoDestino);
       }
@@ -438,6 +461,8 @@ function conectarNodos(nodo1, nodo2){
 
   borrar.onclick = function(e){
     e.stopPropagation();
+
+    registrarHistorialBuilder();
 
     conexiones = conexiones.filter(c => c.linea !== linea);
 
@@ -924,6 +949,8 @@ function agregarContenidoFinal(){
     return;
   }
 
+  registrarHistorialBuilder();
+
   variantesContenido[varianteActual] = contenidoArmado;
 
   const variantesValidas =
@@ -993,6 +1020,7 @@ function abrirEditorSeguimiento(id){
   if(!nodo) return;
 
   if(window.MacBotSeguimiento){
+    nodoSeleccionadoPanel = nodo;
     window.MacBotSeguimiento.renderPanel(nodo);
     const panel = document.getElementById("panelNodo");
     if(panel) panel.classList.add("activo");
@@ -1080,6 +1108,17 @@ function borrarNodo(id){
   const nodo = document.getElementById(id);
   if(!nodo) return;
 
+  const nodoActivoSeg =
+    window.MacBotSeguimiento && window.MacBotSeguimiento.getNodoActivo
+      ? window.MacBotSeguimiento.getNodoActivo()
+      : null;
+
+  const eraSeleccionado =
+    (nodoSeleccionadoPanel && nodoSeleccionadoPanel.id === id) ||
+    (nodoActivoSeg && nodoActivoSeg.id === id);
+
+  registrarHistorialBuilder();
+
   conexiones = conexiones.filter(c => {
     if(c.desde.id === id || c.hasta.id === id){
       c.linea?.remove();
@@ -1095,6 +1134,13 @@ function borrarNodo(id){
   }
 
   nodo.remove();
+
+  if(eraSeleccionado){
+    if(window.MacBotSeguimiento && window.MacBotSeguimiento.clearPanelActivo){
+      window.MacBotSeguimiento.clearPanelActivo();
+    }
+    cerrarPanelNodo();
+  }
 }
 
 /* =========================
@@ -1737,6 +1783,11 @@ document.addEventListener("click", function(e){
 });
 
 function abrirPanelNodo(nodo){
+  if(!nodo || !document.body.contains(nodo)){
+    cerrarPanelNodo();
+    return;
+  }
+
   nodoSeleccionadoPanel = nodo;
 
   const panel = document.getElementById("panelNodo");
@@ -1775,10 +1826,14 @@ function abrirPanelNodo(nodo){
       Guardar cambios
     </button>
   `;
+
+  document.getElementById("panelTituloNodo")?.addEventListener("input", macbotRecordHistoryDebounced);
 }
 
 function guardarPanelNodo(){
-  if(!nodoSeleccionadoPanel) return;
+  if(!nodoSeleccionadoPanel || !document.body.contains(nodoSeleccionadoPanel)) return;
+
+  registrarHistorialBuilder();
 
   const nuevoTitulo = document.getElementById("panelTituloNodo")?.value.trim();
 
@@ -1800,6 +1855,10 @@ function cerrarPanelNodo(){
   const panel = document.getElementById("panelNodo");
   const contenido = document.getElementById("panelNodoContenido");
 
+  if(window.MacBotSeguimiento && window.MacBotSeguimiento.clearPanelActivo){
+    window.MacBotSeguimiento.clearPanelActivo();
+  }
+
   if(panel){
     panel.classList.remove("activo");
   }
@@ -1811,4 +1870,244 @@ function cerrarPanelNodo(){
 
   marcarNodoSeleccionado(null);
   nodoSeleccionadoPanel = null;
+}
+
+/* =========================
+   HISTORIAL DESHACER / REHACER
+========================= */
+
+function sincronizarPanelAntesDeSnapshot(){
+  if(window.MacBotSeguimiento && window.MacBotSeguimiento.flushPanelToNode){
+    window.MacBotSeguimiento.flushPanelToNode();
+  }
+}
+
+function capturarSnapshotBuilder(){
+  sincronizarPanelAntesDeSnapshot();
+
+  const nodos = [];
+
+  document.querySelectorAll("#canvasFlujo .node").forEach((nodo) => {
+    nodos.push({
+      id: nodo.id,
+      className: nodo.className,
+      html: nodo.innerHTML,
+      left: nodo.style.left || "0px",
+      top: nodo.style.top || "0px",
+      tipo: nodo.dataset.tipo || "",
+    });
+  });
+
+  const panel = document.getElementById("panelNodo");
+
+  return {
+    nodoCount,
+    nodos,
+    conexiones: conexiones.map((c) => ({
+      desde: c.desde.id,
+      hasta: c.hasta.id,
+    })),
+    panelAbierto: !!(panel && panel.classList.contains("activo")),
+    nodoSeleccionadoId: nodoSeleccionadoPanel?.id || null,
+  };
+}
+
+function restaurarSnapshotBuilder(snapshot){
+  if(!snapshot) return;
+
+  const canvas = document.getElementById("canvasFlujo");
+  if(!canvas) return;
+
+  builderHistorial.restaurando = true;
+
+  if(window.MacBotSeguimiento && window.MacBotSeguimiento.clearPanelActivo){
+    window.MacBotSeguimiento.clearPanelActivo();
+  }
+
+  conexiones.forEach((c) => {
+    c.linea?.remove();
+    c.borrar?.remove();
+  });
+  conexiones = [];
+
+  canvas.innerHTML = "";
+  const mapaNodos = {};
+
+  (snapshot.nodos || []).forEach((item) => {
+    const nodo = document.createElement("div");
+
+    nodo.id = item.id;
+    nodo.className = item.className || "node";
+    nodo.innerHTML = item.html || "";
+    nodo.style.left = item.left || "80px";
+    nodo.style.top = item.top || "80px";
+
+    if(item.tipo){
+      nodo.dataset.tipo = item.tipo;
+    }
+
+    if(item.id === "nodo_inicio"){
+      nodo.classList.add("node-start");
+      nodo.dataset.tipo = "inicio";
+    }
+
+    canvas.appendChild(nodo);
+    hacerMovible(nodo);
+    mapaNodos[item.id] = nodo;
+
+    if(item.className && item.className.includes("follow-node")){
+      try{
+        if(window.MacBotSeguimiento){
+          window.MacBotSeguimiento.refrescarNodoCargado(nodo);
+        }
+      } catch (err) {
+        console.warn("Seguimiento: error al restaurar nodo", err.message);
+      }
+    }
+  });
+
+  nodoCount = snapshot.nodoCount || 0;
+  ultimoNodo = null;
+
+  (snapshot.conexiones || []).forEach((c) => {
+    if(mapaNodos[c.desde] && mapaNodos[c.hasta]){
+      conectarNodos(mapaNodos[c.desde], mapaNodos[c.hasta]);
+    }
+  });
+
+  if(snapshot.panelAbierto && snapshot.nodoSeleccionadoId){
+    const nodoSel = document.getElementById(snapshot.nodoSeleccionadoId);
+
+    if(nodoSel){
+      abrirPanelNodo(nodoSel);
+    } else {
+      cerrarPanelNodo();
+    }
+  } else {
+    cerrarPanelNodo();
+  }
+
+  actualizarLineas();
+  resizeWorldSurface();
+  builderHistorial.restaurando = false;
+  actualizarBotonesHistorialBuilder();
+}
+
+function registrarHistorialBuilder(){
+  if(builderHistorial.restaurando || !document.getElementById("builderArea")){
+    return;
+  }
+
+  builderHistorial.undoStack.push(capturarSnapshotBuilder());
+
+  if(builderHistorial.undoStack.length > BUILDER_HISTORY_MAX){
+    builderHistorial.undoStack.shift();
+  }
+
+  builderHistorial.redoStack = [];
+  actualizarBotonesHistorialBuilder();
+}
+
+function macbotRecordHistoryDebounced(){
+  if(builderHistorial.restaurando || !document.getElementById("builderArea")){
+    return;
+  }
+
+  clearTimeout(builderHistorial.debounceTimer);
+  builderHistorial.debounceTimer = setTimeout(registrarHistorialBuilder, 450);
+}
+
+function deshacerBuilder(){
+  if(!builderHistorial.undoStack.length || builderHistorial.restaurando){
+    return;
+  }
+
+  builderHistorial.redoStack.push(capturarSnapshotBuilder());
+
+  if(builderHistorial.redoStack.length > BUILDER_HISTORY_MAX){
+    builderHistorial.redoStack.shift();
+  }
+
+  const anterior = builderHistorial.undoStack.pop();
+  restaurarSnapshotBuilder(anterior);
+}
+
+function rehacerBuilder(){
+  if(!builderHistorial.redoStack.length || builderHistorial.restaurando){
+    return;
+  }
+
+  builderHistorial.undoStack.push(capturarSnapshotBuilder());
+
+  if(builderHistorial.undoStack.length > BUILDER_HISTORY_MAX){
+    builderHistorial.undoStack.shift();
+  }
+
+  const siguiente = builderHistorial.redoStack.pop();
+  restaurarSnapshotBuilder(siguiente);
+}
+
+function actualizarBotonesHistorialBuilder(){
+  const btnUndo = document.getElementById("btnBuilderUndo");
+  const btnRedo = document.getElementById("btnBuilderRedo");
+
+  if(btnUndo){
+    btnUndo.disabled = builderHistorial.undoStack.length === 0;
+  }
+
+  if(btnRedo){
+    btnRedo.disabled = builderHistorial.redoStack.length === 0;
+  }
+}
+
+function initBuilderHistory(){
+  if(!document.getElementById("builderArea")){
+    return;
+  }
+
+  window.registrarHistorialBuilder = registrarHistorialBuilder;
+  window.macbotRecordHistoryDebounced = macbotRecordHistoryDebounced;
+
+  document.getElementById("btnBuilderUndo")?.addEventListener("click", deshacerBuilder);
+  document.getElementById("btnBuilderRedo")?.addEventListener("click", rehacerBuilder);
+
+  document.getElementById("canvasFlujo")?.addEventListener("input", function(e){
+    if(e.target.closest(".node input, .node textarea, .node select")){
+      macbotRecordHistoryDebounced();
+    }
+  });
+
+  document.addEventListener("keydown", function(e){
+    if(!document.getElementById("builderArea")){
+      return;
+    }
+
+    const tag = (e.target && e.target.tagName) || "";
+    const editable = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+
+    if(!(e.ctrlKey || e.metaKey)){
+      return;
+    }
+
+    const key = String(e.key || "").toLowerCase();
+
+    if(key === "z" && !e.shiftKey){
+      if(editable && e.target.closest("#panelNodoContenido, #modalContenido")){
+        return;
+      }
+      e.preventDefault();
+      deshacerBuilder();
+      return;
+    }
+
+    if(key === "y" || (key === "z" && e.shiftKey)){
+      if(editable && e.target.closest("#panelNodoContenido, #modalContenido")){
+        return;
+      }
+      e.preventDefault();
+      rehacerBuilder();
+    }
+  });
+
+  actualizarBotonesHistorialBuilder();
 }

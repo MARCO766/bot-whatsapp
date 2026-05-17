@@ -574,7 +574,27 @@ window.MacBotSeguimiento = (function () {
     syncPasoDesdeFormulario();
     renderListaPasos();
     if (nodoActivo) renderPreviewNodo(nodoActivo, configActiva);
+    if (typeof window.macbotRecordHistoryDebounced === "function") {
+      window.macbotRecordHistoryDebounced();
+    }
+  }
 
+  function flushPanelToNode() {
+    if (!nodoActivo) return;
+    syncPasoDesdeFormulario();
+    configActiva.soloSiNoRespondio = !!document.getElementById("segSoloNoRespondio")?.checked;
+    configActiva.detenerSiResponde = !!document.getElementById("segDetenerSiResponde")?.checked;
+    guardarConfigEnNodo(nodoActivo, configActiva);
+  }
+
+  function clearPanelActivo() {
+    nodoActivo = null;
+    configActiva = crearConfigVacia();
+    pasoActivoIndex = 0;
+  }
+
+  function getNodoActivo() {
+    return nodoActivo;
   }
 
   function renderListaPasos() {
@@ -726,5 +746,8 @@ window.MacBotSeguimiento = (function () {
       const n = document.getElementById(id);
       if (n) renderPanel(n);
     },
+    flushPanelToNode: flushPanelToNode,
+    clearPanelActivo: clearPanelActivo,
+    getNodoActivo: getNodoActivo,
   };
 })();

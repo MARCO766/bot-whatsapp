@@ -608,7 +608,13 @@ ${tab === "flujos" && builder ? `
         <p class="flow-hint">Selecciona nodos desde el panel izquierdo. Arrastra el fondo para moverte por el canvas.</p>
       </div>
     </div>
-    <button type="button" class="btn flow-save" id="btnGuardarFlujo">💾 Guardar flujo</button>
+    <div class="flow-toolbar-right">
+      <div class="flow-history-controls" role="group" aria-label="Deshacer y rehacer">
+        <button type="button" class="flow-history-btn" id="btnBuilderUndo" title="Deshacer (Ctrl+Z)" aria-label="Deshacer" disabled>←</button>
+        <button type="button" class="flow-history-btn" id="btnBuilderRedo" title="Rehacer (Ctrl+Y)" aria-label="Rehacer" disabled>→</button>
+      </div>
+      <button type="button" class="btn flow-save" id="btnGuardarFlujo">💾 Guardar flujo</button>
+    </div>
   </header>
 
   <div class="flow-workspace">
