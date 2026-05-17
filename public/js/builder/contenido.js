@@ -404,14 +404,14 @@ window.MacBotContenido = (function () {
         id +
         '" onmousedown="iniciarConexion(event, \'' +
         id +
-        '\')"></div>';
+        '\', \'in\')"></div>';
     const portOutHtml = portsOut
       ? portsOut.outerHTML
       : '<div class="port out" data-nodo="' +
         id +
         '" onmousedown="iniciarConexion(event, \'' +
         id +
-        '\')"></div>';
+        '\', \'out\')"></div>';
 
     nodo.innerHTML =
       portInHtml +
@@ -846,7 +846,7 @@ window.MacBotContenido = (function () {
       nodo.id +
       '" onmousedown="iniciarConexion(event, \'' +
       nodo.id +
-      '\')"></div>' +
+      '\', \'in\')"></div>' +
       '<div class="node-actions">' +
       '<button type="button" class="edit-node" onclick="event.stopPropagation(); editarNodo(\'' +
       nodo.id +
@@ -873,7 +873,7 @@ window.MacBotContenido = (function () {
       nodo.id +
       '" onmousedown="iniciarConexion(event, \'' +
       nodo.id +
-      '\')"></div>';
+      '\', \'out\')"></div>';
 
     canvas.appendChild(nodo);
 

@@ -16,8 +16,10 @@ function detectarTipoNodo(nodo) {
 
   if (
     html.includes("contenido-variantes-data") ||
+    className.includes("content-node") ||
     className.includes("blue") ||
-    html.includes("💬 Contenido")
+    html.includes("💬 Contenido") ||
+    html.includes("content-header-title")
   ) {
     return "contenido";
   }

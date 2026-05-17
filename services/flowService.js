@@ -46,23 +46,161 @@ async function agregarEtiquetaCliente(numero, etiqueta, usuarioId = null) {
 }
 
 
+function normalizarConexionesFlujo(conexionesRaw) {
+  if (!Array.isArray(conexionesRaw)) return [];
+
+  const lista = [];
+  const vistos = new Set();
+
+  conexionesRaw.forEach((c) => {
+    if (!c || typeof c !== "object") return;
+
+    const desde =
+      c.desde || c.from || c.source || c.source_node_id || c.sourceNodeId;
+    const hasta =
+      c.hasta || c.to || c.target || c.target_node_id || c.targetNodeId;
+
+    if (!desde || !hasta || desde === hasta) return;
+
+    const key = desde + "->" + hasta;
+    if (vistos.has(key)) return;
+    vistos.add(key);
+
+    lista.push({ desde, hasta });
+  });
+
+  return lista;
+}
+
+function obtenerSiguientesNodos(conexiones, nodoId) {
+  return conexiones.filter((c) => c.desde === nodoId);
+}
+
+async function ejecutarContenidoNodo(numero, nodo, usuarioId) {
+  const html = nodo.html || "";
+  const matchVariantesContenido = html.match(
+    /<textarea[^>]*class="contenido-variantes-data"[^>]*>([\s\S]*?)<\/textarea>/i
+  );
+
+  if (!matchVariantesContenido) return false;
+
+  try {
+    const textoJson = matchVariantesContenido[1]
+      .replace(/&quot;/g, '"')
+      .replace(/&#34;/g, '"')
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&amp;/g, "&");
+
+    const variantes = JSON.parse(textoJson);
+    const variantesValidas = variantes.filter(
+      (v) => Array.isArray(v) && v.length > 0
+    );
+
+    if (!variantesValidas.length) return false;
+
+    const varianteElegida =
+      variantesValidas[Math.floor(Math.random() * variantesValidas.length)];
+
+    for (const item of varianteElegida) {
+      if (item.tipo === "texto") {
+        await enviarTextoWhatsApp(numero, item.valor, { usuarioId });
+      }
+
+      if (item.tipo === "tiempo") {
+        const segundos = parseInt(item.valor, 10);
+        if (!isNaN(segundos) && segundos > 0) {
+          await esperarSegundos(segundos);
+        }
+      }
+
+      if (item.tipo === "imagen") {
+        await enviarMediaWhatsApp(
+          numero,
+          "image",
+          item.valor,
+          item.descripcion || "",
+          { usuarioId }
+        );
+      }
+
+      if (item.tipo === "audio") {
+        await enviarMediaWhatsApp(numero, "audio", item.valor, "", {
+          usuarioId,
+        });
+      }
+
+      if (item.tipo === "video") {
+        await enviarMediaWhatsApp(
+          numero,
+          "video",
+          item.valor,
+          item.descripcion || "",
+          { usuarioId }
+        );
+      }
+
+      if (item.tipo === "doc") {
+        await enviarMediaWhatsApp(numero, "document", item.valor, "", {
+          usuarioId,
+        });
+      }
+    }
+
+    return true;
+  } catch (e) {
+    console.log("[FLUJO] ERROR LEYENDO VARIANTES DE CONTENIDO:", e.message);
+    return false;
+  }
+}
+
 async function ejecutarFlujo(numero, flujoData, usuarioId = null, flujoId = null) {
   if (!flujoData || !flujoData.nodos || !flujoData.conexiones) return;
 
   const nodos = flujoData.nodos;
-  const conexiones = flujoData.conexiones;
+  const conexiones = normalizarConexionesFlujo(flujoData.conexiones);
+
+  console.log(
+    "[FLUJO] Inicio ejecución | nodos:",
+    nodos.length,
+    "| conexiones:",
+    conexiones.length
+  );
+  if (conexiones.length) {
+    console.log("[FLUJO] Conexiones encontradas:", JSON.stringify(conexiones));
+  }
+
+  async function continuarASiguientes(nodoId, visitados, etiqueta) {
+    const siguientes = obtenerSiguientesNodos(conexiones, nodoId);
+    const ids = siguientes.map((s) => s.hasta);
+
+    if (!ids.length) {
+      console.log("[FLUJO] Sin siguiente nodo:", nodoId, etiqueta ? "(" + etiqueta + ")" : "");
+      return;
+    }
+
+    console.log(
+      "[FLUJO] Siguiente nodo:",
+      ids.join(", "),
+      etiqueta ? "| desde " + etiqueta : "| desde " + nodoId
+    );
+
+    for (const siguiente of siguientes) {
+      await ejecutarNodo(siguiente.hasta, new Set(visitados));
+    }
+  }
 
   async function ejecutarNodo(nodoId, visitados = new Set()) {
     if (!nodoId) return;
 
     if (visitados.has(nodoId)) {
-      console.log("⚠️ Bucle detectado en nodo:", nodoId);
+      console.log("[FLUJO] ⚠ Bucle detectado en nodo:", nodoId);
       return;
     }
 
     visitados.add(nodoId);
 
-    const nodo = nodos.find(n => n.id === nodoId);
+    const nodo = nodos.find((n) => n.id === nodoId);
     if (!nodo) {
       console.log("[FLUJO] Nodo no encontrado:", nodoId);
       return;
@@ -71,7 +209,12 @@ async function ejecutarFlujo(numero, flujoData, usuarioId = null, flujoId = null
     const html = nodo.html || "";
     const tipoNodo = detectarTipoNodo(nodo);
 
-    console.log("[FLUJO] ▶ Nodo actual:", nodoId, "| tipo detectado:", tipoNodo);
+    console.log("[FLUJO] Nodo actual:", nodoId, "| tipo:", tipoNodo);
+
+    if (tipoNodo === "inicio") {
+      await continuarASiguientes(nodoId, visitados, "inicio");
+      return;
+    }
 
     if (tipoNodo === "conversion") {
       const { valor, moneda, origen } = parseConversionFromNodo(nodo);
@@ -86,10 +229,7 @@ async function ejecutarFlujo(numero, flujoData, usuarioId = null, flujoId = null
         metadata: { trigger: "nodo_flujo" },
       });
 
-      const siguientesConv = conexiones.filter((c) => c.desde === nodoId);
-      for (const siguiente of siguientesConv) {
-        await ejecutarNodo(siguiente.hasta, new Set(visitados));
-      }
+      await continuarASiguientes(nodoId, visitados, "conversion");
       return;
     }
 
@@ -109,84 +249,17 @@ async function ejecutarFlujo(numero, flujoData, usuarioId = null, flujoId = null
         );
       }
 
-      const siguientesSeg = conexiones.filter((c) => c.desde === nodoId);
-      const idsSiguientes = siguientesSeg.map((s) => s.hasta);
-
-      console.log(
-        "[FLUJO] → Siguientes nodos:",
-        idsSiguientes.length ? idsSiguientes.join(", ") : "(ninguno)"
-      );
-
-      for (const siguiente of siguientesSeg) {
-        await ejecutarNodo(siguiente.hasta, new Set(visitados));
-      }
-
+      await continuarASiguientes(nodoId, visitados, "seguimiento");
       return;
     }
 
-const matchVariantesContenido = html.match(/<textarea[^>]*class="contenido-variantes-data"[^>]*>([\s\S]*?)<\/textarea>/i);
-
-if (matchVariantesContenido) {
-  try {
-    const textoJson = matchVariantesContenido[1]
-      .replace(/&quot;/g, '"')
-      .replace(/&#34;/g, '"')
-      .replace(/&lt;/g, '<')
-      .replace(/&gt;/g, '>')
-      .replace(/&amp;/g, '&');
-
-    const variantes = JSON.parse(textoJson);
-
-    const variantesValidas = variantes.filter(v => Array.isArray(v) && v.length > 0);
-
-    if (variantesValidas.length > 0) {
-      const varianteElegida = variantesValidas[Math.floor(Math.random() * variantesValidas.length)];
-
-      for (const item of varianteElegida) {
-
-        if (item.tipo === "texto") {
-          await enviarTextoWhatsApp(numero, item.valor, { usuarioId });
-        }
-
-        if (item.tipo === "tiempo") {
-          const segundos = parseInt(item.valor);
-
-          if (!isNaN(segundos) && segundos > 0) {
-            await esperarSegundos(segundos);
-          }
-        }
-
-        if (item.tipo === "imagen") {
-          await enviarMediaWhatsApp(numero, "image", item.valor, item.descripcion || "", { usuarioId });
-        }
-
-        if (item.tipo === "audio") {
-          await enviarMediaWhatsApp(numero, "audio", item.valor, "", { usuarioId });
-        }
-
-        if (item.tipo === "video") {
-          await enviarMediaWhatsApp(numero, "video", item.valor, item.descripcion || "", { usuarioId });
-        }
-
-        if (item.tipo === "doc") {
-          await enviarMediaWhatsApp(numero, "document", item.valor, "", { usuarioId });
-        }
+    if (tipoNodo === "contenido") {
+      const ejecutado = await ejecutarContenidoNodo(numero, nodo, usuarioId);
+      if (ejecutado) {
+        await continuarASiguientes(nodoId, visitados, "contenido");
+        return;
       }
-
-      const siguientes = conexiones.filter(c => c.desde === nodoId);
-      console.log("[FLUJO] → Siguientes nodos (contenido):", siguientes.map(s => s.hasta).join(", ") || "(ninguno)");
-
-      for (const siguiente of siguientes) {
-        await ejecutarNodo(siguiente.hasta, new Set(visitados));
-      }
-
-      return;
     }
-
-  } catch (e) {
-    console.log("ERROR LEYENDO VARIANTES DE CONTENIDO:", e.message);
-  }
-}
 
 const acciones = [];
 
@@ -290,12 +363,7 @@ if (html.includes("🏷️ Etiqueta")) {
     await agregarEtiquetaCliente(numero, etiqueta, usuarioId);
   }
 }
-    const siguientes = conexiones.filter(c => c.desde === nodoId);
-    console.log("[FLUJO] → Siguientes nodos:", siguientes.map(s => s.hasta).join(", ") || "(ninguno)");
-
-    for (const siguiente of siguientes) {
-      await ejecutarNodo(siguiente.hasta, new Set(visitados));
-    }
+    await continuarASiguientes(nodoId, visitados, tipoNodo);
   }
 
   await ejecutarNodo("nodo_inicio");
