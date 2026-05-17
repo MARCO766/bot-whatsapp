@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { useMetricas } from "./metricas/useMetricas";
 import { formatMoney, formatNum, formatPct, formatTendencia } from "./metricas/format";
+import FlujoCampanaSelect from "./metricas/FlujoCampanaSelect";
 
 const PERIODOS = ["Hoy", "7 días", "30 días"];
 
@@ -232,15 +233,13 @@ export default function Metricas() {
 
       <section className="controlBar">
         <div className="selectorBox">
-          <label>Flujo / campaña</label>
-          <select value={flujoId} onChange={(e) => setFlujoId(e.target.value)} disabled={loading}>
-            <option value="">Todos los flujos</option>
-            {flujosLista.map((f) => (
-              <option key={f.id} value={f.id}>
-                {f.nombre}
-              </option>
-            ))}
-          </select>
+          <label htmlFor="flujo-campana-select">Flujo / campaña</label>
+          <FlujoCampanaSelect
+            value={flujoId}
+            onChange={setFlujoId}
+            options={flujosLista}
+            disabled={loading}
+          />
         </div>
 
         <div className="periodos">
@@ -528,7 +527,6 @@ const styles = `
 .heroScore small { color: #94a3b8; }
 .controlBar { border-radius: 26px; padding: 16px; margin-bottom: 18px; background: rgba(15,23,42,.72); border: 1px solid rgba(148,163,184,.14); display: grid; grid-template-columns: 1fr auto auto; gap: 14px; align-items: end; }
 .selectorBox label { display: block; color: #94a3b8; font-size: 12px; margin-bottom: 7px; font-weight: 900; }
-.selectorBox select { width: 100%; min-width: 200px; height: 48px; border: 1px solid rgba(148,163,184,.14); border-radius: 17px; background: rgba(255,255,255,.07); color: white; padding: 0 14px; font-weight: 700; }
 .periodos { display: flex; gap: 8px; flex-wrap: wrap; }
 .periodos button { height: 42px; border: 0; border-radius: 14px; padding: 0 14px; color: white; background: rgba(255,255,255,.08); cursor: pointer; font-weight: 900; }
 .periodos button.active { background: linear-gradient(135deg, #22c55e, #06b6d4); color: #031827; }
