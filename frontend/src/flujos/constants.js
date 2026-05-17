@@ -15,14 +15,6 @@ export const FLOW_STATES = [
   { id: "error", label: "Error", color: "#ef4444" },
 ];
 
-export const CAMPAIGN_TYPES = [
-  { id: "meta_ads", label: "Meta Ads", icon: "📘" },
-  { id: "tiktok", label: "TikTok", icon: "🎵" },
-  { id: "whatsapp", label: "WhatsApp", icon: "💬" },
-  { id: "landing", label: "Landing", icon: "🌐" },
-  { id: "email", label: "Email", icon: "✉️" },
-];
-
 export const SORT_OPTIONS = [
   { id: "recientes", label: "Más recientes" },
   { id: "usados", label: "Más usados" },

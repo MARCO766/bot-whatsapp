@@ -1,8 +1,14 @@
 import React, { memo, useState } from "react";
 import { builderUrl } from "../../flujos/api";
-import { folderLabel, formatDate, formatMetric, stateMeta } from "../../flujos/utils";
+import {
+  folderLabel,
+  formatDate,
+  formatMetric,
+  formatRelativeTime,
+  formatUltimoLead,
+  stateMeta,
+} from "../../flujos/utils";
 import FlowActionsMenu from "./FlowActionsMenu";
-import FlowCampaignsPanel from "./FlowCampaignsPanel";
 import FlowPreviewMini from "./FlowPreviewMini";
 import FlowTimeline from "./FlowTimeline";
 
@@ -15,13 +21,15 @@ function FlowCard({
   onDuplicate,
   onDelete,
   onMoveFolder,
-  onUpdateCampanas,
   onEditName,
 }) {
   const [showTimeline, setShowTimeline] = useState(false);
   const st = stateMeta(flow.meta?.estado);
   const m = flow.metricas || {};
   const isMenuOpen = openMenuId === flow.id;
+
+  const actividadRel = formatRelativeTime(m.ultimaActividad);
+  const ultimoLeadTxt = formatUltimoLead(m.ultimoLead);
 
   return (
     <article className={`flCard ${listMode ? "listMode" : ""} ${isMenuOpen ? "flCardMenuOpen" : ""}`}>
@@ -64,44 +72,44 @@ function FlowCard({
         <FlowPreviewMini preview={flow.preview} />
       </div>
 
-      <div className="flMetrics flMetricsCompact">
+      <div className="flMetrics flMetricsCompact flMetrics5">
         <div className="flMetric" title="Clientes únicos en seguimientos de este flujo">
           <b>{formatMetric(m.clientesEnFlujo)}</b>
           <span>En flujo</span>
         </div>
-        <div className="flMetric" title="Entradas registradas hoy">
+        <div className="flMetric" title="Actividad real registrada hoy">
           <b>{formatMetric(m.leadsHoy)}</b>
           <span>Hoy</span>
         </div>
-        <div className="flMetric" title="Seguimientos respondidos en este flujo">
+        <div className="flMetric" title="Leads que respondieron (seguimiento o mensaje entrante)">
           <b>{formatMetric(m.respuestas)}</b>
           <span>Respuestas</span>
         </div>
-        <div className="flMetric" title="Conversiones del nodo 💰 (crm_conversiones)">
+        <div className="flMetric" title="Registros en crm_conversiones">
           <b>{formatMetric(m.conversiones ?? 0)}</b>
           <span>Conversiones</span>
         </div>
+        <div className="flMetric" title="seguimientos_programados pendientes">
+          <b>{formatMetric(m.seguimientosActivos)}</b>
+          <span>Seg. activos</span>
+        </div>
       </div>
 
-      <FlowCampaignsPanel
-        campanas={flow.meta?.campanas || []}
-        readOnly={false}
-        onToggle={(id) => {
-          const current = flow.meta?.campanas || [];
-          const next = current.includes(id)
-            ? current.filter((c) => c !== id)
-            : [...current, id];
-          onUpdateCampanas(flow.id, next);
-        }}
-      />
+      <div className="flCardActivity">
+        <div className="flCardActivityItem">
+          <span className="flCardActivityLabel">Última actividad</span>
+          <span className="flCardActivityValue">{actividadRel || "Sin actividad"}</span>
+        </div>
+        <div className="flCardActivityItem">
+          <span className="flCardActivityLabel">Último lead</span>
+          <span className="flCardActivityValue">{ultimoLeadTxt || "—"}</span>
+        </div>
+      </div>
 
       <FlowTimeline flowId={flow.id} expanded={showTimeline} />
 
       <div className="flCardFooter">
-        <span>
-          Últ. ejecución: {formatDate(m.ultimaEjecucion)} · Modificado:{" "}
-          {formatDate(flow.meta?.actualizado_en)}
-        </span>
+        <span>Modificado: {formatDate(flow.meta?.actualizado_en)}</span>
         <div className="flQuickActions">
           <a href={builderUrl(flow)} target="_blank" rel="noreferrer" className="flQuickBtn">
             Constructor

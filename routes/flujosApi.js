@@ -211,7 +211,8 @@ router.get("/api/flujos/header-stats", protegerApi, async (req, res) => {
   log(`GET /api/flujos/header-stats usuario=${usuario.id}`);
 
   try {
-    const data = await computeHeaderStats(usuario.id);
+    const flujos = await fetchFlujos(usuario.id);
+    const data = await computeHeaderStats(usuario.id, flujos);
     res.json({ ok: true, ...data });
   } catch (error) {
     log("GET header-stats ERROR", error.response?.data || error.message);
@@ -222,6 +223,7 @@ router.get("/api/flujos/header-stats", protegerApi, async (req, res) => {
       conversaciones: 0,
       ventasTotal: 0,
       moneda: "BOB",
+      flujosActivos: 0,
       tendenciaLeads: null,
       tendenciaConversaciones: null,
       tendenciaVentas: null,
@@ -240,9 +242,8 @@ router.get("/api/flujos/stats", protegerApi, async (req, res) => {
       fetchActivadores(usuario.id),
     ]);
 
-    const { stats } = await loadFlujosDashboardData(usuario.id, flujos, activadores);
-    log("stats calculadas", stats);
-
+    await loadFlujosDashboardData(usuario.id, flujos, activadores);
+    const stats = await computeHeaderStats(usuario.id, flujos);
     res.json({ ok: true, stats });
   } catch (error) {
     log("GET stats ERROR", error.response?.data || error.message);

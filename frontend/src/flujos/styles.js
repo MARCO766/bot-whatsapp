@@ -105,8 +105,19 @@ export const flujosStyles = `
   gap: 14px;
 }
 
+.flHeaderStats4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+@media (max-width: 1100px) {
+  .flHeaderStats4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 900px) {
-  .flHeaderStats {
+  .flHeaderStats,
+  .flHeaderStats4 {
     grid-template-columns: 1fr;
   }
 }
@@ -469,6 +480,54 @@ export const flujosStyles = `
   font-size: 1.1rem;
 }
 
+.flMetrics5 {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+@media (max-width: 1100px) {
+  .flMetrics5 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .flMetrics5 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.flCardActivity {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(2, 6, 23, 0.45);
+  border: 1px solid rgba(148, 163, 184, 0.1);
+  position: relative;
+  z-index: 1;
+}
+
+.flCardActivityItem {
+  flex: 1;
+  min-width: 140px;
+}
+
+.flCardActivityLabel {
+  display: block;
+  font-size: 0.68rem;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 2px;
+}
+
+.flCardActivityValue {
+  font-size: 0.88rem;
+  color: #cbd5e1;
+  font-weight: 600;
+}
+
 .flMetric {
   text-align: center;
   padding: 8px;
@@ -670,27 +729,6 @@ export const flujosStyles = `
 
 .flMenuDanger:hover {
   background: rgba(127,29,29,.35) !important;
-}
-
-.flCampaigns {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.flCampTag {
-  font-size: 0.68rem;
-  padding: 3px 8px;
-  border-radius: 8px;
-  background: rgba(6,182,212,.15);
-  color: #67e8f9;
-  border: 1px solid rgba(6,182,212,.25);
-}
-
-.flCampTag.empty {
-  background: rgba(100,116,139,.1);
-  color: #64748b;
-  border-color: rgba(100,116,139,.2);
 }
 
 .flTimeline {

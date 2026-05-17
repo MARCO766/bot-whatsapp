@@ -6,6 +6,7 @@ const EMPTY = {
   conversaciones: 0,
   ventasTotal: 0,
   moneda: "BOB",
+  flujosActivos: 0,
   tendenciaLeads: null,
   tendenciaConversaciones: null,
   tendenciaVentas: null,
@@ -30,6 +31,7 @@ export function useFlujosHeaderStats(enabled = true) {
         tendenciaLeads: res.tendenciaLeads ?? null,
         tendenciaConversaciones: res.tendenciaConversaciones ?? null,
         tendenciaVentas: res.tendenciaVentas ?? null,
+        flujosActivos: res.flujosActivos ?? 0,
       });
     } catch (err) {
       const apiErr = err instanceof ApiError ? err : new ApiError(err.message, "SERVER");

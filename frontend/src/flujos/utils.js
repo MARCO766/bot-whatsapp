@@ -50,6 +50,29 @@ export function formatHeaderTrend(pct) {
   return { text: `${sign}${n}%`, positive: n >= 0 };
 }
 
+export function formatRelativeTime(iso) {
+  if (!iso) return null;
+  const then = new Date(iso).getTime();
+  if (!Number.isFinite(then)) return null;
+  const diffMs = Date.now() - then;
+  if (diffMs < 0) return "Ahora";
+  const mins = Math.floor(diffMs / 60000);
+  if (mins < 1) return "Ahora";
+  if (mins < 60) return `Hace ${mins} min`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `Hace ${hours} h`;
+  const days = Math.floor(hours / 24);
+  return `Hace ${days} d`;
+}
+
+export function formatUltimoLead(numero) {
+  if (!numero) return null;
+  const n = String(numero).trim();
+  if (!n) return null;
+  if (n.startsWith("+")) return n;
+  return `+${n}`;
+}
+
 /** Muestra número real, 0, o etiqueta cuando no hay fuente de datos. */
 export function formatMetric(value, { pendiente, emptyLabel = "Sin datos" } = {}) {
   if (pendiente) return emptyLabel;

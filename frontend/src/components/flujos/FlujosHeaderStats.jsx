@@ -18,12 +18,13 @@ const CARDS = [
     accent: "accentGreen",
     format: (d) => formatHeaderVentas(d.ventasTotal, d.moneda),
   },
+  { key: "flujosActivos", label: "Flujos activos", icon: "🧩", accent: "accentGreen" },
 ];
 
 export default function FlujosHeaderStats({ data, loading, error, onRetry }) {
   if (loading) {
     return (
-      <div className="flHeaderStats">
+      <div className="flHeaderStats flHeaderStats4">
         {CARDS.map((_, i) => (
           <div key={i} className="flHeaderStatCard flSkeleton" style={{ minHeight: 88 }} />
         ))}
@@ -45,9 +46,9 @@ export default function FlujosHeaderStats({ data, loading, error, onRetry }) {
           )}
         </div>
       )}
-      <div className="flHeaderStats">
+      <div className="flHeaderStats flHeaderStats4">
         {CARDS.map((card) => {
-          const trend = formatHeaderTrend(d[card.trendKey]);
+          const trend = card.trendKey ? formatHeaderTrend(d[card.trendKey]) : null;
           const value = card.format
             ? card.format(d)
             : formatNumber(d[card.key] ?? 0);

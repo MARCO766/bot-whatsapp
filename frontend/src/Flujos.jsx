@@ -190,7 +190,6 @@ export default function Flujos() {
         onDuplicate={duplicar}
         onDelete={(flow) => setConfirmDelete(flow)}
         onMoveFolder={moveToFolder}
-        onUpdateCampanas={(id, campanas) => updateMeta(id, { campanas })}
         onEditName={handleEditName}
         onCreate={() => setNewFlowOpen(true)}
         onImport={() => setImportOpen(true)}

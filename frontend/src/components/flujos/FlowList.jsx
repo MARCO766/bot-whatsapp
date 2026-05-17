@@ -10,7 +10,6 @@ function FlowList({
   onDuplicate,
   onDelete,
   onMoveFolder,
-  onUpdateCampanas,
   onEditName,
   onCreate,
   onImport,
@@ -48,7 +47,6 @@ function FlowList({
           onDuplicate={onDuplicate}
           onDelete={onDelete}
           onMoveFolder={onMoveFolder}
-          onUpdateCampanas={onUpdateCampanas}
           onEditName={onEditName}
         />
       ))}
