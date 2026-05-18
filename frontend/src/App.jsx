@@ -7,6 +7,7 @@ import Clientes from "./Clientes";
 import Ajustes from "./Ajustes";
 import Metricas from "./Metricas";
 import Activadores from "./Activadores";
+import Etiquetas from "./Etiquetas";
 
 export default function App() {
   const [vista, setVista] = useState(() => localStorage.getItem("macbot_vista") || "panel");
@@ -41,6 +42,7 @@ export default function App() {
     },
     { id: "flujos", nombre: "Flujos", icono: "🧩", badge: "4", color: "purple" },
     { id: "activadores", nombre: "Activadores", icono: "⚡", badge: null, color: "yellow" },
+    { id: "etiquetas", nombre: "Etiquetas", icono: "🏷️", badge: null, color: "green" },
     {
   id: "metricas",
   nombre: "Metricas",
@@ -68,6 +70,7 @@ export default function App() {
       return <Bandeja onUnreadChange={setInboxUnread} />;
     if (vista === "flujos") return <Flujos />;
     if (vista === "activadores") return <Activadores />;
+    if (vista === "etiquetas") return <Etiquetas />;
     if (vista === "metricas") return <Metricas />;
     if (vista === "campañas") return <Campañas />;
     if (vista === "clientes") return <Clientes />;

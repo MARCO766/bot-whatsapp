@@ -86,19 +86,6 @@ async function fetchUsuario(usuarioId, sessionUsuario) {
     : null;
 }
 
-async function fetchEtiquetas(usuarioId) {
-  try {
-    const res = await axios.get(
-      `${SUPABASE_URL}/rest/v1/etiquetas?select=*&usuario_id=eq.${encodeURIComponent(usuarioId)}&order=creado_en.desc`,
-      { headers: headers() }
-    );
-    return res.data || [];
-  } catch (error) {
-    log("fetchEtiquetas:", error.response?.data || error.message);
-    return [];
-  }
-}
-
 function buildPerfil(usuario, sessionUsuario) {
   return {
     nombre: usuario?.nombre || sessionUsuario?.nombre || "",
@@ -122,7 +109,6 @@ function buildAjustesVacio(req, sessionUsuario) {
     meta: metaAds,
     automatizacion: { ...DEFAULT_AUTO },
     notificaciones: { ...DEFAULT_NOTIF },
-    etiquetas: [],
     webhook: buildWebhookInfo(req),
   };
 }
@@ -134,20 +120,16 @@ async function getAjustesCompleto(usuarioId, req, sessionUsuario) {
     return buildAjustesVacio(req, sessionUsuario);
   }
 
-  const [usuario, rowActiva, etiquetas] = await Promise.all([
+  const [usuario, rowActiva] = await Promise.all([
     fetchUsuario(usuarioId, sessionUsuario),
     getConexionActiva(usuarioId),
-    fetchEtiquetas(usuarioId),
   ]);
 
   const conexionApi = mapConexionApi(rowActiva, { includeToken: true });
   const lista = conexionApi ? [conexionApi] : [];
   const metaAds = metaFromConexion(rowActiva);
 
-  log("GET ajustes OK", {
-    conectado: Boolean(conexionApi?.conectado),
-    etiquetas: etiquetas.length,
-  });
+  log("GET ajustes OK", { conectado: Boolean(conexionApi?.conectado) });
 
   return {
     ok: true,
@@ -160,7 +142,6 @@ async function getAjustesCompleto(usuarioId, req, sessionUsuario) {
     meta: metaAds,
     automatizacion: { ...DEFAULT_AUTO },
     notificaciones: { ...DEFAULT_NOTIF },
-    etiquetas,
     webhook: buildWebhookInfo(req),
     seguridad: { puedeCambiarPassword: true, ocultarTokens: true },
   };
@@ -214,58 +195,6 @@ async function probarMetaEvento(usuarioId) {
   return { ok: true, mensaje: "Evento enviado (revisa Events Manager en Meta)" };
 }
 
-/** POST /crear-etiqueta */
-async function createEtiqueta(usuarioId, body) {
-  const nombre = String(body?.nombre || "").trim();
-  if (!nombre) {
-    const err = new Error("Nombre de etiqueta obligatorio");
-    err.status = 400;
-    throw err;
-  }
-  await axios.post(
-    `${SUPABASE_URL}/rest/v1/etiquetas`,
-    {
-      nombre,
-      color: body?.color || "#25d366",
-      usuario_id: usuarioId,
-    },
-    {
-      headers: headers({
-        "Content-Type": "application/json",
-        Prefer: "return=minimal",
-      }),
-    }
-  );
-  return { ok: true };
-}
-
-/** PATCH nombre/color si la tabla lo permite */
-async function updateEtiqueta(usuarioId, id, body) {
-  const patch = {};
-  if (body.nombre !== undefined) patch.nombre = String(body.nombre).trim();
-  if (body.color !== undefined) patch.color = String(body.color).trim();
-  await axios.patch(
-    `${SUPABASE_URL}/rest/v1/etiquetas?id=eq.${encodeURIComponent(id)}&usuario_id=eq.${encodeURIComponent(usuarioId)}`,
-    patch,
-    { headers: headers({ "Content-Type": "application/json", Prefer: "return=minimal" }) }
-  );
-  return { ok: true };
-}
-
-/** GET /eliminar-etiqueta/:id */
-async function deleteEtiqueta(usuarioId, id) {
-  await axios.delete(
-    `${SUPABASE_URL}/rest/v1/etiquetas?id=eq.${encodeURIComponent(id)}&usuario_id=eq.${encodeURIComponent(usuarioId)}`,
-    { headers: headers() }
-  );
-  return { ok: true };
-}
-
-async function listEtiquetas(usuarioId) {
-  const etiquetas = await fetchEtiquetas(usuarioId);
-  return { ok: true, etiquetas };
-}
-
 async function cambiarPassword(usuarioId, actual, nueva) {
   if (!actual || !nueva || nueva.length < 6) {
     const err = new Error("Contraseña actual y nueva (mín. 6 caracteres) son obligatorias");
@@ -306,9 +235,5 @@ module.exports = {
   desconectarConexionAjustes,
   probarConexionAjustes,
   probarMetaEvento,
-  listEtiquetas,
-  createEtiqueta,
-  updateEtiqueta,
-  deleteEtiqueta,
   cambiarPassword,
 };

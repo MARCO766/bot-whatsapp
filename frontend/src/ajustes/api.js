@@ -55,7 +55,6 @@ export function probarMeta() {
   return request("/api/ajustes/meta/probar", { method: "POST", body: "{}" });
 }
 
-/** Misma lógica que POST /guardar-conexion */
 export function guardarConexion(body) {
   return request("/api/ajustes/conexion/guardar", {
     method: "POST",
@@ -63,29 +62,15 @@ export function guardarConexion(body) {
   });
 }
 
-/** Misma lógica que POST /desconectar-whatsapp */
 export function desconectarWhatsapp() {
   return request("/api/ajustes/conexion/desconectar", { method: "POST", body: "{}" });
 }
 
-/** Misma lógica que POST /probar-whatsapp */
 export function probarWhatsapp(numero) {
   return request("/api/ajustes/conexion/probar", {
     method: "POST",
     body: JSON.stringify({ numero }),
   });
-}
-
-export function createEtiqueta(body) {
-  return request("/api/etiquetas", { method: "POST", body: JSON.stringify(body) });
-}
-
-export function updateEtiqueta(id, body) {
-  return request(`/api/etiquetas/${id}`, { method: "PATCH", body: JSON.stringify(body) });
-}
-
-export function deleteEtiqueta(id) {
-  return request(`/api/etiquetas/${id}`, { method: "DELETE" });
 }
 
 export function logout() {

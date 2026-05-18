@@ -12,10 +12,6 @@ const {
   desconectarConexionAjustes,
   probarConexionAjustes,
   probarMetaEvento,
-  listEtiquetas,
-  createEtiqueta,
-  updateEtiqueta,
-  deleteEtiqueta,
   cambiarPassword,
 } = require("../services/ajustesService");
 
@@ -129,38 +125,6 @@ router.post("/api/conexiones/whatsapp/:id/probar", protegerApi, async (req, res)
     res.json(await probarConexionAjustes(uid(req), numero));
   } catch (error) {
     handleError(res, error, "POST probar conexion");
-  }
-});
-
-router.get("/api/etiquetas", protegerApi, async (req, res) => {
-  try {
-    res.json(await listEtiquetas(uid(req)));
-  } catch (error) {
-    handleError(res, error, "GET etiquetas");
-  }
-});
-
-router.post("/api/etiquetas", protegerApi, async (req, res) => {
-  try {
-    res.json(await createEtiqueta(uid(req), req.body));
-  } catch (error) {
-    handleError(res, error, "POST etiqueta");
-  }
-});
-
-router.patch("/api/etiquetas/:id", protegerApi, async (req, res) => {
-  try {
-    res.json(await updateEtiqueta(uid(req), req.params.id, req.body));
-  } catch (error) {
-    handleError(res, error, "PATCH etiqueta");
-  }
-});
-
-router.delete("/api/etiquetas/:id", protegerApi, async (req, res) => {
-  try {
-    res.json(await deleteEtiqueta(uid(req), req.params.id));
-  } catch (error) {
-    handleError(res, error, "DELETE etiqueta");
   }
 });
 

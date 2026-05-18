@@ -2,15 +2,12 @@ import { useCallback, useEffect, useState } from "react";
 import {
   ApiError,
   cambiarPassword,
-  createEtiqueta,
-  deleteEtiqueta,
   desconectarWhatsapp,
   fetchAjustes,
   guardarConexion,
   patchPerfil,
   probarMeta,
   probarWhatsapp,
-  updateEtiqueta,
 } from "./api";
 
 export function useAjustes() {
@@ -76,8 +73,5 @@ export function useAjustes() {
     probarWhatsapp: (numero) => run(() => probarWhatsapp(numero), "Prueba enviada"),
     probarMetaEvento: () => run(() => probarMeta(), "Evento de prueba enviado"),
     savePassword: (body) => run(() => cambiarPassword(body), "Contraseña actualizada"),
-    addEtiqueta: (body) => run(() => createEtiqueta(body), "Etiqueta creada"),
-    editEtiqueta: (id, body) => run(() => updateEtiqueta(id, body), "Etiqueta actualizada"),
-    removeEtiqueta: (id) => run(() => deleteEtiqueta(id), "Etiqueta eliminada"),
   };
 }

@@ -9,7 +9,6 @@ const SECCIONES = [
   { id: "meta", label: "Meta Ads", icon: "📊" },
   { id: "auto", label: "Automatización", icon: "⚡" },
   { id: "notif", label: "Notificaciones", icon: "🔔" },
-  { id: "etiquetas", label: "Etiquetas", icon: "🏷️" },
   { id: "seguridad", label: "Seguridad", icon: "🔒" },
 ];
 
@@ -70,9 +69,6 @@ export default function Ajustes() {
     probarWhatsapp,
     savePassword,
     probarMetaEvento,
-    addEtiqueta,
-    editEtiqueta,
-    removeEtiqueta,
   } = useAjustes();
 
   const [seccion, setSeccion] = useState("perfil");
@@ -87,10 +83,6 @@ export default function Ajustes() {
   const [showToken, setShowToken] = useState(false);
   const [showCapi, setShowCapi] = useState(false);
   const [testNumero, setTestNumero] = useState("");
-
-  const [tagNombre, setTagNombre] = useState("");
-  const [tagColor, setTagColor] = useState("#22c55e");
-  const [editTag, setEditTag] = useState(null);
 
   useEffect(() => {
     if (!data) return;
@@ -108,8 +100,6 @@ export default function Ajustes() {
 
   const conexionActiva = data?.conexionActiva || data?.conexionesWhatsapp?.[0] || null;
   const webhook = data?.webhook || {};
-  const etiquetas = data?.etiquetas || [];
-
   async function handleSavePerfil(e) {
     e.preventDefault();
     await savePerfil({ nombre: perfil.nombre, email: perfil.email });
@@ -194,31 +184,6 @@ export default function Ajustes() {
 
   async function handleProbar() {
     await probarWhatsapp(testNumero);
-  }
-
-  async function handleAddEtiqueta(e) {
-    e.preventDefault();
-    if (!tagNombre.trim()) return;
-    const ok = await addEtiqueta({ nombre: tagNombre.trim(), color: tagColor });
-    if (ok) {
-      setTagNombre("");
-      setTagColor("#22c55e");
-    }
-  }
-
-  async function handleSaveEtiqueta(e) {
-    e.preventDefault();
-    if (!editTag?.nombre?.trim()) return;
-    const ok = await editEtiqueta(editTag.id, {
-      nombre: editTag.nombre.trim(),
-      color: editTag.color,
-    });
-    if (ok) setEditTag(null);
-  }
-
-  async function handleDeleteEtiqueta(id, nombre) {
-    if (!confirm(`¿Eliminar etiqueta "${nombre}"?`)) return;
-    await removeEtiqueta(id);
   }
 
   async function handlePassword(e) {
@@ -498,61 +463,6 @@ export default function Ajustes() {
             <button type="button" className="ajBtn primary" disabled={saving} onClick={handleSaveNotif}>Guardar notificaciones</button>
           </div>
         </div>
-      );
-    }
-
-    if (seccion === "etiquetas") {
-      return (
-        <>
-          <form className="ajCard" onSubmit={handleAddEtiqueta}>
-            <h2>Crear etiqueta</h2>
-            <p className="ajHint">Etiquetas para clasificar chats en Bandeja. No son conversiones.</p>
-            <div className="ajRow2">
-              <div className="ajField">
-                <label>Nombre</label>
-                <input value={tagNombre} onChange={(e) => setTagNombre(e.target.value)} required />
-              </div>
-              <div className="ajField">
-                <label>Color</label>
-                <input type="color" value={tagColor} onChange={(e) => setTagColor(e.target.value)} />
-              </div>
-            </div>
-            <button type="submit" className="ajBtn primary" disabled={saving}>Crear etiqueta</button>
-          </form>
-
-          <div className="ajCard">
-            <h2>Etiquetas ({etiquetas.length})</h2>
-            {etiquetas.length === 0 && <p className="ajHint">Sin etiquetas. Crea la primera arriba.</p>}
-            {etiquetas.map((t) => (
-              <div key={t.id} className="tagRow">
-                <span className="tagDot" style={{ background: t.color }} />
-                <span style={{ flex: 1 }}>{t.nombre}</span>
-                <button type="button" className="ajBtn ghost" onClick={() => setEditTag({ ...t })}>Editar</button>
-                <button type="button" className="ajBtn danger" onClick={() => handleDeleteEtiqueta(t.id, t.nombre)}>Eliminar</button>
-              </div>
-            ))}
-          </div>
-
-          {editTag && (
-            <form className="ajCard" onSubmit={handleSaveEtiqueta}>
-              <h2>Editar etiqueta</h2>
-              <div className="ajRow2">
-                <div className="ajField">
-                  <label>Nombre</label>
-                  <input value={editTag.nombre} onChange={(e) => setEditTag({ ...editTag, nombre: e.target.value })} />
-                </div>
-                <div className="ajField">
-                  <label>Color</label>
-                  <input type="color" value={editTag.color} onChange={(e) => setEditTag({ ...editTag, color: e.target.value })} />
-                </div>
-              </div>
-              <div className="ajBtnRow">
-                <button type="submit" className="ajBtn primary" disabled={saving}>Guardar</button>
-                <button type="button" className="ajBtn ghost" onClick={() => setEditTag(null)}>Cancelar</button>
-              </div>
-            </form>
-          )}
-        </>
       );
     }
 
