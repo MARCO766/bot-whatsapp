@@ -88,6 +88,13 @@ export function useInbox({ onUnreadChange } = {}) {
     }
   }, []);
 
+  useEffect(() => {
+    const pre = sessionStorage.getItem("macbot_inbox_numero");
+    if (!pre || loading) return;
+    sessionStorage.removeItem("macbot_inbox_numero");
+    abrirChat(pre);
+  }, [loading, chats.length, abrirChat]);
+
   const moverChatArriba = useCallback((numero, preview) => {
     setChats((prev) => {
       const idx = prev.findIndex((c) => c.numero === numero);

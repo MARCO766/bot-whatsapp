@@ -73,7 +73,7 @@ export default function App() {
     if (vista === "etiquetas") return <Etiquetas />;
     if (vista === "metricas") return <Metricas />;
     if (vista === "campañas") return <Campañas />;
-    if (vista === "clientes") return <Clientes />;
+    if (vista === "clientes") return <Clientes cambiarVista={setVista} />;
     if (vista === "ajustes") return <Ajustes />;
     return <Panel cambiarVista={setVista} />;
   }
