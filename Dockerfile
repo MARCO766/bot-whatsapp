@@ -11,8 +11,7 @@ WORKDIR /app/frontend
 
 COPY frontend/package.json frontend/package-lock.json ./
 
-RUN --mount=type=cache,target=/root/.npm \
-    npm ci --ignore-scripts
+RUN npm ci --ignore-scripts
 
 COPY frontend/ ./
 
@@ -27,8 +26,7 @@ WORKDIR /app
 
 COPY package.json package-lock.json ./
 
-RUN --mount=type=cache,target=/root/.npm \
-    npm ci --omit=dev --ignore-scripts \
+RUN npm ci --omit=dev --ignore-scripts \
  && npm cache clean --force
 
 # ─── 3) Imagen final ───────────────────────────────────────────────────────────
