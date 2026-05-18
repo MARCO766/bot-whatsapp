@@ -1,5 +1,5 @@
 /**
- * API JSON para pantalla Ajustes (MacBot CRM).
+ * API JSON Ajustes — misma lógica que admin Conexiones (/guardar-conexion, etc.)
  */
 const express = require("express");
 const router = express.Router();
@@ -8,11 +8,9 @@ const {
   buildAjustesVacio,
   patchPerfil,
   patchAjustesGenerales,
-  listConexiones,
-  createConexion,
-  updateConexion,
-  deleteConexion,
-  probarConexion,
+  guardarConexionAjustes,
+  desconectarConexionAjustes,
+  probarConexionAjustes,
   probarMetaEvento,
   listEtiquetas,
   createEtiqueta,
@@ -28,175 +26,139 @@ function log(msg, extra) {
 
 function protegerApi(req, res, next) {
   if (req.session?.usuario?.id) return next();
-  log("401 — sin sesión", { path: req.path });
   return res.status(401).json({ ok: false, error: "No autenticado" });
 }
 
-function getUsuarioId(req) {
-  return req.session?.usuario?.id || null;
+function uid(req) {
+  return req.session.usuario.id;
 }
 
 function handleError(res, error, label) {
   const status = error.status || error.response?.status || 500;
-  const detail = error.response?.data || error.message;
-  log(`${label} error (${status}):`, detail);
-
-  if (status === 400 && label.startsWith("GET /api/ajustes")) {
-    return null;
-  }
-
+  log(`${label} (${status}):`, error.response?.data || error.message);
   res.status(status >= 400 && status < 600 ? status : 500).json({
     ok: false,
     error: error.message || "Error del servidor",
   });
 }
 
-// GET /api/ajustes — siempre 200 con estructura válida
+// GET /api/ajustes — siempre 200
 router.get("/api/ajustes", protegerApi, async (req, res) => {
-  const usuarioId = getUsuarioId(req);
-  const sessionUsuario = req.session.usuario;
-
-  log("GET /api/ajustes", { usuarioId, email: sessionUsuario?.email });
-
   try {
-    const data = await getAjustesCompleto(usuarioId, req, sessionUsuario);
-    return res.status(200).json(data);
+    const data = await getAjustesCompleto(uid(req), req, req.session.usuario);
+    res.status(200).json(data);
   } catch (error) {
-    log("GET /api/ajustes excepción — devolviendo vacío:", error.message);
-    const fallback = buildAjustesVacio(req, sessionUsuario, [
-      error.message || "Error cargando ajustes",
-    ]);
-    return res.status(200).json(fallback);
+    log("GET /api/ajustes fallback:", error.message);
+    res.status(200).json(buildAjustesVacio(req, req.session.usuario));
   }
 });
 
-// PATCH /api/ajustes/perfil
 router.patch("/api/ajustes/perfil", protegerApi, async (req, res) => {
   try {
-    const data = await patchPerfil(getUsuarioId(req), req.body, req.session.usuario);
-    res.json(data);
+    res.json(await patchPerfil(uid(req), req.body, req.session.usuario));
   } catch (error) {
     handleError(res, error, "PATCH perfil");
   }
 });
 
-// PATCH /api/ajustes
 router.patch("/api/ajustes", protegerApi, async (req, res) => {
   try {
-    const data = await patchAjustesGenerales(getUsuarioId(req), req.body);
-    res.json(data);
+    res.json(await patchAjustesGenerales());
   } catch (error) {
     handleError(res, error, "PATCH ajustes");
   }
 });
 
-// POST /api/ajustes/password
 router.post("/api/ajustes/password", protegerApi, async (req, res) => {
   try {
     const { actual, nueva } = req.body || {};
-    const data = await cambiarPassword(getUsuarioId(req), actual, nueva);
-    res.json(data);
+    res.json(await cambiarPassword(uid(req), actual, nueva));
   } catch (error) {
     handleError(res, error, "POST password");
   }
 });
 
-// POST /api/ajustes/meta/probar
 router.post("/api/ajustes/meta/probar", protegerApi, async (req, res) => {
   try {
-    const data = await probarMetaEvento(getUsuarioId(req));
-    res.json(data);
+    res.json(await probarMetaEvento(uid(req)));
   } catch (error) {
     handleError(res, error, "POST meta probar");
   }
 });
 
-// GET /api/conexiones/whatsapp
-router.get("/api/conexiones/whatsapp", protegerApi, async (req, res) => {
+/** Misma lógica que POST /guardar-conexion */
+router.post("/api/ajustes/conexion/guardar", protegerApi, async (req, res) => {
   try {
-    const data = await listConexiones(getUsuarioId(req));
-    res.json(data);
+    res.json(await guardarConexionAjustes(uid(req), req.body));
   } catch (error) {
-    handleError(res, error, "GET conexiones");
+    handleError(res, error, "POST conexion guardar");
   }
 });
 
-// POST /api/conexiones/whatsapp
+/** Alias para el frontend */
 router.post("/api/conexiones/whatsapp", protegerApi, async (req, res) => {
   try {
-    const data = await createConexion(getUsuarioId(req), req.body);
-    res.json(data);
+    res.json(await guardarConexionAjustes(uid(req), req.body));
   } catch (error) {
-    handleError(res, error, "POST conexion");
+    handleError(res, error, "POST conexiones/whatsapp");
   }
 });
 
-// PATCH /api/conexiones/whatsapp/:id
-router.patch("/api/conexiones/whatsapp/:id", protegerApi, async (req, res) => {
+/** Misma lógica que POST /desconectar-whatsapp */
+router.post("/api/ajustes/conexion/desconectar", protegerApi, async (req, res) => {
   try {
-    const data = await updateConexion(getUsuarioId(req), req.params.id, req.body);
-    res.json(data);
+    res.json(await desconectarConexionAjustes(uid(req)));
   } catch (error) {
-    handleError(res, error, "PATCH conexion");
+    handleError(res, error, "POST desconectar");
   }
 });
 
-// DELETE /api/conexiones/whatsapp/:id
-router.delete("/api/conexiones/whatsapp/:id", protegerApi, async (req, res) => {
+/** Misma lógica que POST /probar-whatsapp */
+router.post("/api/ajustes/conexion/probar", protegerApi, async (req, res) => {
   try {
-    const data = await deleteConexion(getUsuarioId(req), req.params.id);
-    res.json(data);
+    const { numero } = req.body || {};
+    res.json(await probarConexionAjustes(uid(req), numero));
   } catch (error) {
-    handleError(res, error, "DELETE conexion");
+    handleError(res, error, "POST probar");
   }
 });
 
-// POST /api/conexiones/whatsapp/:id/probar
 router.post("/api/conexiones/whatsapp/:id/probar", protegerApi, async (req, res) => {
   try {
     const { numero } = req.body || {};
-    const data = await probarConexion(getUsuarioId(req), req.params.id, numero);
-    res.json(data);
+    res.json(await probarConexionAjustes(uid(req), numero));
   } catch (error) {
     handleError(res, error, "POST probar conexion");
   }
 });
 
-// GET /api/etiquetas
 router.get("/api/etiquetas", protegerApi, async (req, res) => {
   try {
-    const data = await listEtiquetas(getUsuarioId(req));
-    res.json(data);
+    res.json(await listEtiquetas(uid(req)));
   } catch (error) {
     handleError(res, error, "GET etiquetas");
   }
 });
 
-// POST /api/etiquetas
 router.post("/api/etiquetas", protegerApi, async (req, res) => {
   try {
-    const data = await createEtiqueta(getUsuarioId(req), req.body);
-    res.json(data);
+    res.json(await createEtiqueta(uid(req), req.body));
   } catch (error) {
     handleError(res, error, "POST etiqueta");
   }
 });
 
-// PATCH /api/etiquetas/:id
 router.patch("/api/etiquetas/:id", protegerApi, async (req, res) => {
   try {
-    const data = await updateEtiqueta(getUsuarioId(req), req.params.id, req.body);
-    res.json(data);
+    res.json(await updateEtiqueta(uid(req), req.params.id, req.body));
   } catch (error) {
     handleError(res, error, "PATCH etiqueta");
   }
 });
 
-// DELETE /api/etiquetas/:id
 router.delete("/api/etiquetas/:id", protegerApi, async (req, res) => {
   try {
-    const data = await deleteEtiqueta(getUsuarioId(req), req.params.id);
-    res.json(data);
+    res.json(await deleteEtiqueta(uid(req), req.params.id));
   } catch (error) {
     handleError(res, error, "DELETE etiqueta");
   }

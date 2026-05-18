@@ -65,13 +65,11 @@ export default function Ajustes() {
     toast,
     showToast,
     savePerfil,
-    saveAjustes,
+    saveConexion,
+    desconectar,
+    probarWhatsapp,
     savePassword,
     probarMetaEvento,
-    addConexion,
-    editConexion,
-    removeConexion,
-    testConexion,
     addEtiqueta,
     editEtiqueta,
     removeEtiqueta,
@@ -99,105 +97,103 @@ export default function Ajustes() {
     setPerfil({ ...data.perfil });
     setAuto({ ...data.automatizacion });
     setNotif({ ...data.notificaciones });
+    const c = data.conexionActiva || data.conexionesWhatsapp?.[0];
     setMeta({
-      pixelId: data.meta?.pixelId || "",
-      pixelNombre: data.meta?.pixelNombre || "",
+      pixelId: data.meta?.pixelId || c?.pixel_id || c?.pixelId || "",
+      pixelNombre: data.meta?.pixelNombre || c?.nombre || "",
       activo: data.meta?.activo || false,
       capiToken: "",
     });
   }, [data]);
 
-  const conexiones = data?.conexionesWhatsapp || [];
+  const conexionActiva = data?.conexionActiva || data?.conexionesWhatsapp?.[0] || null;
   const webhook = data?.webhook || {};
   const etiquetas = data?.etiquetas || [];
 
   async function handleSavePerfil(e) {
     e.preventDefault();
-    await savePerfil(perfil);
+    await savePerfil({ nombre: perfil.nombre, email: perfil.email });
   }
 
-  async function handleSaveAuto() {
-    await saveAjustes({ automatizacion: auto });
+  function handleSaveAuto() {
+    showToast("Preferencias de automatización (próximamente en servidor)");
   }
 
-  async function handleSaveNotif() {
-    await saveAjustes({ notificaciones: notif });
+  function handleSaveNotif() {
+    showToast("Preferencias de notificaciones (próximamente en servidor)");
   }
 
   async function handleSaveMeta(e) {
     e.preventDefault();
-    await saveAjustes({
-      meta: {
-        pixelId: meta.pixelId,
-        pixelNombre: meta.pixelNombre,
-        activo: meta.activo,
-        capiToken: meta.capiToken || "__KEEP__",
-      },
+    const c = conexionActiva;
+    if (!c?.token && !meta.capiToken) {
+      showToast("Primero configura WhatsApp con TOKEN y PHONE_ID", "error");
+      return;
+    }
+    const ok = await saveConexion({
+      nombre: c?.nombre || meta.pixelNombre,
+      numero: c?.numero,
+      token: c?.token,
+      phone_id: c?.phone_id || c?.phoneNumberId,
+      pixel_id: meta.pixelId,
+      capi_token: meta.capiToken || c?.capi_token || undefined,
     });
-    setMeta((m) => ({ ...m, capiToken: "" }));
+    if (ok) setMeta((m) => ({ ...m, capiToken: "" }));
   }
 
-  function openNewConexion() {
+  function abrirConfigurar() {
+    const c = conexionActiva;
     setConnForm({
-      id: null,
-      nombre: "",
-      numero: "",
-      phoneNumberId: "",
-      accessToken: "",
-      wabaId: "",
-      hacerPrincipal: conexiones.length === 0,
+      nombre: c?.nombre || "",
+      numero: c?.numero || "",
+      token: c?.token || "",
+      phone_id: c?.phone_id || c?.phoneNumberId || "",
+      pixel_id: c?.pixel_id || c?.pixelId || "",
+      capi_token: c?.capi_token || "",
     });
     setShowToken(false);
+    setShowCapi(false);
   }
 
-  function openEditConexion(c) {
+  function abrirNuevaConexion() {
     setConnForm({
-      id: c.id,
-      nombre: c.nombre,
-      numero: c.numero,
-      phoneNumberId: c.phoneNumberId,
-      accessToken: "",
-      wabaId: c.wabaId || "",
-      hacerPrincipal: c.activo,
+      nombre: "",
+      numero: "",
+      token: "",
+      phone_id: "",
+      pixel_id: "",
+      capi_token: "",
     });
     setShowToken(false);
   }
 
   async function handleSaveConexion(e) {
     e.preventDefault();
-    const body = {
+    const token = connForm.token || connForm.accessToken;
+    const phone_id = connForm.phone_id || connForm.phoneNumberId;
+    if (!token?.trim() || !phone_id?.trim()) {
+      showToast("TOKEN y PHONE_ID son obligatorios", "error");
+      return;
+    }
+    const ok = await saveConexion({
       nombre: connForm.nombre,
       numero: connForm.numero,
-      phoneNumberId: connForm.phoneNumberId,
-      wabaId: connForm.wabaId,
-      hacerPrincipal: connForm.hacerPrincipal,
-    };
-    if (connForm.accessToken) body.accessToken = connForm.accessToken;
-
-    if (connForm.id) {
-      const patch = { ...body };
-      if (!connForm.accessToken) patch.accessToken = "__KEEP__";
-      else patch.accessToken = connForm.accessToken;
-      const ok = await editConexion(connForm.id, patch);
-      if (ok) setConnForm(null);
-    } else {
-      if (!connForm.accessToken) {
-        showToast("Access Token es obligatorio", "error");
-        return;
-      }
-      body.accessToken = connForm.accessToken;
-      const ok = await addConexion(body);
-      if (ok) setConnForm(null);
-    }
+      token,
+      phone_id,
+      pixel_id: connForm.pixel_id,
+      capi_token: connForm.capi_token,
+    });
+    if (ok) setConnForm(null);
   }
 
-  async function handleDeleteConexion(id, nombre) {
-    if (!confirm(`¿Eliminar conexión "${nombre}"?`)) return;
-    await removeConexion(id);
+  async function handleDesconectar() {
+    if (!confirm("¿Desconectar WhatsApp? Se eliminarán las credenciales guardadas.")) return;
+    await desconectar();
+    setConnForm(null);
   }
 
-  async function handleProbarConexion(id) {
-    await testConexion(id, testNumero);
+  async function handleProbar() {
+    await probarWhatsapp(testNumero);
   }
 
   async function handleAddEtiqueta(e) {
@@ -315,26 +311,26 @@ export default function Ajustes() {
 
           <div className="ajCard">
             <div className="ajConnHead">
-              <h2>Conexiones WhatsApp</h2>
-              <button type="button" className="ajBtn primary" onClick={openNewConexion}>+ Nueva conexión</button>
+              <h2>WhatsApp API</h2>
+              <button type="button" className="ajBtn primary" onClick={abrirNuevaConexion}>+ Conectar WhatsApp</button>
             </div>
-            <p className="ajHint">Puedes conectar varios números. Cada uno usa su Phone Number ID. El envío por defecto usa la conexión marcada como principal (activa).</p>
+            <p className="ajHint">Una conexión activa por cuenta (igual que el panel admin Conexiones).</p>
 
-            {conexiones.length === 0 && <p className="ajHint">Sin conexiones. Agrega la primera con tus credenciales de Meta.</p>}
+            {!conexionActiva && <p className="ajHint">Sin conexiones. Agrega TOKEN y PHONE_ID de Meta.</p>}
 
-            {conexiones.map((c) => (
+            {conexionActiva && [conexionActiva].map((c) => (
               <div key={c.id} className="ajConnCard">
                 <div className="ajConnHead">
                   <div>
                     <strong>{c.nombre || "WhatsApp"}</strong> {estadoBadge(c.estado)}
-                    <p className="ajHint">{c.numero || "Sin número"} · ID {c.phoneNumberId}</p>
+                    <p className="ajHint">{c.numero || "Sin número"} · PHONE_ID {c.phone_id || c.phoneNumberId}</p>
                     {c.tokenMasked && <p className="ajHint">Token: {c.tokenMasked}</p>}
                   </div>
                 </div>
                 <div className="ajBtnRow">
-                  <button type="button" className="ajBtn ghost" onClick={() => openEditConexion(c)}>Editar</button>
-                  <button type="button" className="ajBtn ghost" onClick={() => handleProbarConexion(c.id)} disabled={saving}>Probar</button>
-                  <button type="button" className="ajBtn danger" onClick={() => handleDeleteConexion(c.id, c.nombre)}>Eliminar</button>
+                  <button type="button" className="ajBtn primary" onClick={abrirConfigurar}>Configurar</button>
+                  <button type="button" className="ajBtn ghost" onClick={handleProbar} disabled={saving}>Probar conexión</button>
+                  <button type="button" className="ajBtn danger" onClick={handleDesconectar}>Desconectar</button>
                 </div>
               </div>
             ))}
@@ -401,7 +397,7 @@ export default function Ajustes() {
       return (
         <form className="ajCard" onSubmit={handleSaveMeta}>
           <h2>Meta Ads / Tracking</h2>
-          <p className="ajHint">Pixel y CAPI son para seguimiento de conversiones, no para WhatsApp.</p>
+          <p className="ajHint">Pixel y CAPI se guardan en conexiones_whatsapp (misma tabla que Conexiones).</p>
           <div className="ajField">
             <label>Nombre del pixel</label>
             <input value={meta.pixelNombre || ""} onChange={(e) => setMeta({ ...meta, pixelNombre: e.target.value })} />

@@ -47,10 +47,6 @@ export function patchPerfil(body) {
   return request("/api/ajustes/perfil", { method: "PATCH", body: JSON.stringify(body) });
 }
 
-export function patchAjustes(body) {
-  return request("/api/ajustes", { method: "PATCH", body: JSON.stringify(body) });
-}
-
 export function cambiarPassword(body) {
   return request("/api/ajustes/password", { method: "POST", body: JSON.stringify(body) });
 }
@@ -59,20 +55,22 @@ export function probarMeta() {
   return request("/api/ajustes/meta/probar", { method: "POST", body: "{}" });
 }
 
-export function createConexion(body) {
-  return request("/api/conexiones/whatsapp", { method: "POST", body: JSON.stringify(body) });
+/** Misma lógica que POST /guardar-conexion */
+export function guardarConexion(body) {
+  return request("/api/ajustes/conexion/guardar", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
 }
 
-export function updateConexion(id, body) {
-  return request(`/api/conexiones/whatsapp/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+/** Misma lógica que POST /desconectar-whatsapp */
+export function desconectarWhatsapp() {
+  return request("/api/ajustes/conexion/desconectar", { method: "POST", body: "{}" });
 }
 
-export function deleteConexion(id) {
-  return request(`/api/conexiones/whatsapp/${id}`, { method: "DELETE" });
-}
-
-export function probarConexion(id, numero) {
-  return request(`/api/conexiones/whatsapp/${id}/probar`, {
+/** Misma lógica que POST /probar-whatsapp */
+export function probarWhatsapp(numero) {
+  return request("/api/ajustes/conexion/probar", {
     method: "POST",
     body: JSON.stringify({ numero }),
   });
