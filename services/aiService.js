@@ -12,6 +12,8 @@ const MODOS_FASE1 = new Set([
   "responder_automatico",
 ]);
 
+const PROVEEDORES = new Set(["automatico", "local", "openai"]);
+
 const INTENCIONES_VALIDAS = new Set([
   "compra",
   "precio",
@@ -23,12 +25,135 @@ const INTENCIONES_VALIDAS = new Set([
   "desconocido",
 ]);
 
+const INTENT_PRIORITY = [
+  "comprobante",
+  "no_interesado",
+  "reclamo",
+  "precio",
+  "compra",
+  "soporte",
+  "saludo",
+];
+
 const SCORES_VALIDOS = new Set(["caliente", "medio", "frio"]);
+
+const REGLAS_POR_DEFECTO = {
+  saludo: [
+    "hola",
+    "buenos dias",
+    "buenas tardes",
+    "buenas noches",
+    "buen dia",
+    "hey",
+    "que tal",
+    "qué tal",
+    "saludos",
+  ],
+  precio: [
+    "precio",
+    "cuanto cuesta",
+    "cuánto cuesta",
+    "cuanto sale",
+    "cuánto sale",
+    "costo",
+    "valor",
+    "tarifa",
+    "cotizar",
+    "cotizacion",
+  ],
+  compra: [
+    "comprar",
+    "quiero comprar",
+    "me interesa",
+    "adquirir",
+    "quiero el",
+    "pagar",
+    "orden",
+    "pedido",
+  ],
+  comprobante: [
+    "comprobante",
+    "recibo",
+    "transferencia",
+    "pago hecho",
+    "ya pague",
+    "ya pagué",
+    "voucher",
+    "captura",
+  ],
+  soporte: [
+    "ayuda",
+    "soporte",
+    "problema",
+    "no funciona",
+    "error",
+    "duda",
+    "asistencia",
+  ],
+  no_interesado: [
+    "no me interesa",
+    "no gracias",
+    "dejen de escribir",
+    "no quiero",
+    "basta",
+    "spam",
+    "cancelar",
+  ],
+  reclamo: [
+    "reclamo",
+    "queja",
+    "devolucion",
+    "devolución",
+    "estafa",
+    "molesto",
+  ],
+};
+
+const REGLAS_SCORE_DEFECTO = {
+  caliente: [
+    "quiero comprar",
+    "compro ya",
+    "urgente",
+    "hoy",
+    "ahora",
+    "cuanto cuesta",
+    "precio",
+  ],
+  frio: [
+    "solo mirando",
+    "despues",
+    "después",
+    "no me interesa",
+    "tal vez",
+    "luego",
+  ],
+};
+
+const RESPUESTAS_LOCALES_DEFECTO = {
+  saludo: "¡Hola{{nombre}}! Gracias por escribirnos. ¿En qué te podemos ayudar?",
+  precio:
+    "Gracias por tu interés. Te compartimos información de precios en breve.",
+  compra: "¡Genial! Un asesor te ayudará con tu compra muy pronto.",
+  soporte: "Entendemos tu consulta. Te atendemos en breve.",
+  comprobante:
+    "Recibimos tu mensaje. Revisaremos el comprobante y te confirmamos.",
+  reclamo: "Lamentamos lo ocurrido. Un asesor revisará tu caso pronto.",
+  no_interesado: "Entendido. Si cambias de opinión, aquí estamos.",
+  desconocido: "",
+};
+
+function tieneOpenAI() {
+  return !!OPENAI_API_KEY;
+}
 
 function crearConfigPorDefecto() {
   return {
     nombreNodo: "🤖 IA",
     modo: "detectar_intencion",
+    proveedorIA: "automatico",
+    reglas: { ...REGLAS_POR_DEFECTO },
+    reglasScore: { ...REGLAS_SCORE_DEFECTO },
+    respuestasLocales: { ...RESPUESTAS_LOCALES_DEFECTO },
     promptSistema: "",
     instruccionesNegocio: "",
     maxCaracteres: 400,
@@ -49,6 +174,14 @@ function sanitizeInput(text, maxLen = MAX_INPUT_CHARS) {
   return s;
 }
 
+function normalizeText(text) {
+  return String(text || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
+}
+
 function decodeHtmlEntities(str) {
   return String(str || "")
     .replace(/&quot;/g, '"')
@@ -58,9 +191,45 @@ function decodeHtmlEntities(str) {
     .replace(/&amp;/g, "&");
 }
 
+function normalizarListaKeywords(lista) {
+  if (!Array.isArray(lista)) return [];
+  return lista
+    .map((k) => normalizeText(sanitizeInput(k, 120)))
+    .filter(Boolean);
+}
+
+function mergeReglas(custom) {
+  const base = {};
+  for (const key of Object.keys(REGLAS_POR_DEFECTO)) {
+    const customList = custom?.[key];
+    base[key] = normalizarListaKeywords(
+      Array.isArray(customList) && customList.length
+        ? customList
+        : REGLAS_POR_DEFECTO[key]
+    );
+  }
+  if (custom?.reclamo) {
+    base.reclamo = normalizarListaKeywords(custom.reclamo);
+  }
+  return base;
+}
+
+function mergeReglasScore(custom) {
+  const base = {};
+  for (const key of Object.keys(REGLAS_SCORE_DEFECTO)) {
+    const customList = custom?.[key];
+    base[key] = normalizarListaKeywords(
+      Array.isArray(customList) && customList.length
+        ? customList
+        : REGLAS_SCORE_DEFECTO[key]
+    );
+  }
+  return base;
+}
+
 function parseIAFromNodo(nodo) {
   const cfg = crearConfigPorDefecto();
-  if (!nodo) return cfg;
+  if (!nodo) return normalizarConfig(cfg);
 
   const html = nodo.html || "";
   const match = html.match(
@@ -76,36 +245,103 @@ function parseIAFromNodo(nodo) {
     }
   }
 
-  cfg.nombreNodo = sanitizeInput(cfg.nombreNodo || "🤖 IA", 120);
-  cfg.modo = MODOS_FASE1.has(cfg.modo) ? cfg.modo : "detectar_intencion";
-  cfg.promptSistema = sanitizeInput(cfg.promptSistema, 2000);
-  cfg.instruccionesNegocio = sanitizeInput(cfg.instruccionesNegocio, 2000);
-  cfg.maxCaracteres = Math.min(
-    400,
-    Math.max(50, parseInt(cfg.maxCaracteres, 10) || 400)
-  );
-  cfg.temperatura = Math.min(
-    1,
-    Math.max(0, parseFloat(cfg.temperatura) || 0.3)
-  );
-  cfg.modelo = sanitizeInput(cfg.modelo || DEFAULT_MODEL, 64) || DEFAULT_MODEL;
-  cfg.variableResultado = sanitizeInput(cfg.variableResultado, 64);
-  cfg.siFalla = cfg.siFalla === "detener" ? "detener" : "continuar";
-  cfg.mensajeFallback = sanitizeInput(cfg.mensajeFallback, 500);
+  return normalizarConfig(cfg);
+}
 
-  return cfg;
+function normalizarConfig(cfg) {
+  const config = { ...crearConfigPorDefecto(), ...(cfg || {}) };
+
+  config.nombreNodo = sanitizeInput(config.nombreNodo || "🤖 IA", 120);
+  config.modo = MODOS_FASE1.has(config.modo) ? config.modo : "detectar_intencion";
+  config.proveedorIA = PROVEEDORES.has(config.proveedorIA)
+    ? config.proveedorIA
+    : "automatico";
+  config.reglas = mergeReglas(config.reglas);
+  config.reglasScore = mergeReglasScore(config.reglasScore);
+  config.respuestasLocales = {
+    ...RESPUESTAS_LOCALES_DEFECTO,
+    ...(config.respuestasLocales || {}),
+  };
+  config.promptSistema = sanitizeInput(config.promptSistema, 2000);
+  config.instruccionesNegocio = sanitizeInput(config.instruccionesNegocio, 2000);
+  config.maxCaracteres = Math.min(
+    400,
+    Math.max(50, parseInt(config.maxCaracteres, 10) || 400)
+  );
+  config.temperatura = Math.min(
+    1,
+    Math.max(0, parseFloat(config.temperatura) || 0.3)
+  );
+  config.modelo =
+    sanitizeInput(config.modelo || DEFAULT_MODEL, 64) || DEFAULT_MODEL;
+  config.variableResultado = sanitizeInput(config.variableResultado, 64);
+  config.siFalla = config.siFalla === "detener" ? "detener" : "continuar";
+  config.mensajeFallback = sanitizeInput(config.mensajeFallback, 500);
+
+  return config;
+}
+
+function resolverProveedor(config) {
+  const pref = config.proveedorIA || "automatico";
+  if (pref === "local") return "local";
+  if (pref === "openai") return tieneOpenAI() ? "openai" : "local";
+  return tieneOpenAI() ? "openai" : "local";
 }
 
 function interpolarVariables(template, ctx) {
   if (!template) return "";
+  const nombre = ctx.nombre && ctx.nombre !== ctx.telefono ? ctx.nombre : "";
   const map = {
-    nombre: ctx.nombre || "",
+    nombre: nombre ? ` ${nombre}` : "",
     telefono: ctx.telefono || ctx.numero || "",
     ultimo_mensaje: ctx.ultimo_mensaje || "",
     intent: ctx.intent || ctx.ai?.intent || "",
     score: ctx.score || ctx.ai?.score || "",
   };
   return String(template).replace(/\{\{(\w+)\}\}/g, (_, key) => map[key] ?? "");
+}
+
+function coincideKeyword(textoNorm, keyword) {
+  if (!keyword) return false;
+  if (keyword.includes(" ")) return textoNorm.includes(keyword);
+  const re = new RegExp(
+    `(^|[\\s,.;:!?¿¡])${keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([\\s,.;:!?¿¡]|$)`
+  );
+  return re.test(textoNorm) || textoNorm.includes(keyword);
+}
+
+function detectarIntencionLocal(mensaje, reglas) {
+  const texto = normalizeText(mensaje);
+  if (!texto) return "desconocido";
+
+  for (const intent of INTENT_PRIORITY) {
+    const keywords = reglas[intent] || [];
+    for (const kw of keywords) {
+      if (coincideKeyword(texto, kw)) {
+        return intent;
+      }
+    }
+  }
+
+  return "desconocido";
+}
+
+function clasificarLeadLocal(mensaje, reglasScore, intentPrevio) {
+  const texto = normalizeText(mensaje);
+
+  if (intentPrevio === "no_interesado") return "frio";
+  if (intentPrevio === "compra" || intentPrevio === "comprobante") return "caliente";
+  if (intentPrevio === "precio") return "caliente";
+
+  for (const score of ["caliente", "frio"]) {
+    const keywords = reglasScore[score] || [];
+    for (const kw of keywords) {
+      if (coincideKeyword(texto, kw)) return score;
+    }
+  }
+
+  if (intentPrevio === "saludo") return "medio";
+  return "medio";
 }
 
 function normalizarIntencion(valor) {
@@ -120,7 +356,7 @@ function normalizarIntencion(valor) {
   if (v.includes("saludo")) return "saludo";
   if (v.includes("reclamo")) return "reclamo";
   if (v.includes("comprobante")) return "comprobante";
-  if (v.includes("no_interes") || v.includes("no interes")) return "no_interesado";
+  if (v.includes("no_interes")) return "no_interesado";
   return "desconocido";
 }
 
@@ -131,8 +367,23 @@ function normalizarScore(valor) {
   if (SCORES_VALIDOS.has(v)) return v;
   if (v.includes("caliente") || v.includes("hot")) return "caliente";
   if (v.includes("medio") || v.includes("warm")) return "medio";
-  if (v.includes("frio") || v.includes("frío") || v.includes("cold")) return "frio";
+  if (v.includes("frio") || v.includes("cold")) return "frio";
   return "medio";
+}
+
+function responderAutomaticoLocal(config, ctx, intent) {
+  const key = intent || ctx.intent || ctx.ai?.intent || "desconocido";
+  let plantilla =
+    config.respuestasLocales?.[key] ||
+    config.respuestasLocales?.desconocido ||
+    config.mensajeFallback;
+
+  let respuesta = interpolarVariables(plantilla, ctx).trim();
+  if (!respuesta) {
+    respuesta = interpolarVariables(config.mensajeFallback, ctx).trim();
+  }
+  respuesta = sanitizeInput(respuesta, config.maxCaracteres);
+  return respuesta;
 }
 
 async function callOpenAI({ messages, model, temperature, maxTokens }) {
@@ -162,8 +413,7 @@ async function callOpenAI({ messages, model, temperature, maxTokens }) {
     const data = await res.json();
 
     if (!res.ok) {
-      const errMsg =
-        data?.error?.message || `OpenAI HTTP ${res.status}`;
+      const errMsg = data?.error?.message || `OpenAI HTTP ${res.status}`;
       throw new Error(errMsg);
     }
 
@@ -230,7 +480,7 @@ ${contextoLead ? contextoLead + "\n" : ""}Mensaje del cliente:
 ${mensaje || "(sin mensaje)"}`;
 }
 
-async function runAIMode(config, ctx) {
+async function runOpenAIMode(config, ctx) {
   const system = buildSystemPrompt(config, ctx);
   const user = buildUserPromptForMode(config, ctx);
 
@@ -245,17 +495,118 @@ async function runAIMode(config, ctx) {
   });
 
   if (config.modo === "detectar_intencion") {
-    return { tipo: "intent", valor: normalizarIntencion(raw) };
+    return { tipo: "intent", valor: normalizarIntencion(raw), motor: "openai" };
   }
   if (config.modo === "clasificar_lead") {
-    return { tipo: "score", valor: normalizarScore(raw) };
+    return { tipo: "score", valor: normalizarScore(raw), motor: "openai" };
   }
 
   let respuesta = sanitizeInput(raw, config.maxCaracteres);
-  if (respuesta.length > config.maxCaracteres) {
-    respuesta = respuesta.slice(0, config.maxCaracteres);
+  return { tipo: "reply", valor: respuesta, motor: "openai" };
+}
+
+function runLocalMode(config, ctx) {
+  const mensaje = ctx.ultimo_mensaje || "";
+
+  if (config.modo === "detectar_intencion") {
+    return {
+      tipo: "intent",
+      valor: detectarIntencionLocal(mensaje, config.reglas),
+      motor: "local",
+    };
   }
-  return { tipo: "reply", valor: respuesta };
+
+  if (config.modo === "clasificar_lead") {
+    const intentPrevio =
+      ctx.intent || ctx.ai?.intent || detectarIntencionLocal(mensaje, config.reglas);
+    return {
+      tipo: "score",
+      valor: clasificarLeadLocal(mensaje, config.reglasScore, intentPrevio),
+      motor: "local",
+    };
+  }
+
+  const intent =
+    ctx.intent ||
+    ctx.ai?.intent ||
+    detectarIntencionLocal(mensaje, config.reglas);
+  const respuesta = responderAutomaticoLocal(config, ctx, intent);
+  return { tipo: "reply", valor: respuesta, motor: "local" };
+}
+
+function fallbackResultado(config, ctx) {
+  if (config.modo === "detectar_intencion") {
+    const local = detectarIntencionLocal(ctx.ultimo_mensaje, config.reglas);
+    return {
+      tipo: "intent",
+      valor: local !== "desconocido" ? local : "desconocido",
+      motor: "fallback",
+    };
+  }
+  if (config.modo === "clasificar_lead") {
+    return { tipo: "score", valor: "medio", motor: "fallback" };
+  }
+  const texto = interpolarVariables(config.mensajeFallback, ctx).trim();
+  return {
+    tipo: "reply",
+    valor: sanitizeInput(texto, config.maxCaracteres),
+    motor: "fallback",
+  };
+}
+
+async function ejecutarModoIA(config, ctx) {
+  const proveedor = resolverProveedor(config);
+  const intentos = [];
+
+  const usarOpenAI =
+    (config.proveedorIA === "openai" || config.proveedorIA === "automatico") &&
+    tieneOpenAI();
+
+  if (usarOpenAI) intentos.push("openai");
+  intentos.push("local");
+
+  console.log("[IA] modo:", config.modo, "| proveedor:", proveedor, "| intentos:", intentos.join("→"));
+
+  let ultimoError = null;
+
+  for (const motor of intentos) {
+    try {
+      let resultado;
+      if (motor === "openai") {
+        resultado = await runOpenAIMode(config, ctx);
+      } else {
+        resultado = runLocalMode(config, ctx);
+      }
+
+      if (resultado.tipo === "intent" && config.modo === "detectar_intencion") {
+        ctx.intent = resultado.valor;
+      }
+      if (resultado.tipo === "score" && config.modo === "clasificar_lead") {
+        ctx.score = resultado.valor;
+      }
+
+      console.log("[IA] resultado:", resultado.valor, "| motor:", resultado.motor);
+      return {
+        ok: true,
+        resultado,
+        proveedor: proveedor,
+        motor: resultado.motor,
+      };
+    } catch (err) {
+      ultimoError = err;
+      console.log("[IA] error (" + motor + "):", err.message);
+    }
+  }
+
+  const resultado = fallbackResultado(config, ctx);
+  console.log("[IA] resultado:", resultado.valor, "| motor: fallback");
+  return {
+    ok: false,
+    resultado,
+    proveedor,
+    motor: "fallback",
+    error: ultimoError?.message,
+  };
 }
 
 function guardarResultadoEnContexto(flowContext, config, resultado) {
@@ -276,6 +627,9 @@ function guardarResultadoEnContexto(flowContext, config, resultado) {
   if (config.variableResultado && resultado.valor != null) {
     flowContext.ai[config.variableResultado] = resultado.valor;
   }
+
+  flowContext.ai.motor = resultado.motor || "local";
+  flowContext.ai.proveedor = config.proveedorIA || "automatico";
 }
 
 async function ejecutarIANodo({ numero, nodo, usuarioId, flowContext }) {
@@ -285,69 +639,54 @@ async function ejecutarIANodo({ numero, nodo, usuarioId, flowContext }) {
     telefono: numero,
     nombre: "",
     ultimo_mensaje: "",
+    intent: "",
+    score: "",
     ai: {},
   };
 
-  console.log("[IA] modo:", config.modo);
-
-  if (!ctx.ultimo_mensaje && config.modo !== "responder_automatico") {
-    console.log("[IA] sin último mensaje — usando desconocido/medio");
-  }
-
   try {
-    const resultado = await runAIMode(config, ctx);
-    console.log("[IA] resultado:", resultado.valor);
+    const ejec = await ejecutarModoIA(config, ctx);
+    guardarResultadoEnContexto(ctx, config, ejec.resultado);
 
-    guardarResultadoEnContexto(ctx, config, resultado);
-
-    if (config.modo === "responder_automatico" && resultado.valor) {
-      await enviarTextoWhatsApp(numero, resultado.valor, { usuarioId });
+    if (config.modo === "responder_automatico" && ejec.resultado.valor) {
+      await enviarTextoWhatsApp(numero, ejec.resultado.valor, { usuarioId });
     }
 
-    return { ok: true, continuar: true, resultado };
+    if (!ejec.ok && config.siFalla === "detener") {
+      return { ok: false, continuar: false, error: ejec.error };
+    }
+
+    return {
+      ok: ejec.ok,
+      continuar: true,
+      resultado: ejec.resultado,
+      motor: ejec.motor,
+    };
   } catch (err) {
-    console.log("[IA] error:", err.message);
+    console.log("[IA] error fatal:", err.message);
+    const fb = fallbackResultado(config, ctx);
+    guardarResultadoEnContexto(ctx, config, fb);
 
-    const fallback = interpolarVariables(config.mensajeFallback, ctx);
-
-    if (config.modo === "responder_automatico" && fallback) {
+    if (config.modo === "responder_automatico" && fb.valor) {
       try {
-        const texto = sanitizeInput(fallback, config.maxCaracteres);
-        await enviarTextoWhatsApp(numero, texto, { usuarioId });
-        guardarResultadoEnContexto(ctx, config, {
-          tipo: "reply",
-          valor: texto,
-        });
+        await enviarTextoWhatsApp(numero, fb.valor, { usuarioId });
       } catch (sendErr) {
         console.log("[IA] error enviando fallback:", sendErr.message);
       }
-    } else if (config.modo === "detectar_intencion") {
-      guardarResultadoEnContexto(ctx, config, {
-        tipo: "intent",
-        valor: "desconocido",
-      });
-    } else if (config.modo === "clasificar_lead") {
-      guardarResultadoEnContexto(ctx, config, {
-        tipo: "score",
-        valor: "medio",
-      });
     }
 
     if (config.siFalla === "detener") {
       return { ok: false, continuar: false, error: err.message };
     }
-
     return { ok: false, continuar: true, error: err.message };
   }
 }
 
 async function runAI(body = {}) {
-  const config = crearConfigPorDefecto();
-  Object.assign(config, body.config || body);
-
-  config.modo = MODOS_FASE1.has(config.modo) ? config.modo : "detectar_intencion";
-  config.promptSistema = sanitizeInput(config.promptSistema, 2000);
-  config.instruccionesNegocio = sanitizeInput(config.instruccionesNegocio, 2000);
+  const config = normalizarConfig({
+    ...crearConfigPorDefecto(),
+    ...(body.config || body),
+  });
 
   const ctx = {
     nombre: sanitizeInput(body.nombre, 200),
@@ -358,14 +697,34 @@ async function runAI(body = {}) {
     ai: {},
   };
 
-  const resultado = await runAIMode(config, ctx);
-  guardarResultadoEnContexto(ctx, config, resultado);
+  const ejec = await ejecutarModoIA(config, ctx);
+  guardarResultadoEnContexto(ctx, config, ejec.resultado);
 
   return {
-    ok: true,
+    ok: ejec.ok,
     modo: config.modo,
-    resultado: resultado.valor,
-    context: ctx.ai,
+    proveedor: resolverProveedor(config),
+    motor: ejec.motor,
+    resultado: ejec.resultado.valor,
+    tipo: ejec.resultado.tipo,
+    context: {
+      intent: ctx.intent,
+      score: ctx.score,
+      ai: ctx.ai,
+    },
+    error: ejec.error || null,
+  };
+}
+
+async function testIALocal(body = {}) {
+  return runAI(body);
+}
+
+function getIAStatus() {
+  return {
+    ok: true,
+    openaiDisponible: tieneOpenAI(),
+    proveedorSugerido: tieneOpenAI() ? "openai" : "local",
   };
 }
 
@@ -414,10 +773,17 @@ async function enriquecerContextoFlujo(flowContext, numero, usuarioId) {
 module.exports = {
   crearConfigPorDefecto,
   parseIAFromNodo,
+  normalizarConfig,
   ejecutarIANodo,
   runAI,
+  testIALocal,
+  getIAStatus,
+  detectarIntencionLocal,
   enriquecerContextoFlujo,
   interpolarVariables,
   sanitizeInput,
+  tieneOpenAI,
+  resolverProveedor,
   MODOS_FASE1,
+  REGLAS_POR_DEFECTO,
 };

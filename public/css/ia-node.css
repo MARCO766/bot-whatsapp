@@ -162,3 +162,90 @@
   min-height: 72px;
   resize: vertical;
 }
+
+.node.ia-node .ia-badge-proveedor {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 7px;
+  border-radius: 6px;
+  margin-right: 4px;
+  margin-bottom: 4px;
+  background: rgba(34, 211, 238, 0.2);
+  color: #67e8f9;
+  border: 1px solid rgba(34, 211, 238, 0.35);
+}
+
+.ia-status-servidor {
+  font-size: 11px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+
+.ia-status-servidor.ok {
+  background: rgba(34, 197, 94, 0.12);
+  color: #86efac;
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.ia-status-servidor.local {
+  background: rgba(139, 92, 246, 0.12);
+  color: #c4b5fd;
+  border: 1px solid rgba(139, 92, 246, 0.35);
+}
+
+.ia-reglas-ta {
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+}
+
+.ia-prueba-block {
+  margin: 14px 0;
+  padding: 12px;
+  border-radius: 10px;
+  background: rgba(34, 211, 238, 0.06);
+  border: 1px solid rgba(34, 211, 238, 0.15);
+}
+
+.ia-prueba-block input {
+  width: 100%;
+  margin: 8px 0;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid #334155;
+  background: #0f172a;
+  color: #e2e8f0;
+}
+
+.ia-btn-prueba {
+  margin-top: 6px;
+  background: linear-gradient(90deg, #0891b2, #7c3aed) !important;
+}
+
+.ia-resultado-prueba {
+  margin-top: 10px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.ia-prueba-ok {
+  color: #a5f3fc;
+}
+
+.ia-prueba-ok code {
+  background: rgba(0, 0, 0, 0.35);
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: #fde047;
+}
+
+.ia-prueba-error {
+  color: #fca5a5;
+}
+
+.ia-prueba-loading {
+  color: #94a3b8;
+}
