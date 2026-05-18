@@ -11,14 +11,17 @@ export default defineConfig({
     outDir: 'dist',
     emptyOutDir: true,
     sourcemap: false,
-    minify: 'esbuild',
+    minify: true,
     target: 'es2020',
     cssMinify: true,
     rollupOptions: {
       output: {
-        manualChunks: {
-          vendor: ['react', 'react-dom'],
-          socket: ['socket.io-client'],
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('socket.io-client')) return 'socket'
+            if (id.includes('react') || id.includes('react-dom')) return 'react'
+            return 'vendor'
+          }
         },
       },
     },
