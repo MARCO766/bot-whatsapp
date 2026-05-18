@@ -1,5 +1,5 @@
 /**
- * Ajustes MacBot CRM — Supabase + sesión, sin mocks.
+ * Ajustes MacBot CRM — Supabase + sesión, consultas resilientes.
  */
 const axios = require("axios");
 const bcrypt = require("bcryptjs");
@@ -22,12 +22,73 @@ const DEFAULT_NOTIF = {
   alertaErrorConexion: true,
 };
 
+const EMPTY_META_ADS = {
+  pixelId: "",
+  pixelNombre: "",
+  activo: false,
+  capiTokenMasked: null,
+  tieneCapiToken: false,
+};
+
+let crmAjustesTableDisponible = true;
+
+function log(msg, extra) {
+  if (extra !== undefined) console.log(`[ajustesService] ${msg}`, extra);
+  else console.log(`[ajustesService] ${msg}`);
+}
+
 function headers(extra = {}) {
+  if (!SUPABASE_URL || !SUPABASE_KEY) {
+    return { apikey: "", Authorization: "Bearer ", ...extra };
+  }
   return {
     apikey: SUPABASE_KEY,
     Authorization: `Bearer ${SUPABASE_KEY}`,
     ...extra,
   };
+}
+
+function supabaseErrorDetail(error) {
+  const d = error?.response?.data;
+  if (!d) return error?.message || "unknown";
+  if (typeof d === "string") return d;
+  return d.message || d.error || d.hint || JSON.stringify(d);
+}
+
+function isMissingSchemaError(error) {
+  const status = error?.response?.status;
+  const detail = String(supabaseErrorDetail(error)).toLowerCase();
+  return (
+    status === 400 ||
+    status === 404 ||
+    status === 406 ||
+    detail.includes("does not exist") ||
+    detail.includes("column") ||
+    detail.includes("relation") ||
+    detail.includes("pgrst")
+  );
+}
+
+/**
+ * GET Supabase REST sin lanzar: devuelve { data, error, status }.
+ */
+async function supabaseGet(path, label) {
+  if (!SUPABASE_URL || !SUPABASE_KEY) {
+    log(`${label}: Supabase no configurado`);
+    return { data: [], error: "SUPABASE_NOT_CONFIGURED", status: 0 };
+  }
+
+  const url = path.startsWith("http") ? path : `${SUPABASE_URL}/rest/v1/${path}`;
+
+  try {
+    const res = await axios.get(url, { headers: headers() });
+    return { data: res.data || [], error: null, status: res.status };
+  } catch (error) {
+    const status = error.response?.status;
+    const detail = supabaseErrorDetail(error);
+    log(`${label} falló (${status || "network"}):`, detail);
+    return { data: [], error: detail, status: status || 0 };
+  }
 }
 
 function maskSecret(value) {
@@ -41,11 +102,11 @@ function connectionEstado(row) {
   const hasToken = Boolean(row?.token?.trim());
   const hasPhone = Boolean(row?.phone_id?.trim());
   if (row?.estado === "error") return "error";
-  if (hasToken && hasPhone) return row.activo ? "conectado" : "inactivo";
+  if (hasToken && hasPhone) return row.activo !== false ? "conectado" : "inactivo";
   return "incompleto";
 }
 
-function mapConexion(row, { includeToken = false } = {}) {
+function mapConexion(row) {
   if (!row) return null;
   const estado = connectionEstado(row);
   return {
@@ -54,7 +115,7 @@ function mapConexion(row, { includeToken = false } = {}) {
     numero: row.numero || "",
     phoneNumberId: row.phone_id || "",
     wabaId: row.waba_id || "",
-    activo: Boolean(row.activo),
+    activo: row.activo !== false,
     estado,
     estadoLabel:
       estado === "conectado"
@@ -66,7 +127,6 @@ function mapConexion(row, { includeToken = false } = {}) {
             : "Incompleto",
     tieneToken: Boolean(row.token),
     tokenMasked: row.token ? maskSecret(row.token) : null,
-    token: includeToken ? row.token : undefined,
     pixelId: row.pixel_id || "",
     capiTokenMasked: row.capi_token ? maskSecret(row.capi_token) : null,
     creadoEn: row.creado_en || null,
@@ -74,76 +134,9 @@ function mapConexion(row, { includeToken = false } = {}) {
   };
 }
 
-async function fetchUsuario(usuarioId) {
-  const uid = encodeURIComponent(usuarioId);
-  const res = await axios.get(
-    `${SUPABASE_URL}/rest/v1/crm_usuarios?id=eq.${uid}&select=id,nombre,email,activo`,
-    { headers: headers() }
-  );
-  return res.data?.[0] || null;
-}
-
-async function fetchAjustesRow(usuarioId) {
-  const uid = encodeURIComponent(usuarioId);
-  try {
-    const res = await axios.get(
-      `${SUPABASE_URL}/rest/v1/crm_ajustes_usuario?usuario_id=eq.${uid}&select=*`,
-      { headers: headers() }
-    );
-    return res.data?.[0] || null;
-  } catch (e) {
-    if (e.response?.status === 404 || e.response?.status === 406) return null;
-    throw e;
-  }
-}
-
-async function upsertAjustes(usuarioId, patch) {
-  const existing = await fetchAjustesRow(usuarioId);
-  const body = {
-    ...patch,
-    usuario_id: usuarioId,
-    actualizado_en: new Date().toISOString(),
-  };
-
-  if (existing) {
-    await axios.patch(
-      `${SUPABASE_URL}/rest/v1/crm_ajustes_usuario?usuario_id=eq.${encodeURIComponent(usuarioId)}`,
-      body,
-      { headers: headers({ "Content-Type": "application/json", Prefer: "return=minimal" }) }
-    );
-  } else {
-    await axios.post(`${SUPABASE_URL}/rest/v1/crm_ajustes_usuario`, body, {
-      headers: headers({ "Content-Type": "application/json", Prefer: "return=minimal" }),
-    });
-  }
-}
-
-async function assertPhoneIdAvailable(phoneId, usuarioId, excludeId = null) {
-  if (!phoneId?.trim()) {
-    const err = new Error("Phone Number ID es obligatorio");
-    err.status = 400;
-    throw err;
-  }
-  const pid = encodeURIComponent(phoneId.trim());
-  const res = await axios.get(
-    `${SUPABASE_URL}/rest/v1/conexiones_whatsapp?phone_id=eq.${pid}&select=id,usuario_id`,
-    { headers: headers() }
-  );
-  const conflict = (res.data || []).find(
-    (r) => r.usuario_id !== usuarioId && (!excludeId || r.id !== excludeId)
-  );
-  if (conflict) {
-    const err = new Error(
-      "Este Phone Number ID ya está registrado en otra cuenta. Usa otro número o contacta soporte."
-    );
-    err.status = 409;
-    throw err;
-  }
-}
-
 function buildWebhookInfo(req) {
-  const proto = req.get("x-forwarded-proto") || req.protocol || "https";
-  const host = req.get("x-forwarded-host") || req.get("host") || "";
+  const proto = req?.get?.("x-forwarded-proto") || req?.protocol || "https";
+  const host = req?.get?.("x-forwarded-host") || req?.get?.("host") || "";
   const base = host ? `${proto}://${host}` : "";
   const verifyToken =
     process.env.VERIFY_TOKEN || process.env.WEBHOOK_VERIFY_TOKEN || "123456";
@@ -155,63 +148,301 @@ function buildWebhookInfo(req) {
   };
 }
 
-async function getAjustesCompleto(usuarioId, req) {
-  const [usuario, ajustes, conexionesRes, etiquetasRes] = await Promise.all([
-    fetchUsuario(usuarioId),
-    fetchAjustesRow(usuarioId),
-    axios.get(
-      `${SUPABASE_URL}/rest/v1/conexiones_whatsapp?usuario_id=eq.${encodeURIComponent(usuarioId)}&order=creado_en.desc&select=id,nombre,numero,phone_id,waba_id,token,pixel_id,capi_token,activo,estado,creado_en,actualizado_en`,
-      { headers: headers() }
-    ),
-    axios.get(
-      `${SUPABASE_URL}/rest/v1/etiquetas?usuario_id=eq.${encodeURIComponent(usuarioId)}&order=creado_en.asc&select=id,nombre,color,creado_en`,
-      { headers: headers() }
-    ).catch(() => ({ data: [] })),
-  ]);
+function buildMetaAdsFromRow(ajustes, conexionActiva) {
+  const pixelId = ajustes?.meta_pixel_id || conexionActiva?.pixel_id || "";
+  const capiRaw = ajustes?.meta_capi_token || conexionActiva?.capi_token || "";
+  return {
+    ...EMPTY_META_ADS,
+    pixelId,
+    pixelNombre: ajustes?.meta_pixel_nombre || "",
+    activo: Boolean(ajustes?.meta_activo) || Boolean(pixelId && capiRaw),
+    capiTokenMasked: capiRaw ? maskSecret(capiRaw) : null,
+    tieneCapiToken: Boolean(capiRaw),
+  };
+}
 
-  const auto = { ...DEFAULT_AUTO, ...(ajustes?.automatizacion || {}) };
-  const notif = { ...DEFAULT_NOTIF, ...(ajustes?.notificaciones || {}) };
+function buildPerfil(usuario, ajustes, sessionUsuario) {
+  return {
+    nombre: usuario?.nombre || sessionUsuario?.nombre || "",
+    email: usuario?.email || sessionUsuario?.email || "",
+    empresa: ajustes?.empresa || "",
+    zonaHoraria: ajustes?.zona_horaria || DEFAULT_AUTO.zonaHoraria,
+    idioma: ajustes?.idioma || "es",
+  };
+}
 
+/** Respuesta vacía garantizada (nunca 400 en GET). */
+function buildAjustesVacio(req, sessionUsuario, warnings = []) {
+  const perfil = buildPerfil(null, null, sessionUsuario);
+  const metaAds = { ...EMPTY_META_ADS };
   return {
     ok: true,
-    perfil: {
-      nombre: usuario?.nombre || "",
-      email: usuario?.email || "",
-      empresa: ajustes?.empresa || "",
-      zonaHoraria: ajustes?.zona_horaria || DEFAULT_AUTO.zonaHoraria,
-      idioma: ajustes?.idioma || "es",
+    perfil,
+    conexiones: [],
+    conexionesWhatsapp: [],
+    metaAds,
+    meta: metaAds,
+    automatizacion: { ...DEFAULT_AUTO },
+    notificaciones: { ...DEFAULT_NOTIF },
+    etiquetas: [],
+    webhook: buildWebhookInfo(req),
+    seguridad: { puedeCambiarPassword: true, ocultarTokens: true },
+    warnings: warnings.length ? warnings : undefined,
+    source: "fallback",
+  };
+}
+
+async function fetchUsuario(usuarioId, sessionUsuario) {
+  const uid = encodeURIComponent(usuarioId);
+  const { data, error } = await supabaseGet(
+    `crm_usuarios?id=eq.${uid}&select=id,nombre,email,activo`,
+    "fetchUsuario"
+  );
+
+  if (data?.[0]) return data[0];
+
+  if (error) {
+    log("fetchUsuario: usando datos de sesión", { usuarioId });
+  }
+
+  return sessionUsuario
+    ? {
+        id: sessionUsuario.id || usuarioId,
+        nombre: sessionUsuario.nombre || "",
+        email: sessionUsuario.email || "",
+        activo: true,
+      }
+    : null;
+}
+
+async function fetchAjustesRow(usuarioId) {
+  if (!crmAjustesTableDisponible) return null;
+
+  const uid = encodeURIComponent(usuarioId);
+
+  const attempts = [
+    `crm_ajustes_usuario?usuario_id=eq.${uid}&select=*&limit=1`,
+    `crm_ajustes_usuario?usuario_id=eq.${uid}&select=usuario_id,empresa,zona_horaria,idioma,automatizacion,notificaciones,meta_pixel_id,meta_pixel_nombre,meta_capi_token,meta_activo&limit=1`,
+  ];
+
+  for (const path of attempts) {
+    const { data, error, status } = await supabaseGet(path, "fetchAjustesRow");
+    if (!error && data?.[0]) return data[0];
+    if (error && (status === 404 || isMissingSchemaError({ response: { status, data: { message: error } } }))) {
+      if (path.includes("select=*")) continue;
+      crmAjustesTableDisponible = false;
+      log("Tabla crm_ajustes_usuario no disponible — usando solo crm_usuarios");
+      return null;
+    }
+  }
+
+  return null;
+}
+
+async function fetchConexiones(usuarioId) {
+  const uid = encodeURIComponent(usuarioId);
+
+  const queries = [
+    {
+      label: "conexiones_full",
+      path: `conexiones_whatsapp?usuario_id=eq.${uid}&select=id,nombre,numero,phone_id,waba_id,token,pixel_id,capi_token,activo,estado,creado_en,actualizado_en&order=creado_en.desc`,
     },
-    meta: {
-      pixelId: ajustes?.meta_pixel_id || "",
-      pixelNombre: ajustes?.meta_pixel_nombre || "",
-      activo: Boolean(ajustes?.meta_activo),
-      capiTokenMasked: ajustes?.meta_capi_token ? maskSecret(ajustes.meta_capi_token) : null,
-      tieneCapiToken: Boolean(ajustes?.meta_capi_token),
+    {
+      label: "conexiones_sin_order",
+      path: `conexiones_whatsapp?usuario_id=eq.${uid}&select=id,nombre,numero,phone_id,token,pixel_id,capi_token,activo`,
     },
-    automatizacion: auto,
-    notificaciones: notif,
-    conexionesWhatsapp: (conexionesRes.data || []).map((r) => mapConexion(r)),
-    etiquetas: etiquetasRes.data || [],
+    {
+      label: "conexiones_min",
+      path: `conexiones_whatsapp?usuario_id=eq.${uid}&select=id,nombre,numero,phone_id,token,activo`,
+    },
+  ];
+
+  for (const q of queries) {
+    const { data, error } = await supabaseGet(q.path, q.label);
+    if (!error && Array.isArray(data)) {
+      return data.map(mapConexion).filter(Boolean);
+    }
+    if (error && !isMissingSchemaError({ response: { status: 400, data: { message: error } } })) {
+      break;
+    }
+  }
+
+  log("fetchConexiones: sin filas, devolviendo []", { usuarioId });
+  return [];
+}
+
+async function fetchEtiquetas(usuarioId) {
+  const uid = encodeURIComponent(usuarioId);
+
+  const queries = [
+    `etiquetas?usuario_id=eq.${uid}&select=id,nombre,color,creado_en&order=creado_en.asc`,
+    `etiquetas?usuario_id=eq.${uid}&select=id,nombre,color`,
+    `etiquetas?usuario_id=eq.${uid}&select=id,nombre,color,creado_en`,
+  ];
+
+  for (const path of queries) {
+    const { data, error } = await supabaseGet(path, "fetchEtiquetas");
+    if (!error && Array.isArray(data)) return data;
+  }
+
+  return [];
+}
+
+async function getAjustesCompleto(usuarioId, req, sessionUsuario) {
+  const warnings = [];
+
+  log("GET ajustes inicio", { usuarioId });
+
+  if (!usuarioId) {
+    log("GET ajustes: sin usuario_id en sesión");
+    return buildAjustesVacio(req, sessionUsuario, ["Sesión sin usuario_id"]);
+  }
+
+  let usuario = null;
+  let ajustes = null;
+  let conexiones = [];
+  let etiquetas = [];
+
+  try {
+    usuario = await fetchUsuario(usuarioId, sessionUsuario);
+  } catch (e) {
+    warnings.push(`usuario: ${e.message}`);
+    usuario = sessionUsuario || null;
+  }
+
+  try {
+    ajustes = await fetchAjustesRow(usuarioId);
+  } catch (e) {
+    warnings.push(`ajustes: ${e.message}`);
+    ajustes = null;
+  }
+
+  try {
+    conexiones = await fetchConexiones(usuarioId);
+  } catch (e) {
+    warnings.push(`conexiones: ${e.message}`);
+    conexiones = [];
+  }
+
+  try {
+    etiquetas = await fetchEtiquetas(usuarioId);
+  } catch (e) {
+    warnings.push(`etiquetas: ${e.message}`);
+    etiquetas = [];
+  }
+
+  const conexionActiva = conexiones.find((c) => c.activo) || conexiones[0] || null;
+  const metaAds = buildMetaAdsFromRow(ajustes, conexionActiva);
+
+  const payload = {
+    ok: true,
+    source: "supabase",
+    perfil: buildPerfil(usuario, ajustes, sessionUsuario),
+    conexiones,
+    conexionesWhatsapp: conexiones,
+    metaAds,
+    meta: metaAds,
+    automatizacion: { ...DEFAULT_AUTO, ...(ajustes?.automatizacion || {}) },
+    notificaciones: { ...DEFAULT_NOTIF, ...(ajustes?.notificaciones || {}) },
+    etiquetas,
     webhook: buildWebhookInfo(req),
     seguridad: {
       puedeCambiarPassword: true,
       ocultarTokens: true,
     },
   };
+
+  if (warnings.length) {
+    payload.warnings = warnings;
+    log("GET ajustes completado con advertencias", warnings);
+  } else {
+    log("GET ajustes OK", {
+      usuarioId,
+      conexiones: conexiones.length,
+      etiquetas: etiquetas.length,
+      tieneAjustesRow: Boolean(ajustes),
+    });
+  }
+
+  return payload;
 }
 
-async function patchPerfil(usuarioId, body) {
+async function upsertAjustes(usuarioId, patch) {
+  if (!crmAjustesTableDisponible) {
+    log("upsertAjustes omitido: tabla crm_ajustes_usuario no disponible");
+    return { ok: true, skipped: true };
+  }
+
+  const existing = await fetchAjustesRow(usuarioId);
+  const body = {
+    ...patch,
+    usuario_id: usuarioId,
+    actualizado_en: new Date().toISOString(),
+  };
+
+  try {
+    if (existing) {
+      await axios.patch(
+        `${SUPABASE_URL}/rest/v1/crm_ajustes_usuario?usuario_id=eq.${encodeURIComponent(usuarioId)}`,
+        body,
+        { headers: headers({ "Content-Type": "application/json", Prefer: "return=minimal" }) }
+      );
+    } else {
+      await axios.post(`${SUPABASE_URL}/rest/v1/crm_ajustes_usuario`, body, {
+        headers: headers({ "Content-Type": "application/json", Prefer: "return=minimal" }),
+      });
+    }
+    return { ok: true };
+  } catch (error) {
+    if (isMissingSchemaError(error)) {
+      crmAjustesTableDisponible = false;
+      log("upsertAjustes: tabla no disponible", supabaseErrorDetail(error));
+      return { ok: true, skipped: true };
+    }
+    throw error;
+  }
+}
+
+async function assertPhoneIdAvailable(phoneId, usuarioId, excludeId = null) {
+  if (!phoneId?.trim()) {
+    const err = new Error("Phone Number ID es obligatorio");
+    err.status = 400;
+    throw err;
+  }
+  const pid = encodeURIComponent(phoneId.trim());
+  const { data } = await supabaseGet(
+    `conexiones_whatsapp?phone_id=eq.${pid}&select=id,usuario_id`,
+    "assertPhoneId"
+  );
+  const conflict = (data || []).find(
+    (r) => r.usuario_id !== usuarioId && (!excludeId || r.id !== excludeId)
+  );
+  if (conflict) {
+    const err = new Error(
+      "Este Phone Number ID ya está registrado en otra cuenta."
+    );
+    err.status = 409;
+    throw err;
+  }
+}
+
+async function patchPerfil(usuarioId, body, sessionUsuario) {
   const { nombre, email, empresa, zonaHoraria, idioma } = body || {};
   const usuarioPatch = {};
   if (nombre !== undefined) usuarioPatch.nombre = String(nombre).trim();
   if (email !== undefined) usuarioPatch.email = String(email).trim().toLowerCase();
 
   if (Object.keys(usuarioPatch).length) {
-    await axios.patch(
-      `${SUPABASE_URL}/rest/v1/crm_usuarios?id=eq.${encodeURIComponent(usuarioId)}`,
-      usuarioPatch,
-      { headers: headers({ "Content-Type": "application/json", Prefer: "return=minimal" }) }
-    );
+    try {
+      await axios.patch(
+        `${SUPABASE_URL}/rest/v1/crm_usuarios?id=eq.${encodeURIComponent(usuarioId)}`,
+        usuarioPatch,
+        { headers: headers({ "Content-Type": "application/json", Prefer: "return=minimal" }) }
+      );
+    } catch (error) {
+      log("patchPerfil crm_usuarios:", supabaseErrorDetail(error));
+      throw error;
+    }
   }
 
   const ajustesPatch = {};
@@ -250,11 +481,8 @@ async function patchAjustesGenerales(usuarioId, body) {
 }
 
 async function listConexiones(usuarioId) {
-  const res = await axios.get(
-    `${SUPABASE_URL}/rest/v1/conexiones_whatsapp?usuario_id=eq.${encodeURIComponent(usuarioId)}&order=creado_en.desc&select=id,nombre,numero,phone_id,waba_id,token,activo,estado,creado_en,actualizado_en`,
-    { headers: headers() }
-  );
-  return { ok: true, conexiones: (res.data || []).map((r) => mapConexion(r)) };
+  const conexiones = await fetchConexiones(usuarioId);
+  return { ok: true, conexiones };
 }
 
 async function createConexion(usuarioId, body) {
@@ -281,43 +509,38 @@ async function createConexion(usuarioId, body) {
       `${SUPABASE_URL}/rest/v1/conexiones_whatsapp?usuario_id=eq.${encodeURIComponent(usuarioId)}`,
       { activo: false },
       { headers: headers({ "Content-Type": "application/json", Prefer: "return=minimal" }) }
-    );
+    ).catch((e) => log("createConexion desactivar otras:", supabaseErrorDetail(e)));
   }
 
-  const now = new Date().toISOString();
-  const res = await axios.post(
-    `${SUPABASE_URL}/rest/v1/conexiones_whatsapp`,
-    {
-      usuario_id: usuarioId,
-      nombre: nombre?.trim() || "WhatsApp",
-      numero: numero?.trim() || "",
-      token: accessToken.trim(),
-      phone_id: phoneNumberId.trim(),
-      waba_id: wabaId?.trim() || null,
-      activo: Boolean(activo),
-      estado: "conectado",
-      creado_en: now,
-      actualizado_en: now,
-    },
-    {
-      headers: headers({
-        "Content-Type": "application/json",
-        Prefer: "return=representation",
-      }),
-    }
-  );
+  const row = {
+    usuario_id: usuarioId,
+    nombre: nombre?.trim() || "WhatsApp",
+    numero: numero?.trim() || "",
+    token: accessToken.trim(),
+    phone_id: phoneNumberId.trim(),
+    activo: Boolean(activo),
+  };
 
-  const row = Array.isArray(res.data) ? res.data[0] : res.data;
-  return { ok: true, conexion: mapConexion(row) };
+  if (wabaId?.trim()) row.waba_id = wabaId.trim();
+
+  const res = await axios.post(`${SUPABASE_URL}/rest/v1/conexiones_whatsapp`, row, {
+    headers: headers({
+      "Content-Type": "application/json",
+      Prefer: "return=representation",
+    }),
+  });
+
+  const created = Array.isArray(res.data) ? res.data[0] : res.data;
+  return { ok: true, conexion: mapConexion(created) };
 }
 
 async function updateConexion(usuarioId, id, body) {
   const uid = encodeURIComponent(usuarioId);
-  const check = await axios.get(
-    `${SUPABASE_URL}/rest/v1/conexiones_whatsapp?id=eq.${encodeURIComponent(id)}&usuario_id=eq.${uid}&select=id,phone_id,token`,
-    { headers: headers() }
+  const { data: rows } = await supabaseGet(
+    `conexiones_whatsapp?id=eq.${encodeURIComponent(id)}&usuario_id=eq.${uid}&select=id,phone_id,token`,
+    "updateConexion_check"
   );
-  const existing = check.data?.[0];
+  const existing = rows?.[0];
   if (!existing) {
     const err = new Error("Conexión no encontrada");
     err.status = 404;
@@ -334,10 +557,10 @@ async function updateConexion(usuarioId, id, body) {
       `${SUPABASE_URL}/rest/v1/conexiones_whatsapp?usuario_id=eq.${uid}`,
       { activo: false },
       { headers: headers({ "Content-Type": "application/json", Prefer: "return=minimal" }) }
-    );
+    ).catch(() => {});
   }
 
-  const patch = { actualizado_en: new Date().toISOString() };
+  const patch = {};
   if (body.nombre !== undefined) patch.nombre = String(body.nombre).trim();
   if (body.numero !== undefined) patch.numero = String(body.numero).trim();
   if (body.phoneNumberId !== undefined) patch.phone_id = String(body.phoneNumberId).trim();
@@ -345,20 +568,19 @@ async function updateConexion(usuarioId, id, body) {
   if (body.activo !== undefined) patch.activo = Boolean(body.activo);
   if (body.accessToken && body.accessToken !== "__KEEP__") {
     patch.token = String(body.accessToken).trim();
-    patch.estado = "conectado";
   }
 
   await axios.patch(
     `${SUPABASE_URL}/rest/v1/conexiones_whatsapp?id=eq.${encodeURIComponent(id)}&usuario_id=eq.${uid}`,
     patch,
-    { headers: headers({ "Content-Type": "application/json", Prefer: "return=representation" }) }
+    { headers: headers({ "Content-Type": "application/json", Prefer: "return=minimal" }) }
   );
 
-  const res = await axios.get(
-    `${SUPABASE_URL}/rest/v1/conexiones_whatsapp?id=eq.${encodeURIComponent(id)}&select=id,nombre,numero,phone_id,waba_id,token,activo,estado,creado_en,actualizado_en`,
-    { headers: headers() }
+  const { data: updated } = await supabaseGet(
+    `conexiones_whatsapp?id=eq.${encodeURIComponent(id)}&select=id,nombre,numero,phone_id,token,activo`,
+    "updateConexion_read"
   );
-  return { ok: true, conexion: mapConexion(res.data?.[0]) };
+  return { ok: true, conexion: mapConexion(updated?.[0]) };
 }
 
 async function deleteConexion(usuarioId, id) {
@@ -370,11 +592,11 @@ async function deleteConexion(usuarioId, id) {
 }
 
 async function probarConexion(usuarioId, id, numeroPrueba) {
-  const res = await axios.get(
-    `${SUPABASE_URL}/rest/v1/conexiones_whatsapp?id=eq.${encodeURIComponent(id)}&usuario_id=eq.${encodeURIComponent(usuarioId)}&select=*`,
-    { headers: headers() }
+  const { data } = await supabaseGet(
+    `conexiones_whatsapp?id=eq.${encodeURIComponent(id)}&usuario_id=eq.${encodeURIComponent(usuarioId)}&select=*`,
+    "probarConexion"
   );
-  const conexion = res.data?.[0];
+  const conexion = data?.[0];
   if (!conexion?.token || !conexion?.phone_id) {
     const err = new Error("Conexión incompleta: falta token o Phone Number ID");
     err.status = 400;
@@ -393,9 +615,7 @@ async function probarConexion(usuarioId, id, numeroPrueba) {
     {
       messaging_product: "whatsapp",
       to,
-      text: {
-        body: "✅ MacBot: prueba de conexión WhatsApp API exitosa.",
-      },
+      text: { body: "✅ MacBot: prueba de conexión WhatsApp API exitosa." },
     },
     {
       headers: {
@@ -403,12 +623,6 @@ async function probarConexion(usuarioId, id, numeroPrueba) {
         "Content-Type": "application/json",
       },
     }
-  );
-
-  await axios.patch(
-    `${SUPABASE_URL}/rest/v1/conexiones_whatsapp?id=eq.${encodeURIComponent(id)}`,
-    { estado: "conectado", actualizado_en: new Date().toISOString() },
-    { headers: headers({ "Content-Type": "application/json", Prefer: "return=minimal" }) }
   );
 
   return { ok: true, mensaje: "Mensaje de prueba enviado correctamente" };
@@ -423,11 +637,7 @@ async function probarMetaEvento(usuarioId) {
   }
 
   const crypto = require("crypto");
-  const testPhone = "59170000000";
-  const telefonoHash = crypto
-    .createHash("sha256")
-    .update(testPhone)
-    .digest("hex");
+  const telefonoHash = crypto.createHash("sha256").update("59170000000").digest("hex");
 
   await axios.post(
     `https://graph.facebook.com/v19.0/${ajustes.meta_pixel_id}/events?access_token=${ajustes.meta_capi_token}`,
@@ -448,11 +658,8 @@ async function probarMetaEvento(usuarioId) {
 }
 
 async function listEtiquetas(usuarioId) {
-  const res = await axios.get(
-    `${SUPABASE_URL}/rest/v1/etiquetas?usuario_id=eq.${encodeURIComponent(usuarioId)}&order=creado_en.asc&select=id,nombre,color,creado_en`,
-    { headers: headers() }
-  );
-  return { ok: true, etiquetas: res.data || [] };
+  const etiquetas = await fetchEtiquetas(usuarioId);
+  return { ok: true, etiquetas };
 }
 
 async function createEtiqueta(usuarioId, body) {
@@ -464,11 +671,7 @@ async function createEtiqueta(usuarioId, body) {
   }
   const res = await axios.post(
     `${SUPABASE_URL}/rest/v1/etiquetas`,
-    {
-      nombre,
-      color: body?.color || "#22c55e",
-      usuario_id: usuarioId,
-    },
+    { nombre, color: body?.color || "#22c55e", usuario_id: usuarioId },
     {
       headers: headers({
         "Content-Type": "application/json",
@@ -488,14 +691,14 @@ async function updateEtiqueta(usuarioId, id, body) {
   await axios.patch(
     `${SUPABASE_URL}/rest/v1/etiquetas?id=eq.${encodeURIComponent(id)}&usuario_id=eq.${encodeURIComponent(usuarioId)}`,
     patch,
-    { headers: headers({ "Content-Type": "application/json", Prefer: "return=representation" }) }
+    { headers: headers({ "Content-Type": "application/json", Prefer: "return=minimal" }) }
   );
 
-  const res = await axios.get(
-    `${SUPABASE_URL}/rest/v1/etiquetas?id=eq.${encodeURIComponent(id)}&select=id,nombre,color,creado_en`,
-    { headers: headers() }
+  const { data } = await supabaseGet(
+    `etiquetas?id=eq.${encodeURIComponent(id)}&select=id,nombre,color`,
+    "updateEtiqueta_read"
   );
-  return { ok: true, etiqueta: res.data?.[0] };
+  return { ok: true, etiqueta: data?.[0] };
 }
 
 async function deleteEtiqueta(usuarioId, id) {
@@ -513,12 +716,11 @@ async function cambiarPassword(usuarioId, actual, nueva) {
     throw err;
   }
 
-  const usuario = await fetchUsuario(usuarioId);
-  const full = await axios.get(
-    `${SUPABASE_URL}/rest/v1/crm_usuarios?id=eq.${encodeURIComponent(usuarioId)}&select=password_hash`,
-    { headers: headers() }
+  const { data } = await supabaseGet(
+    `crm_usuarios?id=eq.${encodeURIComponent(usuarioId)}&select=password_hash`,
+    "cambiarPassword"
   );
-  const hash = full.data?.[0]?.password_hash;
+  const hash = data?.[0]?.password_hash;
   if (!hash) {
     const err = new Error("No se puede cambiar la contraseña para este usuario");
     err.status = 400;
@@ -544,6 +746,7 @@ async function cambiarPassword(usuarioId, actual, nueva) {
 
 module.exports = {
   getAjustesCompleto,
+  buildAjustesVacio,
   patchPerfil,
   patchAjustesGenerales,
   listConexiones,
