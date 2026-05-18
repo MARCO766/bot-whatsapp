@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { clientesStyles } from "./clientes/styles";
 import { useClientes } from "./clientes/useClientes";
 import LeadProfile from "./clientes/LeadProfile";
-import { loginUrl, fetchFlujos } from "./clientes/api";
+import { loginUrl, fetchFlujos, normalizeClienteNumero } from "./clientes/api";
 
 function fmtRel(iso) {
   if (!iso) return "—";
@@ -81,9 +81,14 @@ function NewLeadModal({ open, onClose, onSave, saving }) {
   );
 }
 
+function openLead(onOpen, c) {
+  const n = normalizeClienteNumero(c?.numero);
+  if (n) onOpen(n);
+}
+
 function LeadRow({ c, onOpen }) {
   return (
-    <tr onClick={() => onOpen(c.numero)}>
+    <tr onClick={() => openLead(onOpen, c)}>
       <td>
         <div className="crmUserCell">
           <div className="crmAvatar">{(c.nombre || "?").charAt(0)}</div>
@@ -108,7 +113,14 @@ function LeadRow({ c, onOpen }) {
       <td>{c.fuente}</td>
       <td><span className="crmScore">{c.scoreEmoji}</span></td>
       <td>
-        <button type="button" className="crmBtn crmBtnGhost" onClick={(e) => { e.stopPropagation(); onOpen(c.numero); }}>
+        <button
+          type="button"
+          className="crmBtn crmBtnGhost"
+          onClick={(e) => {
+            e.stopPropagation();
+            openLead(onOpen, c);
+          }}
+        >
           Ver
         </button>
       </td>
@@ -118,7 +130,7 @@ function LeadRow({ c, onOpen }) {
 
 function LeadCard({ c, onOpen }) {
   return (
-    <div className="crmLeadCard" onClick={() => onOpen(c.numero)}>
+    <div className="crmLeadCard" onClick={() => openLead(onOpen, c)}>
       <div className="crmLeadCardHead">
         <div className="crmAvatar">{(c.nombre || "?").charAt(0)}</div>
         <div style={{ flex: 1 }}>
@@ -326,7 +338,7 @@ export default function Clientes({ cambiarVista }) {
                   className="crmKanbanCard"
                   draggable
                   onDragStart={() => setDragNumero(c.numero)}
-                  onClick={() => crm.openPerfil(c.numero)}
+                  onClick={() => openLead(crm.openPerfil, c)}
                 >
                   <strong>{c.nombre}</strong>
                   <p style={{ margin: "4px 0", fontSize: 12, color: "#94a3b8" }}>{c.numero}</p>

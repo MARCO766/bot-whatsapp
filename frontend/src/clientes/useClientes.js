@@ -7,6 +7,7 @@ import {
   fetchMeta,
   fetchCliente,
   fetchTimeline,
+  normalizeClienteNumero,
   createCliente,
   updateCliente,
   patchEmbudo,
@@ -136,19 +137,33 @@ export function useClientes() {
   useSocketEvent(RT.CONVERSION_REGISTRADA, reloadLive);
 
   const openPerfil = useCallback(async (numero) => {
-    setPerfilNumero(numero);
+    const n = normalizeClienteNumero(numero);
+    if (!n) {
+      showToast("Número de cliente inválido", "error");
+      return;
+    }
+
+    setPerfilNumero(n);
     setPerfilLoading(true);
     setTimeline([]);
+    setPerfil(null);
     try {
       const [det, tl] = await Promise.all([
-        fetchCliente(numero),
-        fetchTimeline(numero, 0),
+        fetchCliente(n),
+        fetchTimeline(n, 0).catch(() => ({ ok: true, timeline: [] })),
       ]);
       setPerfil(det);
-      setTimeline(tl.timeline || []);
+      setTimeline(tl?.timeline || []);
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Error cargando perfil", "error");
+      const msg =
+        err instanceof ApiError
+          ? err.message
+          : err?.message?.includes("400")
+            ? "No se pudo cargar el perfil del cliente"
+            : "Error cargando perfil";
+      showToast(msg, "error");
       setPerfilNumero(null);
+      setPerfil(null);
     } finally {
       setPerfilLoading(false);
     }

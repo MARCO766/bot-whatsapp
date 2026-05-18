@@ -41,6 +41,22 @@ const FUENTES_VALIDAS = [
 const CLIENTE_SELECT =
   "id,numero,nombre,estado,estado_embudo,score,notas,fuente,pais,archivado,creado_en,ultima_actividad,total_gastado,usuario_id";
 
+const CLIENTE_SELECT_MIN =
+  "id,numero,nombre,estado,creado_en,usuario_id";
+
+/** Solo dígitos; vacío si no hay número válido. */
+function normalizeNumero(raw) {
+  if (raw == null || raw === undefined) return "";
+  const s = String(raw).trim();
+  if (!s || s === "undefined" || s === "null") return "";
+  const digits = s.replace(/\D/g, "");
+  return digits || s;
+}
+
+function isBadRequestError(err) {
+  return err?.response?.status === 400 || isSchemaMissingError(err);
+}
+
 function headers(extra = {}) {
   return {
     apikey: SUPABASE_KEY,
@@ -102,6 +118,38 @@ async function supabaseGet(path, { schemaFallback = false } = {}) {
 async function getConversionesRows(usuarioId, extraQuery = "") {
   const q = `crm_conversiones?usuario_id=eq.${uidEnc(usuarioId)}${extraQuery}`;
   return supabaseGet(q, { schemaFallback: true });
+}
+
+/** GET con fallback: columnas/tablas opcionales → [] sin romper perfil. */
+async function supabaseGetSafe(path, fallback = []) {
+  try {
+    return await supabaseGet(path, { schemaFallback: true });
+  } catch (err) {
+    if (isBadRequestError(err)) {
+      log("supabaseGetSafe:", path.split("?")[0], err.response?.data?.message || err.message);
+      return fallback;
+    }
+    throw err;
+  }
+}
+
+/** Busca fila en clientes por columna `numero` (WhatsApp). */
+async function fetchClienteRow(usuarioId, numero) {
+  const n = normalizeNumero(numero);
+  if (!n) return null;
+
+  const base = `clientes?usuario_id=eq.${uidEnc(usuarioId)}&numero=eq.${encodeURIComponent(n)}`;
+
+  try {
+    const rows = await supabaseGet(`${base}&select=${CLIENTE_SELECT}`);
+    if (rows[0]) return rows[0];
+  } catch (err) {
+    if (!isBadRequestError(err)) throw err;
+    log("fetchClienteRow fallback select mínimo:", err.response?.data?.message || err.message);
+  }
+
+  const rowsMin = await supabaseGet(`${base}&select=${CLIENTE_SELECT_MIN}`);
+  return rowsMin[0] || null;
 }
 
 async function supabasePost(table, body, prefer = "return=representation") {
@@ -512,40 +560,56 @@ async function getKanban(usuarioId) {
 }
 
 async function getCliente(usuarioId, numero) {
-  const rows = await supabaseGet(
-    `clientes?usuario_id=eq.${uidEnc(usuarioId)}&numero=eq.${encodeURIComponent(numero)}&select=${CLIENTE_SELECT}`
-  );
-  const row = rows[0];
+  const n = normalizeNumero(numero);
+  if (!n) {
+    const err = new Error("Número de cliente inválido");
+    err.status = 400;
+    throw err;
+  }
+
+  const row = await fetchClienteRow(usuarioId, n);
   if (!row) {
-    const err = new Error("Cliente no encontrado");
+    const err = new Error(`Cliente no encontrado (${n})`);
     err.status = 404;
     throw err;
   }
 
+  const numEnc = encodeURIComponent(n);
+  const msgBase = `mensajes?usuario_id=eq.${uidEnc(usuarioId)}&cliente_numero=eq.${numEnc}`;
+
   const [etiquetas, conversiones, conversaciones, mensajes, historial, seguimientos] =
     await Promise.all([
-      fetchEtiquetasMap(usuarioId),
-      fetchConversionesMap(usuarioId),
-      fetchConversacionesMap(usuarioId),
-      supabaseGet(
-        `mensajes?usuario_id=eq.${uidEnc(usuarioId)}&cliente_numero=eq.${encodeURIComponent(numero)}&select=direccion,contenido,tipo,creado_en,imagen_url&order=creado_en.desc&limit=50`
+      fetchEtiquetasMap(usuarioId).catch(() => ({})),
+      fetchConversionesMap(usuarioId).catch(() => ({})),
+      fetchConversacionesMap(usuarioId).catch(() => ({})),
+      (async () => {
+        try {
+          return await supabaseGet(
+            `${msgBase}&select=direccion,contenido,tipo,creado_en,imagen_url&order=creado_en.desc&limit=50`
+          );
+        } catch (err) {
+          if (!isBadRequestError(err)) throw err;
+          return supabaseGetSafe(
+            `${msgBase}&select=direccion,contenido,creado_en&order=creado_en.desc&limit=50`
+          );
+        }
+      })(),
+      supabaseGetSafe(
+        `crm_historial_cliente?usuario_id=eq.${uidEnc(usuarioId)}&cliente_numero=eq.${numEnc}&select=*&order=creado_en.desc&limit=30`
       ),
-      supabaseGet(
-        `crm_historial_cliente?usuario_id=eq.${uidEnc(usuarioId)}&cliente_numero=eq.${encodeURIComponent(numero)}&select=*&order=creado_en.desc&limit=30`
-      ).catch(() => []),
-      supabaseGet(
-        `seguimientos_programados?usuario_id=eq.${uidEnc(usuarioId)}&cliente_numero=eq.${encodeURIComponent(numero)}&select=id,run_at,estado,mensaje_tipo,mensaje_payload,creado_en&order=run_at.desc&limit=20`
-      ).catch(() => []),
+      supabaseGetSafe(
+        `seguimientos_programados?usuario_id=eq.${uidEnc(usuarioId)}&cliente_numero=eq.${numEnc}&select=id,run_at,estado,mensaje_tipo,mensaje_payload,creado_en&order=run_at.desc&limit=20`
+      ),
     ]);
 
   const ctx = {
     etiquetas,
     conversiones,
     conversaciones,
-    mensajes: { [numero]: mensajes },
+    mensajes: { [n]: mensajes },
   };
   const lead = enrichCliente(row, ctx);
-  const convData = conversiones[numero] || { count: 0, total: 0 };
+  const convData = conversiones[n] || { count: 0, total: 0 };
 
   const entrantes = mensajes.filter((m) => m.direccion === "entrante").length;
   const salientes = mensajes.filter((m) => m.direccion === "saliente").length;
@@ -581,7 +645,7 @@ async function getCliente(usuarioId, numero) {
     metricas: {
       totalCompras: convData.count,
       ingresos: lead.totalGastado,
-      conversaciones: conversaciones[numero] ? 1 : 0,
+      conversaciones: conversaciones[n] ? 1 : 0,
       tiempoRespuestaMin,
       tasaRespuesta,
       seguimientosEnviados: seguimientos.filter((s) => s.estado === "enviado")
@@ -594,23 +658,42 @@ async function getCliente(usuarioId, numero) {
 }
 
 async function getTimeline(usuarioId, numero, { limit = 40, offset = 0 } = {}) {
+  const n = normalizeNumero(numero);
+  if (!n) {
+    return { ok: true, timeline: [], limit: 40, offset: 0 };
+  }
+
   const take = Math.min(80, Math.max(10, limit));
   const skip = Math.max(0, offset);
+  const numEnc = encodeURIComponent(n);
+  const msgBase = `mensajes?usuario_id=eq.${uidEnc(usuarioId)}&cliente_numero=eq.${numEnc}`;
 
-  const [mensajes, conversiones, historial, seguimientos] = await Promise.all([
-    supabaseGet(
-      `mensajes?usuario_id=eq.${uidEnc(usuarioId)}&cliente_numero=eq.${encodeURIComponent(numero)}&select=id,direccion,tipo,contenido,imagen_url,creado_en,flujo_id&order=creado_en.desc&limit=${take}&offset=${skip}`
-    ),
+  let mensajes = [];
+  try {
+    mensajes = await supabaseGet(
+      `${msgBase}&select=id,direccion,tipo,contenido,imagen_url,creado_en,flujo_id&order=creado_en.desc&limit=${take}&offset=${skip}`
+    );
+  } catch (err) {
+    if (isBadRequestError(err)) {
+      mensajes = await supabaseGetSafe(
+        `${msgBase}&select=id,direccion,tipo,contenido,imagen_url,creado_en&order=creado_en.desc&limit=${take}&offset=${skip}`
+      );
+    } else {
+      throw err;
+    }
+  }
+
+  const [conversiones, historial, seguimientos] = await Promise.all([
     getConversionesRows(
       usuarioId,
-      `&cliente_numero=eq.${encodeURIComponent(numero)}&select=id,valor,moneda,origen,creado_en&order=creado_en.desc&limit=20`
+      `&cliente_numero=eq.${numEnc}&select=id,valor,moneda,origen,creado_en&order=creado_en.desc&limit=20`
     ),
-    supabaseGet(
-      `crm_historial_cliente?usuario_id=eq.${uidEnc(usuarioId)}&cliente_numero=eq.${encodeURIComponent(numero)}&select=*&order=creado_en.desc&limit=30`
-    ).catch(() => []),
-    supabaseGet(
-      `seguimientos_programados?usuario_id=eq.${uidEnc(usuarioId)}&cliente_numero=eq.${encodeURIComponent(numero)}&select=id,run_at,estado,mensaje_payload,creado_en,enviado_en&order=creado_en.desc&limit=20`
-    ).catch(() => []),
+    supabaseGetSafe(
+      `crm_historial_cliente?usuario_id=eq.${uidEnc(usuarioId)}&cliente_numero=eq.${numEnc}&select=*&order=creado_en.desc&limit=30`
+    ),
+    supabaseGetSafe(
+      `seguimientos_programados?usuario_id=eq.${uidEnc(usuarioId)}&cliente_numero=eq.${numEnc}&select=id,run_at,estado,mensaje_payload,creado_en,enviado_en&order=creado_en.desc&limit=20`
+    ),
   ]);
 
   const events = [];
@@ -999,6 +1082,7 @@ module.exports = {
   listFlujos,
   getMetaFilters,
   recalcScores,
+  normalizeNumero,
   EMBUDOS,
   KANBAN_COLUMNAS,
 };

@@ -25,6 +25,7 @@ const {
   cancelarSeguimientos,
   listFlujos,
   getMetaFilters,
+  normalizeNumero,
 } = require("../services/clientesService");
 const rt = require("../services/realtimeService");
 
@@ -202,9 +203,47 @@ router.post("/:numero/flujo", protegerApi, async (req, res) => {
 });
 
 router.get("/:numero", protegerApi, async (req, res) => {
+  const raw = req.params.numero;
+  console.log("[clientesApi] perfil numero recibido:", raw);
+
+  let decoded = raw;
   try {
-    res.json(await getCliente(uid(req), req.params.numero));
+    decoded = decodeURIComponent(String(raw || ""));
+  } catch {
+    decoded = String(raw || "");
+  }
+
+  const numero = normalizeNumero(decoded);
+  if (!numero) {
+    console.log("[clientesApi] error perfil: número vacío o inválido");
+    return res.status(400).json({
+      ok: false,
+      error: "Número de cliente inválido",
+    });
+  }
+
+  try {
+    const result = await getCliente(uid(req), numero);
+    console.log("[clientesApi] cliente encontrado:", result?.cliente?.numero || numero);
+    res.json(result);
   } catch (error) {
+    console.log(
+      "[clientesApi] error perfil:",
+      error.message,
+      error.response?.data || ""
+    );
+    if (error.status === 404) {
+      return res.status(404).json({
+        ok: false,
+        error: error.message || "Cliente no encontrado",
+      });
+    }
+    if (error.status === 400) {
+      return res.status(400).json({
+        ok: false,
+        error: error.message || "Solicitud inválida",
+      });
+    }
     handleError(res, error, "get");
   }
 });

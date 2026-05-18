@@ -56,13 +56,32 @@ export function fetchKanban() {
   return request("/api/clientes/kanban");
 }
 
+/** Solo dígitos; mismo criterio que el backend. */
+export function normalizeClienteNumero(numero) {
+  if (numero == null || numero === undefined) return "";
+  const s = String(numero).trim();
+  if (!s || s === "undefined" || s === "null") return "";
+  const digits = s.replace(/\D/g, "");
+  return digits || "";
+}
+
 export function fetchCliente(numero) {
-  return request(`/api/clientes/${encodeURIComponent(numero)}`);
+  const n = normalizeClienteNumero(numero);
+  if (!n) {
+    return Promise.reject(
+      new ApiError("Número de cliente inválido", "INVALID", 400)
+    );
+  }
+  return request(`/api/clientes/${encodeURIComponent(n)}`);
 }
 
 export function fetchTimeline(numero, offset = 0) {
+  const n = normalizeClienteNumero(numero);
+  if (!n) {
+    return Promise.resolve({ ok: true, timeline: [] });
+  }
   return request(
-    `/api/clientes/${encodeURIComponent(numero)}/timeline?limit=40&offset=${offset}`
+    `/api/clientes/${encodeURIComponent(n)}/timeline?limit=40&offset=${offset}`
   );
 }
 
