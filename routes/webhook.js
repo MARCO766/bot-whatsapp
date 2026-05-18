@@ -152,6 +152,8 @@ if (message.type === "text") {
   text = message.text.body;
 }
 
+console.log("📩 MENSAJE ENTRANTE:", text, from);
+
 await axios.post(
   `${SUPABASE_URL}/rest/v1/clientes?on_conflict=numero`,
   {
@@ -501,19 +503,29 @@ if (message.type === "interactive" && message.interactive?.button_reply) {
 
 await enviarEventoMeta(usuarioIdWebhook, "Lead", from);
 
-
-await cancelarSeguimientosPorRespuesta(from, usuarioIdWebhook, io);
+try {
+  await cancelarSeguimientosPorRespuesta(from, usuarioIdWebhook, req);
+} catch (cancelErr) {
+  console.log("[WEBHOOK] cancelar seguimientos:", cancelErr.message);
+}
 
 const textoParaActivador =
   message.type === "text" && message.text?.body
     ? message.text.body
     : text;
-await buscarYEjecutarActivador(
+
+console.log("🔎 ACTIVADOR — texto:", textoParaActivador, "| usuario:", usuarioIdWebhook);
+
+const activadorEjecutado = await buscarYEjecutarActivador(
   from,
   textoParaActivador,
   usuarioIdWebhook,
   message.id
 );
+
+if (!activadorEjecutado) {
+  console.log("⚠️ ACTIVADOR — no se encontró coincidencia para:", textoParaActivador);
+}
 
 return res.sendStatus(200);
 

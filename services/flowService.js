@@ -108,6 +108,7 @@ async function ejecutarContenidoNodo(numero, nodo, usuarioId) {
 
     for (const item of varianteElegida) {
       if (item.tipo === "texto") {
+        console.log("📤 MENSAJE ENVIADO (contenido):", item.valor);
         await enviarTextoWhatsApp(numero, item.valor, { usuarioId });
       }
 
@@ -323,6 +324,7 @@ console.log("📦 TODAS LAS ACCIONES DEL NODO:", acciones);
 
     for (const accion of acciones) {
       if (accion.tipo === "texto") {
+        console.log("📤 MENSAJE ENVIADO (nodo):", accion.valor);
         await enviarTextoWhatsApp(numero, accion.valor, {
   usuarioId
 });
@@ -417,6 +419,29 @@ const {
   matchActivador,
   sortActivadores,
 } = require("./activadorUtils");
+const { resolveEstado } = require("./flujosMetricsService");
+
+function normalizarTextoActivador(texto) {
+  return String(texto || "")
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+function obtenerDatosFlujo(flujo) {
+  if (!flujo) return null;
+  return flujo.data || flujo.datos || null;
+}
+
+function flujoEstaActivo(flujo) {
+  const datos = obtenerDatosFlujo(flujo);
+  if (!datos) return false;
+  const meta = datos.macbot_meta;
+  if (meta && typeof meta.estado === "string") {
+    return meta.estado === "activo";
+  }
+  return Array.isArray(datos.nodos) && datos.nodos.length > 0;
+}
 
 async function registrarUsoActivador(activador) {
   const veces = (Number(activador.veces_usado) || 0) + 1;
@@ -438,10 +463,18 @@ async function registrarUsoActivador(activador) {
 }
 
 async function buscarYEjecutarActivador(numero, textoCliente, usuarioId = null, messageId = null) {
-  if (!textoCliente || !usuarioId) return false;
+  if (!textoCliente || !usuarioId) {
+    console.log("⚠️ ACTIVADOR — omitido (sin texto o sin usuario_id):", {
+      texto: textoCliente,
+      usuarioId,
+    });
+    return false;
+  }
 
-  const textoNorm = String(textoCliente).toLowerCase().trim();
+  const textoNorm = normalizarTextoActivador(textoCliente);
   if (!textoNorm) return false;
+
+  console.log("🔎 BUSCANDO ACTIVADOR:", textoNorm, "| numero:", numero, "| usuario:", usuarioId);
 
   let activadores = [];
   try {
@@ -469,7 +502,10 @@ async function buscarYEjecutarActivador(numero, textoCliente, usuarioId = null, 
     }));
   }
 
-  if (!activadores.length) return false;
+  if (!activadores.length) {
+    console.log("⚠️ ACTIVADOR — ningún activador activo para usuario:", usuarioId);
+    return false;
+  }
 
   const ordenados = sortActivadores(activadores);
   let activador = null;
@@ -484,7 +520,24 @@ async function buscarYEjecutarActivador(numero, textoCliente, usuarioId = null, 
     }
   }
 
-  if (!activador || !matchInfo) return false;
+  if (!activador || !matchInfo) {
+    console.log("⚠️ ACTIVADOR — no encontrado para texto:", textoNorm);
+    return false;
+  }
+
+  console.log("✅ ACTIVADOR ENCONTRADO:", {
+    id: activador.id,
+    frase: activador.frase,
+    flujo_id: activador.flujo_id,
+    tipo: matchInfo.tipo,
+    detalle: matchInfo.detalle,
+  });
+
+  const flowId = activador.flujo_id;
+  if (!flowId || flowId === "undefined" || flowId === "null") {
+    console.error("❌ Flow ID inválido:", flowId);
+    return false;
+  }
 
   if (matchInfo.tipo === TIPOS.CUALQUIER) {
     console.log(
@@ -512,19 +565,31 @@ async function buscarYEjecutarActivador(numero, textoCliente, usuarioId = null, 
   }
 
   const responseFlujo = await axios.get(
-    `${SUPABASE_URL}/rest/v1/flujos_builder?id=eq.${activador.flujo_id}&usuario_id=eq.${usuarioId}&select=*`,
+    `${SUPABASE_URL}/rest/v1/flujos_builder?id=eq.${flowId}&usuario_id=eq.${usuarioId}&select=*`,
     { headers: supabaseHeaders() }
   );
 
   const flujo = responseFlujo.data?.[0];
-  if (!flujo || !flujo.data) {
-    console.log("[ACTIVADOR] flujo no encontrado o vacío:", activador.flujo_id);
+  const flujoDatos = obtenerDatosFlujo(flujo);
+
+  if (!flujo || !flujoDatos) {
+    console.log("⚠️ FLUJO — no encontrado o sin datos:", flowId);
     return false;
   }
 
-  console.log("[ACTIVADOR] flujo ejecutado:", flujo.id, "| nombre:", flujo.nombre || "—");
+  if (!flujoEstaActivo(flujo)) {
+    console.log(
+      "⚠️ FLUJO — pausado/inactivo:",
+      flujo.nombre || flowId,
+      "| estado:",
+      resolveEstado(flujoDatos)
+    );
+    return false;
+  }
 
-  await ejecutarFlujo(numero, flujo.data, usuarioId, flujo.id, {
+  console.log("✅ FLUJO ENCONTRADO:", flujo.nombre || "—", "| id:", flujo.id);
+
+  await ejecutarFlujo(numero, flujoDatos, usuarioId, flujo.id, {
     ultimoMensaje: textoCliente,
   });
   await registrarUsoActivador(activador);
