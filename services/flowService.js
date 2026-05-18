@@ -9,9 +9,10 @@ const {
   parseConversionFromNodo,
 } = require("./conversionService");
 const {
-  ejecutarIANodo,
+  ejecutarNodoIA,
   enriquecerContextoFlujo,
 } = require("./aiService");
+const { esTipoIA, resolverTipoRaw } = require("./seguimiento/detectarTipoNodo");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
@@ -171,7 +172,7 @@ async function ejecutarFlujo(
   const nodos = flujoData.nodos;
   const conexiones = normalizarConexionesFlujo(flujoData.conexiones);
 
-  const flowContext = {
+  let flowContext = {
     numero,
     telefono: numero,
     nombre: opts.nombre || "",
@@ -193,13 +194,40 @@ async function ejecutarFlujo(
     console.log("[FLUJO] Conexiones encontradas:", JSON.stringify(conexiones));
   }
 
+  function logConexionesSalientes(nodoId, etiqueta) {
+    const salientes = conexiones.filter(
+      (c) =>
+        c.desde === nodoId ||
+        c.from === nodoId ||
+        c.source === nodoId ||
+        c.sourceNode === nodoId
+    );
+    if (!salientes.length && (etiqueta === "ia" || etiqueta === "IA")) {
+      console.warn("⚠️ Nodo IA sin conexión saliente");
+      return;
+    }
+    salientes.forEach((c) => {
+      const siguienteNodoId =
+        c.hasta || c.to || c.target || c.targetNode || c.target_node_id;
+      console.log("🔗 Siguiente conexión desde", etiqueta || nodoId + ":", c);
+      console.log("➡️ Siguiente nodo después de", etiqueta || nodoId + ":", siguienteNodoId);
+    });
+  }
+
   async function continuarASiguientes(nodoId, visitados, etiqueta) {
     const siguientes = obtenerSiguientesNodos(conexiones, nodoId);
     const ids = siguientes.map((s) => s.hasta);
 
     if (!ids.length) {
       console.log("[FLUJO] Sin siguiente nodo:", nodoId, etiqueta ? "(" + etiqueta + ")" : "");
+      if (etiqueta === "ia") {
+        console.warn("⚠️ Nodo IA sin conexión saliente");
+      }
       return;
+    }
+
+    if (etiqueta === "ia") {
+      logConexionesSalientes(nodoId, "IA");
     }
 
     console.log(
@@ -232,6 +260,17 @@ async function ejecutarFlujo(
     const html = nodo.html || "";
     const tipoNodo = detectarTipoNodo(nodo);
 
+    console.log("➡️ NODO ACTUAL:", {
+      id: nodo.id,
+      type: nodo.type,
+      tipo: nodo.tipo,
+      tipoDetectado: tipoNodo,
+      dataType: nodo.data?.type,
+      label: nodo.data?.label,
+      className: nodo.className,
+      tipoRaw: resolverTipoRaw(nodo),
+      esIA: esTipoIA(nodo),
+    });
     console.log("[FLUJO] Nodo actual:", nodoId, "| tipo:", tipoNodo);
 
     if (tipoNodo === "inicio") {
@@ -284,16 +323,19 @@ async function ejecutarFlujo(
       }
     }
 
-    if (tipoNodo === "ia") {
-      const { continuar } = await ejecutarIANodo({
+    if (tipoNodo === "ia" || esTipoIA(nodo)) {
+      flowContext = await ejecutarNodoIA(nodo, {
+        ...flowContext,
         numero,
-        nodo,
+        from: numero,
+        telefono: numero,
         usuarioId,
-        flowContext,
+        mensaje: flowContext.ultimo_mensaje || flowContext.ultimoMensaje || "",
+        texto: flowContext.ultimo_mensaje || flowContext.ultimoMensaje || "",
+        body: flowContext.ultimo_mensaje || flowContext.ultimoMensaje || "",
       });
-      if (continuar) {
-        await continuarASiguientes(nodoId, visitados, "ia");
-      }
+      logConexionesSalientes(nodoId, "IA");
+      await continuarASiguientes(nodoId, visitados, "ia");
       return;
     }
 

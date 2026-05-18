@@ -632,6 +632,100 @@ function guardarResultadoEnContexto(flowContext, config, resultado) {
   flowContext.ai.proveedor = config.proveedorIA || "automatico";
 }
 
+function respuestaIARapidaPorMensaje(mensajeLead) {
+  const m = normalizeText(mensajeLead);
+  if (!m) return "";
+  if (
+    m.includes("precio") ||
+    m.includes("cuanto") ||
+    m.includes("cuesta") ||
+    m.includes("valor")
+  ) {
+    return "Claro 😊 te paso la información del precio.";
+  }
+  if (m.includes("hola") || m.includes("buenas") || m.includes("info")) {
+    return "Hola 😊 claro, te paso más información.";
+  }
+  if (m.includes("comprar") || m.includes("quiero") || m.includes("me interesa")) {
+    return "Perfecto 😊 te ayudo con tu compra.";
+  }
+  if (m.includes("pague") || m.includes("pagué") || m.includes("comprobante")) {
+    return "Gracias 😊 envíame tu comprobante para verificarlo.";
+  }
+  return "Entiendo 😊 te ayudo con la información.";
+}
+
+function resolverTextoRespuestaIA(config, ctx, resultado) {
+  if (config.modo === "responder_automatico" && resultado?.tipo === "reply") {
+    return resultado.valor || "";
+  }
+
+  if (config.modo === "detectar_intencion" && resultado?.tipo === "intent") {
+    const intent = resultado.valor || "desconocido";
+    ctx.intent = intent;
+    let texto = responderAutomaticoLocal(config, ctx, intent);
+    if (!texto) {
+      texto = respuestaIARapidaPorMensaje(ctx.ultimo_mensaje);
+    }
+    return texto;
+  }
+
+  if (config.modo === "clasificar_lead" && resultado?.tipo === "score") {
+    ctx.score = resultado.valor;
+    const intent =
+      ctx.intent || ctx.ai?.intent || detectarIntencionLocal(ctx.ultimo_mensaje, config.reglas);
+    let texto = responderAutomaticoLocal(config, ctx, intent);
+    if (!texto) {
+      texto = respuestaIARapidaPorMensaje(ctx.ultimo_mensaje);
+    }
+    return texto;
+  }
+
+  return "";
+}
+
+async function ejecutarNodoIA(nodo, contexto) {
+  const numero = contexto?.numero || contexto?.from || contexto?.telefono;
+  const usuarioId = contexto?.usuarioId || null;
+
+  console.log("🤖✅ NODO IA EJECUTADO");
+
+  const mensajeLead = String(
+    contexto?.mensaje ||
+      contexto?.texto ||
+      contexto?.body ||
+      contexto?.ultimo_mensaje ||
+      contexto?.ultimoMensaje ||
+      ""
+  )
+    .toLowerCase()
+    .trim();
+
+  console.log("📩 Mensaje recibido por IA:", mensajeLead);
+  console.log("📲 Número IA:", numero);
+  console.log("⚙️ Config IA (nodo):", parseIAFromNodo(nodo));
+
+  const result = await ejecutarIANodo({
+    numero,
+    nodo,
+    usuarioId,
+    flowContext: {
+      ...contexto,
+      numero,
+      telefono: numero,
+      ultimo_mensaje: mensajeLead || contexto?.ultimo_mensaje || "",
+    },
+  });
+
+  return {
+    ...contexto,
+    ultimaRespuestaIA: result.respuestaEnviada || "",
+    iaEjecutada: true,
+    intent: result.intent || contexto?.intent,
+    score: result.score || contexto?.score,
+  };
+}
+
 async function ejecutarIANodo({ numero, nodo, usuarioId, flowContext }) {
   const config = parseIAFromNodo(nodo);
   const ctx = flowContext || {
@@ -644,16 +738,42 @@ async function ejecutarIANodo({ numero, nodo, usuarioId, flowContext }) {
     ai: {},
   };
 
+  if (!ctx.ultimo_mensaje && ctx.ultimoMensaje) {
+    ctx.ultimo_mensaje = ctx.ultimoMensaje;
+  }
+
   try {
     const ejec = await ejecutarModoIA(config, ctx);
     guardarResultadoEnContexto(ctx, config, ejec.resultado);
 
-    if (config.modo === "responder_automatico" && ejec.resultado.valor) {
-      await enviarTextoWhatsApp(numero, ejec.resultado.valor, { usuarioId });
+    let textoEnviar = resolverTextoRespuestaIA(config, ctx, ejec.resultado);
+    if (!textoEnviar?.trim()) {
+      textoEnviar = interpolarVariables(config.mensajeFallback, ctx).trim();
+    }
+    if (!textoEnviar?.trim()) {
+      textoEnviar = respuestaIARapidaPorMensaje(ctx.ultimo_mensaje);
+    }
+
+    console.log("🤖 Respuesta IA generada:", textoEnviar);
+
+    let respuestaEnviada = "";
+    if (textoEnviar && numero) {
+      await enviarTextoWhatsApp(numero, textoEnviar, { usuarioId });
+      respuestaEnviada = textoEnviar;
+      console.log("✅ IA respondió por WhatsApp");
+    } else if (!numero) {
+      console.error("❌ IA no puede responder porque no hay número:", ctx);
     }
 
     if (!ejec.ok && config.siFalla === "detener") {
-      return { ok: false, continuar: false, error: ejec.error };
+      return {
+        ok: false,
+        continuar: false,
+        error: ejec.error,
+        respuestaEnviada,
+        intent: ctx.intent,
+        score: ctx.score,
+      };
     }
 
     return {
@@ -661,24 +781,50 @@ async function ejecutarIANodo({ numero, nodo, usuarioId, flowContext }) {
       continuar: true,
       resultado: ejec.resultado,
       motor: ejec.motor,
+      respuestaEnviada,
+      intent: ctx.intent,
+      score: ctx.score,
     };
   } catch (err) {
     console.log("[IA] error fatal:", err.message);
     const fb = fallbackResultado(config, ctx);
     guardarResultadoEnContexto(ctx, config, fb);
 
-    if (config.modo === "responder_automatico" && fb.valor) {
+    let textoEnviar = resolverTextoRespuestaIA(config, ctx, fb);
+    if (!textoEnviar?.trim()) {
+      textoEnviar = interpolarVariables(config.mensajeFallback, ctx).trim();
+    }
+    if (!textoEnviar?.trim()) {
+      textoEnviar = respuestaIARapidaPorMensaje(ctx.ultimo_mensaje);
+    }
+
+    console.log("🤖 Respuesta IA generada (fallback):", textoEnviar);
+
+    let respuestaEnviada = "";
+    if (textoEnviar && numero) {
       try {
-        await enviarTextoWhatsApp(numero, fb.valor, { usuarioId });
+        await enviarTextoWhatsApp(numero, textoEnviar, { usuarioId });
+        respuestaEnviada = textoEnviar;
+        console.log("✅ IA respondió por WhatsApp (fallback)");
       } catch (sendErr) {
         console.log("[IA] error enviando fallback:", sendErr.message);
       }
     }
 
     if (config.siFalla === "detener") {
-      return { ok: false, continuar: false, error: err.message };
+      return {
+        ok: false,
+        continuar: false,
+        error: err.message,
+        respuestaEnviada,
+      };
     }
-    return { ok: false, continuar: true, error: err.message };
+    return {
+      ok: false,
+      continuar: true,
+      error: err.message,
+      respuestaEnviada,
+    };
   }
 }
 
@@ -775,6 +921,7 @@ module.exports = {
   parseIAFromNodo,
   normalizarConfig,
   ejecutarIANodo,
+  ejecutarNodoIA,
   runAI,
   testIALocal,
   getIAStatus,
