@@ -25,6 +25,7 @@ const inboxApiRoutes = require("./routes/inboxApi");
 const metricasApiRoutes = require("./routes/metricasApi");
 const activadoresApiRoutes = require("./routes/activadoresApi");
 const panelApiRoutes = require("./routes/panelApi");
+const ajustesApiRoutes = require("./routes/ajustesApi");
 
 const app = express();
 const isProduction = process.env.NODE_ENV === "production";
@@ -76,6 +77,7 @@ app.use(inboxApiRoutes);
 app.use(metricasApiRoutes);
 app.use(activadoresApiRoutes);
 app.use(panelApiRoutes);
+app.use(ajustesApiRoutes);
 
 // ─── CRM React (frontend/dist) — mismo origen que /api en producción ───
 const frontendDist = path.join(__dirname, "frontend", "dist");

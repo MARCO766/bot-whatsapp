@@ -1,529 +1,628 @@
 import React, { useEffect, useState } from "react";
+import { useAjustes } from "./ajustes/useAjustes";
+import { ajustesStyles } from "./ajustes/styles";
+import { logout } from "./ajustes/api";
 
-const STORAGE_KEY = "macbot_settings";
+const SECCIONES = [
+  { id: "perfil", label: "Perfil", icon: "👤" },
+  { id: "whatsapp", label: "WhatsApp API", icon: "💬" },
+  { id: "meta", label: "Meta Ads", icon: "📊" },
+  { id: "auto", label: "Automatización", icon: "⚡" },
+  { id: "notif", label: "Notificaciones", icon: "🔔" },
+  { id: "etiquetas", label: "Etiquetas", icon: "🏷️" },
+  { id: "seguridad", label: "Seguridad", icon: "🔒" },
+];
 
-const defaultSettings = {
-  nombreCRM: "MacBot CRM",
-  sonido: true,
-  animaciones: true,
-  modoOscuro: true,
-  notificaciones: true,
-  autoResponder: true,
-  idioma: "Español",
-  color: "#22c55e",
-  mensajeBienvenida:
-    "Hola 👋 gracias por escribirnos.",
-};
+const IDIOMAS = [
+  { v: "es", l: "Español" },
+  { v: "en", l: "English" },
+  { v: "pt", l: "Português" },
+];
 
-export default function Ajustes() {
-  const [settings, setSettings] = useState(() => {
-    const saved = localStorage.getItem(
-      STORAGE_KEY
-    );
+const ZONAS = [
+  "America/La_Paz",
+  "America/Bogota",
+  "America/Mexico_City",
+  "America/Argentina/Buenos_Aires",
+  "America/Santiago",
+  "America/New_York",
+  "Europe/Madrid",
+  "UTC",
+];
 
-    return saved
-      ? JSON.parse(saved)
-      : defaultSettings;
-  });
-
-  const [toast, setToast] =
-    useState("");
-
-  useEffect(() => {
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify(settings)
-    );
-  }, [settings]);
-
-  function showToast(text) {
-    setToast(text);
-
-    setTimeout(() => {
-      setToast("");
-    }, 2200);
-  }
-
-  function toggle(key) {
-    setSettings((prev) => ({
-      ...prev,
-      [key]: !prev[key],
-    }));
-
-    showToast(
-      "Configuración actualizada"
-    );
-  }
-
-  function resetAll() {
-    const ok = confirm(
-      "¿Resetear configuraciones?"
-    );
-
-    if (!ok) return;
-
-    setSettings(defaultSettings);
-
-    localStorage.removeItem(
-      STORAGE_KEY
-    );
-
-    showToast(
-      "Configuración reiniciada"
-    );
-  }
-
+function SwitchRow({ on, onToggle, label, hint }) {
   return (
-    <div className="settingsPage">
-      <style>{styles}</style>
-
-      {toast && (
-        <div className="toast">
-          {toast}
-        </div>
-      )}
-
-      <div className="top">
-        <div>
-          <h1>Ajustes</h1>
-
-          <p>
-            Configuración general
-            del CRM y experiencia
-            visual.
-          </p>
-        </div>
+    <div className="ajSwitchRow">
+      <div>
+        <strong>{label}</strong>
+        {hint && <p>{hint}</p>}
       </div>
-
-      <div className="grid">
-        <section className="card">
-          <h2>
-            Información general
-          </h2>
-
-          <div className="field">
-            <label>
-              Nombre del CRM
-            </label>
-
-            <input
-              value={
-                settings.nombreCRM
-              }
-              onChange={(e) =>
-                setSettings(
-                  (
-                    prev
-                  ) => ({
-                    ...prev,
-                    nombreCRM:
-                      e.target
-                        .value,
-                  })
-                )
-              }
-            />
-          </div>
-
-          <div className="field">
-            <label>
-              Idioma
-            </label>
-
-            <select
-              value={
-                settings.idioma
-              }
-              onChange={(e) =>
-                setSettings(
-                  (
-                    prev
-                  ) => ({
-                    ...prev,
-                    idioma:
-                      e.target
-                        .value,
-                  })
-                )
-              }
-            >
-              <option>
-                Español
-              </option>
-
-              <option>
-                English
-              </option>
-
-              <option>
-                Português
-              </option>
-            </select>
-          </div>
-
-          <div className="field">
-            <label>
-              Color principal
-            </label>
-
-            <input
-              type="color"
-              value={
-                settings.color
-              }
-              onChange={(e) =>
-                setSettings(
-                  (
-                    prev
-                  ) => ({
-                    ...prev,
-                    color:
-                      e.target
-                        .value,
-                  })
-                )
-              }
-            />
-          </div>
-        </section>
-
-        <section className="card">
-          <h2>
-            Sistema
-          </h2>
-
-          <div className="switchRow">
-            <div>
-              <strong>
-                Sonidos
-              </strong>
-
-              <p>
-                Reproducir sonidos
-                en mensajes.
-              </p>
-            </div>
-
-            <button
-              className={
-                settings.sonido
-                  ? "switch active"
-                  : "switch"
-              }
-              onClick={() =>
-                toggle(
-                  "sonido"
-                )
-              }
-            >
-              <span />
-            </button>
-          </div>
-
-          <div className="switchRow">
-            <div>
-              <strong>
-                Animaciones
-              </strong>
-
-              <p>
-                Efectos y
-                transiciones.
-              </p>
-            </div>
-
-            <button
-              className={
-                settings.animaciones
-                  ? "switch active"
-                  : "switch"
-              }
-              onClick={() =>
-                toggle(
-                  "animaciones"
-                )
-              }
-            >
-              <span />
-            </button>
-          </div>
-
-          <div className="switchRow">
-            <div>
-              <strong>
-                Notificaciones
-              </strong>
-
-              <p>
-                Mostrar alertas.
-              </p>
-            </div>
-
-            <button
-              className={
-                settings.notificaciones
-                  ? "switch active"
-                  : "switch"
-              }
-              onClick={() =>
-                toggle(
-                  "notificaciones"
-                )
-              }
-            >
-              <span />
-            </button>
-          </div>
-
-          <div className="switchRow">
-            <div>
-              <strong>
-                Auto responder
-              </strong>
-
-              <p>
-                Respuesta automática
-                del bot.
-              </p>
-            </div>
-
-            <button
-              className={
-                settings.autoResponder
-                  ? "switch active"
-                  : "switch"
-              }
-              onClick={() =>
-                toggle(
-                  "autoResponder"
-                )
-              }
-            >
-              <span />
-            </button>
-          </div>
-        </section>
-
-        <section className="card full">
-          <h2>
-            Mensaje de bienvenida
-          </h2>
-
-          <textarea
-            value={
-              settings.mensajeBienvenida
-            }
-            onChange={(e) =>
-              setSettings(
-                (
-                  prev
-                ) => ({
-                  ...prev,
-                  mensajeBienvenida:
-                    e.target
-                      .value,
-                })
-              )
-            }
-          />
-
-          <button
-            className="primary"
-            onClick={() =>
-              showToast(
-                "Mensaje guardado"
-              )
-            }
-          >
-            Guardar mensaje
-          </button>
-        </section>
-
-        <section className="card full">
-          <h2>
-            Zona peligrosa
-          </h2>
-
-          <p>
-            Resetear ajustes y
-            configuraciones del
-            CRM.
-          </p>
-
-          <button
-            className="danger"
-            onClick={resetAll}
-          >
-            Resetear ajustes
-          </button>
-        </section>
-      </div>
+      <button type="button" className={`ajSwitch ${on ? "on" : ""}`} onClick={onToggle} aria-pressed={on}>
+        <span />
+      </button>
     </div>
   );
 }
 
-const styles = `
-.settingsPage {
-  min-height:100%;
+function estadoBadge(estado) {
+  if (estado === "conectado") return <span className="badge ok">Conectado</span>;
+  if (estado === "error") return <span className="badge err">Error</span>;
+  if (estado === "inactivo") return <span className="badge muted">Inactivo</span>;
+  return <span className="badge warn">Incompleto</span>;
 }
 
-.top {
-  margin-bottom:22px;
+function copyText(text, showToast) {
+  if (!text) return;
+  navigator.clipboard?.writeText(text).then(() => showToast("Copiado al portapapeles"));
 }
 
-.top h1 {
-  margin:0;
-  font-size:34px;
-}
+export default function Ajustes() {
+  const {
+    data,
+    loading,
+    saving,
+    error,
+    toast,
+    showToast,
+    savePerfil,
+    saveAjustes,
+    savePassword,
+    probarMetaEvento,
+    addConexion,
+    editConexion,
+    removeConexion,
+    testConexion,
+    addEtiqueta,
+    editEtiqueta,
+    removeEtiqueta,
+  } = useAjustes();
 
-.top p {
-  margin:6px 0 0;
-  color:#94a3b8;
-}
+  const [seccion, setSeccion] = useState("perfil");
 
-.grid {
-  display:grid;
-  grid-template-columns:repeat(2,1fr);
-  gap:20px;
-}
+  const [perfil, setPerfil] = useState({});
+  const [auto, setAuto] = useState({});
+  const [notif, setNotif] = useState({});
+  const [meta, setMeta] = useState({});
+  const [pwd, setPwd] = useState({ actual: "", nueva: "", confirm: "" });
 
-.card {
-  background:#0f172a;
-  border:1px solid rgba(148,163,184,.15);
-  border-radius:24px;
-  padding:22px;
-}
+  const [connForm, setConnForm] = useState(null);
+  const [showToken, setShowToken] = useState(false);
+  const [showCapi, setShowCapi] = useState(false);
+  const [testNumero, setTestNumero] = useState("");
 
-.card.full {
-  grid-column:1 / -1;
-}
+  const [tagNombre, setTagNombre] = useState("");
+  const [tagColor, setTagColor] = useState("#22c55e");
+  const [editTag, setEditTag] = useState(null);
 
-.card h2 {
-  margin:0 0 18px;
-}
+  useEffect(() => {
+    if (!data) return;
+    setPerfil({ ...data.perfil });
+    setAuto({ ...data.automatizacion });
+    setNotif({ ...data.notificaciones });
+    setMeta({
+      pixelId: data.meta?.pixelId || "",
+      pixelNombre: data.meta?.pixelNombre || "",
+      activo: data.meta?.activo || false,
+      capiToken: "",
+    });
+  }, [data]);
 
-.field {
-  margin-bottom:18px;
-}
+  const conexiones = data?.conexionesWhatsapp || [];
+  const webhook = data?.webhook || {};
+  const etiquetas = data?.etiquetas || [];
 
-.field label {
-  display:block;
-  margin-bottom:8px;
-  color:#94a3b8;
-  font-size:13px;
-}
-
-.field input,
-.field select,
-textarea {
-  width:100%;
-  border:none;
-  border-radius:14px;
-  background:#111827;
-  color:white;
-  padding:14px;
-}
-
-input[type="color"] {
-  height:60px;
-  padding:8px;
-}
-
-textarea {
-  min-height:160px;
-  resize:vertical;
-  margin-bottom:14px;
-}
-
-.switchRow {
-  display:flex;
-  justify-content:space-between;
-  align-items:center;
-  gap:20px;
-  padding:18px 0;
-  border-bottom:1px solid rgba(148,163,184,.08);
-}
-
-.switchRow:last-child {
-  border-bottom:none;
-}
-
-.switchRow strong {
-  display:block;
-}
-
-.switchRow p {
-  margin:6px 0 0;
-  color:#94a3b8;
-  font-size:13px;
-}
-
-.switch {
-  width:62px;
-  height:34px;
-  border:none;
-  border-radius:999px;
-  background:#1e293b;
-  position:relative;
-  cursor:pointer;
-  transition:.2s;
-}
-
-.switch span {
-  width:26px;
-  height:26px;
-  border-radius:50%;
-  background:white;
-  position:absolute;
-  top:4px;
-  left:4px;
-  transition:.2s;
-}
-
-.switch.active {
-  background:linear-gradient(135deg,#22c55e,#06b6d4);
-}
-
-.switch.active span {
-  left:32px;
-}
-
-.primary,
-.danger {
-  border:none;
-  height:46px;
-  border-radius:15px;
-  padding:0 18px;
-  cursor:pointer;
-  font-weight:900;
-}
-
-.primary {
-  background:linear-gradient(135deg,#22c55e,#06b6d4);
-  color:#052e16;
-}
-
-.danger {
-  background:rgba(127,29,29,.85);
-  color:#fecaca;
-}
-
-.toast {
-  position:fixed;
-  top:18px;
-  right:24px;
-  background:linear-gradient(135deg,#22c55e,#06b6d4);
-  color:#052e16;
-  font-weight:900;
-  border-radius:16px;
-  padding:13px 18px;
-  z-index:500;
-  box-shadow:0 15px 50px rgba(0,0,0,.35);
-}
-
-@media (max-width: 850px) {
-  .grid {
-    grid-template-columns:1fr;
+  async function handleSavePerfil(e) {
+    e.preventDefault();
+    await savePerfil(perfil);
   }
+
+  async function handleSaveAuto() {
+    await saveAjustes({ automatizacion: auto });
+  }
+
+  async function handleSaveNotif() {
+    await saveAjustes({ notificaciones: notif });
+  }
+
+  async function handleSaveMeta(e) {
+    e.preventDefault();
+    await saveAjustes({
+      meta: {
+        pixelId: meta.pixelId,
+        pixelNombre: meta.pixelNombre,
+        activo: meta.activo,
+        capiToken: meta.capiToken || "__KEEP__",
+      },
+    });
+    setMeta((m) => ({ ...m, capiToken: "" }));
+  }
+
+  function openNewConexion() {
+    setConnForm({
+      id: null,
+      nombre: "",
+      numero: "",
+      phoneNumberId: "",
+      accessToken: "",
+      wabaId: "",
+      hacerPrincipal: conexiones.length === 0,
+    });
+    setShowToken(false);
+  }
+
+  function openEditConexion(c) {
+    setConnForm({
+      id: c.id,
+      nombre: c.nombre,
+      numero: c.numero,
+      phoneNumberId: c.phoneNumberId,
+      accessToken: "",
+      wabaId: c.wabaId || "",
+      hacerPrincipal: c.activo,
+    });
+    setShowToken(false);
+  }
+
+  async function handleSaveConexion(e) {
+    e.preventDefault();
+    const body = {
+      nombre: connForm.nombre,
+      numero: connForm.numero,
+      phoneNumberId: connForm.phoneNumberId,
+      wabaId: connForm.wabaId,
+      hacerPrincipal: connForm.hacerPrincipal,
+    };
+    if (connForm.accessToken) body.accessToken = connForm.accessToken;
+
+    if (connForm.id) {
+      const patch = { ...body };
+      if (!connForm.accessToken) patch.accessToken = "__KEEP__";
+      else patch.accessToken = connForm.accessToken;
+      const ok = await editConexion(connForm.id, patch);
+      if (ok) setConnForm(null);
+    } else {
+      if (!connForm.accessToken) {
+        showToast("Access Token es obligatorio", "error");
+        return;
+      }
+      body.accessToken = connForm.accessToken;
+      const ok = await addConexion(body);
+      if (ok) setConnForm(null);
+    }
+  }
+
+  async function handleDeleteConexion(id, nombre) {
+    if (!confirm(`¿Eliminar conexión "${nombre}"?`)) return;
+    await removeConexion(id);
+  }
+
+  async function handleProbarConexion(id) {
+    await testConexion(id, testNumero);
+  }
+
+  async function handleAddEtiqueta(e) {
+    e.preventDefault();
+    if (!tagNombre.trim()) return;
+    const ok = await addEtiqueta({ nombre: tagNombre.trim(), color: tagColor });
+    if (ok) {
+      setTagNombre("");
+      setTagColor("#22c55e");
+    }
+  }
+
+  async function handleSaveEtiqueta(e) {
+    e.preventDefault();
+    if (!editTag?.nombre?.trim()) return;
+    const ok = await editEtiqueta(editTag.id, {
+      nombre: editTag.nombre.trim(),
+      color: editTag.color,
+    });
+    if (ok) setEditTag(null);
+  }
+
+  async function handleDeleteEtiqueta(id, nombre) {
+    if (!confirm(`¿Eliminar etiqueta "${nombre}"?`)) return;
+    await removeEtiqueta(id);
+  }
+
+  async function handlePassword(e) {
+    e.preventDefault();
+    if (pwd.nueva !== pwd.confirm) {
+      showToast("Las contraseñas no coinciden", "error");
+      return;
+    }
+    const ok = await savePassword({ actual: pwd.actual, nueva: pwd.nueva });
+    if (ok) setPwd({ actual: "", nueva: "", confirm: "" });
+  }
+
+  const renderContent = () => {
+    if (loading) {
+      return (
+        <div className="ajCard">
+          <div className="skel h40" />
+          <div className="skel h40" />
+          <div className="skel h120" />
+        </div>
+      );
+    }
+
+    if (error) {
+      return (
+        <div className="ajErrorBox">
+          <strong>No se pudieron cargar los ajustes</strong>
+          <p>{error}</p>
+          <p className="ajHint">Inicia sesión en <a href="/login" style={{ color: "#86efac" }}>/login</a> y vuelve aquí.</p>
+        </div>
+      );
+    }
+
+    if (seccion === "perfil") {
+      return (
+        <form className="ajCard" onSubmit={handleSavePerfil}>
+          <h2>Perfil</h2>
+          <div className="ajRow2">
+            <div className="ajField">
+              <label>Nombre</label>
+              <input value={perfil.nombre || ""} onChange={(e) => setPerfil({ ...perfil, nombre: e.target.value })} />
+            </div>
+            <div className="ajField">
+              <label>Email</label>
+              <input type="email" value={perfil.email || ""} onChange={(e) => setPerfil({ ...perfil, email: e.target.value })} />
+            </div>
+          </div>
+          <div className="ajField">
+            <label>Empresa</label>
+            <input value={perfil.empresa || ""} onChange={(e) => setPerfil({ ...perfil, empresa: e.target.value })} />
+          </div>
+          <div className="ajRow2">
+            <div className="ajField">
+              <label>Zona horaria</label>
+              <select value={perfil.zonaHoraria || ZONAS[0]} onChange={(e) => setPerfil({ ...perfil, zonaHoraria: e.target.value })}>
+                {ZONAS.map((z) => (
+                  <option key={z} value={z}>{z}</option>
+                ))}
+              </select>
+            </div>
+            <div className="ajField">
+              <label>Idioma</label>
+              <select value={perfil.idioma || "es"} onChange={(e) => setPerfil({ ...perfil, idioma: e.target.value })}>
+                {IDIOMAS.map((i) => (
+                  <option key={i.v} value={i.v}>{i.l}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div className="ajBtnRow">
+            <button type="submit" className="ajBtn primary" disabled={saving}>Guardar perfil</button>
+          </div>
+        </form>
+      );
+    }
+
+    if (seccion === "whatsapp") {
+      return (
+        <>
+          <div className="ajCard">
+            <h2>Webhook global</h2>
+            <p className="ajHint">{webhook.instrucciones}</p>
+            <label className="ajHint">Webhook URL</label>
+            <code className="ajCode">{webhook.webhookUrl}</code>
+            <button type="button" className="ajBtn ghost" onClick={() => copyText(webhook.webhookUrl, showToast)}>Copiar URL</button>
+            <label className="ajHint" style={{ marginTop: 12 }}>Verify Token</label>
+            <code className="ajCode">{webhook.verifyToken}</code>
+            <button type="button" className="ajBtn ghost" onClick={() => copyText(webhook.verifyToken, showToast)}>Copiar token</button>
+          </div>
+
+          <div className="ajCard">
+            <div className="ajConnHead">
+              <h2>Conexiones WhatsApp</h2>
+              <button type="button" className="ajBtn primary" onClick={openNewConexion}>+ Nueva conexión</button>
+            </div>
+            <p className="ajHint">Puedes conectar varios números. Cada uno usa su Phone Number ID. El envío por defecto usa la conexión marcada como principal (activa).</p>
+
+            {conexiones.length === 0 && <p className="ajHint">Sin conexiones. Agrega la primera con tus credenciales de Meta.</p>}
+
+            {conexiones.map((c) => (
+              <div key={c.id} className="ajConnCard">
+                <div className="ajConnHead">
+                  <div>
+                    <strong>{c.nombre || "WhatsApp"}</strong> {estadoBadge(c.estado)}
+                    <p className="ajHint">{c.numero || "Sin número"} · ID {c.phoneNumberId}</p>
+                    {c.tokenMasked && <p className="ajHint">Token: {c.tokenMasked}</p>}
+                  </div>
+                </div>
+                <div className="ajBtnRow">
+                  <button type="button" className="ajBtn ghost" onClick={() => openEditConexion(c)}>Editar</button>
+                  <button type="button" className="ajBtn ghost" onClick={() => handleProbarConexion(c.id)} disabled={saving}>Probar</button>
+                  <button type="button" className="ajBtn danger" onClick={() => handleDeleteConexion(c.id, c.nombre)}>Eliminar</button>
+                </div>
+              </div>
+            ))}
+
+            <div className="ajField" style={{ marginTop: 12 }}>
+              <label>Número para prueba (código país, sin +)</label>
+              <input value={testNumero} onChange={(e) => setTestNumero(e.target.value)} placeholder="59170000000" />
+            </div>
+          </div>
+
+          {connForm && (
+            <form className="ajCard" onSubmit={handleSaveConexion}>
+              <h2>{connForm.id ? "Editar conexión" : "Nueva conexión"}</h2>
+              <div className="ajRow2">
+                <div className="ajField">
+                  <label>Nombre de conexión</label>
+                  <input value={connForm.nombre} onChange={(e) => setConnForm({ ...connForm, nombre: e.target.value })} required />
+                </div>
+                <div className="ajField">
+                  <label>Número visible</label>
+                  <input value={connForm.numero} onChange={(e) => setConnForm({ ...connForm, numero: e.target.value })} placeholder="+591..." />
+                </div>
+              </div>
+              <div className="ajField">
+                <label>Phone Number ID</label>
+                <input value={connForm.phoneNumberId} onChange={(e) => setConnForm({ ...connForm, phoneNumberId: e.target.value })} required />
+              </div>
+              <div className="ajField">
+                <label>Access Token {connForm.id && <span className="ajHint">(dejar vacío para mantener)</span>}</label>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <input
+                    type={showToken ? "text" : "password"}
+                    value={connForm.accessToken}
+                    onChange={(e) => setConnForm({ ...connForm, accessToken: e.target.value })}
+                    placeholder={connForm.id ? "••••••••" : "EAAxxxx..."}
+                    required={!connForm.id}
+                    style={{ flex: 1 }}
+                  />
+                  <button type="button" className="ajBtn ghost" onClick={() => setShowToken((v) => !v)}>
+                    {showToken ? "Ocultar" : "Mostrar"}
+                  </button>
+                </div>
+              </div>
+              <div className="ajField">
+                <label>WABA ID (opcional)</label>
+                <input value={connForm.wabaId} onChange={(e) => setConnForm({ ...connForm, wabaId: e.target.value })} />
+              </div>
+              <SwitchRow
+                label="Conexión principal (activa para envíos)"
+                on={connForm.hacerPrincipal}
+                onToggle={() => setConnForm({ ...connForm, hacerPrincipal: !connForm.hacerPrincipal })}
+              />
+              <div className="ajBtnRow">
+                <button type="submit" className="ajBtn primary" disabled={saving}>Guardar conexión</button>
+                <button type="button" className="ajBtn ghost" onClick={() => setConnForm(null)}>Cancelar</button>
+              </div>
+            </form>
+          )}
+        </>
+      );
+    }
+
+    if (seccion === "meta") {
+      return (
+        <form className="ajCard" onSubmit={handleSaveMeta}>
+          <h2>Meta Ads / Tracking</h2>
+          <p className="ajHint">Pixel y CAPI son para seguimiento de conversiones, no para WhatsApp.</p>
+          <div className="ajField">
+            <label>Nombre del pixel</label>
+            <input value={meta.pixelNombre || ""} onChange={(e) => setMeta({ ...meta, pixelNombre: e.target.value })} />
+          </div>
+          <div className="ajRow2">
+            <div className="ajField">
+              <label>Pixel ID</label>
+              <input value={meta.pixelId || ""} onChange={(e) => setMeta({ ...meta, pixelId: e.target.value })} />
+            </div>
+            <div className="ajField">
+              <label>Estado</label>
+              <select value={meta.activo ? "1" : "0"} onChange={(e) => setMeta({ ...meta, activo: e.target.value === "1" })}>
+                <option value="1">Activo</option>
+                <option value="0">Inactivo</option>
+              </select>
+            </div>
+          </div>
+          <div className="ajField">
+            <label>CAPI Token {data?.meta?.tieneCapiToken && <span className="ajHint">(guardado: {data.meta.capiTokenMasked})</span>}</label>
+            <div style={{ display: "flex", gap: 8 }}>
+              <input
+                type={showCapi ? "text" : "password"}
+                value={meta.capiToken}
+                onChange={(e) => setMeta({ ...meta, capiToken: e.target.value })}
+                placeholder="Dejar vacío para mantener el actual"
+                style={{ flex: 1 }}
+              />
+              <button type="button" className="ajBtn ghost" onClick={() => setShowCapi((v) => !v)}>
+                {showCapi ? "Ocultar" : "Mostrar"}
+              </button>
+            </div>
+          </div>
+          <div className="ajBtnRow">
+            <button type="submit" className="ajBtn primary" disabled={saving}>Guardar Meta</button>
+            <button type="button" className="ajBtn ghost" disabled={saving} onClick={() => probarMetaEvento()}>
+              Enviar evento de prueba
+            </button>
+          </div>
+        </form>
+      );
+    }
+
+    if (seccion === "auto") {
+      return (
+        <div className="ajCard">
+          <h2>Automatización</h2>
+          <SwitchRow
+            label="Detener seguimientos si el lead responde"
+            hint="Cancela seguimientos pendientes al recibir mensaje del cliente."
+            on={!!auto.detenerSeguimientosSiResponde}
+            onToggle={() => setAuto({ ...auto, detenerSeguimientosSiResponde: !auto.detenerSeguimientosSiResponde })}
+          />
+          <SwitchRow
+            label="Evitar activar el mismo flujo dos veces"
+            hint="Reduce activaciones duplicadas en paralelo."
+            on={!!auto.evitarFlujoDuplicado}
+            onToggle={() => setAuto({ ...auto, evitarFlujoDuplicado: !auto.evitarFlujoDuplicado })}
+          />
+          <SwitchRow
+            label="Modo seguro anti-spam"
+            on={!!auto.modoSeguroAntiSpam}
+            onToggle={() => setAuto({ ...auto, modoSeguroAntiSpam: !auto.modoSeguroAntiSpam })}
+          />
+          <div className="ajField">
+            <label>Zona horaria (automatización)</label>
+            <select value={auto.zonaHoraria || ZONAS[0]} onChange={(e) => setAuto({ ...auto, zonaHoraria: e.target.value })}>
+              {ZONAS.map((z) => (
+                <option key={z} value={z}>{z}</option>
+              ))}
+            </select>
+          </div>
+          <div className="ajField">
+            <label>Cooldown global de activadores (minutos)</label>
+            <input
+              type="number"
+              min={0}
+              max={1440}
+              value={auto.cooldownActivadoresMin ?? 5}
+              onChange={(e) => setAuto({ ...auto, cooldownActivadoresMin: Number(e.target.value) })}
+            />
+          </div>
+          <div className="ajBtnRow">
+            <button type="button" className="ajBtn primary" disabled={saving} onClick={handleSaveAuto}>Guardar automatización</button>
+          </div>
+        </div>
+      );
+    }
+
+    if (seccion === "notif") {
+      return (
+        <div className="ajCard">
+          <h2>Notificaciones</h2>
+          <SwitchRow label="Sonido nuevo mensaje" on={!!notif.sonidoNuevoMensaje} onToggle={() => setNotif({ ...notif, sonidoNuevoMensaje: !notif.sonidoNuevoMensaje })} />
+          <SwitchRow label="Alerta lead sin responder" on={!!notif.alertaLeadSinResponder} onToggle={() => setNotif({ ...notif, alertaLeadSinResponder: !notif.alertaLeadSinResponder })} />
+          <SwitchRow label="Alerta conversión" on={!!notif.alertaConversion} onToggle={() => setNotif({ ...notif, alertaConversion: !notif.alertaConversion })} />
+          <SwitchRow label="Alerta error de conexión" on={!!notif.alertaErrorConexion} onToggle={() => setNotif({ ...notif, alertaErrorConexion: !notif.alertaErrorConexion })} />
+          <div className="ajBtnRow">
+            <button type="button" className="ajBtn primary" disabled={saving} onClick={handleSaveNotif}>Guardar notificaciones</button>
+          </div>
+        </div>
+      );
+    }
+
+    if (seccion === "etiquetas") {
+      return (
+        <>
+          <form className="ajCard" onSubmit={handleAddEtiqueta}>
+            <h2>Crear etiqueta</h2>
+            <p className="ajHint">Etiquetas para clasificar chats en Bandeja. No son conversiones.</p>
+            <div className="ajRow2">
+              <div className="ajField">
+                <label>Nombre</label>
+                <input value={tagNombre} onChange={(e) => setTagNombre(e.target.value)} required />
+              </div>
+              <div className="ajField">
+                <label>Color</label>
+                <input type="color" value={tagColor} onChange={(e) => setTagColor(e.target.value)} />
+              </div>
+            </div>
+            <button type="submit" className="ajBtn primary" disabled={saving}>Crear etiqueta</button>
+          </form>
+
+          <div className="ajCard">
+            <h2>Etiquetas ({etiquetas.length})</h2>
+            {etiquetas.length === 0 && <p className="ajHint">Sin etiquetas. Crea la primera arriba.</p>}
+            {etiquetas.map((t) => (
+              <div key={t.id} className="tagRow">
+                <span className="tagDot" style={{ background: t.color }} />
+                <span style={{ flex: 1 }}>{t.nombre}</span>
+                <button type="button" className="ajBtn ghost" onClick={() => setEditTag({ ...t })}>Editar</button>
+                <button type="button" className="ajBtn danger" onClick={() => handleDeleteEtiqueta(t.id, t.nombre)}>Eliminar</button>
+              </div>
+            ))}
+          </div>
+
+          {editTag && (
+            <form className="ajCard" onSubmit={handleSaveEtiqueta}>
+              <h2>Editar etiqueta</h2>
+              <div className="ajRow2">
+                <div className="ajField">
+                  <label>Nombre</label>
+                  <input value={editTag.nombre} onChange={(e) => setEditTag({ ...editTag, nombre: e.target.value })} />
+                </div>
+                <div className="ajField">
+                  <label>Color</label>
+                  <input type="color" value={editTag.color} onChange={(e) => setEditTag({ ...editTag, color: e.target.value })} />
+                </div>
+              </div>
+              <div className="ajBtnRow">
+                <button type="submit" className="ajBtn primary" disabled={saving}>Guardar</button>
+                <button type="button" className="ajBtn ghost" onClick={() => setEditTag(null)}>Cancelar</button>
+              </div>
+            </form>
+          )}
+        </>
+      );
+    }
+
+    if (seccion === "seguridad") {
+      return (
+        <>
+          <form className="ajCard" onSubmit={handlePassword}>
+            <h2>Cambiar contraseña</h2>
+            <div className="ajField">
+              <label>Contraseña actual</label>
+              <input type="password" value={pwd.actual} onChange={(e) => setPwd({ ...pwd, actual: e.target.value })} autoComplete="current-password" />
+            </div>
+            <div className="ajRow2">
+              <div className="ajField">
+                <label>Nueva contraseña</label>
+                <input type="password" value={pwd.nueva} onChange={(e) => setPwd({ ...pwd, nueva: e.target.value })} autoComplete="new-password" />
+              </div>
+              <div className="ajField">
+                <label>Confirmar</label>
+                <input type="password" value={pwd.confirm} onChange={(e) => setPwd({ ...pwd, confirm: e.target.value })} autoComplete="new-password" />
+              </div>
+            </div>
+            <button type="submit" className="ajBtn primary" disabled={saving}>Actualizar contraseña</button>
+          </form>
+          <div className="ajCard">
+            <h2>Sesión</h2>
+            <p className="ajHint">Los tokens de API nunca se guardan en el navegador. Solo en el servidor.</p>
+            <div className="ajBtnRow">
+              <button type="button" className="ajBtn danger" onClick={() => logout()}>Cerrar sesión</button>
+            </div>
+          </div>
+        </>
+      );
+    }
+
+    return null;
+  };
+
+  return (
+    <div className="ajustesPage">
+      <style>{ajustesStyles}</style>
+
+      {toast && (
+        <div className={`ajToast ${toast.type === "error" ? "err" : "ok"}`}>{toast.message}</div>
+      )}
+
+      <div className="ajustesTop">
+        <h1>Ajustes</h1>
+        <p>Conecta tu CRM, WhatsApp y preferencias de cuenta.</p>
+      </div>
+
+      <div className="ajustesLayout">
+        <nav className="ajustesSide">
+          {SECCIONES.map((s) => (
+            <button
+              key={s.id}
+              type="button"
+              className={seccion === s.id ? "active" : ""}
+              onClick={() => setSeccion(s.id)}
+            >
+              {s.icon} {s.label}
+            </button>
+          ))}
+        </nav>
+        <main className="ajustesMain">{renderContent()}</main>
+      </div>
+    </div>
+  );
 }
-`;

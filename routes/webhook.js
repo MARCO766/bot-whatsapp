@@ -25,7 +25,8 @@ setInterval(() => {
 }, 1000 * 60 * 10);
 // 🔐 VERIFICACIÓN WEBHOOK
 router.get('/webhook', (req, res) => {
-  const VERIFY_TOKEN = "123456";
+  const VERIFY_TOKEN =
+    process.env.VERIFY_TOKEN || process.env.WEBHOOK_VERIFY_TOKEN || "123456";
 
   const mode = req.query['hub.mode'];
   const token = req.query['hub.verify_token'];
