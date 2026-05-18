@@ -2,6 +2,7 @@
  * Métricas reales para pantalla Flujos — solo Supabase, sin mocks.
  */
 const axios = require("axios");
+const { isSchemaMissingError, logSchemaFallback } = require("./supabaseSafe");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
@@ -57,6 +58,10 @@ async function supabaseCount(table, filterQuery) {
     const n = parseInt(part, 10);
     return Number.isFinite(n) ? n : 0;
   } catch (e) {
+    if (table === "crm_conversiones" && isSchemaMissingError(e)) {
+      logSchemaFallback(table, e);
+      return 0;
+    }
     console.log(`[flujosMetrics] count ${table}:`, e.response?.data || e.message);
     return null;
   }
@@ -68,6 +73,10 @@ async function supabaseSelect(table, filterQuery, selectFields = "*") {
     const res = await axios.get(url, { headers: headers() });
     return res.data || [];
   } catch (e) {
+    if (table === "crm_conversiones" && isSchemaMissingError(e)) {
+      logSchemaFallback(table, e);
+      return [];
+    }
     console.log(`[flujosMetrics] select ${table}:`, e.response?.data || e.message);
     return null;
   }
@@ -156,7 +165,7 @@ async function fetchConversionesRows(usuarioId) {
     `usuario_id=eq.${uid}&order=creado_en.desc`,
     "flujo_id,valor,moneda,cliente_numero,creado_en,origen"
   );
-  if (rows === null) return null;
+  if (rows === null) return [];
   return rows;
 }
 

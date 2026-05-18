@@ -5,6 +5,7 @@
 const axios = require("axios");
 const { ejecutarFlujo } = require("./flowService");
 const { registrarConversion } = require("./conversionService");
+const { isSchemaMissingError, logSchemaFallback } = require("./supabaseSafe");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
@@ -85,9 +86,22 @@ function startOfTodayUtc() {
   return d.toISOString();
 }
 
-async function supabaseGet(path) {
-  const res = await axios.get(`${SUPABASE_URL}/rest/v1/${path}`, { headers: headers() });
-  return res.data || [];
+async function supabaseGet(path, { schemaFallback = false } = {}) {
+  try {
+    const res = await axios.get(`${SUPABASE_URL}/rest/v1/${path}`, { headers: headers() });
+    return res.data || [];
+  } catch (err) {
+    if (schemaFallback && isSchemaMissingError(err)) {
+      logSchemaFallback(path.split("?")[0], err);
+      return [];
+    }
+    throw err;
+  }
+}
+
+async function getConversionesRows(usuarioId, extraQuery = "") {
+  const q = `crm_conversiones?usuario_id=eq.${uidEnc(usuarioId)}${extraQuery}`;
+  return supabaseGet(q, { schemaFallback: true });
 }
 
 async function supabasePost(table, body, prefer = "return=representation") {
@@ -182,8 +196,9 @@ function embudoLabel(e) {
 }
 
 async function fetchConversionesMap(usuarioId) {
-  const rows = await supabaseGet(
-    `crm_conversiones?usuario_id=eq.${uidEnc(usuarioId)}&select=cliente_numero,valor,creado_en&order=creado_en.desc`
+  const rows = await getConversionesRows(
+    usuarioId,
+    "&select=cliente_numero,valor,creado_en&order=creado_en.desc"
   );
   const map = {};
   rows.forEach((r) => {
@@ -324,9 +339,7 @@ async function listClientesRaw(usuarioId, { archivado = false } = {}) {
 async function getDashboard(usuarioId) {
   const [clientes, conversiones] = await Promise.all([
     listClientesRaw(usuarioId),
-    supabaseGet(
-      `crm_conversiones?usuario_id=eq.${uidEnc(usuarioId)}&select=valor,cliente_numero,creado_en`
-    ),
+    getConversionesRows(usuarioId, "&select=valor,cliente_numero,creado_en"),
   ]);
 
   const hoy = startOfTodayUtc();
@@ -588,8 +601,9 @@ async function getTimeline(usuarioId, numero, { limit = 40, offset = 0 } = {}) {
     supabaseGet(
       `mensajes?usuario_id=eq.${uidEnc(usuarioId)}&cliente_numero=eq.${encodeURIComponent(numero)}&select=id,direccion,tipo,contenido,imagen_url,creado_en,flujo_id&order=creado_en.desc&limit=${take}&offset=${skip}`
     ),
-    supabaseGet(
-      `crm_conversiones?usuario_id=eq.${uidEnc(usuarioId)}&cliente_numero=eq.${encodeURIComponent(numero)}&select=id,valor,moneda,origen,creado_en&order=creado_en.desc&limit=20`
+    getConversionesRows(
+      usuarioId,
+      `&cliente_numero=eq.${encodeURIComponent(numero)}&select=id,valor,moneda,origen,creado_en&order=creado_en.desc&limit=20`
     ),
     supabaseGet(
       `crm_historial_cliente?usuario_id=eq.${uidEnc(usuarioId)}&cliente_numero=eq.${encodeURIComponent(numero)}&select=*&order=creado_en.desc&limit=30`
@@ -745,8 +759,9 @@ async function recalcScores(usuarioId, numeros) {
     const msgs = await supabaseGet(
       `mensajes?usuario_id=eq.${uidEnc(usuarioId)}&cliente_numero=eq.${encodeURIComponent(numero)}&select=direccion,contenido&limit=30`
     );
-    const conv = await supabaseGet(
-      `crm_conversiones?usuario_id=eq.${uidEnc(usuarioId)}&cliente_numero=eq.${encodeURIComponent(numero)}&select=id&limit=5`
+    const conv = await getConversionesRows(
+      usuarioId,
+      `&cliente_numero=eq.${encodeURIComponent(numero)}&select=id&limit=5`
     );
     const tags = await supabaseGet(
       `clientes_etiquetas?usuario_id=eq.${uidEnc(usuarioId)}&cliente_numero=eq.${encodeURIComponent(numero)}&select=etiqueta`
@@ -884,9 +899,13 @@ async function eliminarCliente(usuarioId, numero) {
   await supabaseDelete(
     `conversaciones?cliente_numero=eq.${encodeURIComponent(numero)}&usuario_id=eq.${uidEnc(usuarioId)}`
   );
-  await supabaseDelete(
-    `crm_conversiones?cliente_numero=eq.${encodeURIComponent(numero)}&usuario_id=eq.${uidEnc(usuarioId)}`
-  );
+  try {
+    await supabaseDelete(
+      `crm_conversiones?cliente_numero=eq.${encodeURIComponent(numero)}&usuario_id=eq.${uidEnc(usuarioId)}`
+    );
+  } catch (err) {
+    if (!isSchemaMissingError(err)) throw err;
+  }
   await supabaseDelete(
     `seguimientos_programados?cliente_numero=eq.${encodeURIComponent(numero)}&usuario_id=eq.${uidEnc(usuarioId)}`
   ).catch(() => null);

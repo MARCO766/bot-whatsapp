@@ -416,11 +416,22 @@ async function buscarYEjecutarActivador(numero, textoCliente, usuarioId = null, 
     );
     activadores = responseActivadores.data || [];
   } catch (e) {
+    console.log(
+      "[ACTIVADOR] fallback sin columnas extendidas:",
+      e.response?.data?.message || e.message
+    );
     const responseActivadores = await axios.get(
-      `${SUPABASE_URL}/rest/v1/activadores?select=id,frase,flujo_id,activo,repetible,prioridad,coincidencia,veces_usado&activo=eq.true&usuario_id=eq.${usuarioId}`,
+      `${SUPABASE_URL}/rest/v1/activadores?select=id,frase,flujo_id,activo,repetible&activo=eq.true&usuario_id=eq.${usuarioId}`,
       { headers: supabaseHeaders() }
     );
-    activadores = responseActivadores.data || [];
+    activadores = (responseActivadores.data || []).map((a) => ({
+      ...a,
+      prioridad: 0,
+      coincidencia: "contiene",
+      veces_usado: 0,
+      tipo_activador: "palabra_unica",
+      palabras_clave_array: [],
+    }));
   }
 
   if (!activadores.length) return false;

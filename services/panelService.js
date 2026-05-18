@@ -3,6 +3,7 @@
  */
 const axios = require("axios");
 const { computeHeaderStats, countFlujosActivos } = require("./flujosMetricsService");
+const { isSchemaMissingError, logSchemaFallback } = require("./supabaseSafe");
 const { computeResumen, fetchFlujosList } = require("./metricasService");
 const { loadInboxData, formatPreview } = require("./inboxService");
 
@@ -23,6 +24,10 @@ async function supabaseSelect(table, filterQuery, selectFields = "*", limit = 30
     const res = await axios.get(url, { headers: headers() });
     return res.data || [];
   } catch (e) {
+    if (table === "crm_conversiones" && isSchemaMissingError(e)) {
+      logSchemaFallback(table, e);
+      return [];
+    }
     console.log(`[panel] select ${table}:`, e.response?.data || e.message);
     return null;
   }

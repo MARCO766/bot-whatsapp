@@ -3,6 +3,7 @@
  */
 const axios = require("axios");
 const { calcTendencia, sumarVentasPorMoneda } = require("./flujosMetricsService");
+const { isSchemaMissingError, logSchemaFallback } = require("./supabaseSafe");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
@@ -80,6 +81,10 @@ async function supabaseCount(table, filterQuery) {
     const n = parseInt(part, 10);
     return Number.isFinite(n) ? n : 0;
   } catch (e) {
+    if (table === "crm_conversiones" && isSchemaMissingError(e)) {
+      logSchemaFallback(table, e);
+      return 0;
+    }
     console.log(`[metricas] count ${table}:`, e.response?.data || e.message);
     return null;
   }
@@ -91,6 +96,10 @@ async function supabaseSelect(table, filterQuery, selectFields = "*", limit = 50
     const res = await axios.get(url, { headers: headers() });
     return res.data || [];
   } catch (e) {
+    if (table === "crm_conversiones" && isSchemaMissingError(e)) {
+      logSchemaFallback(table, e);
+      return [];
+    }
     console.log(`[metricas] select ${table}:`, e.response?.data || e.message);
     return null;
   }
