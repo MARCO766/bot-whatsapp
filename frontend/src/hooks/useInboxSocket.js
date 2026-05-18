@@ -1,14 +1,10 @@
-import { useEffect, useRef } from "react";
-import { io } from "socket.io-client";
-import { getApiBase } from "../flujos/apiBase";
+/**
+ * @deprecated Usar useSocketEvent desde SocketProvider global.
+ * Mantenido por compatibilidad; delega al socket único de la app.
+ */
+import { useSocketEvent } from "./useSocketEvent";
+import { RT } from "../realtime/events";
 import { normalizeIncomingMessage } from "../utils/chatFormat";
-
-function socketOrigin() {
-  const base = getApiBase();
-  if (base) return base;
-  if (typeof window !== "undefined") return window.location.origin;
-  return undefined;
-}
 
 export function useInboxSocket({
   usuarioId,
@@ -17,52 +13,36 @@ export function useInboxSocket({
   onMensajeEstado,
   onSeguimientoEstado,
 }) {
-  const socketRef = useRef(null);
-  const chatRef = useRef(chatActivo);
-
-  useEffect(() => {
-    chatRef.current = chatActivo;
-  }, [chatActivo]);
-
-  useEffect(() => {
-    if (!usuarioId) return undefined;
-
-    const socket = io(socketOrigin(), {
-      path: "/socket.io",
-      withCredentials: true,
-      transports: ["websocket", "polling"],
-    });
-
-    socketRef.current = socket;
-    socket.emit("join-user", usuarioId);
-
-    socket.on("nuevo-mensaje", (msg) => {
+  useSocketEvent(
+    RT.NUEVO_MENSAJE,
+    (msg) => {
+      if (!onNuevoMensaje) return;
       const normalized = normalizeIncomingMessage(msg);
       const numero = normalized.cliente_numero;
-      const isActive = numero === chatRef.current;
-
-      onNuevoMensaje?.({
+      onNuevoMensaje({
         msg: normalized,
         numero,
-        isActive,
+        isActive: numero === chatActivo,
       });
-    });
+    },
+    Boolean(usuarioId && onNuevoMensaje)
+  );
 
-    socket.on("mensaje-estado", (data) => {
-      onMensajeEstado?.(data);
-    });
+  useSocketEvent(
+    RT.MENSAJE_ESTADO,
+    (data) => onMensajeEstado?.(data),
+    Boolean(usuarioId && onMensajeEstado)
+  );
 
-    socket.on("seguimiento-estado", (data) => {
-      if (data.cliente_numero === chatRef.current) {
+  useSocketEvent(
+    RT.SEGUIMIENTO_ACTUALIZADO,
+    (data) => {
+      if (data?.cliente_numero === chatActivo) {
         onSeguimientoEstado?.(data);
       }
-    });
+    },
+    Boolean(usuarioId && onSeguimientoEstado)
+  );
 
-    return () => {
-      socket.disconnect();
-      socketRef.current = null;
-    };
-  }, [usuarioId, onNuevoMensaje, onMensajeEstado, onSeguimientoEstado]);
-
-  return socketRef;
+  return null;
 }

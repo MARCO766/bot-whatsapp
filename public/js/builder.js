@@ -105,7 +105,11 @@ function editarNombreFlujo(id, nombreActual){
   .then(res => res.text())
   .then(msg => {
     alert(msg);
-    location.reload();
+    if (window.opener && !window.opener.closed) {
+      try {
+        window.opener.postMessage({ type: "macbot:flujo_guardado", id }, "*");
+      } catch (_) { /* noop */ }
+    }
   });
 }
 

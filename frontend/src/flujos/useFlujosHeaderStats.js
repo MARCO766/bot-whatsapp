@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { ApiError, fetchHeaderStats } from "./api";
+import { useSocketEvent } from "../hooks/useSocketEvent";
+import { useDebouncedCallback } from "../hooks/useDebouncedCallback";
+import { RT } from "../realtime/events";
 
 const EMPTY = {
   leadsVivos: 0,
@@ -45,6 +48,11 @@ export function useFlujosHeaderStats(enabled = true) {
   useEffect(() => {
     load();
   }, [load]);
+
+  const reloadLive = useDebouncedCallback(load, 500);
+  useSocketEvent(RT.METRICA_ACTUALIZADA, reloadLive, enabled);
+  useSocketEvent(RT.CONVERSION_REGISTRADA, reloadLive, enabled);
+  useSocketEvent(RT.NUEVO_MENSAJE, reloadLive, enabled);
 
   return { data, loading, error, reload: load };
 }

@@ -17,6 +17,9 @@ import {
   filterFlows,
   sortFlows,
 } from "./utils";
+import { useSocketEvent } from "../hooks/useSocketEvent";
+import { useDebouncedCallback } from "../hooks/useDebouncedCallback";
+import { RT } from "../realtime/events";
 
 export function useFlujos() {
   const [flows, setFlows] = useState([]);
@@ -74,6 +77,10 @@ export function useFlujos() {
   useEffect(() => {
     load();
   }, [load]);
+
+  const reloadLive = useDebouncedCallback(load, 400);
+  useSocketEvent(RT.FLUJO_GUARDADO, reloadLive);
+  useSocketEvent(RT.METRICA_ACTUALIZADA, reloadLive);
 
   useEffect(() => {
     localStorage.setItem("macbot_flujos_view", viewMode);

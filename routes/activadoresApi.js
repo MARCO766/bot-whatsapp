@@ -10,6 +10,7 @@ const {
   bodyToActivadorFields,
   mapActivadorRow,
 } = require("../services/activadorUtils");
+const rt = require("../services/realtimeService");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
@@ -164,7 +165,9 @@ router.post("/api/activadores", protegerApi, async (req, res) => {
     const flujos = await fetchFlujosMini(usuario.id);
     const flujosById = Object.fromEntries(flujos.map((f) => [f.id, f]));
     log(`creado id=${created?.id} tipo=${payload.tipo_activador || "palabra_unica"}`);
-    res.status(201).json({ ok: true, activador: mapActivadorRow(created, flujosById) });
+    const activadorMapped = mapActivadorRow(created, flujosById);
+    rt.activadorCreado(req, usuario.id, { activador: activadorMapped });
+    res.status(201).json({ ok: true, activador: activadorMapped });
   } catch (e) {
     log("POST error", e.response?.data || e.message);
     res.status(500).json({ ok: false, error: "No se pudo crear el activador" });
@@ -208,7 +211,9 @@ router.patch("/api/activadores/:id", protegerApi, async (req, res) => {
 
     const flujos = await fetchFlujosMini(usuario.id);
     const flujosById = Object.fromEntries(flujos.map((f) => [f.id, f]));
-    res.json({ ok: true, activador: mapActivadorRow(updated, flujosById) });
+    const activadorMapped = mapActivadorRow(updated, flujosById);
+    rt.activadorActualizado(req, usuario.id, { activador: activadorMapped });
+    res.json({ ok: true, activador: activadorMapped });
   } catch (e) {
     log("PATCH error", e.response?.data || e.message);
     res.status(500).json({ ok: false, error: "No se pudo actualizar el activador" });
@@ -230,6 +235,7 @@ router.delete("/api/activadores/:id", protegerApi, async (req, res) => {
       { headers: supabaseHeaders() }
     );
     log(`eliminado id=${id}`);
+    rt.activadorEliminado(req, usuario.id, { id });
     res.json({ ok: true });
   } catch (e) {
     log("DELETE error", e.response?.data || e.message);
@@ -261,9 +267,14 @@ router.post("/api/activadores/:id/toggle", protegerApi, async (req, res) => {
     const updated = r.data?.[0];
     const flujos = await fetchFlujosMini(usuario.id);
     const flujosById = Object.fromEntries(flujos.map((f) => [f.id, f]));
+    const activadorMapped = mapActivadorRow(updated, flujosById);
+    rt.activadorActualizado(req, usuario.id, {
+      activador: activadorMapped,
+      estado: nuevoActivo ? "activo" : "pausado",
+    });
     res.json({
       ok: true,
-      activador: mapActivadorRow(updated, flujosById),
+      activador: activadorMapped,
       estado: nuevoActivo ? "activo" : "pausado",
     });
   } catch (e) {

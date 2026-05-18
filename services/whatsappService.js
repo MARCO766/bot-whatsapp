@@ -1,4 +1,5 @@
 const axios = require("axios");
+const rt = require("./realtimeService");
 
 const TOKEN = process.env.TOKEN;
 const PHONE_ID = process.env.PHONE_ID;
@@ -50,9 +51,8 @@ async function enviarTextoWhatsApp(numero, texto, opciones = {}) {
     );
 const whatsappMessageId =
   respuestaMeta.data?.messages?.[0]?.id || null;
-    await axios.post(
+    const insertRes = await axios.post(
       `${SUPABASE_URL}/rest/v1/mensajes`,
-    
       {
         cliente_numero: numero,
         usuario_id: opciones.usuarioId || null,
@@ -60,20 +60,44 @@ const whatsappMessageId =
         tipo: "texto",
         contenido: texto,
         imagen_url: null,
-whatsapp_message_id: whatsappMessageId,
-estado_envio: "sent"
+        whatsapp_message_id: whatsappMessageId,
+        estado_envio: "sent",
       },
       {
         headers: {
           apikey: SUPABASE_KEY,
           Authorization: `Bearer ${SUPABASE_KEY}`,
-          "Content-Type": "application/json"
-        }
+          "Content-Type": "application/json",
+          Prefer: "return=representation",
+        },
       }
     );
 
+    const row = insertRes.data?.[0];
+    if (opciones.usuarioId) {
+      rt.nuevoMensaje(null, opciones.usuarioId, {
+        id: row?.id,
+        cliente_numero: numero,
+        usuario_id: opciones.usuarioId,
+        direccion: "saliente",
+        tipo: "texto",
+        contenido: texto,
+        imagen_url: null,
+        whatsapp_message_id: whatsappMessageId,
+        estado_envio: "sent",
+        creado_en: row?.creado_en || new Date().toISOString(),
+      });
+      rt.conversacionActualizada(null, opciones.usuarioId, {
+        cliente_numero: numero,
+        ultimo_mensaje: texto,
+        direccion: "saliente",
+      });
+    }
+
+    return row;
   } catch (error) {
     console.log("ERROR ENVIANDO WHATSAPP:", error.response?.data || error.message);
+    return null;
   }
 }
 
@@ -158,7 +182,7 @@ async function enviarMediaWhatsApp(numero, tipo, mediaUrl, caption = "", opcione
     const whatsappMessageId =
   respuestaMeta.data?.messages?.[0]?.id || null;
 
-    await axios.post(
+    const insertRes = await axios.post(
       `${SUPABASE_URL}/rest/v1/mensajes`,
       {
         cliente_numero: numero,
@@ -167,18 +191,36 @@ async function enviarMediaWhatsApp(numero, tipo, mediaUrl, caption = "", opcione
         tipo: tipo,
         contenido: caption || mediaUrl,
         imagen_url: mediaUrl,
-whatsapp_message_id: whatsappMessageId,
-estado_envio: "sent"
+        whatsapp_message_id: whatsappMessageId,
+        estado_envio: "sent",
       },
       {
         headers: {
           apikey: SUPABASE_KEY,
           Authorization: `Bearer ${SUPABASE_KEY}`,
-          "Content-Type": "application/json"
-        }
+          "Content-Type": "application/json",
+          Prefer: "return=representation",
+        },
       }
     );
 
+    const row = insertRes.data?.[0];
+    if (opciones.usuarioId) {
+      rt.nuevoMensaje(null, opciones.usuarioId, {
+        id: row?.id,
+        cliente_numero: numero,
+        usuario_id: opciones.usuarioId,
+        direccion: "saliente",
+        tipo,
+        contenido: caption || mediaUrl,
+        imagen_url: mediaUrl,
+        whatsapp_message_id: whatsappMessageId,
+        estado_envio: "sent",
+        creado_en: row?.creado_en || new Date().toISOString(),
+      });
+    }
+
+    return row;
   } catch (error) {
     console.log("❌ ERROR ENVIANDO MEDIA WHATSAPP:");
     console.log(error.response?.status);
@@ -252,7 +294,7 @@ async function enviarBotonesWhatsApp(numero, texto, botones, opciones = {}) {
 
     const whatsappMessageId = respuestaMeta.data?.messages?.[0]?.id || null;
 
-    await axios.post(
+    const insertRes = await axios.post(
       `${SUPABASE_URL}/rest/v1/mensajes`,
       {
         cliente_numero: numero,
@@ -269,9 +311,26 @@ async function enviarBotonesWhatsApp(numero, texto, botones, opciones = {}) {
           apikey: SUPABASE_KEY,
           Authorization: `Bearer ${SUPABASE_KEY}`,
           "Content-Type": "application/json",
+          Prefer: "return=representation",
         },
       }
     );
+
+    const row = insertRes.data?.[0];
+    if (opciones.usuarioId) {
+      rt.nuevoMensaje(null, opciones.usuarioId, {
+        id: row?.id,
+        cliente_numero: numero,
+        usuario_id: opciones.usuarioId,
+        direccion: "saliente",
+        tipo: "interactive",
+        contenido: texto,
+        whatsapp_message_id: whatsappMessageId,
+        estado_envio: "sent",
+        creado_en: row?.creado_en || new Date().toISOString(),
+      });
+    }
+    return row;
   } catch (error) {
     console.log(
       "ERROR ENVIANDO BOTONES WHATSAPP:",

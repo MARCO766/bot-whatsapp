@@ -23,6 +23,7 @@ const {
   enviarMediaWhatsApp
 } = require("../services/whatsappService");
 const seguimientoRoutes = require("./seguimiento");
+const rt = require("../services/realtimeService");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
@@ -455,10 +456,15 @@ router.post("/guardar-flujo-builder", protegerPanel, async (req, res) => {
         }
       );
 
+      rt.flujoGuardado(req, req.session.usuario.id, {
+        id,
+        nombre,
+        accion: "actualizado",
+      });
       return res.send("✅ Flujo actualizado correctamente");
     }
 
-    await axios.post(
+    const createRes = await axios.post(
   `${SUPABASE_URL}/rest/v1/flujos_builder`,
   {
     nombre,
@@ -470,10 +476,17 @@ router.post("/guardar-flujo-builder", protegerPanel, async (req, res) => {
           apikey: SUPABASE_KEY,
           Authorization: `Bearer ${SUPABASE_KEY}`,
           "Content-Type": "application/json",
-          Prefer: "return=minimal"
+          Prefer: "return=representation"
         }
       }
     );
+
+    const nuevoId = createRes.data?.[0]?.id;
+    rt.flujoGuardado(req, req.session.usuario.id, {
+      id: nuevoId,
+      nombre,
+      accion: "creado",
+    });
 
     res.send("✅ Flujo guardado correctamente");
 

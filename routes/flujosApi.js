@@ -12,6 +12,7 @@ const {
   computeHeaderStats,
 } = require("../services/flujosMetricsService");
 const { registrarConversion } = require("../services/conversionService");
+const rt = require("../services/realtimeService");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
@@ -303,6 +304,7 @@ router.patch("/api/flujos/:id/meta", protegerApi, async (req, res) => {
     );
 
     log(`meta actualizada flujo=${id} estado=${nextMeta.estado}`);
+    rt.flujoGuardado(req, usuarioId, { id, accion: "meta", meta: nextMeta });
     res.json({ ok: true, meta: nextMeta });
   } catch (error) {
     log("PATCH meta ERROR", error.response?.data || error.message);
@@ -330,6 +332,7 @@ router.patch("/api/flujos/:id/nombre", protegerApi, async (req, res) => {
       }
     );
 
+    rt.flujoGuardado(req, usuarioId, { id, nombre, accion: "renombrado" });
     res.json({ ok: true, nombre });
   } catch (error) {
     log("PATCH nombre ERROR", error.response?.data || error.message);
@@ -368,6 +371,7 @@ router.post("/api/flujos", protegerApi, async (req, res) => {
     );
 
     const row = Array.isArray(created.data) ? created.data[0] : created.data;
+    rt.flujoGuardado(req, usuarioId, { id: row?.id, nombre, accion: "creado", flow: row });
     res.json({ ok: true, flow: row });
   } catch (error) {
     log("POST flujo ERROR", error.response?.data || error.message);
@@ -515,6 +519,7 @@ router.post("/api/flujos/conversiones", protegerApi, async (req, res) => {
       });
     }
 
+    rt.conversionRegistrada(req, usuarioId, { conversion: row });
     res.json({ ok: true, conversion: row });
   } catch (error) {
     log("POST conversiones ERROR", error.message);

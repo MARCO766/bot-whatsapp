@@ -11,6 +11,7 @@ const {
 const {
   registrarRespuestaBotonSeguimiento,
 } = require("../services/seguimiento/registrarRespuestaBoton");
+const rt = require("../services/realtimeService");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
@@ -99,14 +100,10 @@ if (value?.statuses) {
         }
       }
     );
-const io = req.app.get("io");
-
-if (io && usuarioIdWebhook) {
-  io.to("user_" + usuarioIdWebhook).emit("mensaje-estado", {
+rt.mensajeEstado(req, usuarioIdWebhook, {
     whatsapp_message_id: whatsappMessageId,
-    estado_envio: estado
+    estado_envio: estado,
   });
-}
   }
 
   return res.sendStatus(200);
@@ -394,10 +391,7 @@ await axios.post(
   }
 );
 
-const io = req.app.get("io");
-
-if (io && usuarioIdWebhook) {
-  io.to("user_" + usuarioIdWebhook).emit("nuevo-mensaje", {
+rt.nuevoMensaje(req, usuarioIdWebhook, {
     cliente_numero: from,
     nombre: nombre,
     usuario_id: usuarioIdWebhook,
@@ -405,9 +399,13 @@ if (io && usuarioIdWebhook) {
     tipo: message.type,
     contenido: text || "",
     imagen_url: mediaUrlFinal || null,
-    creado_en: creadoEn
+    creado_en: creadoEn,
   });
-}
+  rt.conversacionActualizada(req, usuarioIdWebhook, {
+    cliente_numero: from,
+    ultimo_mensaje: text || "",
+    direccion: "entrante",
+  });
 
 const responseConversacionActual = await axios.get(
   `${SUPABASE_URL}/rest/v1/conversaciones?cliente_numero=eq.${from}&usuario_id=eq.${usuarioIdWebhook}&select=*`,

@@ -180,6 +180,9 @@ const io = new Server(server, {
 
 app.set("io", io);
 
+const { setApp: setRealtimeApp } = require("./services/realtimeService");
+setRealtimeApp(app);
+
 io.on("connection", (socket) => {
   console.log("🟢 Cliente conectado al inbox:", socket.id);
 

@@ -6,6 +6,9 @@ import {
   fetchEtiquetas,
   updateEtiqueta,
 } from "./api";
+import { useSocketEvent } from "../hooks/useSocketEvent";
+import { useDebouncedCallback } from "../hooks/useDebouncedCallback";
+import { RT } from "../realtime/events";
 
 export function useEtiquetas() {
   const [etiquetas, setEtiquetas] = useState([]);
@@ -41,6 +44,9 @@ export function useEtiquetas() {
   useEffect(() => {
     load();
   }, [load]);
+
+  const reloadLive = useDebouncedCallback(load, 400);
+  useSocketEvent(RT.ETIQUETA_ACTUALIZADA, reloadLive);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import FlowFolders from "./components/flujos/FlowFolders";
 import FlowList from "./components/flujos/FlowList";
 import FlujosHeaderStats from "./components/flujos/FlujosHeaderStats";
@@ -47,6 +47,14 @@ export default function Flujos() {
   } = useFlujos();
 
   const headerStats = useFlujosHeaderStats(true);
+
+  useEffect(() => {
+    const onMsg = (e) => {
+      if (e.data?.type === "macbot:flujo_guardado") load();
+    };
+    window.addEventListener("message", onMsg);
+    return () => window.removeEventListener("message", onMsg);
+  }, [load]);
 
   const [importOpen, setImportOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(null);

@@ -8,6 +8,9 @@ import {
   toggleActivador,
   updateActivador,
 } from "./api";
+import { useSocketEvent } from "../hooks/useSocketEvent";
+import { useDebouncedCallback } from "../hooks/useDebouncedCallback";
+import { RT } from "../realtime/events";
 
 export function useActivadores() {
   const [activadores, setActivadores] = useState([]);
@@ -54,6 +57,11 @@ export function useActivadores() {
   useEffect(() => {
     load();
   }, [load]);
+
+  const reloadLive = useDebouncedCallback(load, 400);
+  useSocketEvent(RT.ACTIVADOR_CREADO, reloadLive);
+  useSocketEvent(RT.ACTIVADOR_ELIMINADO, reloadLive);
+  useSocketEvent(RT.ACTIVADOR_ACTUALIZADO, reloadLive);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();

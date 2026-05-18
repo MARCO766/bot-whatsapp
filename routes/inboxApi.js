@@ -12,6 +12,7 @@ const {
   SUPABASE_KEY,
   supabaseHeaders,
 } = require("../services/inboxService");
+const rt = require("../services/realtimeService");
 
 function protegerApi(req, res, next) {
   if (req.session?.usuario) return next();
@@ -112,6 +113,8 @@ router.post("/api/inbox/etiqueta", protegerApi, async (req, res) => {
       }
     );
 
+    rt.etiquetaActualizada(req, usuarioId, { numero, etiqueta, accion: "asignada" });
+    rt.clienteActualizado(req, usuarioId, { numero, etiquetas: [etiqueta] });
     res.json({ ok: true, numero, etiqueta });
   } catch (error) {
     log("etiqueta ERROR", error.response?.data || error.message);
@@ -130,6 +133,10 @@ router.post("/api/inbox/quitar-etiqueta", protegerApi, async (req, res) => {
       { headers: supabaseHeaders() }
     );
 
+    rt.etiquetaActualizada(req, req.session.usuario.id, {
+      numero,
+      accion: "quitada",
+    });
     res.json({ ok: true, numero });
   } catch (error) {
     log("quitar-etiqueta ERROR", error.response?.data || error.message);
@@ -163,6 +170,7 @@ router.post("/api/inbox/bloquear", protegerApi, async (req, res) => {
       { headers: supabaseHeaders({ "Content-Type": "application/json" }) }
     );
 
+    rt.chatBloqueado(req, usuarioId, { cliente_numero: numero, numero });
     res.json({ ok: true, bloqueado: true });
   } catch (error) {
     log("bloquear ERROR", error.response?.data || error.message);
@@ -196,6 +204,7 @@ router.post("/api/inbox/desbloquear", protegerApi, async (req, res) => {
       { headers: supabaseHeaders({ "Content-Type": "application/json" }) }
     );
 
+    rt.chatDesbloqueado(req, usuarioId, { cliente_numero: numero, numero });
     res.json({ ok: true, bloqueado: false });
   } catch (error) {
     log("desbloquear ERROR", error.response?.data || error.message);

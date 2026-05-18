@@ -14,6 +14,7 @@ const {
   probarMetaEvento,
   cambiarPassword,
 } = require("../services/ajustesService");
+const rt = require("../services/realtimeService");
 
 function log(msg, extra) {
   if (extra !== undefined) console.log(`[ajustesApi] ${msg}`, extra);
@@ -85,7 +86,9 @@ router.post("/api/ajustes/meta/probar", protegerApi, async (req, res) => {
 /** Misma lógica que POST /guardar-conexion */
 router.post("/api/ajustes/conexion/guardar", protegerApi, async (req, res) => {
   try {
-    res.json(await guardarConexionAjustes(uid(req), req.body));
+    const result = await guardarConexionAjustes(uid(req), req.body);
+    rt.conexionActualizada(req, uid(req), { accion: "guardada", conexion: result });
+    res.json(result);
   } catch (error) {
     handleError(res, error, "POST conexion guardar");
   }
@@ -94,7 +97,9 @@ router.post("/api/ajustes/conexion/guardar", protegerApi, async (req, res) => {
 /** Alias para el frontend */
 router.post("/api/conexiones/whatsapp", protegerApi, async (req, res) => {
   try {
-    res.json(await guardarConexionAjustes(uid(req), req.body));
+    const result = await guardarConexionAjustes(uid(req), req.body);
+    rt.conexionActualizada(req, uid(req), { accion: "guardada", conexion: result });
+    res.json(result);
   } catch (error) {
     handleError(res, error, "POST conexiones/whatsapp");
   }
@@ -103,7 +108,9 @@ router.post("/api/conexiones/whatsapp", protegerApi, async (req, res) => {
 /** Misma lógica que POST /desconectar-whatsapp */
 router.post("/api/ajustes/conexion/desconectar", protegerApi, async (req, res) => {
   try {
-    res.json(await desconectarConexionAjustes(uid(req)));
+    const result = await desconectarConexionAjustes(uid(req));
+    rt.conexionActualizada(req, uid(req), { accion: "desconectada", conexion: result });
+    res.json(result);
   } catch (error) {
     handleError(res, error, "POST desconectar");
   }

@@ -20,6 +20,9 @@ import {
   iniciarFlujo,
   cancelarSeguimientos,
 } from "./api";
+import { useSocketEvent } from "../hooks/useSocketEvent";
+import { useDebouncedCallback } from "../hooks/useDebouncedCallback";
+import { RT } from "../realtime/events";
 
 const DEFAULT_FILTERS = {
   q: "",
@@ -117,6 +120,20 @@ export function useClientes() {
       loadList();
     }
   }, [vistaLista, loadList, loadKanban, filters, page]);
+
+  const reloadLive = useDebouncedCallback(() => {
+    loadDashboard();
+    if (vistaLista === "kanban") loadKanban();
+    else loadList();
+    if (perfilNumero) {
+      fetchCliente(perfilNumero).then((det) => setPerfil(det?.cliente || det)).catch(() => {});
+    }
+  }, 500);
+
+  useSocketEvent(RT.CLIENTE_ACTUALIZADO, reloadLive);
+  useSocketEvent(RT.NUEVO_MENSAJE, reloadLive);
+  useSocketEvent(RT.ETIQUETA_ACTUALIZADA, reloadLive);
+  useSocketEvent(RT.CONVERSION_REGISTRADA, reloadLive);
 
   const openPerfil = useCallback(async (numero) => {
     setPerfilNumero(numero);

@@ -10,11 +10,12 @@ const {
   clienteRespondioDespues,
 } = require("./seguimientoRepository");
 const { ESTADOS_SEGUIMIENTO } = require("./constants");
+const rt = require("../realtimeService");
 
 function emitirEstadoSeguimiento(io, item, estado) {
-  if (!io || !item?.usuario_id) return;
+  if (!item?.usuario_id) return;
 
-  io.to("user_" + item.usuario_id).emit("seguimiento-estado", {
+  rt.seguimientoActualizado(io, item.usuario_id, {
     id: item.id,
     campana_id: item.campana_id,
     cliente_numero: item.cliente_numero,

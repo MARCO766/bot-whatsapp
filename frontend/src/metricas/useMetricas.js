@@ -10,6 +10,9 @@ import {
   fetchFlujosLista,
 } from "./api";
 import { periodoToApi } from "./format";
+import { useSocketEvent } from "../hooks/useSocketEvent";
+import { useDebouncedCallback } from "../hooks/useDebouncedCallback";
+import { RT } from "../realtime/events";
 
 export function useMetricas(periodoLabel = "7 días", flujoId = "") {
   const [resumen, setResumen] = useState(null);
@@ -65,6 +68,12 @@ export function useMetricas(periodoLabel = "7 días", flujoId = "") {
   useEffect(() => {
     load();
   }, [load]);
+
+  const reloadLive = useDebouncedCallback(load, 600);
+  useSocketEvent(RT.METRICA_ACTUALIZADA, reloadLive);
+  useSocketEvent(RT.CONVERSION_REGISTRADA, reloadLive);
+  useSocketEvent(RT.NUEVO_MENSAJE, reloadLive);
+  useSocketEvent(RT.CLIENTE_ACTUALIZADO, reloadLive);
 
   return {
     resumen,

@@ -2,6 +2,7 @@ const {
   cancelarPendientesCliente,
 } = require("./seguimientoRepository");
 const { ESTADOS_SEGUIMIENTO } = require("./constants");
+const rt = require("../realtimeService");
 
 async function cancelarSeguimientosPorRespuesta(numero, usuarioId, io) {
   if (!numero) return;
@@ -13,13 +14,11 @@ async function cancelarSeguimientosPorRespuesta(numero, usuarioId, io) {
     "Lead respondió"
   );
 
-  if (io && usuarioId) {
-    io.to("user_" + usuarioId).emit("seguimiento-estado", {
-      cliente_numero: numero,
-      estado: ESTADOS_SEGUIMIENTO.RESPONDIDO,
-      motivo: "respuesta_cliente",
-    });
-  }
+  rt.seguimientoActualizado(io, usuarioId, {
+    cliente_numero: numero,
+    estado: ESTADOS_SEGUIMIENTO.RESPONDIDO,
+    motivo: "respuesta_cliente",
+  });
 }
 
 module.exports = {

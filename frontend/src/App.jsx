@@ -1,5 +1,8 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Bandeja from "./pages/Bandeja";
+import { useSocket } from "./context/SocketProvider";
+import { useSocketEvent } from "./hooks/useSocketEvent";
+import { RT } from "./realtime/events";
 import Panel from "./Panel";
 import Flujos from "./Flujos";
 import Campañas from "./Campañas";
@@ -16,6 +19,48 @@ export default function App() {
   const [now, setNow] = useState(new Date());
   const [showActivity, setShowActivity] = useState(false);
   const [inboxUnread, setInboxUnread] = useState(null);
+  const [activities, setActivities] = useState([]);
+  const vistaRef = useRef(vista);
+  const { connected } = useSocket() || {};
+
+  useEffect(() => {
+    vistaRef.current = vista;
+  }, [vista]);
+
+  const pushActivity = useCallback((text, dot = "cyan") => {
+    setActivities((prev) => [
+      { text, time: "Ahora", dot },
+      ...prev.slice(0, 11),
+    ]);
+  }, []);
+
+  useSocketEvent(RT.NUEVO_MENSAJE, (msg) => {
+    const entrante = msg?.direccion !== "saliente";
+    if (entrante && vistaRef.current !== "inbox") {
+      setInboxUnread((n) => (n == null ? 1 : n + 1));
+    }
+    const quien = msg?.nombre || msg?.cliente_numero || "WhatsApp";
+    pushActivity(
+      entrante ? `Nuevo mensaje de ${quien}` : `Mensaje enviado a ${quien}`,
+      entrante ? "green" : "cyan"
+    );
+  });
+
+  useSocketEvent(RT.CLIENTE_ACTUALIZADO, (p) => {
+    pushActivity(`Cliente actualizado: ${p?.numero || p?.cliente?.numero || "CRM"}`, "purple");
+  });
+
+  useSocketEvent(RT.CONVERSION_REGISTRADA, () => {
+    pushActivity("Nueva conversión registrada", "orange");
+  });
+
+  useSocketEvent(RT.FLUJO_GUARDADO, (p) => {
+    pushActivity(`Flujo guardado: ${p?.nombre || p?.id || ""}`.trim(), "purple");
+  });
+
+  useSocketEvent(RT.ACTIVADOR_CREADO, () => {
+    pushActivity("Activador creado", "yellow");
+  });
 
   useEffect(() => {
     localStorage.setItem("macbot_vista", vista);
@@ -40,29 +85,22 @@ export default function App() {
             : String(inboxUnread),
       color: "green",
     },
-    { id: "flujos", nombre: "Flujos", icono: "🧩", badge: "4", color: "purple" },
+    { id: "flujos", nombre: "Flujos", icono: "🧩", badge: null, color: "purple" },
     { id: "activadores", nombre: "Activadores", icono: "⚡", badge: null, color: "yellow" },
     { id: "etiquetas", nombre: "Etiquetas", icono: "🏷️", badge: null, color: "green" },
     {
   id: "metricas",
   nombre: "Metricas",
   icono: "📊",
-  badge: "LIVE",
+  badge: connected ? "LIVE" : null,
   color: "cyan",
 },
-    { id: "campañas", nombre: "Campañas", icono: "📣", badge: "3", color: "orange" },
-    { id: "clientes", nombre: "Clientes", icono: "👥", badge: "86", color: "pink" },
+    { id: "campañas", nombre: "Campañas", icono: "📣", badge: null, color: "orange" },
+    { id: "clientes", nombre: "Clientes", icono: "👥", badge: null, color: "pink" },
     { id: "ajustes", nombre: "Ajustes", icono: "⚙️", badge: null, color: "blue" },
   ];
 
-  const activities = [
-    { text: "Nuevo mensaje desde WhatsApp", time: "Ahora", dot: "green" },
-    { text: "Campaña Papercraft subió CTR", time: "2 min", dot: "cyan" },
-    { text: "Cliente marcado como Pagó", time: "7 min", dot: "purple" },
-    { text: "Flujo Remarketing 23h activado", time: "12 min", dot: "orange" },
-  ];
-
-  const vistaActual = useMemo(() => menu.find((m) => m.id === vista), [vista]);
+  const vistaActual = useMemo(() => menu.find((m) => m.id === vista), [vista, connected, inboxUnread]);
 
   function renderVista() {
     if (vista === "panel") return <Panel cambiarVista={setVista} />;
@@ -130,25 +168,25 @@ export default function App() {
         {sidebarOpen && (
           <div className="systemCard">
             <div className="systemTop">
-              <span className="liveDot" />
-              <strong>Servidor listo</strong>
-              <small>98%</small>
+              <span className={`liveDot ${connected ? "" : "offline"}`} />
+              <strong>{connected ? "Tiempo real" : "Conectando…"}</strong>
+              <small>{connected ? "ON" : "…"}</small>
             </div>
 
-            <p>Frontend preparado para conectar server.js, WhatsApp API, Supabase y sockets.</p>
+            <p>Sincronización en vivo vía Socket.IO entre pestañas del CRM.</p>
 
             <div className="energy">
               <div />
             </div>
 
             <div className="miniSystem">
-              <span>API</span>
-              <b>Online</b>
+              <span>Socket</span>
+              <b>{connected ? "Online" : "…"}</b>
             </div>
 
             <div className="miniSystem">
-              <span>Inbox</span>
-              <b>Activo</b>
+              <span>Bandeja</span>
+              <b>{inboxUnread != null && inboxUnread > 0 ? `${inboxUnread} nuevos` : "Al día"}</b>
             </div>
           </div>
         )}
@@ -204,15 +242,21 @@ export default function App() {
               <button onClick={() => setShowActivity(false)}>×</button>
             </div>
 
-            {activities.map((item, i) => (
-              <div className="activityItem" key={i}>
-                <span className={`activityDot ${item.dot}`} />
-                <div>
-                  <p>{item.text}</p>
-                  <small>{item.time}</small>
+            {activities.length === 0 ? (
+              <p style={{ margin: 0, color: "#94a3b8", fontSize: 13 }}>
+                Los eventos en vivo aparecerán aquí (mensajes, clientes, flujos…).
+              </p>
+            ) : (
+              activities.map((item, i) => (
+                <div className="activityItem" key={`${item.text}-${i}`}>
+                  <span className={`activityDot ${item.dot}`} />
+                  <div>
+                    <p>{item.text}</p>
+                    <small>{item.time}</small>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         )}
 
@@ -917,6 +961,12 @@ nav {
     transform: scale(1.55);
     opacity: .5;
   }
+}
+
+.liveDot.offline {
+  background: #64748b;
+  box-shadow: none;
+  animation: none;
 }
 
 @keyframes energyFlow {

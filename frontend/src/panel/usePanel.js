@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { fetchPanelDashboard, PanelApiError } from "./api";
+import { useSocketEvent } from "../hooks/useSocketEvent";
+import { useDebouncedCallback } from "../hooks/useDebouncedCallback";
+import { RT } from "../realtime/events";
 
 export function usePanel() {
   const [data, setData] = useState(null);
@@ -23,11 +26,17 @@ export function usePanel() {
     }
   }, []);
 
+  const reloadLive = useDebouncedCallback(reload, 500);
+
   useEffect(() => {
     reload();
-    const id = setInterval(reload, 60000);
-    return () => clearInterval(id);
   }, [reload]);
+
+  useSocketEvent(RT.NUEVO_MENSAJE, reloadLive);
+  useSocketEvent(RT.CLIENTE_ACTUALIZADO, reloadLive);
+  useSocketEvent(RT.CONVERSION_REGISTRADA, reloadLive);
+  useSocketEvent(RT.METRICA_ACTUALIZADA, reloadLive);
+  useSocketEvent(RT.FLUJO_GUARDADO, reloadLive);
 
   return { data, loading, error, reload };
 }

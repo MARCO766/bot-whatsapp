@@ -26,6 +26,7 @@ const {
   listFlujos,
   getMetaFilters,
 } = require("../services/clientesService");
+const rt = require("../services/realtimeService");
 
 function protegerApi(req, res, next) {
   if (req.session?.usuario?.id) return next();
@@ -88,7 +89,9 @@ router.get("/", protegerApi, async (req, res) => {
 
 router.post("/", protegerApi, async (req, res) => {
   try {
-    res.status(201).json(await createCliente(uid(req), req.body));
+    const result = await createCliente(uid(req), req.body);
+    rt.clienteActualizado(req, uid(req), { accion: "creado", cliente: result?.cliente || result });
+    res.status(201).json(result);
   } catch (error) {
     handleError(res, error, "create");
   }
@@ -108,7 +111,14 @@ router.get("/:numero/timeline", protegerApi, async (req, res) => {
 router.patch("/:numero/embudo", protegerApi, async (req, res) => {
   try {
     const { estado_embudo } = req.body || {};
-    res.json(await patchEmbudo(uid(req), req.params.numero, estado_embudo));
+    const result = await patchEmbudo(uid(req), req.params.numero, estado_embudo);
+    rt.clienteActualizado(req, uid(req), {
+      numero: req.params.numero,
+      estado_embudo,
+      accion: "embudo",
+      cliente: result?.cliente || result,
+    });
+    res.json(result);
   } catch (error) {
     handleError(res, error, "embudo");
   }
@@ -201,7 +211,13 @@ router.get("/:numero", protegerApi, async (req, res) => {
 
 router.patch("/:numero", protegerApi, async (req, res) => {
   try {
-    res.json(await updateCliente(uid(req), req.params.numero, req.body));
+    const result = await updateCliente(uid(req), req.params.numero, req.body);
+    rt.clienteActualizado(req, uid(req), {
+      numero: req.params.numero,
+      accion: "actualizado",
+      cliente: result?.cliente || result,
+    });
+    res.json(result);
   } catch (error) {
     handleError(res, error, "patch");
   }

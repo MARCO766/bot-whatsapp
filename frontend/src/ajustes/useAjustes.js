@@ -9,6 +9,9 @@ import {
   probarMeta,
   probarWhatsapp,
 } from "./api";
+import { useSocketEvent } from "../hooks/useSocketEvent";
+import { useDebouncedCallback } from "../hooks/useDebouncedCallback";
+import { RT } from "../realtime/events";
 
 export function useAjustes() {
   const [data, setData] = useState(null);
@@ -40,6 +43,9 @@ export function useAjustes() {
   useEffect(() => {
     load();
   }, [load]);
+
+  const reloadLive = useDebouncedCallback(load, 400);
+  useSocketEvent(RT.CONEXION_ACTUALIZADA, reloadLive);
 
   const run = useCallback(
     async (fn, okMsg) => {
