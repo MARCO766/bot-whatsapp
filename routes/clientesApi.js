@@ -1,5 +1,6 @@
 /**
  * API JSON — CRM Clientes (leads, embudo, timeline).
+ * Montar en server.js: app.use("/api/clientes", clientesApiRoutes)
  */
 const express = require("express");
 const router = express.Router();
@@ -44,7 +45,8 @@ function handleError(res, error, label) {
   });
 }
 
-router.get("/api/clientes/meta", protegerApi, async (req, res) => {
+// Rutas fijas primero (evitar que :numero capture "dashboard", "meta", etc.)
+router.get("/meta", protegerApi, async (req, res) => {
   try {
     res.json(await getMetaFilters(uid(req)));
   } catch (error) {
@@ -52,7 +54,7 @@ router.get("/api/clientes/meta", protegerApi, async (req, res) => {
   }
 });
 
-router.get("/api/clientes/dashboard", protegerApi, async (req, res) => {
+router.get("/dashboard", protegerApi, async (req, res) => {
   try {
     res.json(await getDashboard(uid(req)));
   } catch (error) {
@@ -60,7 +62,7 @@ router.get("/api/clientes/dashboard", protegerApi, async (req, res) => {
   }
 });
 
-router.get("/api/clientes/kanban", protegerApi, async (req, res) => {
+router.get("/kanban", protegerApi, async (req, res) => {
   try {
     res.json(await getKanban(uid(req)));
   } catch (error) {
@@ -68,7 +70,7 @@ router.get("/api/clientes/kanban", protegerApi, async (req, res) => {
   }
 });
 
-router.get("/api/clientes/flujos", protegerApi, async (req, res) => {
+router.get("/flujos", protegerApi, async (req, res) => {
   try {
     res.json(await listFlujos(uid(req)));
   } catch (error) {
@@ -76,7 +78,7 @@ router.get("/api/clientes/flujos", protegerApi, async (req, res) => {
   }
 });
 
-router.get("/api/clientes", protegerApi, async (req, res) => {
+router.get("/", protegerApi, async (req, res) => {
   try {
     res.json(await listClientes(uid(req), req.query));
   } catch (error) {
@@ -84,7 +86,7 @@ router.get("/api/clientes", protegerApi, async (req, res) => {
   }
 });
 
-router.post("/api/clientes", protegerApi, async (req, res) => {
+router.post("/", protegerApi, async (req, res) => {
   try {
     res.status(201).json(await createCliente(uid(req), req.body));
   } catch (error) {
@@ -92,15 +94,8 @@ router.post("/api/clientes", protegerApi, async (req, res) => {
   }
 });
 
-router.get("/api/clientes/:numero", protegerApi, async (req, res) => {
-  try {
-    res.json(await getCliente(uid(req), req.params.numero));
-  } catch (error) {
-    handleError(res, error, "get");
-  }
-});
-
-router.get("/api/clientes/:numero/timeline", protegerApi, async (req, res) => {
+// Sub-rutas de :numero antes del GET genérico
+router.get("/:numero/timeline", protegerApi, async (req, res) => {
   try {
     const limit = parseInt(req.query.limit, 10) || 40;
     const offset = parseInt(req.query.offset, 10) || 0;
@@ -110,15 +105,7 @@ router.get("/api/clientes/:numero/timeline", protegerApi, async (req, res) => {
   }
 });
 
-router.patch("/api/clientes/:numero", protegerApi, async (req, res) => {
-  try {
-    res.json(await updateCliente(uid(req), req.params.numero, req.body));
-  } catch (error) {
-    handleError(res, error, "patch");
-  }
-});
-
-router.patch("/api/clientes/:numero/embudo", protegerApi, async (req, res) => {
+router.patch("/:numero/embudo", protegerApi, async (req, res) => {
   try {
     const { estado_embudo } = req.body || {};
     res.json(await patchEmbudo(uid(req), req.params.numero, estado_embudo));
@@ -127,7 +114,7 @@ router.patch("/api/clientes/:numero/embudo", protegerApi, async (req, res) => {
   }
 });
 
-router.post("/api/clientes/:numero/etiqueta", protegerApi, async (req, res) => {
+router.post("/:numero/etiqueta", protegerApi, async (req, res) => {
   try {
     const { etiqueta } = req.body || {};
     if (!etiqueta) return res.status(400).json({ ok: false, error: "Falta etiqueta" });
@@ -137,7 +124,7 @@ router.post("/api/clientes/:numero/etiqueta", protegerApi, async (req, res) => {
   }
 });
 
-router.delete("/api/clientes/:numero/etiqueta", protegerApi, async (req, res) => {
+router.delete("/:numero/etiqueta", protegerApi, async (req, res) => {
   try {
     res.json(await removeEtiqueta(uid(req), req.params.numero));
   } catch (error) {
@@ -145,7 +132,7 @@ router.delete("/api/clientes/:numero/etiqueta", protegerApi, async (req, res) =>
   }
 });
 
-router.post("/api/clientes/:numero/compra", protegerApi, async (req, res) => {
+router.post("/:numero/compra", protegerApi, async (req, res) => {
   try {
     res.json(await registrarCompraManual(uid(req), req.params.numero, req.body));
   } catch (error) {
@@ -153,7 +140,7 @@ router.post("/api/clientes/:numero/compra", protegerApi, async (req, res) => {
   }
 });
 
-router.post("/api/clientes/:numero/recordatorio", protegerApi, async (req, res) => {
+router.post("/:numero/recordatorio", protegerApi, async (req, res) => {
   try {
     res.json(await crearRecordatorio(uid(req), req.params.numero, req.body));
   } catch (error) {
@@ -161,7 +148,7 @@ router.post("/api/clientes/:numero/recordatorio", protegerApi, async (req, res) 
   }
 });
 
-router.post("/api/clientes/:numero/bloquear", protegerApi, async (req, res) => {
+router.post("/:numero/bloquear", protegerApi, async (req, res) => {
   try {
     res.json(await bloquearCliente(uid(req), req.params.numero));
   } catch (error) {
@@ -169,7 +156,7 @@ router.post("/api/clientes/:numero/bloquear", protegerApi, async (req, res) => {
   }
 });
 
-router.post("/api/clientes/:numero/desbloquear", protegerApi, async (req, res) => {
+router.post("/:numero/desbloquear", protegerApi, async (req, res) => {
   try {
     res.json(await desbloquearCliente(uid(req), req.params.numero));
   } catch (error) {
@@ -177,7 +164,7 @@ router.post("/api/clientes/:numero/desbloquear", protegerApi, async (req, res) =
   }
 });
 
-router.post("/api/clientes/:numero/archivar", protegerApi, async (req, res) => {
+router.post("/:numero/archivar", protegerApi, async (req, res) => {
   try {
     const archivado = req.body?.archivado !== false;
     res.json(await archivarCliente(uid(req), req.params.numero, archivado));
@@ -186,15 +173,15 @@ router.post("/api/clientes/:numero/archivar", protegerApi, async (req, res) => {
   }
 });
 
-router.delete("/api/clientes/:numero", protegerApi, async (req, res) => {
+router.post("/:numero/flujo/cancelar", protegerApi, async (req, res) => {
   try {
-    res.json(await eliminarCliente(uid(req), req.params.numero));
+    res.json(await cancelarSeguimientos(uid(req), req.params.numero));
   } catch (error) {
-    handleError(res, error, "delete");
+    handleError(res, error, "cancelar-flujo");
   }
 });
 
-router.post("/api/clientes/:numero/flujo", protegerApi, async (req, res) => {
+router.post("/:numero/flujo", protegerApi, async (req, res) => {
   try {
     const { flujo_id } = req.body || {};
     if (!flujo_id) return res.status(400).json({ ok: false, error: "Falta flujo_id" });
@@ -204,11 +191,27 @@ router.post("/api/clientes/:numero/flujo", protegerApi, async (req, res) => {
   }
 });
 
-router.post("/api/clientes/:numero/flujo/cancelar", protegerApi, async (req, res) => {
+router.get("/:numero", protegerApi, async (req, res) => {
   try {
-    res.json(await cancelarSeguimientos(uid(req), req.params.numero));
+    res.json(await getCliente(uid(req), req.params.numero));
   } catch (error) {
-    handleError(res, error, "cancelar-flujo");
+    handleError(res, error, "get");
+  }
+});
+
+router.patch("/:numero", protegerApi, async (req, res) => {
+  try {
+    res.json(await updateCliente(uid(req), req.params.numero, req.body));
+  } catch (error) {
+    handleError(res, error, "patch");
+  }
+});
+
+router.delete("/:numero", protegerApi, async (req, res) => {
+  try {
+    res.json(await eliminarCliente(uid(req), req.params.numero));
+  } catch (error) {
+    handleError(res, error, "delete");
   }
 });
 
