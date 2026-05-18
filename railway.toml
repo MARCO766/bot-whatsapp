@@ -1,5 +1,5 @@
-# MacBot — deploy con Dockerfile (sin Nixpacks)
-# Railway usa esta config; el build ocurre 100% en Dockerfile.
+# MacBot — Railway: SOLO Dockerfile
+# NO usar NIXPACKS. El build ocurre únicamente en ./Dockerfile
 
 [build]
 builder = "DOCKERFILE"
