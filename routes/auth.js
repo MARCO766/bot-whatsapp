@@ -18,6 +18,10 @@ router.use(session({
 }));
 
 router.get("/login", (req, res) => {
+  if (req.session?.usuario) {
+    return res.redirect("/");
+  }
+
   res.send(`
 <!DOCTYPE html>
 <html lang="es">
@@ -248,7 +252,7 @@ router.post("/login", async (req, res) => {
       email: usuario.email
     };
 
-    res.redirect("/admin?tab=inicio");
+    res.redirect("/");
 
   } catch (error) {
     console.log("ERROR LOGIN:", error.response?.data || error.message);
