@@ -38,6 +38,7 @@ export const META_STORAGE_KEY = "macbot_flujos_meta_local";
 export const NODE_PREVIEW_COLORS = {
   inicio: "#f43f5e",
   contenido: "#14b8a6",
+  ia: "#22d3ee",
   seguimiento: "#ff6b35",
   espera: "#8b5cf6",
   etiqueta: "#3b82f6",

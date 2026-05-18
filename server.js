@@ -28,6 +28,7 @@ const panelApiRoutes = require("./routes/panelApi");
 const ajustesApiRoutes = require("./routes/ajustesApi");
 const etiquetasApiRoutes = require("./routes/etiquetasApi");
 const clientesApiRouter = require("./routes/clientesApi");
+const aiApiRoutes = require("./routes/aiApi");
 
 const app = express();
 const isProduction = process.env.NODE_ENV === "production";
@@ -82,7 +83,9 @@ app.use(panelApiRoutes);
 app.use(ajustesApiRoutes);
 app.use(etiquetasApiRoutes);
 app.use("/api/clientes", clientesApiRouter);
+app.use(aiApiRoutes);
 console.log("✅ API Clientes montada en /api/clientes");
+console.log("✅ API IA montada en POST /api/ai/run");
 
 // ─── CRM React (frontend/dist) — mismo origen que /api en producción ───
 const frontendDist = path.join(__dirname, "frontend", "dist");

@@ -8,6 +8,10 @@ const {
   registrarConversion,
   parseConversionFromNodo,
 } = require("./conversionService");
+const {
+  ejecutarIANodo,
+  enriquecerContextoFlujo,
+} = require("./aiService");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
@@ -154,11 +158,29 @@ async function ejecutarContenidoNodo(numero, nodo, usuarioId) {
   }
 }
 
-async function ejecutarFlujo(numero, flujoData, usuarioId = null, flujoId = null) {
+async function ejecutarFlujo(
+  numero,
+  flujoData,
+  usuarioId = null,
+  flujoId = null,
+  opts = {}
+) {
   if (!flujoData || !flujoData.nodos || !flujoData.conexiones) return;
 
   const nodos = flujoData.nodos;
   const conexiones = normalizarConexionesFlujo(flujoData.conexiones);
+
+  const flowContext = {
+    numero,
+    telefono: numero,
+    nombre: opts.nombre || "",
+    ultimo_mensaje: opts.ultimoMensaje || opts.ultimo_mensaje || "",
+    intent: "",
+    score: "",
+    ai: {},
+  };
+
+  await enriquecerContextoFlujo(flowContext, numero, usuarioId);
 
   console.log(
     "[FLUJO] Inicio ejecución | nodos:",
@@ -259,6 +281,19 @@ async function ejecutarFlujo(numero, flujoData, usuarioId = null, flujoId = null
         await continuarASiguientes(nodoId, visitados, "contenido");
         return;
       }
+    }
+
+    if (tipoNodo === "ia") {
+      const { continuar } = await ejecutarIANodo({
+        numero,
+        nodo,
+        usuarioId,
+        flowContext,
+      });
+      if (continuar) {
+        await continuarASiguientes(nodoId, visitados, "ia");
+      }
+      return;
     }
 
 const acciones = [];
@@ -489,7 +524,9 @@ async function buscarYEjecutarActivador(numero, textoCliente, usuarioId = null, 
 
   console.log("[ACTIVADOR] flujo ejecutado:", flujo.id, "| nombre:", flujo.nombre || "—");
 
-  await ejecutarFlujo(numero, flujo.data, usuarioId, flujo.id);
+  await ejecutarFlujo(numero, flujo.data, usuarioId, flujo.id, {
+    ultimoMensaje: textoCliente,
+  });
   await registrarUsoActivador(activador);
 
   return true;

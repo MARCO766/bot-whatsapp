@@ -10,6 +10,11 @@ function detectarTipoNodo(nodo) {
     return "inicio";
   }
 
+  const tipoGuardado = nodo.tipo || nodo.dataset?.tipo;
+  if (tipoGuardado === "ia") {
+    return "ia";
+  }
+
   if (esNodoSeguimiento(nodo)) {
     return "seguimiento";
   }
@@ -26,6 +31,15 @@ function detectarTipoNodo(nodo) {
 
   if (html.includes("⏳ Espera")) {
     return "espera";
+  }
+
+  if (
+    nodo.dataset?.tipo === "ia" ||
+    className.includes("ia-node") ||
+    html.includes("ia-data") ||
+    html.includes("🤖 IA")
+  ) {
+    return "ia";
   }
 
   if (html.includes("🏷️ Etiqueta")) {

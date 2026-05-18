@@ -229,6 +229,16 @@ function cargarFlujoGuardado(){
     }
   });
 
+  document.querySelectorAll(".ia-node").forEach((nodo) => {
+    try {
+      if(window.MacBotIA){
+        window.MacBotIA.refrescarNodoCargado(nodo);
+      }
+    } catch (e) {
+      console.warn("IA: error al refrescar nodo cargado", e);
+    }
+  });
+
   if(flujoCargado.conexiones){
     flujoCargado.conexiones.forEach(c => {
       const desdeId = c.desde || c.from || c.source || c.source_node_id;
@@ -254,6 +264,12 @@ function agregarNodo(tipo){
 
   if(!canvas){
     alert("No existe canvasFlujo");
+    return;
+  }
+
+  if(tipo === "ia" && window.MacBotIA && window.MacBotIA.crearNodoEnCanvas){
+    registrarHistorialBuilder();
+    window.MacBotIA.crearNodoEnCanvas();
     return;
   }
 
@@ -362,6 +378,31 @@ function agregarNodo(tipo){
     `;
   }
 
+  if(tipo === "ia"){
+    nodo.classList.add("ia-node");
+    const cfgIa = JSON.stringify({
+      nombreNodo: "🤖 IA",
+      modo: "detectar_intencion",
+      promptSistema: "",
+      instruccionesNegocio: "",
+      maxCaracteres: 400,
+      temperatura: 0.3,
+      modelo: "gpt-4o-mini",
+      variableResultado: "",
+      siFalla: "continuar",
+      mensajeFallback: "Gracias por escribirnos. En breve un asesor te atiende.",
+    });
+    contenido = `
+      <div class="node-actions">
+        <button type="button" class="edit-node" onclick="event.stopPropagation(); editarNodo('${nodo.id}')">✎</button>
+        <button type="button" class="delete-node" onclick="event.stopPropagation(); borrarNodo('${nodo.id}')">×</button>
+      </div>
+      <div class="ia-header"><h3 class="ia-title">🤖 IA</h3></div>
+      <div class="ia-body"><span class="ia-badge-modo">Detectar intención</span></div>
+      <textarea class="ia-data" style="display:none;">${cfgIa}</textarea>
+    `;
+  }
+
   nodo.innerHTML = `
     <div class="port in" data-nodo="${nodo.id}" onmousedown="iniciarConexion(event, '${nodo.id}', 'in')"></div>
     ${contenido}
@@ -372,6 +413,10 @@ function agregarNodo(tipo){
 
   if(tipo === "seguimiento" && window.MacBotSeguimiento){
     window.MacBotSeguimiento.initNodoRecienCreado(nodo);
+  }
+
+  if(tipo === "ia" && window.MacBotIA){
+    window.MacBotIA.initNodoRecienCreado(nodo);
   }
 
   hacerMovible(nodo);
@@ -698,10 +743,16 @@ function borrarNodo(id){
       ? window.MacBotContenido.getNodoActivo()
       : null;
 
+  const nodoActivoIa =
+    window.MacBotIA && window.MacBotIA.getNodoActivo
+      ? window.MacBotIA.getNodoActivo()
+      : null;
+
   const eraSeleccionado =
     (nodoSeleccionadoPanel && nodoSeleccionadoPanel.id === id) ||
     (nodoActivoSeg && nodoActivoSeg.id === id) ||
-    (nodoActivoCnt && nodoActivoCnt.id === id);
+    (nodoActivoCnt && nodoActivoCnt.id === id) ||
+    (nodoActivoIa && nodoActivoIa.id === id);
 
   registrarHistorialBuilder();
 
@@ -1442,6 +1493,11 @@ function abrirPanelNodo(nodo){
     return;
   }
 
+  if(window.MacBotIA && window.MacBotIA.esNodoIA(nodo)){
+    window.MacBotIA.renderPanel(nodo);
+    return;
+  }
+
   if(nodo.dataset.tipo === "conversion" || nodo.classList.contains("conversion-node")){
     renderPanelConversion(nodo);
     return;
@@ -1600,6 +1656,10 @@ function cerrarPanelNodo(){
     window.MacBotContenido.clearPanelActivo();
   }
 
+  if(window.MacBotIA && window.MacBotIA.clearPanelActivo){
+    window.MacBotIA.clearPanelActivo();
+  }
+
   if(panel){
     panel.classList.remove("activo");
   }
@@ -1624,6 +1684,10 @@ function sincronizarPanelAntesDeSnapshot(){
 
   if(window.MacBotContenido && window.MacBotContenido.flushPanelToNode){
     window.MacBotContenido.flushPanelToNode();
+  }
+
+  if(window.MacBotIA && window.MacBotIA.flushPanelToNode){
+    window.MacBotIA.flushPanelToNode();
   }
 }
 
@@ -1721,6 +1785,20 @@ function restaurarSnapshotBuilder(snapshot){
         }
       } catch (err) {
         console.warn("Contenido: error al restaurar nodo", err.message);
+      }
+    }
+
+    if(
+      (item.className && item.className.includes("ia-node")) ||
+      item.tipo === "ia" ||
+      (item.html && item.html.includes("ia-data"))
+    ){
+      try{
+        if(window.MacBotIA){
+          window.MacBotIA.refrescarNodoCargado(nodo);
+        }
+      } catch (err) {
+        console.warn("IA: error al restaurar nodo", err.message);
       }
     }
   });

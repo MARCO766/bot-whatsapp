@@ -160,6 +160,7 @@ export default function Flujos() {
           <option value="all">Tipo de nodo</option>
           <option value="inicio">Inicio</option>
           <option value="contenido">Contenido</option>
+          <option value="ia">IA</option>
           <option value="seguimiento">Seguimiento</option>
           <option value="espera">Espera</option>
           <option value="etiqueta">Etiqueta</option>

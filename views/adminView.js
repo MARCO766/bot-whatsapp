@@ -19,7 +19,7 @@ function renderAdminPage({
 
 <link rel="stylesheet" href="/css/admin.css">
 <link rel="stylesheet" href="/css/flow-builder.css">
-${builder ? '<link rel="stylesheet" href="/css/seguimiento.css"><link rel="stylesheet" href="/css/contenido.css"><link rel="stylesheet" href="/css/conversion-node.css">' : ""}
+${builder ? '<link rel="stylesheet" href="/css/seguimiento.css"><link rel="stylesheet" href="/css/contenido.css"><link rel="stylesheet" href="/css/conversion-node.css"><link rel="stylesheet" href="/css/ia-node.css">' : ""}
 </head>
 
 <body>
@@ -43,6 +43,7 @@ ${builder ? '<link rel="stylesheet" href="/css/seguimiento.css"><link rel="style
     <span class="menu-nodos-title">Nodos</span>
     <button type="button" class="menu-nodo-btn active" disabled>🧩 Paleta</button>
     <button type="button" class="menu-nodo-btn" onclick="agregarNodoContenido()">💬 Contenido</button>
+    <button type="button" class="menu-nodo-btn menu-nodo-btn-ia" onclick="agregarNodoIA()">🤖 IA</button>
     <button type="button" class="menu-nodo-btn" onclick="agregarNodo('seguimiento')">🔔 Seguimiento</button>
     <button type="button" class="menu-nodo-btn" onclick="agregarNodo('espera')">⏳ Espera</button>
     <button type="button" class="menu-nodo-btn" onclick="agregarNodo('etiqueta')">🏷️ Etiqueta</button>
@@ -718,6 +719,7 @@ ${tab === "flujos" && builder ? `
 ${builder ? `
 <script src="/js/builder/seguimiento.js"></script>
 <script src="/js/builder/contenido.js"></script>
+<script src="/js/builder/ia.js"></script>
 <script src="/js/builder.js"></script>
 ` : ""}
 
