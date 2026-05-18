@@ -1,8 +1,11 @@
+# MacBot — deploy con Dockerfile (sin Nixpacks)
+# Railway usa esta config; el build ocurre 100% en Dockerfile.
+
 [build]
-builder = "NIXPACKS"
-buildCommand = "npm install && npm run build"
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
 
 [deploy]
-startCommand = "npm start"
 healthcheckPath = "/api/flujos/status"
 healthcheckTimeout = 120
+restartPolicyType = "ON_FAILURE"

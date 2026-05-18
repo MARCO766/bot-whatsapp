@@ -6,9 +6,11 @@
   "node": "22.x"
 },
   "scripts": {
-    "build:frontend": "npm install --prefix frontend && npm run build --prefix frontend",
+    "build:frontend": "npm ci --prefix frontend && npm run build --prefix frontend",
     "build": "npm run build:frontend",
-    "start": "node server.js"
+    "start": "node server.js",
+    "docker:build": "docker build -t macbot .",
+    "docker:run": "docker run --rm -p 3000:3000 --env-file .env macbot"
   },
   "dependencies": {
     "axios": "^1.13.1",

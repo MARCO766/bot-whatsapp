@@ -1,0 +1,55 @@
+# Dependencias (se instalan en build)
+node_modules
+frontend/node_modules
+frontend/dist
+
+# Git / IDE
+.git
+.gitignore
+.github
+.cursor
+.vscode
+.idea
+*.swp
+*.swo
+
+# Secretos y entorno local
+.env
+.env.*
+!.env.example
+frontend/.env
+frontend/.env.*
+
+# Logs y temporales
+logs
+*.log
+npm-debug.log*
+tmp
+temp
+uploads
+.cache
+
+# Tests y docs (no necesarios en runtime)
+**/*.test.js
+**/*.spec.js
+**/__tests__
+coverage
+*.md
+!public/**/*.md
+
+# Docker / Railway (no copiar al contexto de build)
+Dockerfile*
+docker-compose*
+.dockerignore
+
+# Builds locales
+dist
+build
+
+# macOS / Windows
+.DS_Store
+Thumbs.db
+
+# Agent / misc
+agent-transcripts
+mcps

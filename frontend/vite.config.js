@@ -10,6 +10,18 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
+    sourcemap: false,
+    minify: 'esbuild',
+    target: 'es2020',
+    cssMinify: true,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom'],
+          socket: ['socket.io-client'],
+        },
+      },
+    },
   },
   server: {
     proxy: {
