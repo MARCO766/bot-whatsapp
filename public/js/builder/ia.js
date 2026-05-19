@@ -163,10 +163,24 @@ window.MacBotIA = (function () {
     }
   }
 
+  function wrapNodoIACore(nodo) {
+    if (nodo.querySelector(".ia-node-left")) return;
+    const left = document.createElement(TAG_DIV);
+    left.className = "ia-node-left";
+    const portIn = nodo.querySelector(".port.in");
+    if (portIn) left.appendChild(portIn);
+    ["node-actions", "ia-header", "ia-body"].forEach(function (sel) {
+      const el = nodo.querySelector(sel);
+      if (el) left.appendChild(el);
+    });
+    nodo.insertBefore(left, nodo.firstChild);
+  }
+
   function renderVisualNodoIA(nodo, config) {
     const activos = caminosParaVisual(config);
     console.log("🎨 Renderizando salidas IA:", activos);
 
+    nodo.querySelector(".ia-routes-branch")?.remove();
     nodo.querySelector(".ia-ports-out")?.remove();
     nodo.querySelectorAll(".port.out").forEach(function (p) {
       p.remove();
@@ -178,52 +192,64 @@ window.MacBotIA = (function () {
     const h3 = nodo.querySelector(".ia-title");
     if (h3) h3.textContent = config.nombreNodo || "🤖 IA";
 
+    nodo.classList.remove("ia-node--with-routes");
+    nodo.style.minWidth = "";
+    nodo.style.minHeight = "";
+
     if (!activos.length) {
       body.innerHTML =
         '<p class="ia-empty-hint">Doble click para configurar</p>';
-      nodo.style.minHeight = "";
       return;
     }
 
-    const filasHtml = activos
-      .map(function (route) {
-        const label = labelCaminoVisual(route);
-        console.log("🔌 Handle ruta:", route.id, label);
-        const sinNombre = !textoCamino(route);
-        return (
-          '<li class="ia-salida-item' +
-          (sinNombre ? " ia-salida-item--sin-nombre" : "") +
-          '" data-route-id="' +
-          esc(route.id) +
-          '"><span class="ia-salida-text">' +
-          esc(label) +
-          "</span></li>"
-        );
-      })
-      .join("");
-
+    wrapNodoIACore(nodo);
+    nodo.classList.add("ia-node--with-routes");
     body.innerHTML =
-      '<ul class="ia-salidas-visuales">' + filasHtml + "</ul>";
+      '<p class="ia-desc-mini">IA responde consultas o avanza por un camino</p>';
 
-    const headerOffset = 44;
-    const rowH = 30;
-    const wrap = document.createElement(TAG_DIV);
-    wrap.className = "ia-ports-out";
+    const branch = document.createElement(TAG_DIV);
+    branch.className = "ia-routes-branch";
 
-    activos.forEach(function (route, index) {
+    const stem = document.createElement(TAG_DIV);
+    stem.className = "ia-routes-stem";
+    stem.setAttribute("aria-hidden", "true");
+    branch.appendChild(stem);
+
+    const list = document.createElement("ul");
+    list.className = "ia-routes-list";
+
+    activos.forEach(function (route) {
+      const label = labelCaminoVisual(route);
+      const sinNombre = !textoCamino(route);
+      console.log("🔌 Handle ruta:", route.id, label);
+      console.log("🔌 Source handle:", route.id);
+
+      const li = document.createElement("li");
+      li.className =
+        "ia-route-pill" + (sinNombre ? " ia-route-pill--sin-nombre" : "");
+      li.dataset.routeId = route.id;
+
+      const dot = document.createElement("span");
+      dot.className = "ia-route-dot";
+      li.appendChild(dot);
+
+      const name = document.createElement("span");
+      name.className = "ia-route-name";
+      name.textContent = label;
+      li.appendChild(name);
+
       const port = document.createElement(TAG_DIV);
       port.className = "port out ia-port-route";
       port.dataset.nodo = nodo.id;
       port.dataset.handle = route.id;
-      console.log("🔌 Source handle:", route.id);
-      port.title = labelCaminoVisual(route);
-      const topPx = headerOffset + index * rowH + rowH / 2;
-      port.style.setProperty("top", topPx + "px", "important");
-      wrap.appendChild(port);
+      port.title = label;
+      li.appendChild(port);
+
+      list.appendChild(li);
     });
 
-    nodo.appendChild(wrap);
-    nodo.style.minHeight = headerOffset + activos.length * rowH + 20 + "px";
+    branch.appendChild(list);
+    nodo.appendChild(branch);
 
     if (typeof actualizarHandlersPuertosCanvas === "function") {
       actualizarHandlersPuertosCanvas();

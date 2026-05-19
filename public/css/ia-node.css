@@ -11,8 +11,8 @@
 /* MacBot — Nodo IA (cyan / morado, glow) */
 
 .node.ia-node {
-  min-width: 220px;
-  max-width: 280px;
+  min-width: 200px;
+  max-width: 520px;
   border: 2px solid transparent;
   border-radius: 16px;
   background: linear-gradient(145deg, #0d1520 0%, #12102a 50%, #0a1628 100%);
@@ -22,6 +22,21 @@
     0 8px 32px rgba(0, 0, 0, 0.45);
   position: relative;
   overflow: visible;
+}
+
+.node.ia-node.ia-node--with-routes {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  min-width: 320px;
+  padding-right: 4px;
+}
+
+.node.ia-node .ia-node-left {
+  flex: 0 0 auto;
+  min-width: 148px;
+  max-width: 168px;
+  position: relative;
 }
 
 .node.ia-node::before {
@@ -55,9 +70,23 @@
   background-clip: text;
 }
 
+.node.ia-node .ia-header,
+.node.ia-node .ia-body,
+.node.ia-node .node-actions {
+  flex-shrink: 0;
+}
+
+
 .node.ia-node .ia-body {
-  padding: 8px 12px 14px;
-  min-height: 36px;
+  padding: 6px 12px 12px;
+  min-height: 28px;
+}
+
+.node.ia-node .ia-desc-mini {
+  margin: 0;
+  font-size: 10px;
+  line-height: 1.35;
+  color: #94a3b8;
 }
 
 .node.ia-node .ia-empty-hint {
@@ -69,37 +98,128 @@
   padding: 10px 4px;
 }
 
-.node.ia-node .ia-salidas-visuales {
+/* Rama de caminos (estilo referencia: píldoras + handle naranja) */
+.node.ia-node .ia-routes-branch {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  flex: 1;
+  min-width: 0;
+  margin: 8px 0 8px 4px;
+  position: relative;
+}
+
+.node.ia-node .ia-routes-stem {
+  position: relative;
+  width: 28px;
+  flex-shrink: 0;
+  align-self: stretch;
+}
+
+.node.ia-node .ia-routes-stem::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 14px;
+  height: 2px;
+  background: #22c55e;
+  box-shadow: 0 0 6px rgba(34, 197, 94, 0.6);
+  transform: translateY(-50%);
+}
+
+.node.ia-node .ia-routes-stem::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 12px;
+  bottom: 12px;
+  width: 2px;
+  background: #22c55e;
+  box-shadow: 0 0 6px rgba(34, 197, 94, 0.45);
+}
+
+.node.ia-node .ia-routes-list {
   list-style: none;
   margin: 0;
-  padding: 0;
+  padding: 4px 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  justify-content: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
 }
 
-.node.ia-node .ia-salida-item {
+.node.ia-node .ia-route-pill {
   display: flex;
   align-items: center;
-  min-height: 26px;
-  padding: 4px 28px 4px 8px;
-  border-radius: 8px;
-  background: rgba(34, 211, 238, 0.08);
-  border: 1px solid rgba(34, 211, 238, 0.2);
+  gap: 8px;
+  min-height: 34px;
+  padding: 4px 4px 4px 12px;
+  border-radius: 999px;
+  background: #f8fafc;
+  border: 1px solid rgba(34, 197, 94, 0.55);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  position: relative;
+  min-width: 120px;
 }
 
-.node.ia-node .ia-salida-text {
-  font-size: 12px;
-  font-weight: 700;
-  color: #e0f2fe;
-  line-height: 1.3;
-  word-break: break-word;
+.node.ia-node .ia-route-pill::before {
+  content: "";
+  position: absolute;
+  left: -14px;
+  top: 50%;
+  width: 14px;
+  height: 2px;
+  background: #22c55e;
+  transform: translateY(-50%);
 }
 
-.node.ia-node .ia-salida-item--sin-nombre .ia-salida-text {
-  color: #94a3b8;
+.node.ia-node .ia-route-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 6px rgba(34, 197, 94, 0.7);
+  flex-shrink: 0;
+}
+
+.node.ia-node .ia-route-name {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 600;
+  color: #15803d;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.node.ia-node .ia-route-pill--sin-nombre .ia-route-name {
+  color: #64748b;
   font-style: italic;
   font-weight: 500;
+}
+
+.node.ia-node .ia-route-pill > .port.out.ia-port-route {
+  position: relative !important;
+  right: auto !important;
+  left: auto !important;
+  top: auto !important;
+  transform: none !important;
+  margin: 0 0 0 4px;
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border-width: 2px;
+  background: linear-gradient(135deg, #ffb300, #ff6d00) !important;
+  box-shadow: 0 0 12px rgba(255, 152, 0, 0.65) !important;
+}
+
+.node.ia-node .ia-route-pill > .port.out.ia-port-route:hover {
+  transform: scale(1.12) !important;
 }
 
 .node.ia-node .ia-badge-modo {
@@ -295,27 +415,6 @@
 
 .node.ia-node {
   padding-bottom: 8px;
-}
-
-.node.ia-node .ia-ports-out {
-  position: absolute;
-  right: -10px;
-  top: 0;
-  bottom: 0;
-  width: 0;
-  pointer-events: none;
-}
-
-.node.ia-node .ia-port-route {
-  position: absolute;
-  right: -10px !important;
-  left: auto !important;
-  pointer-events: auto;
-  transform: translateY(-50%) !important;
-}
-
-.node.ia-node .ia-port-route:hover {
-  transform: translateY(-50%) scale(1.12) !important;
 }
 
 .ia-panel-seccion {
