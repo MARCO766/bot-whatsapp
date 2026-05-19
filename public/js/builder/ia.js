@@ -22,7 +22,7 @@ window.MacBotIA = (function () {
   function crearConfigPorDefecto() {
     return {
       version: 3,
-      nombreNodo: "🤖 IA",
+      nombreNodo: "Agente IA",
       scoreMinimo: 40,
       caminos: [],
       comportamiento: {
@@ -163,22 +163,88 @@ window.MacBotIA = (function () {
     }
   }
 
-  function wrapNodoIACore(nodo) {
-    if (nodo.querySelector(".ia-node-left")) return;
-    const left = document.createElement(TAG_DIV);
-    left.className = "ia-node-left";
+  const IA_ICON_SVG =
+    '<svg class="ia-icon-svg" viewBox="0 0 24 24" width="36" height="36" aria-hidden="true">' +
+    '<path fill="#ffffff" d="M22.28 9.82a5.98 5.98 0 0 0-.52-4.91 6.05 6.05 0 0 0-6.51-2.9A6.07 6.07 0 0 0 4.98 4.18a5.98 5.98 0 0 0-4.91.52 6.05 6.05 0 0 0-2.9 6.51 5.97 5.97 0 0 0 .52 4.91 6.05 6.05 0 0 0 2.9 6.51 5.98 5.98 0 0 0 4.91.52 6.05 6.05 0 0 0 6.51-2.9 5.98 5.98 0 0 0 .52-4.91 6.05 6.05 0 0 0-2.9-6.51zM12 6.5l1.45 2.79 3.11-.45-2.25 2.19.53 3.11-2.79-1.45-2.79 1.45-.53-3.11-2.25-2.19 3.11.45L12 6.5z"/>' +
+    "</svg>";
+
+  function ensureEstructuraCircularIA(nodo) {
+    nodo.querySelector(".ia-node-left")?.remove();
+    nodo.querySelector(".ia-header")?.remove();
+
+    let shell = nodo.querySelector(".ia-node-shell");
+    if (shell) {
+      const circle = shell.querySelector(".ia-circle");
+      if (circle) {
+        const portIn = nodo.querySelector(".port.in");
+        const actions = nodo.querySelector(".node-actions");
+        if (portIn && portIn.parentElement !== circle) circle.insertBefore(portIn, circle.firstChild);
+        if (actions && actions.parentElement !== circle) {
+          const afterPort = circle.querySelector(".port.in");
+          if (afterPort && afterPort.nextSibling) circle.insertBefore(actions, afterPort.nextSibling);
+          else circle.appendChild(actions);
+        }
+        if (!circle.querySelector(".ia-icon-wrap")) {
+          const iconWrap = document.createElement(TAG_DIV);
+          iconWrap.className = "ia-icon-wrap";
+          iconWrap.innerHTML = IA_ICON_SVG;
+          const title = circle.querySelector(".ia-title");
+          circle.insertBefore(iconWrap, title || null);
+        }
+        const title = nodo.querySelector(".ia-title");
+        if (title && title.parentElement !== circle) circle.appendChild(title);
+      }
+      return;
+    }
+
     const portIn = nodo.querySelector(".port.in");
-    if (portIn) left.appendChild(portIn);
-    ["node-actions", "ia-header", "ia-body"].forEach(function (sel) {
-      const el = nodo.querySelector(sel);
-      if (el) left.appendChild(el);
-    });
-    nodo.insertBefore(left, nodo.firstChild);
+    const actions = nodo.querySelector(".node-actions");
+    let titleEl = nodo.querySelector(".ia-title");
+    let bodyEl = nodo.querySelector(".ia-body");
+
+    shell = document.createElement(TAG_DIV);
+    shell.className = "ia-node-shell";
+
+    const coreCol = document.createElement(TAG_DIV);
+    coreCol.className = "ia-core-column";
+
+    const circle = document.createElement(TAG_DIV);
+    circle.className = "ia-circle";
+    if (portIn) circle.appendChild(portIn);
+    if (actions) circle.appendChild(actions);
+
+    if (!circle.querySelector(".ia-icon-wrap")) {
+      const iconWrap = document.createElement(TAG_DIV);
+      iconWrap.className = "ia-icon-wrap";
+      iconWrap.innerHTML = IA_ICON_SVG;
+      circle.appendChild(iconWrap);
+    }
+
+    if (!titleEl) {
+      titleEl = document.createElement("h3");
+    }
+    titleEl.className = "ia-title";
+    if (titleEl.parentElement !== circle) circle.appendChild(titleEl);
+
+    if (!bodyEl) {
+      bodyEl = document.createElement(TAG_DIV);
+    }
+    bodyEl.className = "ia-body";
+    coreCol.appendChild(circle);
+    coreCol.appendChild(bodyEl);
+
+    shell.appendChild(coreCol);
+
+    const data = nodo.querySelector(".ia-data");
+    if (data) nodo.insertBefore(shell, data);
+    else nodo.appendChild(shell);
   }
 
   function renderVisualNodoIA(nodo, config) {
     const activos = caminosParaVisual(config);
     console.log("🎨 Renderizando salidas IA:", activos);
+
+    ensureEstructuraCircularIA(nodo);
 
     nodo.querySelector(".ia-routes-branch")?.remove();
     nodo.querySelector(".ia-ports-out")?.remove();
@@ -187,26 +253,25 @@ window.MacBotIA = (function () {
     });
 
     const body = nodo.querySelector(".ia-body");
-    if (!body) return;
+    const titleEl = nodo.querySelector(".ia-title");
+    if (!body || !titleEl) return;
 
-    const h3 = nodo.querySelector(".ia-title");
-    if (h3) h3.textContent = config.nombreNodo || "🤖 IA";
+    const titulo = config.nombreNodo || "Agente IA";
+    titleEl.textContent = titulo;
 
     nodo.classList.remove("ia-node--with-routes");
-    nodo.style.minWidth = "";
-    nodo.style.minHeight = "";
 
     if (!activos.length) {
       body.innerHTML =
-        '<p class="ia-empty-hint">Doble click para configurar</p>';
+        '<p class="ia-desc-pill ia-desc-pill--empty">Doble click para configurar</p>';
       return;
     }
 
-    wrapNodoIACore(nodo);
     nodo.classList.add("ia-node--with-routes");
     body.innerHTML =
-      '<p class="ia-desc-mini">IA responde consultas o avanza por un camino</p>';
+      '<p class="ia-desc-pill">IA responde consultas o avanza por un camino</p>';
 
+    const shell = nodo.querySelector(".ia-node-shell");
     const branch = document.createElement(TAG_DIV);
     branch.className = "ia-routes-branch";
 
@@ -249,7 +314,8 @@ window.MacBotIA = (function () {
     });
 
     branch.appendChild(list);
-    nodo.appendChild(branch);
+    if (shell) shell.appendChild(branch);
+    else nodo.appendChild(branch);
 
     if (typeof actualizarHandlersPuertosCanvas === "function") {
       actualizarHandlersPuertosCanvas();
@@ -664,6 +730,9 @@ window.MacBotIA = (function () {
     const json = JSON.stringify(cfg);
 
     nodo.innerHTML =
+      '<div class="ia-node-shell">' +
+      '<div class="ia-core-column">' +
+      '<div class="ia-circle">' +
       '<div class="port in" data-nodo="' +
       id +
       '" onmousedown="iniciarConexion(event, \'' +
@@ -677,8 +746,14 @@ window.MacBotIA = (function () {
       id +
       '\')">×</button>' +
       "</div>" +
-      '<div class="ia-header"><h3 class="ia-title">🤖 IA</h3></div>' +
-      '<div class="ia-body"></div>' +
+      '<div class="ia-icon-wrap">' +
+      IA_ICON_SVG +
+      "</div>" +
+      '<h3 class="ia-title">Agente IA</h3>' +
+      "</div>" +
+      '<div class="ia-body"><p class="ia-desc-pill ia-desc-pill--empty">Doble click para configurar</p></div>' +
+      "</div>" +
+      "</div>" +
       '<textarea class="ia-data" style="display:none;">' +
       json +
       "</textarea>";
