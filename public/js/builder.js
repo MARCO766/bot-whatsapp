@@ -408,7 +408,7 @@ function agregarNodo(tipo){
   nodo.innerHTML = `
     <div class="port in" data-nodo="${nodo.id}" onmousedown="iniciarConexion(event, '${nodo.id}', 'in')"></div>
     ${contenido}
-    <div class="port out" data-nodo="${nodo.id}" onmousedown="iniciarConexion(event, '${nodo.id}', 'out')"></div>
+    ${tipo === "ia" ? "" : `<div class="port out" data-nodo="${nodo.id}" onmousedown="iniciarConexion(event, '${nodo.id}', 'out')"></div>`}
   `;
 
   canvas.appendChild(nodo);
@@ -676,6 +676,24 @@ function actualizarLineas(){
     }
   });
 }
+
+function eliminarConexionesPorHandle(nodoId, sourceHandle) {
+  if(!nodoId || !sourceHandle) return;
+
+  conexiones = conexiones.filter(function (c) {
+    const quitar =
+      c.desde?.id === nodoId && (c.sourceHandle || null) === sourceHandle;
+    if(quitar){
+      c.linea?.remove();
+      c.borrar?.remove();
+    }
+    return !quitar;
+  });
+
+  actualizarLineas();
+}
+
+window.eliminarConexionesPorHandle = eliminarConexionesPorHandle;
 
 /* =========================
    CONTENIDO (MacBotContenido — solo panel lateral)

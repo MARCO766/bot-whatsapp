@@ -79,7 +79,16 @@ window.MacBotIA = (function () {
     return normalizarConfig(cfg);
   }
 
-  function normalizarCaminos(caminos) {
+  function textoCamino(route) {
+    return String(route?.text || route?.nombre || "").trim();
+  }
+
+  function labelCaminoVisual(route) {
+    const t = textoCamino(route);
+    return t || "Camino sin nombre";
+  }
+
+  function normalizarCaminos(caminos, soloValidos) {
     if (!Array.isArray(caminos)) return [];
     return caminos
       .map(function (r) {
@@ -91,25 +100,36 @@ window.MacBotIA = (function () {
                 return s.trim();
               })
               .filter(Boolean);
+        const text = textoCamino(r);
         return {
           id: String(r.id || generarRouteId()).trim(),
-          nombre: String(r.nombre || "").trim(),
+          text: text,
+          nombre: text,
+          type: String(r.type || "texto").trim() || "texto",
           synonyms: syns,
           priority: parseInt(r.priority, 10) || 50,
-          mediaId: String(r.mediaId || "").trim(),
+          mediaId: r.mediaId ? String(r.mediaId).trim() : null,
           enabled: r.enabled !== false,
         };
       })
       .filter(function (r) {
-        return r.id && r.nombre;
+        if (!r.id) return false;
+        if (soloValidos === false) return true;
+        return !!r.text;
       });
   }
 
   function normalizarConfig(data) {
     const base = migrarConfigLegacy(data || {});
-    base.caminos = normalizarCaminos(base.caminos);
+    base.caminos = normalizarCaminos(base.caminos, true);
     base.scoreMinimo = Math.min(100, Math.max(0, parseInt(base.scoreMinimo, 10) || 40));
     return base;
+  }
+
+  function caminosParaVisual(config) {
+    return normalizarCaminos(config.caminos || [], false).filter(function (r) {
+      return r.enabled !== false;
+    });
   }
 
   function leerConfigDeNodo(nodo) {
@@ -125,15 +145,50 @@ window.MacBotIA = (function () {
     }
   }
 
-  function renderPuertosRuta(nodo, caminos) {
-    const existente = nodo.querySelector(".ia-ports-out");
-    if (existente) existente.remove();
+  function renderVisualNodoIA(nodo, config) {
+    const activos = caminosParaVisual(config);
+    console.log("🎨 Renderizando salidas IA:", activos);
 
-    const activos = (caminos || []).filter(function (r) {
-      return r.enabled !== false;
+    nodo.querySelector(".ia-ports-out")?.remove();
+    nodo.querySelectorAll(".port.out").forEach(function (p) {
+      p.remove();
     });
-    if (!activos.length) return;
 
+    const body = nodo.querySelector(".ia-body");
+    if (!body) return;
+
+    const h3 = nodo.querySelector(".ia-title");
+    if (h3) h3.textContent = config.nombreNodo || "🤖 IA";
+
+    if (!activos.length) {
+      body.innerHTML =
+        '<p class="ia-empty-hint">Doble click para configurar</p>';
+      nodo.style.minHeight = "";
+      return;
+    }
+
+    const filasHtml = activos
+      .map(function (route) {
+        const label = labelCaminoVisual(route);
+        console.log("🔌 Handle ruta:", route.id, label);
+        const sinNombre = !textoCamino(route);
+        return (
+          '<li class="ia-salida-item' +
+          (sinNombre ? " ia-salida-item--sin-nombre" : "") +
+          '" data-route-id="' +
+          esc(route.id) +
+          '"><span class="ia-salida-text">' +
+          esc(label) +
+          "</span></li>"
+        );
+      })
+      .join("");
+
+    body.innerHTML =
+      '<ul class="ia-salidas-visuales">' + filasHtml + "</ul>";
+
+    const headerOffset = 44;
+    const rowH = 30;
     const wrap = document.createElement(TAG_DIV);
     wrap.className = "ia-ports-out";
 
@@ -142,66 +197,33 @@ window.MacBotIA = (function () {
       port.className = "port out ia-port-route";
       port.dataset.nodo = nodo.id;
       port.dataset.handle = route.id;
-      port.title = route.nombre;
-      port.style.top = 36 + index * 22 + "px";
-
-      const label = document.createElement("span");
-      label.className = "ia-port-label";
-      label.textContent = route.nombre;
-      port.appendChild(label);
-
+      port.title = labelCaminoVisual(route);
+      const topPx = headerOffset + index * rowH + rowH / 2;
+      port.style.setProperty("top", topPx + "px", "important");
       wrap.appendChild(port);
     });
 
     nodo.appendChild(wrap);
+    nodo.style.minHeight = headerOffset + activos.length * rowH + 20 + "px";
 
     if (typeof actualizarHandlersPuertosCanvas === "function") {
       actualizarHandlersPuertosCanvas();
     }
+    if (typeof actualizarLineas === "function") actualizarLineas();
   }
 
   function guardarConfigEnNodo(nodo, config) {
     const cfg = normalizarConfig(config);
+    console.log("🧠 Guardando caminos IA:", cfg.caminos);
+
     const box = nodo.querySelector(".ia-data");
     const json = JSON.stringify(cfg);
     if (box) {
       box.value = json;
       box.textContent = json;
     }
-    renderPreviewNodo(nodo, cfg);
-    renderPuertosRuta(nodo, cfg.caminos);
-    const h3 = nodo.querySelector(".ia-title");
-    if (h3) h3.textContent = cfg.nombreNodo || "🤖 IA";
-    if (typeof actualizarLineas === "function") actualizarLineas();
-  }
 
-  function renderPreviewNodo(nodo, config) {
-    const body = nodo.querySelector(".ia-body");
-    if (!body) return;
-
-    const rutas = (config.caminos || []).filter(function (r) {
-      return r.enabled !== false;
-    });
-    const nombres = rutas
-      .slice(0, 3)
-      .map(function (r) {
-        return r.nombre;
-      })
-      .join(", ");
-
-    body.innerHTML =
-      '<span class="ia-badge-modo">Router local</span>' +
-      '<div class="ia-status"><span class="ia-status-dot"></span> Espera lead · silencioso</div>' +
-      '<p class="ia-preview">' +
-      esc(
-        rutas.length
-          ? rutas.length + " camino(s): " + (nombres || "—")
-          : "Sin caminos — agrega rutas en el panel"
-      ) +
-      "</p>" +
-      (config.comportamiento?.responderSiNoCoincide
-        ? '<span class="ia-badge-fallback">Fallback</span>'
-        : "");
+    renderVisualNodoIA(nodo, cfg);
   }
 
   function syncCaminosDesdeDom() {
@@ -209,8 +231,8 @@ window.MacBotIA = (function () {
     const caminos = [];
     rows.forEach(function (row) {
       const id = row.dataset.routeId;
-      const nombre = row.querySelector(".ia-ruta-nombre")?.value.trim();
-      if (!id || !nombre) return;
+      if (!id) return;
+      const text = row.querySelector(".ia-ruta-texto")?.value.trim() || "";
       const synsRaw = row.querySelector(".ia-ruta-sinonimos")?.value || "";
       const syns = synsRaw
         .split(",")
@@ -218,12 +240,15 @@ window.MacBotIA = (function () {
           return s.trim();
         })
         .filter(Boolean);
+      const mediaRaw = row.querySelector(".ia-ruta-media")?.value.trim() || "";
       caminos.push({
         id: id,
-        nombre: nombre,
+        text: text,
+        nombre: text,
+        type: "texto",
         synonyms: syns,
         priority: parseInt(row.querySelector(".ia-ruta-prioridad")?.value, 10) || 50,
-        mediaId: row.querySelector(".ia-ruta-media")?.value.trim() || "",
+        mediaId: mediaRaw || null,
         enabled: row.querySelector(".ia-ruta-enabled")?.checked !== false,
       });
     });
@@ -268,9 +293,9 @@ window.MacBotIA = (function () {
           "> Activo</label>" +
           '<button type="button" class="ia-ruta-del" data-action="del">Eliminar</button>' +
           "</div>" +
-          '<div class="panel-campo"><label>Nombre</label>' +
-          '<input class="ia-ruta-nombre" value="' +
-          esc(route.nombre) +
+          '<div class="panel-campo"><label>Texto del camino</label>' +
+          '<input class="ia-ruta-texto" placeholder="Ej: qr" value="' +
+          esc(textoCamino(route)) +
           '"></div>' +
           '<div class="panel-campo"><label>Sinónimos (coma)</label>' +
           '<textarea class="ia-ruta-sinonimos ia-textarea" rows="2">' +
@@ -303,6 +328,9 @@ window.MacBotIA = (function () {
         configActiva.caminos = (configActiva.caminos || []).filter(function (r) {
           return r.id !== rid;
         });
+        if (nodoActivo && typeof window.eliminarConexionesPorHandle === "function") {
+          window.eliminarConexionesPorHandle(nodoActivo.id, rid);
+        }
         renderCaminosEditor();
         onFormChange();
       });
@@ -436,10 +464,12 @@ window.MacBotIA = (function () {
       syncCaminosDesdeDom();
       configActiva.caminos.push({
         id: generarRouteId(),
-        nombre: "nuevo",
+        text: "",
+        nombre: "",
+        type: "texto",
         synonyms: [],
         priority: 50,
-        mediaId: "",
+        mediaId: null,
         enabled: true,
       });
       renderCaminosEditor();
@@ -464,7 +494,16 @@ window.MacBotIA = (function () {
 
   function onFormChange() {
     syncDesdeFormulario();
-    if (nodoActivo) guardarConfigEnNodo(nodoActivo, configActiva);
+    if (nodoActivo) {
+      renderVisualNodoIA(nodoActivo, configActiva);
+      const box = nodoActivo.querySelector(".ia-data");
+      const draft = normalizarConfig(configActiva);
+      const json = JSON.stringify(draft);
+      if (box) {
+        box.value = json;
+        box.textContent = json;
+      }
+    }
     if (typeof window.macbotRecordHistoryDebounced === "function") {
       window.macbotRecordHistoryDebounced();
     }
@@ -474,6 +513,9 @@ window.MacBotIA = (function () {
     if (!nodoActivo) return;
     syncDesdeFormulario();
     guardarConfigEnNodo(nodoActivo, configActiva);
+    if (typeof cerrarPanelNodo === "function") {
+      cerrarPanelNodo();
+    }
   }
 
   function flushPanelToNode() {
@@ -554,6 +596,11 @@ window.MacBotIA = (function () {
 
     canvas.appendChild(nodo);
 
+    nodo.addEventListener("dblclick", function (ev) {
+      ev.stopPropagation();
+      if (typeof editarNodo === "function") editarNodo(id);
+    });
+
     if (typeof hacerMovible === "function") hacerMovible(nodo);
     initNodoRecienCreado(nodo);
     return nodo;
@@ -565,6 +612,16 @@ window.MacBotIA = (function () {
 
   function refrescarNodoCargado(nodo) {
     try {
+      nodo.querySelectorAll(".port.out:not(.ia-port-route)").forEach(function (p) {
+        p.remove();
+      });
+      if (!nodo.dataset.iaDblBound) {
+        nodo.dataset.iaDblBound = "1";
+        nodo.addEventListener("dblclick", function (ev) {
+          ev.stopPropagation();
+          if (typeof editarNodo === "function") editarNodo(nodo.id);
+        });
+      }
       guardarConfigEnNodo(nodo, leerConfigDeNodo(nodo));
     } catch (e) {
       console.warn("IA: error refrescando nodo", e.message);
@@ -575,7 +632,7 @@ window.MacBotIA = (function () {
     crearConfigPorDefecto: crearConfigPorDefecto,
     leerConfigDeNodo: leerConfigDeNodo,
     guardarConfigEnNodo: guardarConfigEnNodo,
-    renderPreviewNodo: renderPreviewNodo,
+    renderVisualNodoIA: renderVisualNodoIA,
     renderPanel: renderPanel,
     esNodoIA: esNodoIA,
     crearNodoEnCanvas: crearNodoEnCanvas,
