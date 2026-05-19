@@ -218,30 +218,37 @@ async function ejecutarBloqueContenido(numero, bloque, usuarioId) {
   }
 
   if (tipo.includes("imagen") || tipo === "image") {
-    await enviarMediaWhatsApp(numero, "image", media, captionMediaBloque(bloque), {
+    const enviado = await enviarMediaWhatsApp(numero, "image", media, captionMediaBloque(bloque), {
       usuarioId,
     });
-    console.log("✅ IMAGEN ENVIADA");
+    if (enviado) console.log("✅ IMAGEN ENVIADA");
+    else console.log("❌ IMAGEN NO ENVIADA (Meta o URL inválida)");
     return;
   }
 
   if (tipo.includes("video")) {
-    await enviarMediaWhatsApp(numero, "video", media, captionMediaBloque(bloque), {
+    const enviado = await enviarMediaWhatsApp(numero, "video", media, captionMediaBloque(bloque), {
       usuarioId,
     });
-    console.log("✅ VIDEO ENVIADO");
+    if (enviado) console.log("✅ VIDEO ENVIADO");
+    else console.log("❌ VIDEO NO ENVIADO (Meta o URL inválida)");
     return;
   }
 
   if (tipo.includes("audio")) {
-    await enviarMediaWhatsApp(numero, "audio", media, "", { usuarioId });
-    console.log("✅ AUDIO ENVIADO");
+    const enviado = await enviarMediaWhatsApp(numero, "audio", media, "", { usuarioId });
+    if (enviado) console.log("✅ AUDIO ENVIADO");
+    else console.log("❌ AUDIO NO ENVIADO (Meta o URL inválida)");
     return;
   }
 
   if (tipo.includes("pdf") || tipo.includes("doc") || tipo === "document") {
-    await enviarMediaWhatsApp(numero, "document", media, "", { usuarioId });
-    console.log("✅ PDF ENVIADO");
+    const enviado = await enviarMediaWhatsApp(numero, "document", media, captionMediaBloque(bloque), {
+      usuarioId,
+      filename: bloque.nombre || bloque.filename || "archivo.pdf",
+    });
+    if (enviado) console.log("✅ PDF ENVIADO");
+    else console.log("❌ PDF NO ENVIADO (Meta o URL inválida)");
     return;
   }
 
