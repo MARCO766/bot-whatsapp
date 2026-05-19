@@ -267,6 +267,12 @@ async function enviarMediaWhatsApp(numero, tipo, mediaUrl, caption = "", opcione
     }
 
     console.log("✅ MEDIA REALMENTE ENVIADA:", whatsappMessageId);
+    console.log("📎 WAMID MEDIA (comparar con webhook statuses):", whatsappMessageId, {
+      numero: numeroDestino,
+      tipo: tipoApi,
+      mediaUrl: url,
+      caption: caption || "",
+    });
 
     const insertRes = await axios.post(
       `${SUPABASE_URL}/rest/v1/mensajes`,

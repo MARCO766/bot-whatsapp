@@ -74,40 +74,65 @@ if (phoneNumberIdWebhook) {
   }
 }
 
-// 🚫 Ignorar estados (read, delivered, etc)
-// ✅ estados WhatsApp (sent, delivered, read)
-
+// ✅ estados WhatsApp (sent, delivered, read, failed)
 if (value?.statuses) {
+  console.log(
+    "📬 WEBHOOK STATUSES:",
+    value.statuses.length,
+    "| phone_id:",
+    phoneNumberIdWebhook,
+    "| usuario:",
+    usuarioIdWebhook
+  );
 
   for (const status of value.statuses) {
+    console.log("📬 STATUS WHATSAPP:", {
+      id: status.id,
+      status: status.status,
+      timestamp: status.timestamp,
+      recipient_id: status.recipient_id,
+      errors: status.errors,
+    });
+
+    if (status.status === "failed") {
+      console.error(
+        "❌ WHATSAPP STATUS FAILED:",
+        JSON.stringify(status.errors, null, 2)
+      );
+    }
 
     const whatsappMessageId = status.id;
-
     const estado = status.status;
 
     if (!whatsappMessageId || !estado) continue;
 
-    await axios.patch(
-      `${SUPABASE_URL}/rest/v1/mensajes?whatsapp_message_id=eq.${whatsappMessageId}`,
-      {
-        estado_envio: estado
-      },
-      {
-        headers: {
-          apikey: SUPABASE_KEY,
-          Authorization: `Bearer ${SUPABASE_KEY}`,
-          "Content-Type": "application/json"
+    try {
+      await axios.patch(
+        `${SUPABASE_URL}/rest/v1/mensajes?whatsapp_message_id=eq.${whatsappMessageId}`,
+        { estado_envio: estado },
+        {
+          headers: {
+            apikey: SUPABASE_KEY,
+            Authorization: `Bearer ${SUPABASE_KEY}`,
+            "Content-Type": "application/json",
+          },
         }
-      }
-    );
-rt.mensajeEstado(req, usuarioIdWebhook, {
-    whatsapp_message_id: whatsappMessageId,
-    estado_envio: estado,
-  });
+      );
+    } catch (patchErr) {
+      console.error(
+        "❌ ERROR ACTUALIZANDO estado_envio EN BD:",
+        whatsappMessageId,
+        patchErr.response?.data || patchErr.message
+      );
+    }
+
+    rt.mensajeEstado(req, usuarioIdWebhook, {
+      whatsapp_message_id: whatsappMessageId,
+      estado_envio: estado,
+    });
   }
 
   return res.sendStatus(200);
-
 }
 // 🚫 evitar errores y duplicados
 if (!value || !value.messages || !value.messages[0]) {
