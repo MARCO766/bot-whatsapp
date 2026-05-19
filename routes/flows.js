@@ -22,6 +22,10 @@ const {
   enviarTextoWhatsApp,
   enviarMediaWhatsApp
 } = require("../services/whatsappService");
+const {
+  esArchivoImagen,
+  prepararImagenParaWhatsApp,
+} = require("../services/imageWhatsAppService");
 const seguimientoRoutes = require("./seguimiento");
 const rt = require("../services/realtimeService");
 
@@ -61,19 +65,40 @@ router.post("/subir-archivo", protegerPanel, upload.single("archivo"), async (re
       });
     }
 
-    const extension = req.file.originalname.split(".").pop();
-    const nombreArchivo = Date.now() + "-" + Math.random().toString(36).substring(2) + "." + extension;
+    let bufferSubir = req.file.buffer;
+    let mimeSubir = req.file.mimetype;
+    let extension = req.file.originalname.split(".").pop();
+
+    if (esArchivoImagen(req.file)) {
+      try {
+        const preparada = await prepararImagenParaWhatsApp(
+          req.file.buffer,
+          req.file.mimetype,
+          req.file.originalname
+        );
+        bufferSubir = preparada.buffer;
+        mimeSubir = preparada.mimetype;
+        extension = preparada.extension;
+      } catch (convErr) {
+        return res.status(400).json({
+          error: convErr.message || "No se pudo convertir la imagen",
+        });
+      }
+    }
+
+    const nombreArchivo =
+      Date.now() + "-" + Math.random().toString(36).substring(2) + "." + extension;
 
     const rutaArchivo = `whatsapp/${req.session.usuario.id}/${nombreArchivo}`;
 
     await axios.post(
       `${SUPABASE_URL}/storage/v1/object/archivos/${rutaArchivo}`,
-      req.file.buffer,
+      bufferSubir,
       {
         headers: {
           apikey: SUPABASE_KEY,
           Authorization: `Bearer ${SUPABASE_KEY}`,
-          "Content-Type": req.file.mimetype,
+          "Content-Type": mimeSubir,
           "x-upsert": "true"
         }
       }
@@ -84,7 +109,7 @@ router.post("/subir-archivo", protegerPanel, upload.single("archivo"), async (re
     res.json({
       ok: true,
       url: urlPublica,
-      tipo: req.file.mimetype
+      tipo: mimeSubir
     });
 
   } catch (error) {
@@ -188,10 +213,32 @@ router.post("/inbox/responder", protegerPanel, upload.single("archivo"), async (
     // IMAGEN
     // =========================
 
-    if (mime.startsWith("image/")) {
+    if (mime.startsWith("image/") || esArchivoImagen(req.file)) {
 
       if (sizeMB > 2) {
         return res.send("❌ Imagen máxima 2MB");
+      }
+
+      try {
+        const preparada = await prepararImagenParaWhatsApp(
+          req.file.buffer,
+          req.file.mimetype,
+          req.file.originalname
+        );
+        req.file.buffer = preparada.buffer;
+        req.file.mimetype = preparada.mimetype;
+        req.file.originalname =
+          "imagen." + preparada.extension;
+      } catch (convErr) {
+        if (wantsInboxJson(req)) {
+          return res.status(400).json({
+            ok: false,
+            error: convErr.message || "No se pudo convertir la imagen",
+          });
+        }
+        return res.send(
+          "❌ " + (convErr.message || "No se pudo convertir la imagen")
+        );
       }
 
       tipoWhatsApp = "image";
