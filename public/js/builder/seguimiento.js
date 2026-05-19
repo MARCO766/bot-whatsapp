@@ -570,24 +570,42 @@ window.MacBotSeguimiento = (function () {
       });
   }
 
+  function syncOpcionesGlobalesDesdePanel() {
+    const solo = document.getElementById("segSoloNoRespondio");
+    const detener = document.getElementById("segDetenerSiResponde");
+    if (solo) configActiva.soloSiNoRespondio = !!solo.checked;
+    if (detener) configActiva.detenerSiResponde = !!detener.checked;
+  }
+
+  function persistirConfigActivaEnNodo() {
+    if (!nodoActivo) return;
+    syncPasoDesdeFormulario();
+    syncOpcionesGlobalesDesdePanel();
+    guardarConfigEnNodo(nodoActivo, configActiva);
+  }
+
   function onFormChange() {
     syncPasoDesdeFormulario();
     renderListaPasos();
-    if (nodoActivo) renderPreviewNodo(nodoActivo, configActiva);
+    if (nodoActivo) {
+      renderPreviewNodo(nodoActivo, configActiva);
+      persistirConfigActivaEnNodo();
+    }
     if (typeof window.macbotRecordHistoryDebounced === "function") {
       window.macbotRecordHistoryDebounced();
     }
   }
 
   function flushPanelToNode() {
-    if (!nodoActivo) return;
-    syncPasoDesdeFormulario();
-    configActiva.soloSiNoRespondio = !!document.getElementById("segSoloNoRespondio")?.checked;
-    configActiva.detenerSiResponde = !!document.getElementById("segDetenerSiResponde")?.checked;
-    guardarConfigEnNodo(nodoActivo, configActiva);
+    persistirConfigActivaEnNodo();
   }
 
   function clearPanelActivo() {
+    const restaurando =
+      typeof builderHistorial !== "undefined" && builderHistorial.restaurando;
+    if (!restaurando) {
+      persistirConfigActivaEnNodo();
+    }
     nodoActivo = null;
     configActiva = crearConfigVacia();
     pasoActivoIndex = 0;
