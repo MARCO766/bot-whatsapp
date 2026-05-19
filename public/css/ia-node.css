@@ -249,3 +249,113 @@
 .ia-prueba-loading {
   color: #94a3b8;
 }
+
+.node.ia-node {
+  padding-bottom: 8px;
+}
+
+.node.ia-node .ia-ports-out {
+  position: absolute;
+  right: -10px;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  pointer-events: none;
+}
+
+.node.ia-node .ia-port-route {
+  position: absolute;
+  right: -6px;
+  pointer-events: auto;
+}
+
+.node.ia-node .ia-port-label {
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 9px;
+  font-weight: 700;
+  color: #a5f3fc;
+  white-space: nowrap;
+  max-width: 72px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+
+.ia-panel-seccion {
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(34, 211, 238, 0.12);
+}
+
+.ia-panel-seccion h5 {
+  margin: 0 0 10px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #94a3b8;
+}
+
+.ia-caminos-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ia-ruta-row {
+  padding: 10px;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(139, 92, 246, 0.25);
+}
+
+.ia-ruta-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.ia-ruta-num {
+  font-size: 11px;
+  font-weight: 800;
+  color: #c4b5fd;
+}
+
+.ia-ruta-del {
+  margin-left: auto;
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(248, 113, 113, 0.4);
+  background: transparent;
+  color: #fca5a5;
+  cursor: pointer;
+}
+
+.ia-ruta-meta {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.ia-handle-hint {
+  font-size: 10px;
+  color: #64748b;
+  margin: 6px 0 0;
+}
+
+.ia-toggle {
+  display: block;
+  font-size: 12px;
+  margin-bottom: 8px;
+  color: #cbd5e1;
+}
+
+.ia-btn-add-ruta {
+  margin-top: 8px;
+  width: 100%;
+}

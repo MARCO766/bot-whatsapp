@@ -1,38 +1,11 @@
 /**
- * MacBot — Editor de nodo IA (híbrido: local + OpenAI)
+ * MacBot — Nodo IA local ultra (router silencioso + caminos dinámicos)
  */
 window.MacBotIA = (function () {
-  const MODOS = [
-    { id: "detectar_intencion", label: "Detectar intención" },
-    { id: "clasificar_lead", label: "Clasificar lead" },
-    { id: "responder_automatico", label: "Responder automático" },
-  ];
-
-  const PROVEEDORES = [
-    { id: "automatico", label: "Automático (OpenAI si hay key, si no local)" },
-    { id: "local", label: "Solo IA local (reglas)" },
-    { id: "openai", label: "Solo OpenAI" },
-  ];
-
-  const MODELOS = [
-    { id: "gpt-4o-mini", label: "gpt-4o-mini" },
-    { id: "gpt-4o", label: "gpt-4o" },
-    { id: "gpt-4.1-mini", label: "gpt-4.1-mini" },
-  ];
-
-  const REGLAS_DEFAULT = {
-    saludo: "hola, buenos dias, buenas tardes, hey, que tal",
-    precio: "precio, cuanto cuesta, costo, valor, cotizar",
-    compra: "comprar, quiero, me interesa, pagar, pedido",
-    comprobante: "comprobante, recibo, transferencia, ya pague, voucher",
-    soporte: "ayuda, soporte, problema, no funciona, duda",
-    no_interesado: "no me interesa, no gracias, no quiero, basta",
-    reclamo: "reclamo, queja, devolucion, estafa",
-  };
+  const TAG_DIV = "di" + "v";
 
   let nodoActivo = null;
   let configActiva = crearConfigPorDefecto();
-  let iaStatusServidor = { openaiDisponible: false };
 
   function esc(str) {
     return String(str || "")
@@ -42,105 +15,101 @@ window.MacBotIA = (function () {
       .replace(/"/g, "&quot;");
   }
 
+  function generarRouteId() {
+    return "route_" + Math.random().toString(36).slice(2, 8);
+  }
+
   function crearConfigPorDefecto() {
-    const reglas = {};
-    Object.keys(REGLAS_DEFAULT).forEach(function (k) {
-      reglas[k] = REGLAS_DEFAULT[k].split(",").map(function (s) {
-        return s.trim();
-      });
-    });
     return {
+      version: 3,
       nombreNodo: "🤖 IA",
-      modo: "detectar_intencion",
-      proveedorIA: "automatico",
-      reglas: reglas,
-      reglasScore: {
-        caliente: ["quiero comprar", "urgente", "hoy", "precio"],
-        frio: ["solo mirando", "despues", "no me interesa", "luego"],
+      scoreMinimo: 40,
+      caminos: [],
+      comportamiento: {
+        responderSiNoCoincide: true,
+        mensajeFallback:
+          "No entendí bien 😊\n¿Buscas QR, depósito o Tigo Money?",
+        activarOtrosFlujos: false,
+        responderConAudio: false,
       },
-      respuestasLocales: {
-        saludo: "¡Hola! Gracias por escribirnos. ¿En qué te ayudamos?",
-        precio: "Gracias por tu interés. Te compartimos precios en breve.",
-        compra: "¡Genial! Un asesor te ayudará con tu compra pronto.",
-        soporte: "Entendemos tu consulta. Te atendemos en breve.",
-        comprobante: "Recibimos tu mensaje. Revisaremos el comprobante.",
-        no_interesado: "Entendido. Si cambias de opinión, aquí estamos.",
-        desconocido: "",
-      },
-      promptSistema:
-        "Eres un asistente de automatización WhatsApp. Responde solo con el formato solicitado.",
-      instruccionesNegocio: "",
-      maxCaracteres: 400,
-      temperatura: 0.3,
-      modelo: "gpt-4o-mini",
-      variableResultado: "",
-      siFalla: "continuar",
-      mensajeFallback: "Gracias por escribirnos. En breve un asesor te atiende.",
     };
   }
 
-  function labelModo(modo) {
-    const m = MODOS.find(function (x) {
-      return x.id === modo;
-    });
-    return m ? m.label : modo;
-  }
+  function migrarConfigLegacy(data) {
+    const cfg = crearConfigPorDefecto();
+    if (!data || typeof data !== "object") return cfg;
 
-  function labelProveedor(prov) {
-    if (prov === "local") return "Local";
-    if (prov === "openai") return "OpenAI";
-    return iaStatusServidor.openaiDisponible ? "Auto · OpenAI" : "Auto · Local";
-  }
+    Object.assign(cfg, data);
+    cfg.version = 3;
 
-  function reglasToTextarea(reglas) {
-    const lines = [];
-    Object.keys(REGLAS_DEFAULT).forEach(function (key) {
-      const arr = reglas?.[key] || [];
-      const txt = Array.isArray(arr) ? arr.join(", ") : String(arr || "");
-      lines.push(key + ": " + txt);
-    });
-    return lines.join("\n");
-  }
-
-  function parseReglasFromTextarea(text) {
-    const reglas = {};
-    String(text || "")
-      .split("\n")
-      .forEach(function (line) {
-        const idx = line.indexOf(":");
-        if (idx < 1) return;
-        const key = line.slice(0, idx).trim().toLowerCase();
-        const vals = line
-          .slice(idx + 1)
-          .split(",")
-          .map(function (s) {
-            return s.trim();
-          })
-          .filter(Boolean);
-        if (vals.length) reglas[key] = vals;
+    if (!Array.isArray(cfg.caminos) || !cfg.caminos.length) {
+      const caminos = [];
+      const reglas = data.reglas || {};
+      Object.keys(reglas).forEach(function (key) {
+        const syns = Array.isArray(reglas[key]) ? reglas[key] : [];
+        if (!syns.length) return;
+        caminos.push({
+          id: generarRouteId(),
+          nombre: key,
+          synonyms: syns,
+          priority: 50,
+          mediaId: "",
+          enabled: true,
+        });
       });
-    return reglas;
+      cfg.caminos = caminos;
+    }
+
+    cfg.comportamiento = {
+      responderSiNoCoincide:
+        data.comportamiento?.responderSiNoCoincide !== false,
+      mensajeFallback:
+        data.comportamiento?.mensajeFallback ||
+        data.mensajeFallback ||
+        cfg.comportamiento.mensajeFallback,
+      activarOtrosFlujos: !!(
+        data.comportamiento?.activarOtrosFlujos || data.activarOtrosFlujos
+      ),
+      responderConAudio: !!(
+        data.comportamiento?.responderConAudio || data.responderConAudio
+      ),
+    };
+
+    cfg.scoreMinimo = parseInt(cfg.scoreMinimo, 10) || 40;
+    return normalizarConfig(cfg);
+  }
+
+  function normalizarCaminos(caminos) {
+    if (!Array.isArray(caminos)) return [];
+    return caminos
+      .map(function (r) {
+        const syns = Array.isArray(r.synonyms)
+          ? r.synonyms
+          : String(r.synonyms || "")
+              .split(",")
+              .map(function (s) {
+                return s.trim();
+              })
+              .filter(Boolean);
+        return {
+          id: String(r.id || generarRouteId()).trim(),
+          nombre: String(r.nombre || "").trim(),
+          synonyms: syns,
+          priority: parseInt(r.priority, 10) || 50,
+          mediaId: String(r.mediaId || "").trim(),
+          enabled: r.enabled !== false,
+        };
+      })
+      .filter(function (r) {
+        return r.id && r.nombre;
+      });
   }
 
   function normalizarConfig(data) {
-    const cfg = crearConfigPorDefecto();
-    Object.assign(cfg, data || {});
-
-    if (!MODOS.some(function (m) {
-      return m.id === cfg.modo;
-    })) {
-      cfg.modo = "detectar_intencion";
-    }
-
-    if (!["automatico", "local", "openai"].includes(cfg.proveedorIA)) {
-      cfg.proveedorIA = "automatico";
-    }
-
-    cfg.reglas = { ...crearConfigPorDefecto().reglas, ...(cfg.reglas || {}) };
-    cfg.maxCaracteres = Math.min(400, Math.max(50, parseInt(cfg.maxCaracteres, 10) || 400));
-    cfg.temperatura = Math.min(1, Math.max(0, parseFloat(cfg.temperatura) || 0.3));
-    cfg.siFalla = cfg.siFalla === "detener" ? "detener" : "continuar";
-    return cfg;
+    const base = migrarConfigLegacy(data || {});
+    base.caminos = normalizarCaminos(base.caminos);
+    base.scoreMinimo = Math.min(100, Math.max(0, parseInt(base.scoreMinimo, 10) || 40));
+    return base;
   }
 
   function leerConfigDeNodo(nodo) {
@@ -156,102 +125,198 @@ window.MacBotIA = (function () {
     }
   }
 
+  function renderPuertosRuta(nodo, caminos) {
+    const existente = nodo.querySelector(".ia-ports-out");
+    if (existente) existente.remove();
+
+    const activos = (caminos || []).filter(function (r) {
+      return r.enabled !== false;
+    });
+    if (!activos.length) return;
+
+    const wrap = document.createElement(TAG_DIV);
+    wrap.className = "ia-ports-out";
+
+    activos.forEach(function (route, index) {
+      const port = document.createElement(TAG_DIV);
+      port.className = "port out ia-port-route";
+      port.dataset.nodo = nodo.id;
+      port.dataset.handle = route.id;
+      port.title = route.nombre;
+      port.style.top = 36 + index * 22 + "px";
+
+      const label = document.createElement("span");
+      label.className = "ia-port-label";
+      label.textContent = route.nombre;
+      port.appendChild(label);
+
+      wrap.appendChild(port);
+    });
+
+    nodo.appendChild(wrap);
+
+    if (typeof actualizarHandlersPuertosCanvas === "function") {
+      actualizarHandlersPuertosCanvas();
+    }
+  }
+
   function guardarConfigEnNodo(nodo, config) {
+    const cfg = normalizarConfig(config);
     const box = nodo.querySelector(".ia-data");
-    const json = JSON.stringify(config);
+    const json = JSON.stringify(cfg);
     if (box) {
       box.value = json;
       box.textContent = json;
     }
-    renderPreviewNodo(nodo, config);
+    renderPreviewNodo(nodo, cfg);
+    renderPuertosRuta(nodo, cfg.caminos);
     const h3 = nodo.querySelector(".ia-title");
-    if (h3) h3.textContent = config.nombreNodo || "🤖 IA";
-  }
-
-  function fetchIAStatus() {
-    fetch("/api/ai/status", { credentials: "same-origin" })
-      .then(function (r) {
-        return r.json();
-      })
-      .then(function (data) {
-        iaStatusServidor = data || { openaiDisponible: false };
-        const badge = document.getElementById("iaStatusServidor");
-        if (badge) {
-          badge.textContent = data.openaiDisponible
-            ? "OpenAI disponible en servidor"
-            : "Sin OPENAI_API_KEY — solo IA local";
-          badge.className =
-            "ia-status-servidor " + (data.openaiDisponible ? "ok" : "local");
-        }
-        if (nodoActivo) renderPreviewNodo(nodoActivo, configActiva);
-      })
-      .catch(function () {
-        iaStatusServidor = { openaiDisponible: false };
-      });
+    if (h3) h3.textContent = cfg.nombreNodo || "🤖 IA";
+    if (typeof actualizarLineas === "function") actualizarLineas();
   }
 
   function renderPreviewNodo(nodo, config) {
     const body = nodo.querySelector(".ia-body");
     if (!body) return;
 
-    const tieneFallback = !!(config.mensajeFallback || "").trim();
-    const provLabel = labelProveedor(config.proveedorIA);
+    const rutas = (config.caminos || []).filter(function (r) {
+      return r.enabled !== false;
+    });
+    const nombres = rutas
+      .slice(0, 3)
+      .map(function (r) {
+        return r.nombre;
+      })
+      .join(", ");
 
     body.innerHTML =
-      '<span class="ia-badge-proveedor">' +
-      esc(provLabel) +
-      "</span>" +
-      '<span class="ia-badge-modo">' +
-      esc(labelModo(config.modo)) +
-      "</span>" +
-      '<div class="ia-status"><span class="ia-status-dot"></span> IA activa</div>' +
+      '<span class="ia-badge-modo">Router local</span>' +
+      '<div class="ia-status"><span class="ia-status-dot"></span> Espera lead · silencioso</div>' +
       '<p class="ia-preview">' +
-      esc("Reglas: " + Object.keys(config.reglas || {}).length + " categorías") +
+      esc(
+        rutas.length
+          ? rutas.length + " camino(s): " + (nombres || "—")
+          : "Sin caminos — agrega rutas en el panel"
+      ) +
       "</p>" +
-      (tieneFallback ? '<span class="ia-badge-fallback">Fallback</span>' : "");
+      (config.comportamiento?.responderSiNoCoincide
+        ? '<span class="ia-badge-fallback">Fallback</span>'
+        : "");
+  }
+
+  function syncCaminosDesdeDom() {
+    const rows = document.querySelectorAll(".ia-ruta-row");
+    const caminos = [];
+    rows.forEach(function (row) {
+      const id = row.dataset.routeId;
+      const nombre = row.querySelector(".ia-ruta-nombre")?.value.trim();
+      if (!id || !nombre) return;
+      const synsRaw = row.querySelector(".ia-ruta-sinonimos")?.value || "";
+      const syns = synsRaw
+        .split(",")
+        .map(function (s) {
+          return s.trim();
+        })
+        .filter(Boolean);
+      caminos.push({
+        id: id,
+        nombre: nombre,
+        synonyms: syns,
+        priority: parseInt(row.querySelector(".ia-ruta-prioridad")?.value, 10) || 50,
+        mediaId: row.querySelector(".ia-ruta-media")?.value.trim() || "",
+        enabled: row.querySelector(".ia-ruta-enabled")?.checked !== false,
+      });
+    });
+    configActiva.caminos = caminos;
   }
 
   function syncDesdeFormulario() {
     configActiva.nombreNodo =
       document.getElementById("iaNombreNodo")?.value.trim() || "🤖 IA";
-    configActiva.modo =
-      document.getElementById("iaModo")?.value || "detectar_intencion";
-    configActiva.proveedorIA =
-      document.getElementById("iaProveedor")?.value || "automatico";
-    configActiva.reglas = parseReglasFromTextarea(
-      document.getElementById("iaReglas")?.value
-    );
-    configActiva.promptSistema =
-      document.getElementById("iaPromptSistema")?.value.trim() || "";
-    configActiva.instruccionesNegocio =
-      document.getElementById("iaInstrucciones")?.value.trim() || "";
-    configActiva.maxCaracteres =
-      parseInt(document.getElementById("iaMaxChars")?.value, 10) || 400;
-    configActiva.temperatura =
-      parseFloat(document.getElementById("iaTemperatura")?.value) || 0.3;
-    configActiva.modelo =
-      document.getElementById("iaModelo")?.value || "gpt-4o-mini";
-    configActiva.variableResultado =
-      document.getElementById("iaVariable")?.value.trim() || "";
-    configActiva.siFalla =
-      document.getElementById("iaSiFalla")?.value || "continuar";
-    configActiva.mensajeFallback =
-      document.getElementById("iaFallback")?.value.trim() || "";
+    configActiva.scoreMinimo =
+      parseInt(document.getElementById("iaScoreMinimo")?.value, 10) || 40;
+    syncCaminosDesdeDom();
+    configActiva.comportamiento = {
+      responderSiNoCoincide: !!document.getElementById("iaResponderFallback")?.checked,
+      mensajeFallback:
+        document.getElementById("iaMensajeFallback")?.value.trim() ||
+        crearConfigPorDefecto().comportamiento.mensajeFallback,
+      activarOtrosFlujos: !!document.getElementById("iaActivarFlujos")?.checked,
+      responderConAudio: !!document.getElementById("iaResponderAudio")?.checked,
+    };
     configActiva = normalizarConfig(configActiva);
   }
 
-  function toggleOpenAIFields() {
-    const prov = document.getElementById("iaProveedor")?.value || "automatico";
-    const bloque = document.getElementById("iaOpenAIFields");
-    if (bloque) {
-      bloque.style.display = prov === "local" ? "none" : "block";
-    }
+  function renderCaminosEditor() {
+    const wrap = document.getElementById("iaCaminosLista");
+    if (!wrap) return;
+
+    wrap.innerHTML = (configActiva.caminos || [])
+      .map(function (route, index) {
+        const syns = (route.synonyms || []).join(", ");
+        const mediaLabel = route.mediaId ? esc(route.mediaId) : "Sin medio";
+        return (
+          '<div class="ia-ruta-row" data-route-id="' +
+          esc(route.id) +
+          '">' +
+          '<div class="ia-ruta-head">' +
+          '<span class="ia-ruta-num">Ruta ' +
+          (index + 1) +
+          "</span>" +
+          '<label class="ia-ruta-enabled-wrap"><input type="checkbox" class="ia-ruta-enabled"' +
+          (route.enabled !== false ? " checked" : "") +
+          "> Activo</label>" +
+          '<button type="button" class="ia-ruta-del" data-action="del">Eliminar</button>' +
+          "</div>" +
+          '<div class="panel-campo"><label>Nombre</label>' +
+          '<input class="ia-ruta-nombre" value="' +
+          esc(route.nombre) +
+          '"></div>' +
+          '<div class="panel-campo"><label>Sinónimos (coma)</label>' +
+          '<textarea class="ia-ruta-sinonimos ia-textarea" rows="2">' +
+          esc(syns) +
+          "</textarea></div>" +
+          '<div class="ia-ruta-meta">' +
+          '<div class="panel-campo"><label>Prioridad</label>' +
+          '<input type="number" class="ia-ruta-prioridad" min="0" max="100" value="' +
+          (route.priority || 50) +
+          '"></div>' +
+          '<div class="panel-campo"><label>Media ID / URL</label>' +
+          '<input class="ia-ruta-media" placeholder="Sin medio" value="' +
+          esc(route.mediaId) +
+          '"><small class="ia-media-hint">' +
+          mediaLabel +
+          "</small></div>" +
+          "</div>" +
+          '<p class="ia-handle-hint">Handle: <code>' +
+          esc(route.id) +
+          "</code></p>" +
+          "</div>"
+        );
+      })
+      .join("");
+
+    wrap.querySelectorAll('[data-action="del"]').forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        const row = btn.closest(".ia-ruta-row");
+        const rid = row?.dataset.routeId;
+        configActiva.caminos = (configActiva.caminos || []).filter(function (r) {
+          return r.id !== rid;
+        });
+        renderCaminosEditor();
+        onFormChange();
+      });
+    });
+
+    wrap.querySelectorAll("input, textarea").forEach(function (el) {
+      el.addEventListener("input", onFormChange);
+      el.addEventListener("change", onFormChange);
+    });
   }
 
   async function ejecutarPruebaInterna() {
     syncDesdeFormulario();
-    const mensaje =
-      document.getElementById("iaMensajePrueba")?.value.trim() || "";
+    const mensaje = document.getElementById("iaMensajePrueba")?.value.trim() || "";
     const out = document.getElementById("iaResultadoPrueba");
     if (!out) return;
 
@@ -271,6 +336,12 @@ window.MacBotIA = (function () {
         body: JSON.stringify({
           config: configActiva,
           ultimo_mensaje: mensaje,
+          ultimaSalidaBot:
+            document.getElementById("iaContextoPrueba")?.value.trim() || "",
+          memoriaIA: {
+            ultimaPregunta:
+              document.getElementById("iaContextoPrueba")?.value.trim() || "",
+          },
           nombre: "Cliente prueba",
         }),
       });
@@ -284,24 +355,21 @@ window.MacBotIA = (function () {
         return;
       }
 
-      const motor = data.motor || "local";
-      const resultado = data.resultado || "—";
-      const tipo = data.tipo || configActiva.modo;
-
       out.innerHTML =
         '<div class="ia-prueba-ok">' +
-        "<strong>Motor:</strong> " +
-        esc(motor) +
-        " · <strong>Proveedor config:</strong> " +
-        esc(configActiva.proveedorIA) +
-        "<br><strong>Resultado:</strong> <code>" +
-        esc(resultado) +
-        "</code>" +
+        "<strong>Resultado:</strong> <code>" +
+        esc(data.resultado) +
+        "</code><br>" +
         (data.context?.intent
-          ? "<br><strong>context.intent:</strong> " + esc(data.context.intent)
+          ? "<strong>{{intent}}:</strong> " + esc(data.context.intent) + "<br>"
           : "") +
-        (data.context?.score
-          ? "<br><strong>context.score:</strong> " + esc(data.context.score)
+        (data.context?.score != null
+          ? "<strong>{{score}}:</strong> " + esc(data.context.score) + "<br>"
+          : "") +
+        (data.context?.route
+          ? "<strong>{{route}}:</strong> <code>" +
+            esc(data.context.route) +
+            "</code>"
           : "") +
         "</div>";
     } catch (e) {
@@ -314,149 +382,89 @@ window.MacBotIA = (function () {
     if (!nodo) return;
     nodoActivo = nodo;
     configActiva = leerConfigDeNodo(nodo);
-    fetchIAStatus();
 
     const contenido = document.getElementById("panelNodoContenido");
     if (!contenido) return;
 
-    const modosOpts = MODOS.map(function (m) {
-      return (
-        '<option value="' +
-        m.id +
-        '"' +
-        (configActiva.modo === m.id ? " selected" : "") +
-        ">" +
-        esc(m.label) +
-        "</option>"
-      );
-    }).join("");
-
-    const provOpts = PROVEEDORES.map(function (p) {
-      return (
-        '<option value="' +
-        p.id +
-        '"' +
-        (configActiva.proveedorIA === p.id ? " selected" : "") +
-        ">" +
-        esc(p.label) +
-        "</option>"
-      );
-    }).join("");
-
-    const modelosOpts = MODELOS.map(function (m) {
-      return (
-        '<option value="' +
-        m.id +
-        '"' +
-        (configActiva.modelo === m.id ? " selected" : "") +
-        ">" +
-        esc(m.label) +
-        "</option>"
-      );
-    }).join("");
-
-    const reglasText = reglasToTextarea(configActiva.reglas);
-
     contenido.innerHTML =
       '<div class="ia-panel">' +
-      "<h4>🤖 Nodo IA híbrido</h4>" +
-      '<p id="iaStatusServidor" class="ia-status-servidor local">Comprobando servidor…</p>' +
+      "<h4>🤖 IA local ultra</h4>" +
+      '<p class="ia-panel-desc">Router silencioso: no responde ni avanza hasta que el lead escriba.</p>' +
+      '<section class="ia-panel-seccion"><h5>1. Config compartida</h5>' +
       '<div class="panel-campo"><label>Nombre del nodo</label>' +
       '<input id="iaNombreNodo" value="' +
       esc(configActiva.nombreNodo) +
       '"></div>' +
-      '<div class="panel-campo"><label>Motor IA</label>' +
-      '<select id="iaProveedor">' +
-      provOpts +
-      "</select></div>" +
-      '<div class="panel-campo"><label>Acción del nodo</label>' +
-      '<select id="iaModo">' +
-      modosOpts +
-      "</select></div>" +
-      '<div class="panel-campo ia-reglas-block">' +
-      "<label>Reglas locales (palabras clave)</label>" +
-      '<p class="ia-panel-desc">Una línea por categoría: <code>precio: cuanto cuesta, valor</code></p>' +
-      '<textarea id="iaReglas" class="ia-textarea ia-reglas-ta" rows="8">' +
-      esc(reglasText) +
+      '<div class="panel-campo"><label>Score mínimo (threshold)</label>' +
+      '<input id="iaScoreMinimo" type="number" min="0" max="100" value="' +
+      configActiva.scoreMinimo +
+      '"></div></section>' +
+      '<section class="ia-panel-seccion"><h5>2. Biblioteca media</h5>' +
+      '<p class="ia-panel-desc">Asigna mediaId por camino (URL o id guardado).</p></section>' +
+      '<section class="ia-panel-seccion"><h5>3. Config del nodo</h5>' +
+      '<p class="ia-panel-desc">Modo silencioso: pausa el flujo y espera al lead.</p></section>' +
+      '<section class="ia-panel-seccion"><h5>4. Caminos de ruteo</h5>' +
+      '<div id="iaCaminosLista" class="ia-caminos-lista"></div>' +
+      '<button type="button" class="panel-btn ia-btn-add-ruta" id="iaAgregarCamino">+ Agregar camino</button></section>' +
+      '<section class="ia-panel-seccion"><h5>5. Comportamiento</h5>' +
+      '<label class="ia-toggle"><input type="checkbox" id="iaResponderFallback"' +
+      (configActiva.comportamiento.responderSiNoCoincide ? " checked" : "") +
+      "> Responder si no coincide</label>" +
+      '<div class="panel-campo"><label>Mensaje fallback</label>' +
+      '<textarea id="iaMensajeFallback" class="ia-textarea" rows="3">' +
+      esc(configActiva.comportamiento.mensajeFallback) +
       "</textarea></div>" +
+      '<label class="ia-toggle"><input type="checkbox" id="iaActivarFlujos"' +
+      (configActiva.comportamiento.activarOtrosFlujos ? " checked" : "") +
+      "> Activar otros flujos (antes del fallback)</label>" +
+      '<label class="ia-toggle"><input type="checkbox" id="iaResponderAudio"' +
+      (configActiva.comportamiento.responderConAudio ? " checked" : "") +
+      "> Responder con audio (usa transcripción si existe)</label></section>" +
       '<div class="ia-prueba-block">' +
       "<label>Prueba interna</label>" +
-      '<input id="iaMensajePrueba" placeholder="Ej: hola, cuánto cuesta el curso?" />' +
+      '<input id="iaContextoPrueba" placeholder="Contexto: última pregunta del bot" />' +
+      '<input id="iaMensajePrueba" placeholder="Ej: quiero pagar por qr" />' +
       '<button type="button" class="panel-btn ia-btn-prueba" id="iaBtnPrueba">Probar detección</button>' +
-      '<div id="iaResultadoPrueba" class="ia-resultado-prueba"></div>' +
-      "</div>" +
-      '<div id="iaOpenAIFields">' +
-      '<div class="panel-campo"><label>Prompt del sistema (OpenAI)</label>' +
-      '<textarea id="iaPromptSistema" class="ia-textarea" rows="2">' +
-      esc(configActiva.promptSistema) +
-      "</textarea></div>" +
-      '<div class="panel-campo"><label>Instrucciones del negocio</label>' +
-      '<textarea id="iaInstrucciones" class="ia-textarea" rows="2">' +
-      esc(configActiva.instruccionesNegocio) +
-      "</textarea></div>" +
-      '<div class="panel-campo"><label>Modelo OpenAI</label><select id="iaModelo">' +
-      modelosOpts +
-      "</select></div>" +
-      '<div class="panel-campo"><label>Temperatura</label>' +
-      '<input id="iaTemperatura" type="number" min="0" max="1" step="0.1" value="' +
-      configActiva.temperatura +
-      '"></div>' +
-      "</div>" +
-      '<div class="panel-campo"><label>Respuesta máx. (caracteres)</label>' +
-      '<input id="iaMaxChars" type="number" min="50" max="400" value="' +
-      configActiva.maxCaracteres +
-      '"></div>' +
-      '<div class="panel-campo"><label>Variable resultado</label>' +
-      '<input id="iaVariable" placeholder="opcional" value="' +
-      esc(configActiva.variableResultado) +
-      '"></div>' +
-      '<div class="panel-campo"><label>Si falla IA</label>' +
-      '<select id="iaSiFalla">' +
-      '<option value="continuar"' +
-      (configActiva.siFalla === "continuar" ? " selected" : "") +
-      ">Continuar</option>" +
-      '<option value="detener"' +
-      (configActiva.siFalla === "detener" ? " selected" : "") +
-      ">Detener</option>" +
-      "</select></div>" +
-      '<div class="panel-campo"><label>Mensaje fallback</label>' +
-      '<textarea id="iaFallback" class="ia-textarea" rows="2">' +
-      esc(configActiva.mensajeFallback) +
-      "</textarea></div>" +
-      '<p class="ia-vars-hint">Variables: {{nombre}} {{telefono}} {{ultimo_mensaje}} {{intent}} {{score}}</p>' +
+      '<div id="iaResultadoPrueba" class="ia-resultado-prueba"></div></div>' +
+      '<p class="ia-vars-hint">Variables: {{intent}} {{score}} {{route}} {{ultimo_mensaje}}</p>' +
       '<button type="button" class="panel-btn" id="iaGuardarPanel">Guardar nodo IA</button>' +
       "</div>";
 
-    document.getElementById("iaGuardarPanel")?.addEventListener("click", guardarDesdePanel);
-    document.getElementById("iaBtnPrueba")?.addEventListener("click", ejecutarPruebaInterna);
-    document.getElementById("iaProveedor")?.addEventListener("change", function () {
-      toggleOpenAIFields();
+    renderCaminosEditor();
+
+    document.getElementById("iaAgregarCamino")?.addEventListener("click", function () {
+      syncCaminosDesdeDom();
+      configActiva.caminos.push({
+        id: generarRouteId(),
+        nombre: "nuevo",
+        synonyms: [],
+        priority: 50,
+        mediaId: "",
+        enabled: true,
+      });
+      renderCaminosEditor();
       onFormChange();
     });
 
+    document.getElementById("iaGuardarPanel")?.addEventListener("click", guardarDesdePanel);
+    document.getElementById("iaBtnPrueba")?.addEventListener("click", ejecutarPruebaInterna);
+
     [
       "iaNombreNodo",
-      "iaModo",
-      "iaReglas",
-      "iaPromptSistema",
-      "iaInstrucciones",
-      "iaMaxChars",
-      "iaTemperatura",
-      "iaModelo",
-      "iaVariable",
-      "iaSiFalla",
-      "iaFallback",
+      "iaScoreMinimo",
+      "iaMensajeFallback",
+      "iaResponderFallback",
+      "iaActivarFlujos",
+      "iaResponderAudio",
     ].forEach(function (id) {
       document.getElementById(id)?.addEventListener("input", onFormChange);
       document.getElementById(id)?.addEventListener("change", onFormChange);
     });
-
-    toggleOpenAIFields();
   }
 
   function onFormChange() {
     syncDesdeFormulario();
-    if (nodoActivo) renderPreviewNodo(nodoActivo, configActiva);
+    if (nodoActivo) guardarConfigEnNodo(nodoActivo, configActiva);
     if (typeof window.macbotRecordHistoryDebounced === "function") {
       window.macbotRecordHistoryDebounced();
     }
@@ -511,7 +519,7 @@ window.MacBotIA = (function () {
 
     const id =
       "nodo_" + (typeof nodoCount !== "undefined" ? nodoCount : window.nodoCount);
-    const nodo = document.createElement("div");
+    const nodo = document.createElement(TAG_DIV);
     nodo.className = "node ia-node";
     nodo.id = id;
     nodo.dataset.tipo = "ia";
@@ -539,15 +547,10 @@ window.MacBotIA = (function () {
       '\')">×</button>' +
       "</div>" +
       '<div class="ia-header"><h3 class="ia-title">🤖 IA</h3></div>' +
-      '<div class="ia-body"><span class="ia-badge-proveedor">Auto</span></div>' +
+      '<div class="ia-body"></div>' +
       '<textarea class="ia-data" style="display:none;">' +
       json +
-      "</textarea>" +
-      '<div class="port out" data-nodo="' +
-      id +
-      '" onmousedown="iniciarConexion(event, \'' +
-      id +
-      '\', \'out\')"></div>';
+      "</textarea>";
 
     canvas.appendChild(nodo);
 

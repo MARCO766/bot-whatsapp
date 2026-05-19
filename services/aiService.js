@@ -1,5 +1,9 @@
 const axios = require("axios");
 const { enviarTextoWhatsApp } = require("./whatsappService");
+const {
+  normalizarConfigRouter,
+  analizarRutaLocal,
+} = require("./iaLocalRouter");
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const DEFAULT_MODEL = "gpt-4o-mini";
@@ -148,9 +152,19 @@ function tieneOpenAI() {
 
 function crearConfigPorDefecto() {
   return {
+    version: 3,
     nombreNodo: "🤖 IA",
+    scoreMinimo: 40,
+    caminos: [],
+    comportamiento: {
+      responderSiNoCoincide: true,
+      mensajeFallback:
+        "No entendí bien 😊\n¿Buscas QR, depósito o Tigo Money?",
+      activarOtrosFlujos: false,
+      responderConAudio: false,
+    },
     modo: "detectar_intencion",
-    proveedorIA: "automatico",
+    proveedorIA: "local",
     reglas: { ...REGLAS_POR_DEFECTO },
     reglasScore: { ...REGLAS_SCORE_DEFECTO },
     respuestasLocales: { ...RESPUESTAS_LOCALES_DEFECTO },
@@ -163,6 +177,12 @@ function crearConfigPorDefecto() {
     siFalla: "continuar",
     mensajeFallback: "Gracias por escribirnos. En breve un asesor te atiende.",
   };
+}
+
+function esConfigRouterLocal(config) {
+  if (!config) return false;
+  if (config.version >= 3) return true;
+  return Array.isArray(config.caminos);
 }
 
 function sanitizeInput(text, maxLen = MAX_INPUT_CHARS) {
@@ -250,6 +270,10 @@ function parseIAFromNodo(nodo) {
 
 function normalizarConfig(cfg) {
   const config = { ...crearConfigPorDefecto(), ...(cfg || {}) };
+
+  if (esConfigRouterLocal(config)) {
+    return normalizarConfigRouter(config);
+  }
 
   config.nombreNodo = sanitizeInput(config.nombreNodo || "🤖 IA", 120);
   config.modo = MODOS_FASE1.has(config.modo) ? config.modo : "detectar_intencion";
@@ -684,11 +708,102 @@ function resolverTextoRespuestaIA(config, ctx, resultado) {
   return "";
 }
 
-async function ejecutarNodoIA(nodo, contexto) {
+async function ejecutarNodoIARouter(nodo, contexto, opts = {}) {
+  const numero = contexto?.numero || contexto?.from || contexto?.telefono;
+  const usuarioId = contexto?.usuarioId || null;
+  const config = normalizarConfigRouter(parseIAFromNodo(nodo));
+
+  if (!opts.resume) {
+    console.log("🤖 IA LOCAL — modo silencioso: esperando respuesta del lead");
+    return {
+      ...contexto,
+      iaPausar: true,
+      iaEjecutada: false,
+    };
+  }
+
+  const mensajeLead = sanitizeInput(
+    contexto?.mensaje ||
+      contexto?.texto ||
+      contexto?.body ||
+      contexto?.ultimo_mensaje ||
+      contexto?.ultimoMensaje ||
+      "",
+    2000
+  );
+
+  const memoria = contexto.memoriaIA || {
+    ultimoMensajeBot: contexto.ultimaSalidaBot || "",
+    ultimaPregunta: contexto.ultimaSalidaBot || "",
+    ultimoNodo: contexto.ultimoNodoContenido || "",
+  };
+
+  const analisis = analizarRutaLocal(config, mensajeLead, memoria);
+
+  contexto.intent = analisis.intent || "";
+  contexto.score = analisis.score ?? "";
+  contexto.route = analisis.route || "";
+  contexto.ultimo_mensaje = mensajeLead;
+
+  if (!analisis.matched) {
+    if (config.comportamiento.activarOtrosFlujos && contexto._buscarActivadores) {
+      const activado = await contexto._buscarActivadores();
+      if (activado) {
+        return {
+          ...contexto,
+          iaPausar: false,
+          iaActivadorGlobal: true,
+          iaEjecutada: true,
+        };
+      }
+    }
+
+    if (config.comportamiento.responderSiNoCoincide) {
+      const fb = interpolarVariables(config.comportamiento.mensajeFallback, contexto).trim();
+      if (fb && numero) {
+        await enviarTextoWhatsApp(numero, fb, { usuarioId });
+        contexto.ultimaRespuestaIA = fb;
+      }
+      return {
+        ...contexto,
+        iaPausar: true,
+        iaFallback: true,
+        iaEjecutada: true,
+        intent: contexto.intent,
+        score: contexto.score,
+      };
+    }
+
+    return {
+      ...contexto,
+      iaPausar: false,
+      iaSinCoincidencia: true,
+      iaEjecutada: true,
+    };
+  }
+
+  return {
+    ...contexto,
+    iaPausar: false,
+    iaRouteId: analisis.routeId,
+    iaEjecutada: true,
+    intent: analisis.intent,
+    score: analisis.score,
+    route: analisis.route,
+  };
+}
+
+async function ejecutarNodoIA(nodo, contexto, opts = {}) {
+  const config = parseIAFromNodo(nodo);
+
+  if (esConfigRouterLocal(config)) {
+    return ejecutarNodoIARouter(nodo, contexto, opts);
+  }
+
   const numero = contexto?.numero || contexto?.from || contexto?.telefono;
   const usuarioId = contexto?.usuarioId || null;
 
-  console.log("🤖✅ NODO IA EJECUTADO");
+  console.log("🤖✅ NODO IA EJECUTADO (legacy)");
 
   const mensajeLead = String(
     contexto?.mensaje ||
@@ -700,10 +815,6 @@ async function ejecutarNodoIA(nodo, contexto) {
   )
     .toLowerCase()
     .trim();
-
-  console.log("📩 Mensaje recibido por IA:", mensajeLead);
-  console.log("📲 Número IA:", numero);
-  console.log("⚙️ Config IA (nodo):", parseIAFromNodo(nodo));
 
   const result = await ejecutarIANodo({
     numero,
@@ -841,7 +952,33 @@ async function runAI(body = {}) {
     intent: sanitizeInput(body.intent, 64),
     score: sanitizeInput(body.score, 32),
     ai: {},
+    memoriaIA: body.memoriaIA || body.memoria || {},
+    ultimaSalidaBot: body.ultimaSalidaBot || "",
   };
+
+  if (esConfigRouterLocal(config)) {
+    const analisis = analizarRutaLocal(config, ctx.ultimo_mensaje, ctx.memoriaIA);
+    ctx.intent = analisis.intent;
+    ctx.score = analisis.score;
+    ctx.route = analisis.route;
+
+    return {
+      ok: true,
+      modo: "router_local",
+      proveedor: "local",
+      motor: "local",
+      resultado: analisis.intent || "sin_coincidencia",
+      tipo: analisis.matched ? "route" : "fallback",
+      context: {
+        intent: ctx.intent,
+        score: ctx.score,
+        route: ctx.route,
+        ranking: analisis.ranking,
+        ai: ctx.ai,
+      },
+      error: null,
+    };
+  }
 
   const ejec = await ejecutarModoIA(config, ctx);
   guardarResultadoEnContexto(ctx, config, ejec.resultado);
@@ -920,8 +1057,10 @@ module.exports = {
   crearConfigPorDefecto,
   parseIAFromNodo,
   normalizarConfig,
+  esConfigRouterLocal,
   ejecutarIANodo,
   ejecutarNodoIA,
+  ejecutarNodoIARouter,
   runAI,
   testIALocal,
   getIAStatus,

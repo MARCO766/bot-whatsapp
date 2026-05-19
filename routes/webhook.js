@@ -4,7 +4,7 @@ const router = express.Router();
 const axios = require("axios");
 
 const { enviarEventoMeta } = require("../services/metaService");
-const { buscarYEjecutarActivador } = require("../services/flowService");
+const { procesarMensajeEntrante } = require("../services/flowService");
 const {
   cancelarSeguimientosPorRespuesta,
 } = require("../services/seguimiento/cancelOnReply");
@@ -541,7 +541,7 @@ const textoParaActivador =
 
 console.log("🔎 ACTIVADOR — texto:", textoParaActivador, "| usuario:", usuarioIdWebhook);
 
-const activadorEjecutado = await buscarYEjecutarActivador(
+const activadorEjecutado = await procesarMensajeEntrante(
   from,
   textoParaActivador,
   usuarioIdWebhook,

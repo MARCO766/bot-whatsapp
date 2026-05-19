@@ -11,7 +11,14 @@ const {
 const {
   ejecutarNodoIA,
   enriquecerContextoFlujo,
+  esConfigRouterLocal,
+  parseIAFromNodo,
 } = require("./aiService");
+const {
+  guardarSesionIAPendiente,
+  obtenerSesionIAPendiente,
+  limpiarSesionIAPendiente,
+} = require("./iaFlowSession");
 const { esTipoIA, resolverTipoRaw } = require("./seguimiento/detectarTipoNodo");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -67,11 +74,16 @@ function normalizarConexionesFlujo(conexionesRaw) {
 
     if (!desde || !hasta || desde === hasta) return;
 
-    const key = desde + "->" + hasta;
+    const sourceHandle =
+      c.sourceHandle || c.desdeHandle || c.handle || c.salida || null;
+
+    const key = desde + "->" + hasta + "@" + (sourceHandle || "");
     if (vistos.has(key)) return;
     vistos.add(key);
 
-    lista.push({ desde, hasta });
+    const item = { desde, hasta };
+    if (sourceHandle) item.sourceHandle = sourceHandle;
+    lista.push(item);
   });
 
   return lista;
@@ -188,11 +200,11 @@ async function ejecutarBloqueContenido(numero, bloque, usuarioId) {
     const mensaje = valorTextoBloque(bloque);
     if (!mensaje) {
       console.log("⚠️ TEXTO VACÍO, SE OMITE");
-      return;
+      return null;
     }
     await enviarTextoWhatsApp(numero, mensaje, { usuarioId });
     console.log("✅ TEXTO ENVIADO");
-    return;
+    return mensaje;
   }
 
   if (
@@ -275,12 +287,14 @@ async function ejecutarContenidoNodo(numero, nodo, usuarioId) {
     const bloques = varianteElegida;
     console.log("📦 BLOQUES:", bloques);
 
+    let ultimoTextoBot = "";
     for (const bloque of bloques) {
       console.log("📦 BLOQUE ACTUAL:", bloque);
-      await ejecutarBloqueContenido(numero, bloque, usuarioId);
+      const enviado = await ejecutarBloqueContenido(numero, bloque, usuarioId);
+      if (enviado && typeof enviado === "string") ultimoTextoBot = enviado;
     }
 
-    return true;
+    return { ok: true, ultimoTextoBot };
   } catch (e) {
     console.log("[FLUJO] ERROR LEYENDO VARIANTES DE CONTENIDO:", e.message);
     return false;
@@ -299,15 +313,22 @@ async function ejecutarFlujo(
   const nodos = flujoData.nodos;
   const conexiones = normalizarConexionesFlujo(flujoData.conexiones);
 
-  let flowContext = {
+  let flowContext = opts.flowContextResume || {
     numero,
     telefono: numero,
     nombre: opts.nombre || "",
     ultimo_mensaje: opts.ultimoMensaje || opts.ultimo_mensaje || "",
     intent: "",
     score: "",
+    route: "",
     ai: {},
+    memoriaIA: {},
   };
+
+  if (opts.mensajeResume) {
+    flowContext.ultimo_mensaje = opts.mensajeResume;
+    flowContext.ultimoMensaje = opts.mensajeResume;
+  }
 
   await enriquecerContextoFlujo(flowContext, numero, usuarioId);
 
@@ -341,8 +362,16 @@ async function ejecutarFlujo(
     });
   }
 
-  async function continuarASiguientes(nodoId, visitados, etiqueta) {
-    const siguientes = obtenerSiguientesNodos(conexiones, nodoId);
+  async function continuarASiguientes(nodoId, visitados, etiqueta, sourceHandle) {
+    let siguientes = obtenerSiguientesNodos(conexiones, nodoId);
+
+    if (sourceHandle) {
+      const filtradas = siguientes.filter(
+        (c) => (c.sourceHandle || c.desdeHandle || null) === sourceHandle
+      );
+      if (filtradas.length) siguientes = filtradas;
+    }
+
     const ids = siguientes.map((s) => s.hasta);
 
     if (!ids.length) {
@@ -444,24 +473,98 @@ async function ejecutarFlujo(
 
     if (tipoNodo === "contenido") {
       const ejecutado = await ejecutarContenidoNodo(numero, nodo, usuarioId);
-      if (ejecutado) {
+      if (ejecutado?.ok || ejecutado === true) {
+        const ultimoTexto =
+          typeof ejecutado === "object" ? ejecutado.ultimoTextoBot : "";
+        if (ultimoTexto) {
+          flowContext.ultimaSalidaBot = ultimoTexto;
+          flowContext.memoriaIA = {
+            ultimoMensajeBot: ultimoTexto,
+            ultimaPregunta: ultimoTexto,
+            ultimoNodo: nodoId,
+          };
+          flowContext.ultimoNodoContenido = nodoId;
+        }
         await continuarASiguientes(nodoId, visitados, "contenido");
         return;
       }
     }
 
     if (tipoNodo === "ia" || esTipoIA(nodo)) {
-      flowContext = await ejecutarNodoIA(nodo, {
-        ...flowContext,
-        numero,
-        from: numero,
-        telefono: numero,
-        usuarioId,
-        mensaje: flowContext.ultimo_mensaje || flowContext.ultimoMensaje || "",
-        texto: flowContext.ultimo_mensaje || flowContext.ultimoMensaje || "",
-        body: flowContext.ultimo_mensaje || flowContext.ultimoMensaje || "",
-      });
+      const configIA = parseIAFromNodo(nodo);
+      const esRouter = esConfigRouterLocal(configIA);
+      const resumeIA = !!opts.iaResume;
+
+      flowContext = await ejecutarNodoIA(
+        nodo,
+        {
+          ...flowContext,
+          numero,
+          from: numero,
+          telefono: numero,
+          usuarioId,
+          mensaje: resumeIA
+            ? opts.mensajeResume ||
+              flowContext.ultimo_mensaje ||
+              flowContext.ultimoMensaje ||
+              ""
+            : "",
+          texto: resumeIA
+            ? opts.mensajeResume ||
+              flowContext.ultimo_mensaje ||
+              flowContext.ultimoMensaje ||
+              ""
+            : "",
+          body: resumeIA
+            ? opts.mensajeResume ||
+              flowContext.ultimo_mensaje ||
+              flowContext.ultimoMensaje ||
+              ""
+            : "",
+          _buscarActivadores: resumeIA
+            ? () =>
+                buscarYEjecutarActivador(
+                  numero,
+                  opts.mensajeResume || flowContext.ultimo_mensaje || "",
+                  usuarioId
+                )
+            : null,
+        },
+        { resume: resumeIA }
+      );
+
+      if (esRouter && flowContext.iaPausar && !resumeIA) {
+        guardarSesionIAPendiente({
+          usuarioId,
+          numero,
+          flujoId,
+          nodoId,
+          visitados: Array.from(visitados),
+          flowContext: {
+            ...flowContext,
+            ultimo_mensaje: "",
+          },
+        });
+        console.log("[FLUJO] IA en espera silenciosa — nodo:", nodoId);
+        return;
+      }
+
+      if (esRouter && flowContext.iaPausar && resumeIA) {
+        return;
+      }
+
       logConexionesSalientes(nodoId, "IA");
+
+      if (esRouter && flowContext.iaRouteId) {
+        limpiarSesionIAPendiente(usuarioId, numero);
+        await continuarASiguientes(nodoId, visitados, "ia", flowContext.iaRouteId);
+        return;
+      }
+
+      if (esRouter && resumeIA) {
+        limpiarSesionIAPendiente(usuarioId, numero);
+      }
+
       await continuarASiguientes(nodoId, visitados, "ia");
       return;
     }
@@ -572,7 +675,59 @@ if (html.includes("🏷️ Etiqueta")) {
     await continuarASiguientes(nodoId, visitados, tipoNodo);
   }
 
+  if (opts.iaResume && opts.nodoResumeId) {
+    const visitadosResume = opts.visitadosResume || new Set();
+    await ejecutarNodo(opts.nodoResumeId, visitadosResume);
+    return;
+  }
+
   await ejecutarNodo("nodo_inicio");
+}
+
+async function reanudarFlujoIAPendiente(numero, mensaje, usuarioId) {
+  const sesion = obtenerSesionIAPendiente(usuarioId, numero);
+  if (!sesion?.flujoId || !sesion?.nodoId) return false;
+
+  if (!SUPABASE_URL || !SUPABASE_KEY) return false;
+
+  const responseFlujo = await axios.get(
+    `${SUPABASE_URL}/rest/v1/flujos_builder?id=eq.${sesion.flujoId}&usuario_id=eq.${usuarioId}&select=*`,
+    { headers: supabaseHeaders() }
+  );
+
+  const flujo = responseFlujo.data?.[0];
+  const flujoDatos = obtenerDatosFlujo(flujo);
+  if (!flujo || !flujoDatos) {
+    limpiarSesionIAPendiente(usuarioId, numero);
+    return false;
+  }
+
+  if (!flujoEstaActivo(flujo)) {
+    limpiarSesionIAPendiente(usuarioId, numero);
+    return false;
+  }
+
+  console.log("[FLUJO] Reanudando IA pendiente | nodo:", sesion.nodoId);
+
+  await ejecutarFlujo(numero, flujoDatos, usuarioId, sesion.flujoId, {
+    iaResume: true,
+    nodoResumeId: sesion.nodoId,
+    visitadosResume: new Set(sesion.visitados || []),
+    flowContextResume: {
+      ...(sesion.flowContext || {}),
+      ultimo_mensaje: mensaje,
+      ultimoMensaje: mensaje,
+    },
+    mensajeResume: mensaje,
+  });
+
+  return true;
+}
+
+async function procesarMensajeEntrante(numero, texto, usuarioId, messageId) {
+  const reanudado = await reanudarFlujoIAPendiente(numero, texto, usuarioId);
+  if (reanudado) return true;
+  return buscarYEjecutarActivador(numero, texto, usuarioId, messageId);
 }
 
 function supabaseHeaders(extra = {}) {
@@ -770,5 +925,7 @@ module.exports = {
   agregarEtiquetaCliente,
   ejecutarFlujo,
   buscarYEjecutarActivador,
+  procesarMensajeEntrante,
+  reanudarFlujoIAPendiente,
   registrarConversion,
 };

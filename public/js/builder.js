@@ -4,6 +4,7 @@ let conexiones = [];
 let nodoArrastrando = null;
 let lineaTemporal = null;
 let puertoOrigenConexion = null;
+let puertoHandleOrigen = null;
 
 const MACBOT_BUILDER = window.MACBOT_BUILDER || {};
 
@@ -245,7 +246,8 @@ function cargarFlujoGuardado(){
       const hastaId = c.hasta || c.to || c.target || c.target_node_id;
 
       if(mapaNodos[desdeId] && mapaNodos[hastaId]){
-        conectarNodos(mapaNodos[desdeId], mapaNodos[hastaId]);
+        const handle = c.sourceHandle || c.desdeHandle || c.handle || null;
+        conectarNodos(mapaNodos[desdeId], mapaNodos[hastaId], handle);
       }
     });
   }
@@ -503,11 +505,22 @@ function actualizarHandlersPuertosCanvas(){
   });
 }
 
+function obtenerPuertoSalida(nodo, handle){
+  if(!nodo) return null;
+  if(handle){
+    const especifico = nodo.querySelector('.port.out[data-handle="' + handle + '"]');
+    if(especifico) return especifico;
+  }
+  return nodo.querySelector(".port.out") || nodo.querySelector(".port");
+}
+
 function iniciarConexion(e, id, portSide){
   e.stopPropagation();
 
   nodoArrastrando = document.getElementById(id);
   puertoOrigenConexion = portSide === "in" ? "in" : "out";
+  const portEl = e.target?.closest?.(".port");
+  puertoHandleOrigen = portEl?.dataset?.handle || null;
 
   const canvas = document.getElementById("canvasFlujo");
   if(!canvas || !nodoArrastrando) return;
@@ -527,7 +540,7 @@ function moverConexionTemporal(e){
   const puerto =
     puertoOrigenConexion === "in"
       ? nodoArrastrando.querySelector(".port.in")
-      : nodoArrastrando.querySelector(".port.out");
+      : obtenerPuertoSalida(nodoArrastrando, puertoHandleOrigen);
   if(!puerto) return;
 
   const inicio = getPortCanvasPoint(puerto);
@@ -560,7 +573,11 @@ function soltarConexion(e){
 
       if(nodoDesde && nodoHasta){
         registrarHistorialBuilder();
-        conectarNodos(nodoDesde, nodoHasta);
+        const handleOrigen =
+          nodoDesde === nodoArrastrando
+            ? puertoHandleOrigen
+            : destino.dataset.handle || null;
+        conectarNodos(nodoDesde, nodoHasta, handleOrigen);
       }
     }
   }
@@ -572,16 +589,21 @@ function soltarConexion(e){
   nodoArrastrando = null;
   lineaTemporal = null;
   puertoOrigenConexion = null;
+  puertoHandleOrigen = null;
 }
 
-function conectarNodos(nodo1, nodo2){
+function conectarNodos(nodo1, nodo2, sourceHandle){
   const canvas = document.getElementById("canvasFlujo");
   if(!canvas || !nodo1 || !nodo2 || !nodo1.id || !nodo2.id) return;
   if(nodo1.id === nodo2.id) return;
 
-  const yaExiste = conexiones.some(
-    c => c.desde?.id === nodo1.id && c.hasta?.id === nodo2.id
-  );
+  const yaExiste = conexiones.some(function (c) {
+    return (
+      c.desde?.id === nodo1.id &&
+      c.hasta?.id === nodo2.id &&
+      (c.sourceHandle || null) === (sourceHandle || null)
+    );
+  });
   if(yaExiste) return;
 
   const linea = document.createElement("div");
@@ -605,12 +627,14 @@ function conectarNodos(nodo1, nodo2){
   canvas.appendChild(linea);
   canvas.appendChild(borrar);
 
-  conexiones.push({
+  const item = {
     desde: nodo1,
     hasta: nodo2,
     linea,
-    borrar
-  });
+    borrar,
+  };
+  if(sourceHandle) item.sourceHandle = sourceHandle;
+  conexiones.push(item);
 
   actualizarLineas();
 }
@@ -636,7 +660,7 @@ function actualizarLineas(){
   });
 
   conexiones.forEach(c => {
-    const puertoDesde = c.desde.querySelector(".port.out") || c.desde.querySelector(".port");
+    const puertoDesde = obtenerPuertoSalida(c.desde, c.sourceHandle);
     const puertoHasta = c.hasta.querySelector(".port.in") || c.hasta.querySelector(".port");
 
     if(!puertoDesde || !puertoHasta) return;
@@ -788,7 +812,10 @@ function normalizarConexionGuardada(c){
   const desde = c.desde || c.from || c.source || c.source_node_id;
   const hasta = c.hasta || c.to || c.target || c.target_node_id;
   if(!desde || !hasta || desde === hasta) return null;
-  return { desde, hasta };
+  const sourceHandle = c.sourceHandle || c.desdeHandle || c.handle || null;
+  const item = { desde, hasta };
+  if(sourceHandle) item.sourceHandle = sourceHandle;
+  return item;
 }
 
 function obtenerConexionesParaGuardar(){
@@ -800,11 +827,13 @@ function obtenerConexionesParaGuardar(){
   conexiones.forEach(c => {
     if(!c.desde?.id || !c.hasta?.id) return;
 
-    const key = c.desde.id + "->" + c.hasta.id;
+    const key = c.desde.id + "->" + c.hasta.id + "@" + (c.sourceHandle || "");
     if(vistos.has(key)) return;
     vistos.add(key);
 
-    lista.push({ desde: c.desde.id, hasta: c.hasta.id });
+    const item = { desde: c.desde.id, hasta: c.hasta.id };
+    if(c.sourceHandle) item.sourceHandle = c.sourceHandle;
+    lista.push(item);
   });
 
   return lista;
@@ -1825,7 +1854,7 @@ function restaurarSnapshotBuilder(snapshot){
   (snapshot.conexiones || []).forEach((c) => {
     const par = normalizarConexionGuardada(c);
     if(par && mapaNodos[par.desde] && mapaNodos[par.hasta]){
-      conectarNodos(mapaNodos[par.desde], mapaNodos[par.hasta]);
+      conectarNodos(mapaNodos[par.desde], mapaNodos[par.hasta], par.sourceHandle || null);
     }
   });
 
