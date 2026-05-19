@@ -42,7 +42,7 @@ window.MacBotIA = (function () {
     Object.assign(cfg, data);
     cfg.version = 3;
 
-    if (!Array.isArray(cfg.caminos) || !cfg.caminos.length) {
+    if (!obtenerRoutes(cfg).length) {
       const caminos = [];
       const reglas = data.reglas || {};
       Object.keys(reglas).forEach(function (key) {
@@ -58,6 +58,7 @@ window.MacBotIA = (function () {
         });
       });
       cfg.caminos = caminos;
+      cfg.routes = caminos;
     }
 
     cfg.comportamiento = {
@@ -76,11 +77,26 @@ window.MacBotIA = (function () {
     };
 
     cfg.scoreMinimo = parseInt(cfg.scoreMinimo, 10) || 40;
+    asegurarArraysCaminos(cfg);
     return normalizarConfig(cfg);
   }
 
+  function obtenerRoutes(cfg) {
+    const raw = cfg?.routes ?? cfg?.caminos;
+    return Array.isArray(raw) ? raw : [];
+  }
+
   function textoCamino(route) {
-    return String(route?.text || route?.nombre || "").trim();
+    return String(route?.text || route?.name || route?.nombre || "").trim();
+  }
+
+  function asegurarArraysCaminos(cfg) {
+    const lista = obtenerRoutes(cfg).map(function (r) {
+      return { ...r };
+    });
+    cfg.caminos = lista;
+    cfg.routes = lista;
+    return cfg;
   }
 
   function labelCaminoVisual(route) {
@@ -121,13 +137,15 @@ window.MacBotIA = (function () {
 
   function normalizarConfig(data) {
     const base = migrarConfigLegacy(data || {});
-    base.caminos = normalizarCaminos(base.caminos, true);
+    const validos = normalizarCaminos(obtenerRoutes(base), true);
+    base.caminos = validos;
+    base.routes = validos;
     base.scoreMinimo = Math.min(100, Math.max(0, parseInt(base.scoreMinimo, 10) || 40));
     return base;
   }
 
   function caminosParaVisual(config) {
-    return normalizarCaminos(config.caminos || [], false).filter(function (r) {
+    return normalizarCaminos(obtenerRoutes(config), false).filter(function (r) {
       return r.enabled !== false;
     });
   }
@@ -197,6 +215,7 @@ window.MacBotIA = (function () {
       port.className = "port out ia-port-route";
       port.dataset.nodo = nodo.id;
       port.dataset.handle = route.id;
+      console.log("🔌 Source handle:", route.id);
       port.title = labelCaminoVisual(route);
       const topPx = headerOffset + index * rowH + rowH / 2;
       port.style.setProperty("top", topPx + "px", "important");
@@ -214,6 +233,7 @@ window.MacBotIA = (function () {
 
   function guardarConfigEnNodo(nodo, config) {
     const cfg = normalizarConfig(config);
+    console.log("💾 Guardando IA:", cfg);
     console.log("🧠 Guardando caminos IA:", cfg.caminos);
 
     const box = nodo.querySelector(".ia-data");
@@ -252,10 +272,14 @@ window.MacBotIA = (function () {
         enabled: row.querySelector(".ia-ruta-enabled")?.checked !== false,
       });
     });
-    configActiva.caminos = caminos;
+    asegurarArraysCaminos(configActiva);
   }
 
-  function syncDesdeFormulario() {
+  /** Lee el panel sin borrar caminos vacíos (solo borrador). */
+  function syncCamposPanelDraft() {
+    if (!configActiva || typeof configActiva !== "object") {
+      configActiva = crearConfigPorDefecto();
+    }
     configActiva.nombreNodo =
       document.getElementById("iaNombreNodo")?.value.trim() || "🤖 IA";
     configActiva.scoreMinimo =
@@ -269,16 +293,56 @@ window.MacBotIA = (function () {
       activarOtrosFlujos: !!document.getElementById("iaActivarFlujos")?.checked,
       responderConAudio: !!document.getElementById("iaResponderAudio")?.checked,
     };
-    configActiva = normalizarConfig(configActiva);
+    asegurarArraysCaminos(configActiva);
+    console.log("🧠 localIA routes:", configActiva.routes);
+    return configActiva;
+  }
+
+  function agregarCaminoIA() {
+    console.log("➕ Agregar camino IA click");
+    syncCamposPanelDraft();
+
+    const nuevo = {
+      id: generarRouteId(),
+      text: "",
+      name: "",
+      nombre: "",
+      type: "texto",
+      synonyms: [],
+      priority: 50,
+      mediaId: null,
+      enabled: true,
+    };
+
+    configActiva.caminos.push(nuevo);
+    configActiva.routes = configActiva.caminos;
+    console.log("🧠 localIA routes:", configActiva.routes);
+
+    renderCaminosEditor();
+
+    if (nodoActivo) {
+      renderVisualNodoIA(nodoActivo, configActiva);
+    }
   }
 
   function renderCaminosEditor() {
     const wrap = document.getElementById("iaCaminosLista");
     if (!wrap) return;
 
-    wrap.innerHTML = (configActiva.caminos || [])
+    const routes = obtenerRoutes(configActiva);
+    console.log("🎨 Render IA routes:", routes);
+
+    if (!routes.length) {
+      wrap.innerHTML =
+        '<p class="ia-caminos-vacio">No hay caminos todavía. Agrega uno.</p>';
+      return;
+    }
+
+    wrap.innerHTML = routes
       .map(function (route, index) {
-        const syns = (route.synonyms || []).join(", ");
+        const syns = Array.isArray(route.synonyms)
+          ? route.synonyms.join(", ")
+          : String(route.synonyms || "");
         const mediaLabel = route.mediaId ? esc(route.mediaId) : "Sin medio";
         return (
           '<div class="ia-ruta-row" data-route-id="' +
@@ -308,7 +372,7 @@ window.MacBotIA = (function () {
           '"></div>' +
           '<div class="panel-campo"><label>Media ID / URL</label>' +
           '<input class="ia-ruta-media" placeholder="Sin medio" value="' +
-          esc(route.mediaId) +
+          esc(route.mediaId || "") +
           '"><small class="ia-media-hint">' +
           mediaLabel +
           "</small></div>" +
@@ -343,7 +407,7 @@ window.MacBotIA = (function () {
   }
 
   async function ejecutarPruebaInterna() {
-    syncDesdeFormulario();
+    syncCamposPanelDraft();
     const mensaje = document.getElementById("iaMensajePrueba")?.value.trim() || "";
     const out = document.getElementById("iaResultadoPrueba");
     if (!out) return;
@@ -410,6 +474,7 @@ window.MacBotIA = (function () {
     if (!nodo) return;
     nodoActivo = nodo;
     configActiva = leerConfigDeNodo(nodo);
+    asegurarArraysCaminos(configActiva);
 
     const contenido = document.getElementById("panelNodoContenido");
     if (!contenido) return;
@@ -460,23 +525,25 @@ window.MacBotIA = (function () {
 
     renderCaminosEditor();
 
-    document.getElementById("iaAgregarCamino")?.addEventListener("click", function () {
-      syncCaminosDesdeDom();
-      configActiva.caminos.push({
-        id: generarRouteId(),
-        text: "",
-        nombre: "",
-        type: "texto",
-        synonyms: [],
-        priority: 50,
-        mediaId: null,
-        enabled: true,
-      });
-      renderCaminosEditor();
-      onFormChange();
-    });
+    const btnAgregar = document.getElementById("iaAgregarCamino");
+    if (btnAgregar) {
+      btnAgregar.type = "button";
+      btnAgregar.onclick = function (ev) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        agregarCaminoIA();
+      };
+    }
 
-    document.getElementById("iaGuardarPanel")?.addEventListener("click", guardarDesdePanel);
+    const btnGuardar = document.getElementById("iaGuardarPanel");
+    if (btnGuardar) {
+      btnGuardar.type = "button";
+      btnGuardar.onclick = function (ev) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        guardarDesdePanel();
+      };
+    }
     document.getElementById("iaBtnPrueba")?.addEventListener("click", ejecutarPruebaInterna);
 
     [
@@ -493,16 +560,9 @@ window.MacBotIA = (function () {
   }
 
   function onFormChange() {
-    syncDesdeFormulario();
+    syncCamposPanelDraft();
     if (nodoActivo) {
       renderVisualNodoIA(nodoActivo, configActiva);
-      const box = nodoActivo.querySelector(".ia-data");
-      const draft = normalizarConfig(configActiva);
-      const json = JSON.stringify(draft);
-      if (box) {
-        box.value = json;
-        box.textContent = json;
-      }
     }
     if (typeof window.macbotRecordHistoryDebounced === "function") {
       window.macbotRecordHistoryDebounced();
@@ -510,8 +570,11 @@ window.MacBotIA = (function () {
   }
 
   function guardarDesdePanel() {
-    if (!nodoActivo) return;
-    syncDesdeFormulario();
+    if (!nodoActivo) {
+      console.warn("💾 Guardar IA: sin nodo activo");
+      return;
+    }
+    syncCamposPanelDraft();
     guardarConfigEnNodo(nodoActivo, configActiva);
     if (typeof cerrarPanelNodo === "function") {
       cerrarPanelNodo();
@@ -520,7 +583,7 @@ window.MacBotIA = (function () {
 
   function flushPanelToNode() {
     if (!nodoActivo) return;
-    syncDesdeFormulario();
+    syncCamposPanelDraft();
     guardarConfigEnNodo(nodoActivo, configActiva);
   }
 
@@ -633,6 +696,8 @@ window.MacBotIA = (function () {
     leerConfigDeNodo: leerConfigDeNodo,
     guardarConfigEnNodo: guardarConfigEnNodo,
     renderVisualNodoIA: renderVisualNodoIA,
+    agregarCaminoIA: agregarCaminoIA,
+    guardarDesdePanel: guardarDesdePanel,
     renderPanel: renderPanel,
     esNodoIA: esNodoIA,
     crearNodoEnCanvas: crearNodoEnCanvas,
