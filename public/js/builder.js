@@ -1473,6 +1473,22 @@ function abrirPanelNodo(nodo){
     return;
   }
 
+  if(nodoSeleccionadoPanel && nodoSeleccionadoPanel.id !== nodo.id){
+    sincronizarPanelAntesDeSnapshot();
+
+    if(window.MacBotSeguimiento && window.MacBotSeguimiento.clearPanelActivo){
+      window.MacBotSeguimiento.clearPanelActivo();
+    }
+
+    if(window.MacBotContenido && window.MacBotContenido.clearPanelActivo){
+      window.MacBotContenido.clearPanelActivo();
+    }
+
+    if(window.MacBotIA && window.MacBotIA.clearPanelActivo){
+      window.MacBotIA.clearPanelActivo();
+    }
+  }
+
   nodoSeleccionadoPanel = nodo;
 
   const panel = document.getElementById("panelNodo");

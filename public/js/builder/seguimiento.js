@@ -172,9 +172,50 @@ window.MacBotSeguimiento = (function () {
   }
 
   function leerTextareaJson(box) {
-    const raw = (box.value || box.textContent || box.innerHTML || "[]").trim();
-    if (!raw) return [];
+    const fromValue = String(box.value || "").trim();
+    const fromContent = String(box.textContent || "").trim();
+    const raw = fromValue || fromContent;
+    if (!raw) return null;
     return JSON.parse(raw);
+  }
+
+  /** Lee JSON del nodo sin filtrar pasos (fuente de verdad en .seguimiento-data). */
+  function parseConfigAlmacenada(data) {
+    if (!data) return crearConfigVacia();
+
+    if (Array.isArray(data)) {
+      return normalizarConfig(data);
+    }
+
+    if (data.version === 2 || Array.isArray(data.pasos)) {
+      const pasos = (data.pasos || []).map(function (p, i) {
+        const paso = asegurarPaso(
+          Object.assign(
+            {
+              id: "paso_" + (i + 1),
+              delay: { valor: 15, unidad: "minutos" },
+              segundos: 15 * 60,
+              mensaje: { tipo: "texto", texto: "", url: "", caption: "" },
+              botones: [],
+            },
+            p || {}
+          )
+        );
+        if (!paso.segundos && paso.delay) {
+          paso.segundos = delayToSeconds(paso.delay.valor, paso.delay.unidad);
+        }
+        return paso;
+      });
+
+      return {
+        version: 2,
+        soloSiNoRespondio: data.soloSiNoRespondio !== false,
+        detenerSiResponde: data.detenerSiResponde !== false,
+        pasos: pasos,
+      };
+    }
+
+    return normalizarConfig(data);
   }
 
   function leerConfigDeNodo(nodo) {
@@ -182,7 +223,9 @@ window.MacBotSeguimiento = (function () {
     if (!box) return crearConfigVacia();
 
     try {
-      return normalizarConfig(leerTextareaJson(box));
+      const parsed = leerTextareaJson(box);
+      if (parsed == null) return crearConfigVacia();
+      return parseConfigAlmacenada(parsed);
     } catch (e) {
       console.warn("Seguimiento: JSON inválido en nodo", nodo.id, e.message);
       return crearConfigVacia();
@@ -713,7 +756,7 @@ window.MacBotSeguimiento = (function () {
 
     renderListaPasos();
     renderFormularioPaso();
-    onFormChange();
+    guardarConfigEnNodo(nodo, configActiva);
   }
 
   function guardarDesdePanel() {
@@ -745,7 +788,8 @@ window.MacBotSeguimiento = (function () {
 
   function refrescarNodoCargado(nodo) {
     try {
-      guardarConfigEnNodo(nodo, leerConfigDeNodo(nodo));
+      const config = leerConfigDeNodo(nodo);
+      renderPreviewNodo(nodo, config);
     } catch (e) {
       console.warn("Seguimiento: error refrescando nodo", e.message);
     }
