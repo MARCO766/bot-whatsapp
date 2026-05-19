@@ -502,3 +502,131 @@
   background: rgba(251, 113, 133, 0.2);
   color: #fda4af;
 }
+
+/* Upload imagen nodo Contenido (solo panel flujo) */
+#cntFieldImagen .cnt-img-upload {
+  margin-top: 10px;
+}
+
+#cntFieldImagen .cnt-img-upload-card {
+  display: grid;
+  grid-template-columns: 52px 1fr 40px;
+  grid-template-rows: auto auto;
+  align-items: center;
+  gap: 6px 10px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.55);
+  border: 1px solid rgba(103, 232, 249, 0.2);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+}
+
+#cntFieldImagen .cnt-img-upload-thumb {
+  grid-row: 1 / 3;
+  grid-column: 1;
+}
+
+#cntFieldImagen .cnt-img-upload-status {
+  grid-column: 2 / 4;
+  grid-row: 1;
+}
+
+#cntFieldImagen .cnt-img-upload-bar {
+  grid-column: 2;
+  grid-row: 2;
+}
+
+#cntFieldImagen .cnt-img-upload-pct {
+  grid-column: 3;
+  grid-row: 2;
+}
+
+#cntFieldImagen .cnt-img-upload-thumb,
+#cntFieldImagen .cnt-img-done-thumb {
+  width: 52px;
+  height: 52px;
+  object-fit: cover;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  flex-shrink: 0;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+#cntFieldImagen .cnt-img-upload-done:hover .cnt-img-done-thumb {
+  transform: scale(1.04);
+  box-shadow: 0 4px 16px rgba(56, 189, 248, 0.25);
+}
+
+#cntFieldImagen .cnt-img-upload-status {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: #e2e8f0;
+  min-width: 0;
+}
+
+#cntFieldImagen .cnt-img-upload-bar {
+  flex: 1;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+  min-width: 80px;
+}
+
+#cntFieldImagen .cnt-img-upload-bar span {
+  display: block;
+  height: 100%;
+  width: 0%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #22d3ee, #39ff14);
+  transition: width 0.25s ease;
+}
+
+#cntFieldImagen .cnt-img-upload-pct {
+  font-size: 11px;
+  font-weight: 800;
+  color: #67e8f9;
+  min-width: 36px;
+  text-align: right;
+}
+
+#cntFieldImagen .cnt-img-upload-done {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: rgba(57, 255, 20, 0.08);
+  border: 1px solid rgba(57, 255, 20, 0.25);
+  font-size: 12px;
+  font-weight: 700;
+  color: #bbf7d0;
+}
+
+.cnt-toast-flujo {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 99999;
+  max-width: 320px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.95);
+  border: 1px solid rgba(251, 191, 36, 0.4);
+  color: #fde68a;
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 0.25s ease, transform 0.25s ease;
+  pointer-events: none;
+}
+
+.cnt-toast-flujo--show {
+  opacity: 1;
+  transform: translateY(0);
+}

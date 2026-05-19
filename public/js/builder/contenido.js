@@ -6,6 +6,8 @@ window.MacBotContenido = (function () {
   const TIPOS_ENTREGABLE = ["texto", "imagen", "audio", "video", "doc", "boton"];
   const COMPACT_FROM = 4;
   const SCROLL_FROM = 7;
+  const MAX_IMAGEN_FLUJO_BYTES = 2 * 1024 * 1024;
+  let subidaImagenActiva = false;
 
   const ETIQUETAS = {
     texto: "Texto",
@@ -628,6 +630,160 @@ window.MacBotContenido = (function () {
     onPanelChange();
   }
 
+  function mostrarToastContenido(texto) {
+    if (typeof window.mostrarToast === "function") {
+      window.mostrarToast(texto);
+      return;
+    }
+    let toast = document.getElementById("cntToastFlujo");
+    if (!toast) {
+      toast = document.createElement("div");
+      toast.id = "cntToastFlujo";
+      toast.className = "cnt-toast-flujo";
+      document.body.appendChild(toast);
+    }
+    toast.textContent = texto;
+    toast.classList.add("cnt-toast-flujo--show");
+    clearTimeout(toast._hideTimer);
+    toast._hideTimer = setTimeout(function () {
+      toast.classList.remove("cnt-toast-flujo--show");
+    }, 3200);
+  }
+
+  function setProgresoImagen(pct, etiqueta) {
+    const box = document.getElementById("cntImgUploadBox");
+    const fill = document.getElementById("cntImgUploadBarFill");
+    const pctEl = document.getElementById("cntImgUploadPct");
+    const status = document.getElementById("cntImgUploadStatus");
+    if (!box || !fill || !pctEl) return;
+    box.style.display = "block";
+    const n = Math.max(0, Math.min(100, Math.round(pct)));
+    fill.style.width = n + "%";
+    pctEl.textContent = n + "%";
+    if (status && etiqueta) status.textContent = etiqueta;
+  }
+
+  function ocultarProgresoImagen() {
+    const box = document.getElementById("cntImgUploadBox");
+    if (box) box.style.display = "none";
+  }
+
+  function mostrarPreviewImagenLista(url) {
+    const done = document.getElementById("cntImgUploadDone");
+    const thumb = document.getElementById("cntImgDoneThumb");
+    if (!done || !thumb) return;
+    thumb.src = url;
+    done.style.display = "flex";
+    ocultarProgresoImagen();
+  }
+
+  function subirImagenNodoFlujo(file) {
+    if (!file || subidaImagenActiva) return;
+
+    if (file.size > MAX_IMAGEN_FLUJO_BYTES) {
+      mostrarToastContenido(
+        "⚠️ La imagen supera el límite de 2MB. Usa una imagen más ligera."
+      );
+      setProgresoImagen(0, "⚠️ Máximo permitido: 2MB");
+      return;
+    }
+
+    subidaImagenActiva = true;
+    const done = document.getElementById("cntImgUploadDone");
+    if (done) done.style.display = "none";
+
+    const thumb = document.getElementById("cntImgUploadThumb");
+    if (thumb) {
+      thumb.src = URL.createObjectURL(file);
+    }
+
+    console.log("📤 preparando imagen");
+    setProgresoImagen(1, "Subiendo imagen…");
+
+    const formData = new FormData();
+    formData.append("archivo", file);
+
+    const xhr = new XMLHttpRequest();
+    let faseOptim = false;
+
+    xhr.upload.addEventListener("progress", function (ev) {
+      if (!ev.lengthComputable) return;
+      const ratio = ev.loaded / ev.total;
+      const pct = 15 + Math.round(ratio * 47);
+      setProgresoImagen(pct, "Subiendo imagen…");
+    });
+
+    xhr.addEventListener("loadstart", function () {
+      setProgresoImagen(15, "Subiendo imagen…");
+    });
+
+    xhr.addEventListener("readystatechange", function () {
+      if (xhr.readyState === 3 && !faseOptim) {
+        faseOptim = true;
+        setProgresoImagen(62, "Optimizando…");
+        console.log("🖼 optimizando webp");
+      }
+    });
+
+    xhr.addEventListener("load", function () {
+      subidaImagenActiva = false;
+      let data = {};
+      try {
+        data = JSON.parse(xhr.responseText || "{}");
+      } catch (e) {
+        data = {};
+      }
+
+      if (xhr.status >= 200 && xhr.status < 300 && data.url) {
+        console.log("☁️ subiendo a supabase");
+        setProgresoImagen(84, "Finalizando…");
+        setProgresoImagen(100, "✅ Imagen lista");
+        console.log("✅ upload completado");
+
+        const item = { tipo: "imagen", valor: data.url };
+        const desc = document.getElementById("cntPanelDescImg")?.value?.trim();
+        if (desc) item.descripcion = desc;
+
+        varianteActualPanel().push(item);
+        const fileInput = document.getElementById("cntPanelImagen");
+        if (fileInput) fileInput.value = "";
+
+        mostrarPreviewImagenLista(data.url);
+        onPanelChange();
+        return;
+      }
+
+      const msg =
+        data.error ||
+        (xhr.status === 400
+          ? "⚠️ La imagen supera el límite de 2MB. Usa una imagen más ligera."
+          : "❌ Error al subir imagen");
+      setProgresoImagen(0, "❌ Error al subir imagen");
+      mostrarToastContenido(msg);
+      ocultarProgresoImagen();
+    });
+
+    xhr.addEventListener("error", function () {
+      subidaImagenActiva = false;
+      setProgresoImagen(0, "❌ Error al subir imagen");
+      mostrarToastContenido("❌ Error al subir imagen");
+      ocultarProgresoImagen();
+    });
+
+    xhr.open("POST", "/subir-imagen-nodo-flujo");
+    xhr.send(formData);
+  }
+
+  function iniciarSubidaImagenDesdePanel() {
+    const fileInput = document.getElementById("cntPanelImagen");
+    const file = fileInput?.files?.[0];
+    if (!file) {
+      fileInput?.click();
+      return;
+    }
+    subirImagenNodoFlujo(file);
+  }
+
   function subirArchivoPanel(inputId, tipo, conDescripcion) {
     const fileInput = document.getElementById(inputId);
     const file = fileInput?.files?.[0];
@@ -724,8 +880,18 @@ window.MacBotContenido = (function () {
       '<button type="button" class="cnt-btn cnt-btn-ghost" id="cntAddTiempo" style="margin-top:6px;">Agregar pausa</button></div>' +
       '<div class="cnt-panel-field" id="cntFieldImagen" style="display:none;">' +
       "<label>Imagen</label>" +
-      '<input type="file" id="cntPanelImagen" accept="image/*">' +
+      '<input type="file" id="cntPanelImagen" accept="image/jpeg,image/png,image/webp,image/gif,image/bmp,image/heic,image/heif,.jpg,.jpeg,.png,.webp,.bmp,.gif,.heic,.heif">' +
       '<textarea id="cntPanelDescImg" rows="2" placeholder="Descripción (opcional)"></textarea>' +
+      '<div id="cntImgUploadBox" class="cnt-img-upload" style="display:none;">' +
+      '<div class="cnt-img-upload-card">' +
+      '<img id="cntImgUploadThumb" class="cnt-img-upload-thumb" alt="" />' +
+      '<p id="cntImgUploadStatus" class="cnt-img-upload-status">Subiendo imagen…</p>' +
+      '<div class="cnt-img-upload-bar"><span id="cntImgUploadBarFill"></span></div>' +
+      '<span id="cntImgUploadPct" class="cnt-img-upload-pct">0%</span>' +
+      "</div></div>" +
+      '<div id="cntImgUploadDone" class="cnt-img-upload-done" style="display:none;">' +
+      '<img id="cntImgDoneThumb" class="cnt-img-done-thumb" alt="" />' +
+      "<span>✅ Imagen lista</span></div>" +
       '<button type="button" class="cnt-btn cnt-btn-ghost" id="cntSubirImagen" style="margin-top:6px;">Subir imagen</button></div>' +
       '<div class="cnt-panel-field" id="cntFieldAudio" style="display:none;">' +
       "<label>Audio</label>" +
@@ -774,8 +940,10 @@ window.MacBotContenido = (function () {
 
     document.getElementById("cntAddTexto")?.addEventListener("click", agregarTextoDesdePanel);
     document.getElementById("cntAddTiempo")?.addEventListener("click", agregarTiempoDesdePanel);
-    document.getElementById("cntSubirImagen")?.addEventListener("click", function () {
-      subirArchivoPanel("cntPanelImagen", "imagen", true);
+    document.getElementById("cntSubirImagen")?.addEventListener("click", iniciarSubidaImagenDesdePanel);
+    document.getElementById("cntPanelImagen")?.addEventListener("change", function () {
+      const f = this.files?.[0];
+      if (f) subirImagenNodoFlujo(f);
     });
     document.getElementById("cntSubirAudio")?.addEventListener("click", function () {
       subirArchivoPanel("cntPanelAudio", "audio", false);

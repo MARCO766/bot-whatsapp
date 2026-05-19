@@ -26,6 +26,9 @@ const {
   esArchivoImagen,
   prepararImagenParaWhatsApp,
 } = require("../services/imageWhatsAppService");
+const { optimizarImagenFlujoStorage } = require("../services/flowImageStorageService");
+
+const MAX_IMAGEN_NODO_FLUJO = 2 * 1024 * 1024;
 const seguimientoRoutes = require("./seguimiento");
 const rt = require("../services/realtimeService");
 
@@ -117,6 +120,85 @@ router.post("/subir-archivo", protegerPanel, upload.single("archivo"), async (re
     res.status(500).json({ error: "Error subiendo archivo" });
   }
 });
+
+/** Solo nodo Contenido del builder — WEBP optimizado, máx 2MB entrada */
+router.post(
+  "/subir-imagen-nodo-flujo",
+  protegerPanel,
+  upload.single("archivo"),
+  async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: "No se recibió archivo" });
+      }
+
+      if (!esArchivoImagen(req.file)) {
+        return res.status(400).json({ error: "El archivo no es una imagen" });
+      }
+
+      if (req.file.size > MAX_IMAGEN_NODO_FLUJO) {
+        return res.status(400).json({
+          error:
+            "⚠️ La imagen supera el límite de 2MB. Usa una imagen más ligera.",
+        });
+      }
+
+      let preparada;
+      try {
+        preparada = await optimizarImagenFlujoStorage(
+          req.file.buffer,
+          req.file.mimetype,
+          req.file.originalname
+        );
+      } catch (convErr) {
+        return res.status(400).json({
+          error: convErr.message || "No se pudo optimizar la imagen",
+        });
+      }
+
+      const nombreArchivo =
+        Date.now() +
+        "-" +
+        Math.random().toString(36).substring(2) +
+        "." +
+        preparada.extension;
+
+      const rutaArchivo = `whatsapp/${req.session.usuario.id}/${nombreArchivo}`;
+
+      console.log("☁️ subiendo a supabase");
+
+      await axios.post(
+        `${SUPABASE_URL}/storage/v1/object/archivos/${rutaArchivo}`,
+        preparada.buffer,
+        {
+          headers: {
+            apikey: SUPABASE_KEY,
+            Authorization: `Bearer ${SUPABASE_KEY}`,
+            "Content-Type": preparada.mimetype,
+            "x-upsert": "true",
+          },
+        }
+      );
+
+      const urlPublica = `${SUPABASE_URL}/storage/v1/object/public/archivos/${rutaArchivo}`;
+
+      console.log("✅ upload completado");
+
+      res.json({
+        ok: true,
+        url: urlPublica,
+        tipo: preparada.mimetype,
+        size: preparada.buffer.length,
+      });
+    } catch (error) {
+      console.log(
+        "ERROR SUBIENDO IMAGEN NODO FLUJO:",
+        error.response?.data || error.message
+      );
+      res.status(500).json({ error: "Error subiendo imagen" });
+    }
+  }
+);
 
 // ✅ CREAR FLUJO
 router.post("/crear-flujo", protegerPanel, async (req, res) => {
