@@ -81,76 +81,196 @@ function obtenerSiguientesNodos(conexiones, nodoId) {
   return conexiones.filter((c) => c.desde === nodoId);
 }
 
-async function ejecutarContenidoNodo(numero, nodo, usuarioId) {
-  const html = nodo.html || "";
-  const matchVariantesContenido = html.match(
-    /<textarea[^>]*class="contenido-variantes-data"[^>]*>([\s\S]*?)<\/textarea>/i
-  );
+function decodificarJsonHtml(raw) {
+  return String(raw || "")
+    .replace(/&quot;/g, '"')
+    .replace(/&#34;/g, '"')
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&")
+    .trim();
+}
 
-  if (!matchVariantesContenido) return false;
+function normalizarVariantesContenido(parsed) {
+  if (!parsed) return [];
+
+  if (parsed.variantes && Array.isArray(parsed.variantes)) {
+    return normalizarVariantesContenido(parsed.variantes);
+  }
+
+  if (!Array.isArray(parsed)) return [];
+
+  if (
+    parsed.length &&
+    parsed[0] &&
+    typeof parsed[0] === "object" &&
+    !Array.isArray(parsed[0]) &&
+    (parsed[0].tipo || parsed[0].type || parsed[0].blockType)
+  ) {
+    return [parsed];
+  }
+
+  if (parsed.length && parsed[0]?.bloques && Array.isArray(parsed[0].bloques)) {
+    return parsed
+      .map((v) => (Array.isArray(v.bloques) ? v.bloques : []))
+      .filter((bloques) => bloques.length > 0);
+  }
+
+  return parsed.filter((v) => Array.isArray(v) && v.length > 0);
+}
+
+function extraerJsonVariantesDesdeNodo(nodo) {
+  const html = nodo?.html || "";
+  const matches = [
+    ...html.matchAll(
+      /<textarea[^>]*class="contenido-variantes-data"[^>]*>([\s\S]*?)<\/textarea>/gi
+    ),
+  ];
+
+  let mejor = "";
+  for (const m of matches) {
+    const candidato = decodificarJsonHtml(m[1]);
+    if (candidato.length > mejor.length) mejor = candidato;
+  }
+
+  if (mejor) return mejor;
+
+  if (nodo?.data?.variantes) {
+    return JSON.stringify(nodo.data.variantes);
+  }
+
+  return "";
+}
+
+function tipoBloqueContenido(bloque) {
+  return String(
+    bloque?.type || bloque?.tipo || bloque?.blockType || bloque?.mediaType || ""
+  )
+    .toLowerCase()
+    .trim();
+}
+
+function valorTextoBloque(bloque) {
+  return String(
+    bloque?.valor ?? bloque?.texto ?? bloque?.mensaje ?? bloque?.content ?? ""
+  ).trim();
+}
+
+function urlMediaBloque(bloque) {
+  return String(
+    bloque?.valor ?? bloque?.url ?? bloque?.media ?? bloque?.archivo ?? bloque?.file ?? ""
+  ).trim();
+}
+
+function captionMediaBloque(bloque) {
+  return String(
+    bloque?.descripcion ?? bloque?.caption ?? bloque?.texto ?? ""
+  ).trim();
+}
+
+function segundosPausaBloque(bloque) {
+  const raw =
+    bloque?.valor ?? bloque?.segundos ?? bloque?.time ?? bloque?.delay ?? 1;
+  const segundos = parseInt(raw, 10);
+  return !isNaN(segundos) && segundos > 0 ? segundos : 0;
+}
+
+async function ejecutarBloqueContenido(numero, bloque, usuarioId) {
+  const tipo = tipoBloqueContenido(bloque);
+  console.log("🧩 EJECUTANDO BLOQUE:", tipo, bloque);
+
+  if (!tipo) {
+    console.log("⚠️ BLOQUE SIN TIPO, SE OMITE");
+    return;
+  }
+
+  if (tipo.includes("texto") || tipo === "text") {
+    const mensaje = valorTextoBloque(bloque);
+    if (!mensaje) {
+      console.log("⚠️ TEXTO VACÍO, SE OMITE");
+      return;
+    }
+    await enviarTextoWhatsApp(numero, mensaje, { usuarioId });
+    console.log("✅ TEXTO ENVIADO");
+    return;
+  }
+
+  if (
+    tipo.includes("pausa") ||
+    tipo.includes("wait") ||
+    tipo === "tiempo" ||
+    tipo === "delay"
+  ) {
+    const segundos = segundosPausaBloque(bloque);
+    if (!segundos) {
+      console.log("⚠️ PAUSA INVÁLIDA, SE OMITE");
+      return;
+    }
+    console.log("⏳ PAUSA:", segundos);
+    await esperarSegundos(segundos);
+    return;
+  }
+
+  const media = urlMediaBloque(bloque);
+  if (!media) {
+    console.log("⚠️ MEDIA SIN URL, SE OMITE:", tipo);
+    return;
+  }
+
+  if (tipo.includes("imagen") || tipo === "image") {
+    await enviarMediaWhatsApp(numero, "image", media, captionMediaBloque(bloque), {
+      usuarioId,
+    });
+    console.log("✅ IMAGEN ENVIADA");
+    return;
+  }
+
+  if (tipo.includes("video")) {
+    await enviarMediaWhatsApp(numero, "video", media, captionMediaBloque(bloque), {
+      usuarioId,
+    });
+    console.log("✅ VIDEO ENVIADO");
+    return;
+  }
+
+  if (tipo.includes("audio")) {
+    await enviarMediaWhatsApp(numero, "audio", media, "", { usuarioId });
+    console.log("✅ AUDIO ENVIADO");
+    return;
+  }
+
+  if (tipo.includes("pdf") || tipo.includes("doc") || tipo === "document") {
+    await enviarMediaWhatsApp(numero, "document", media, "", { usuarioId });
+    console.log("✅ PDF ENVIADO");
+    return;
+  }
+
+  console.log("⚠️ TIPO DE BLOQUE NO RECONOCIDO:", tipo);
+}
+
+async function ejecutarContenidoNodo(numero, nodo, usuarioId) {
+  console.log("📦 EJECUTANDO NODO CONTENIDO");
+  console.log("📦 DATA NODO:", nodo?.data);
+  console.log("🧩 JSON REAL BLOQUES:", extraerJsonVariantesDesdeNodo(nodo) || "(vacío)");
+
+  const textoJson = extraerJsonVariantesDesdeNodo(nodo);
+  if (!textoJson) return false;
 
   try {
-    const textoJson = matchVariantesContenido[1]
-      .replace(/&quot;/g, '"')
-      .replace(/&#34;/g, '"')
-      .replace(/&lt;/g, "<")
-      .replace(/&gt;/g, ">")
-      .replace(/&amp;/g, "&");
+    const parsed = JSON.parse(textoJson);
+    const variantes = normalizarVariantesContenido(parsed);
+    console.log("📦 VARIANTES:", variantes);
 
-    const variantes = JSON.parse(textoJson);
-    const variantesValidas = variantes.filter(
-      (v) => Array.isArray(v) && v.length > 0
-    );
-
-    if (!variantesValidas.length) return false;
+    if (!variantes.length) return false;
 
     const varianteElegida =
-      variantesValidas[Math.floor(Math.random() * variantesValidas.length)];
+      variantes[Math.floor(Math.random() * variantes.length)];
+    const bloques = varianteElegida;
+    console.log("📦 BLOQUES:", bloques);
 
-    for (const item of varianteElegida) {
-      if (item.tipo === "texto") {
-        console.log("📤 MENSAJE ENVIADO (contenido):", item.valor);
-        await enviarTextoWhatsApp(numero, item.valor, { usuarioId });
-      }
-
-      if (item.tipo === "tiempo") {
-        const segundos = parseInt(item.valor, 10);
-        if (!isNaN(segundos) && segundos > 0) {
-          await esperarSegundos(segundos);
-        }
-      }
-
-      if (item.tipo === "imagen") {
-        await enviarMediaWhatsApp(
-          numero,
-          "image",
-          item.valor,
-          item.descripcion || "",
-          { usuarioId }
-        );
-      }
-
-      if (item.tipo === "audio") {
-        await enviarMediaWhatsApp(numero, "audio", item.valor, "", {
-          usuarioId,
-        });
-      }
-
-      if (item.tipo === "video") {
-        await enviarMediaWhatsApp(
-          numero,
-          "video",
-          item.valor,
-          item.descripcion || "",
-          { usuarioId }
-        );
-      }
-
-      if (item.tipo === "doc") {
-        await enviarMediaWhatsApp(numero, "document", item.valor, "", {
-          usuarioId,
-        });
-      }
+    for (const bloque of bloques) {
+      console.log("📦 BLOQUE ACTUAL:", bloque);
+      await ejecutarBloqueContenido(numero, bloque, usuarioId);
     }
 
     return true;
