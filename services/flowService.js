@@ -75,7 +75,14 @@ function normalizarConexionesFlujo(conexionesRaw) {
     if (!desde || !hasta || desde === hasta) return;
 
     const sourceHandle =
-      c.sourceHandle || c.desdeHandle || c.handle || c.salida || null;
+      c.sourceHandle ||
+      c.source_handle ||
+      c.desdeHandle ||
+      c.handle ||
+      c.puerto ||
+      c.dataHandle ||
+      c.salida ||
+      null;
 
     const key = desde + "->" + hasta + "@" + (sourceHandle || "");
     if (vistos.has(key)) return;
@@ -91,6 +98,20 @@ function normalizarConexionesFlujo(conexionesRaw) {
 
 function obtenerSiguientesNodos(conexiones, nodoId) {
   return conexiones.filter((c) => c.desde === nodoId);
+}
+
+function handleConexion(c) {
+  if (!c || typeof c !== "object") return null;
+  return (
+    c.sourceHandle ||
+    c.source_handle ||
+    c.desdeHandle ||
+    c.handle ||
+    c.puerto ||
+    c.dataHandle ||
+    c.salida ||
+    null
+  );
 }
 
 function decodificarJsonHtml(raw) {
@@ -365,11 +386,50 @@ async function ejecutarFlujo(
   async function continuarASiguientes(nodoId, visitados, etiqueta, sourceHandle) {
     let siguientes = obtenerSiguientesNodos(conexiones, nodoId);
 
-    if (sourceHandle) {
-      const filtradas = siguientes.filter(
-        (c) => (c.sourceHandle || c.desdeHandle || null) === sourceHandle
+    if (etiqueta === "ia") {
+      console.log(
+        "🔌 CONEXIONES DESDE IA:",
+        conexiones
+          .filter((c) => c.desde === nodoId)
+          .map((c) => ({ hasta: c.hasta, handle: handleConexion(c) }))
       );
-      if (filtradas.length) siguientes = filtradas;
+      if (sourceHandle) {
+        console.log("🔍 BUSCANDO SOURCE HANDLE:", sourceHandle);
+      }
+    }
+
+    if (sourceHandle && siguientes.length) {
+      const filtradas = siguientes.filter(
+        (c) => handleConexion(c) === sourceHandle
+      );
+      if (filtradas.length) {
+        siguientes = filtradas;
+      } else if (siguientes.length === 1) {
+        console.warn(
+          "⚠️ IA: sin match para sourceHandle",
+          sourceHandle,
+          "— fallback única salida:",
+          siguientes[0].hasta,
+          "handle guardado:",
+          handleConexion(siguientes[0])
+        );
+      } else {
+        console.error(
+          "❌ IA: sourceHandle",
+          sourceHandle,
+          "sin conexión. Salidas:",
+          siguientes.map((c) => ({
+            hasta: c.hasta,
+            handle: handleConexion(c) || "(sin handle)",
+          }))
+        );
+        siguientes = [];
+      }
+    } else if (!sourceHandle && siguientes.length === 1) {
+      console.log(
+        "↪️ IA: una sola salida sin sourceHandle, usando",
+        siguientes[0].hasta
+      );
     }
 
     const ids = siguientes.map((s) => s.hasta);
@@ -384,6 +444,7 @@ async function ejecutarFlujo(
 
     if (etiqueta === "ia") {
       logConexionesSalientes(nodoId, "IA");
+      console.log("➡️ SIGUIENTE NODO IA:", ids.join(", "));
     }
 
     console.log(
@@ -549,20 +610,33 @@ async function ejecutarFlujo(
         return;
       }
 
-      if (esRouter && flowContext.iaPausar && resumeIA) {
-        return;
-      }
+      const routeHandle =
+        flowContext.iaRouteId ||
+        flowContext.route ||
+        flowContext.route_id ||
+        null;
 
-      logConexionesSalientes(nodoId, "IA");
+      console.log("🤖 IA ROUTE DETECTADA:", routeHandle);
 
-      if (esRouter && flowContext.iaRouteId) {
-        limpiarSesionIAPendiente(usuarioId, numero);
-        await continuarASiguientes(nodoId, visitados, "ia", flowContext.iaRouteId);
+      if (esRouter && flowContext.iaPausar && resumeIA && !routeHandle) {
+        console.log("[FLUJO] IA sigue en espera (sin ruta detectada)");
         return;
       }
 
       if (esRouter && resumeIA) {
         limpiarSesionIAPendiente(usuarioId, numero);
+      }
+
+      logConexionesSalientes(nodoId, "IA");
+
+      if (esRouter && resumeIA && routeHandle) {
+        await continuarASiguientes(nodoId, visitados, "ia", routeHandle);
+        return;
+      }
+
+      if (esRouter && resumeIA) {
+        await continuarASiguientes(nodoId, visitados, "ia");
+        return;
       }
 
       await continuarASiguientes(nodoId, visitados, "ia");
@@ -676,7 +750,14 @@ if (html.includes("🏷️ Etiqueta")) {
   }
 
   if (opts.iaResume && opts.nodoResumeId) {
-    const visitadosResume = opts.visitadosResume || new Set();
+    const visitadosResume = new Set(opts.visitadosResume || []);
+    visitadosResume.delete(opts.nodoResumeId);
+    console.log(
+      "[FLUJO] Reanudar IA en nodo",
+      opts.nodoResumeId,
+      "| visitados:",
+      Array.from(visitadosResume)
+    );
     await ejecutarNodo(opts.nodoResumeId, visitadosResume);
     return;
   }
