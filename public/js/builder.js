@@ -513,6 +513,96 @@ function obtenerPuertoSalida(nodo, handle){
   return nodo.querySelector(".port.out") || nodo.querySelector(".port");
 }
 
+function crearLineaTemporalSvg(canvas){
+  const NS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(NS, "svg");
+  svg.id = "tempConnectionSvg";
+  svg.setAttribute("class", "temp-connection-svg");
+  svg.setAttribute("aria-hidden", "true");
+
+  const glow = document.createElementNS(NS, "path");
+  glow.setAttribute("class", "temp-connection-glow");
+  glow.setAttribute("fill", "none");
+
+  const path = document.createElementNS(NS, "path");
+  path.id = "tempConnectionPath";
+  path.setAttribute("class", "temp-connection-path");
+  path.setAttribute("fill", "none");
+
+  const packet = document.createElementNS(NS, "circle");
+  packet.setAttribute("class", "temp-connection-packet");
+  packet.setAttribute("r", "4");
+  const motion = document.createElementNS(NS, "animateMotion");
+  motion.setAttribute("dur", "1.65s");
+  motion.setAttribute("repeatCount", "indefinite");
+  motion.setAttribute("path", "");
+  packet.appendChild(motion);
+
+  svg.appendChild(glow);
+  svg.appendChild(path);
+  svg.appendChild(packet);
+  canvas.appendChild(svg);
+
+  return { svg, glow, path, motion };
+}
+
+function buildTempBezierPath(x1, y1, x2, y2){
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const dist = Math.hypot(dx, dy) || 1;
+  const curve = Math.min(140, Math.max(48, dist * 0.38));
+
+  let c1x;
+  let c1y;
+  let c2x;
+  let c2y;
+
+  if(Math.abs(dx) >= Math.abs(dy)){
+    c1x = x1 + (dx >= 0 ? curve : -curve);
+    c1y = y1;
+    c2x = x2 - (dx >= 0 ? curve : -curve);
+    c2y = y2;
+  } else {
+    c1x = x1;
+    c1y = y1 + (dy >= 0 ? curve : -curve);
+    c2x = x2;
+    c2y = y2 - (dy >= 0 ? curve : -curve);
+  }
+
+  return (
+    "M " +
+    x1 +
+    " " +
+    y1 +
+    " C " +
+    c1x +
+    " " +
+    c1y +
+    ", " +
+    c2x +
+    " " +
+    c2y +
+    ", " +
+    x2 +
+    " " +
+    y2
+  );
+}
+
+function actualizarLineaTemporalCurva(pathEl, glowEl, motionEl, x1, y1, x2, y2){
+  const d = buildTempBezierPath(x1, y1, x2, y2);
+  pathEl.setAttribute("d", d);
+  if(glowEl) glowEl.setAttribute("d", d);
+  if(motionEl) motionEl.setAttribute("path", d);
+}
+
+function removerLineaTemporal(){
+  if(lineaTemporal){
+    lineaTemporal.remove();
+    lineaTemporal = null;
+  }
+}
+
 function iniciarConexion(e, id, portSide){
   e.stopPropagation();
 
@@ -524,17 +614,21 @@ function iniciarConexion(e, id, portSide){
   const canvas = document.getElementById("canvasFlujo");
   if(!canvas || !nodoArrastrando) return;
 
-  lineaTemporal = document.createElement("div");
-  lineaTemporal.className = "linea linea-dashed linea-temporal";
+  removerLineaTemporal();
+  const tempSvg = crearLineaTemporalSvg(canvas);
+  lineaTemporal = tempSvg.svg;
+  lineaTemporal._tempPath = tempSvg.path;
+  lineaTemporal._tempGlow = tempSvg.glow;
+  lineaTemporal._tempMotion = tempSvg.motion;
 
-  canvas.appendChild(lineaTemporal);
+  console.log("🎨 Drag connection curve active");
 
   document.addEventListener("mousemove", moverConexionTemporal);
   document.addEventListener("mouseup", soltarConexion);
 }
 
 function moverConexionTemporal(e){
-  if(!nodoArrastrando || !lineaTemporal) return;
+  if(!nodoArrastrando || !lineaTemporal?._tempPath) return;
 
   const puerto =
     puertoOrigenConexion === "in"
@@ -545,7 +639,15 @@ function moverConexionTemporal(e){
   const inicio = getPortCanvasPoint(puerto);
   const fin = screenPointToCanvas(e.clientX, e.clientY);
 
-  posicionarLinea(lineaTemporal, inicio.x, inicio.y, fin.x, fin.y);
+  actualizarLineaTemporalCurva(
+    lineaTemporal._tempPath,
+    lineaTemporal._tempGlow,
+    lineaTemporal._tempMotion,
+    inicio.x,
+    inicio.y,
+    fin.x,
+    fin.y
+  );
 }
 
 function soltarConexion(e){
@@ -581,12 +683,9 @@ function soltarConexion(e){
     }
   }
 
-  if(lineaTemporal){
-    lineaTemporal.remove();
-  }
+  removerLineaTemporal();
 
   nodoArrastrando = null;
-  lineaTemporal = null;
   puertoOrigenConexion = null;
   puertoHandleOrigen = null;
 }
@@ -868,10 +967,7 @@ function macbotUnlockCanvasInteraction(){
   if(wrap){
     wrap.classList.remove("panning");
   }
-  if(lineaTemporal){
-    lineaTemporal.remove();
-    lineaTemporal = null;
-  }
+  removerLineaTemporal();
   nodoArrastrando = null;
   puertoOrigenConexion = null;
   puertoHandleOrigen = null;
