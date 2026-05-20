@@ -46,6 +46,7 @@ window.addEventListener("load", function(){
   }
 
   ensureInfiniteViewport();
+  console.log("🎨 Flow lines premium loaded");
   cargarFlujoGuardado();
   crearNodoInicioAutomatico();
   resizeWorldSurface();
@@ -524,7 +525,7 @@ function iniciarConexion(e, id, portSide){
   if(!canvas || !nodoArrastrando) return;
 
   lineaTemporal = document.createElement("div");
-  lineaTemporal.className = "linea linea-dashed";
+  lineaTemporal.className = "linea linea-dashed linea-temporal";
 
   canvas.appendChild(lineaTemporal);
 
