@@ -48,7 +48,7 @@ function corregirTexto(textoNorm) {
 
 function tokensDeRuta(route) {
   const lista = [];
-  const nombre = normalizeText(route.nombre || "");
+  const nombre = normalizeText(route.nombre || route.text || route.name || "");
   if (nombre) lista.push(nombre);
   const syns = Array.isArray(route.synonyms) ? route.synonyms : [];
   syns.forEach((s) => {
@@ -123,7 +123,7 @@ function normalizarConfigRouter(cfg) {
     caminos: caminos
       .map((r) => ({
         id: String(r.id || "").trim(),
-        nombre: String(r.nombre || "").trim(),
+        nombre: String(r.nombre || r.text || r.name || "").trim(),
         synonyms: Array.isArray(r.synonyms)
           ? r.synonyms.map((s) => String(s || "").trim()).filter(Boolean)
           : String(r.synonyms || "")

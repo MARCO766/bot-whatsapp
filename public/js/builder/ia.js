@@ -323,19 +323,55 @@ window.MacBotIA = (function () {
     if (typeof actualizarLineas === "function") actualizarLineas();
   }
 
+  function updateIANode(nodo, nextData) {
+    if (!nodo) return;
+    const cfg = normalizarConfig(nextData);
+    console.log("💾 IA DATA A GUARDAR:", cfg);
+    guardarConfigEnNodo(nodo, cfg);
+    configActiva = cfg;
+    console.log("✅ NODO IA ACTUALIZADO");
+  }
+
   function guardarConfigEnNodo(nodo, config) {
     const cfg = normalizarConfig(config);
     console.log("💾 Guardando IA:", cfg);
-    console.log("🧠 Guardando caminos IA:", cfg.caminos);
+    console.log("💾 ROUTES LIMPIAS:", cfg.caminos || cfg.routes);
+    console.log("🎨 HTML IA REGENERADO CON RUTAS:", cfg.caminos || cfg.routes);
 
     const box = nodo.querySelector(".ia-data");
     const json = JSON.stringify(cfg);
     if (box) {
       box.value = json;
       box.textContent = json;
+    } else {
+      const ta = document.createElement("textarea");
+      ta.className = "ia-data";
+      ta.style.display = "none";
+      ta.value = json;
+      nodo.appendChild(ta);
     }
 
     renderVisualNodoIA(nodo, cfg);
+  }
+
+  function updateRoute(routeId, patch) {
+    if (!routeId) return;
+    asegurarArraysCaminos(configActiva);
+    const lista = obtenerRoutes(configActiva);
+    configActiva.caminos = lista.map(function (r) {
+      if (r.id !== routeId) return r;
+      const merged = { ...r, ...patch };
+      const nombre = String(
+        merged.name || merged.text || merged.nombre || ""
+      ).trim();
+      merged.text = nombre;
+      merged.name = nombre;
+      merged.nombre = nombre;
+      return merged;
+    });
+    configActiva.routes = configActiva.caminos;
+    console.log("✏️ updateRoute:", routeId, patch);
+    console.log("🧠 LOCAL IA ACTUAL:", configActiva);
   }
 
   function syncCaminosDesdeDom() {
@@ -345,6 +381,7 @@ window.MacBotIA = (function () {
       const id = row.dataset.routeId;
       if (!id) return;
       const text = row.querySelector(".ia-ruta-texto")?.value.trim() || "";
+      console.log("✏️ CAMBIO NOMBRE RUTA:", id, text);
       const synsRaw = row.querySelector(".ia-ruta-sinonimos")?.value || "";
       const syns = synsRaw
         .split(",")
@@ -356,6 +393,7 @@ window.MacBotIA = (function () {
       caminos.push({
         id: id,
         text: text,
+        name: text,
         nombre: text,
         type: "texto",
         synonyms: syns,
@@ -364,7 +402,9 @@ window.MacBotIA = (function () {
         enabled: row.querySelector(".ia-ruta-enabled")?.checked !== false,
       });
     });
-    asegurarArraysCaminos(configActiva);
+    configActiva.caminos = caminos;
+    configActiva.routes = caminos;
+    return caminos;
   }
 
   /** Lee el panel sin borrar caminos vacíos (solo borrador). */
@@ -386,7 +426,7 @@ window.MacBotIA = (function () {
       responderConAudio: !!document.getElementById("iaResponderAudio")?.checked,
     };
     asegurarArraysCaminos(configActiva);
-    console.log("🧠 localIA routes:", configActiva.routes);
+    console.log("🧠 LOCAL IA ACTUAL:", configActiva);
     return configActiva;
   }
 
@@ -495,6 +535,16 @@ window.MacBotIA = (function () {
     wrap.querySelectorAll("input, textarea").forEach(function (el) {
       el.addEventListener("input", onFormChange);
       el.addEventListener("change", onFormChange);
+    });
+
+    wrap.querySelectorAll(".ia-ruta-texto").forEach(function (input) {
+      input.addEventListener("input", function () {
+        const row = input.closest(".ia-ruta-row");
+        const rid = row?.dataset.routeId;
+        const value = input.value;
+        console.log("✏️ CAMBIO NOMBRE RUTA:", rid, value);
+        if (rid) updateRoute(rid, { name: value, text: value, nombre: value });
+      });
     });
   }
 
@@ -662,12 +712,49 @@ window.MacBotIA = (function () {
   }
 
   function guardarDesdePanel() {
+    console.log("💾 CLICK GUARDAR NODO IA");
     if (!nodoActivo) {
       console.warn("💾 Guardar IA: sin nodo activo");
       return;
     }
     syncCamposPanelDraft();
-    guardarConfigEnNodo(nodoActivo, configActiva);
+
+    const routes = (configActiva.routes || configActiva.caminos || [])
+      .map(function (r) {
+        const nombre = textoCamino(r);
+        return {
+          ...r,
+          text: nombre,
+          name: nombre,
+          nombre: nombre,
+          synonyms: Array.isArray(r.synonyms)
+            ? r.synonyms
+            : String(r.synonyms || "")
+                .split(",")
+                .map(function (s) {
+                  return s.trim();
+                })
+                .filter(Boolean),
+          priority: parseInt(r.priority, 10) || 50,
+          mediaId: r.mediaId ? String(r.mediaId).trim() : null,
+          enabled: r.enabled !== false,
+        };
+      })
+      .filter(function (r) {
+        return r.id && textoCamino(r);
+      });
+
+    console.log("💾 ROUTES LIMPIAS:", routes);
+
+    const nextData = {
+      ...configActiva,
+      routes: routes,
+      caminos: routes,
+    };
+
+    updateIANode(nodoActivo, nextData);
+
+    if (typeof actualizarLineas === "function") actualizarLineas();
     if (typeof cerrarPanelNodo === "function") {
       cerrarPanelNodo();
     }
