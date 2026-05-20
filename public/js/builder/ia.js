@@ -79,7 +79,37 @@ window.MacBotIA = (function () {
 
     cfg.scoreMinimo = parseInt(cfg.scoreMinimo, 10) || 40;
     asegurarArraysCaminos(cfg);
-    return normalizarConfig(cfg);
+    return cfg;
+  }
+
+  /** Solo JSON plano — nunca DOM, eventos ni referencias circulares. */
+  function sanitizeIAData(localIA) {
+    const src = localIA && typeof localIA === "object" ? localIA : {};
+    const routesRaw = obtenerRoutes(src);
+    const routes = normalizarCaminos(routesRaw, true);
+
+    const comp = src.comportamiento || src.behavior || {};
+
+    return {
+      version: 3,
+      nombreNodo: String(src.nombreNodo || src.label || "Agente IA").trim(),
+      scoreMinimo: Math.min(
+        100,
+        Math.max(0, parseInt(src.scoreMinimo ?? src.threshold, 10) || 40)
+      ),
+      caminos: routes,
+      routes: routes,
+      comportamiento: {
+        responderSiNoCoincide: comp.responderSiNoCoincide !== false && comp.fallback !== false,
+        mensajeFallback: String(
+          comp.mensajeFallback ||
+            comp.fallbackMessage ||
+            crearConfigPorDefecto().comportamiento.mensajeFallback
+        ).trim(),
+        activarOtrosFlujos: !!comp.activarOtrosFlujos,
+        responderConAudio: !!(comp.responderConAudio ?? comp.responderAudio),
+      },
+    };
   }
 
   function obtenerRoutes(cfg) {
@@ -151,11 +181,7 @@ window.MacBotIA = (function () {
 
   function normalizarConfig(data) {
     const base = migrarConfigLegacy(data || {});
-    const validos = normalizarCaminos(obtenerRoutes(base), true);
-    base.caminos = validos;
-    base.routes = validos;
-    base.scoreMinimo = Math.min(100, Math.max(0, parseInt(base.scoreMinimo, 10) || 40));
-    return base;
+    return sanitizeIAData(base);
   }
 
   function caminosParaVisual(config) {
@@ -337,24 +363,14 @@ window.MacBotIA = (function () {
     if (typeof actualizarLineas === "function") actualizarLineas();
   }
 
-  function updateIANode(nodo, nextData) {
+  function actualizarHTMLNodoIA(nodo, cleanData) {
     if (!nodo) return;
-    const cfg = normalizarConfig(nextData);
-    console.log("💾 IA DATA A GUARDAR:", cfg);
-    guardarConfigEnNodo(nodo, cfg);
-    configActiva = cfg;
-    console.log("✅ IA NODE UPDATED");
-    console.log("✅ NODO IA ACTUALIZADO");
-  }
 
-  function guardarConfigEnNodo(nodo, config) {
-    const cfg = normalizarConfig(config);
-    console.log("💾 Guardando IA:", cfg);
-    console.log("💾 ROUTES LIMPIAS:", cfg.caminos || cfg.routes);
-    console.log("🎨 HTML IA REGENERADO CON RUTAS:", cfg.caminos || cfg.routes);
+    const cfg = sanitizeIAData(cleanData);
+    const json = JSON.stringify(cfg);
+    console.log("🧪 JSON OK:", json.length);
 
     const box = nodo.querySelector(".ia-data");
-    const json = JSON.stringify(cfg);
     if (box) {
       box.value = json;
       box.textContent = json;
@@ -367,6 +383,13 @@ window.MacBotIA = (function () {
     }
 
     renderVisualNodoIA(nodo, cfg);
+    configActiva = cfg;
+    console.log("✅ NODO IA HTML ACTUALIZADO");
+    console.log("✅ NODO IA GUARDADO SIN RECURSIÓN");
+  }
+
+  function guardarConfigEnNodo(nodo, config) {
+    actualizarHTMLNodoIA(nodo, config);
   }
 
   function updateRoute(routeId, patch) {
@@ -386,7 +409,6 @@ window.MacBotIA = (function () {
     });
     configActiva.routes = configActiva.caminos;
     console.log("✏️ updateRoute:", routeId, patch);
-    console.log("🧠 LOCAL IA ACTUAL:", configActiva);
   }
 
   function syncCaminosDesdeDom() {
@@ -441,7 +463,6 @@ window.MacBotIA = (function () {
       responderConAudio: !!document.getElementById("iaResponderAudio")?.checked,
     };
     asegurarArraysCaminos(configActiva);
-    console.log("🧠 LOCAL IA ACTUAL:", configActiva);
     return configActiva;
   }
 
@@ -745,7 +766,10 @@ window.MacBotIA = (function () {
     }
   }
 
-  function guardarDesdePanel() {
+  function guardarDesdePanel(ev) {
+    if (ev && ev.preventDefault) ev.preventDefault();
+    if (ev && ev.stopPropagation) ev.stopPropagation();
+
     console.log("💾 CLICK GUARDAR NODO IA");
     if (!nodoActivo) {
       console.warn("💾 Guardar IA: sin nodo activo");
@@ -759,33 +783,28 @@ window.MacBotIA = (function () {
       }
 
       syncCamposPanelDraft();
+      const cleanData = sanitizeIAData(configActiva);
+      console.log("🧹 IA DATA SANITIZADA:", cleanData);
 
-      const routes = normalizarCaminos(obtenerRoutes(configActiva), true);
-      console.log("💾 ROUTES LIMPIAS:", routes);
-
-      const nextData = {
-        ...configActiva,
-        routes: routes,
-        caminos: routes,
-      };
-
-      updateIANode(nodoActivo, nextData);
+      actualizarHTMLNodoIA(nodoActivo, cleanData);
 
       if (typeof actualizarHandlersPuertosCanvas === "function") {
         actualizarHandlersPuertosCanvas();
       }
       if (typeof actualizarLineas === "function") actualizarLineas();
-      if (typeof registrarHistorialBuilder === "function") {
-        registrarHistorialBuilder();
-      }
 
       unlockCanvasBuilder();
+      console.log("🔓 CANVAS DESBLOQUEADO");
 
       if (typeof cerrarPanelNodo === "function") {
         cerrarPanelNodo();
       }
+
+      if (typeof registrarHistorialBuilder === "function") {
+        registrarHistorialBuilder();
+      }
     } catch (err) {
-      console.error("IA: error al guardar panel", err);
+      console.error("❌ ERROR GUARDAR IA:", err);
       unlockCanvasBuilder();
       alert("No se pudo guardar el nodo IA: " + err.message);
     }
@@ -795,9 +814,7 @@ window.MacBotIA = (function () {
     if (!nodoActivo) return;
     try {
       syncCamposPanelDraft();
-      const routes = normalizarCaminos(obtenerRoutes(configActiva), true);
-      const draft = { ...configActiva, routes: routes, caminos: routes };
-      guardarConfigEnNodo(nodoActivo, draft);
+      actualizarHTMLNodoIA(nodoActivo, sanitizeIAData(configActiva));
     } catch (err) {
       console.warn("IA: flushPanelToNode", err.message);
     }
