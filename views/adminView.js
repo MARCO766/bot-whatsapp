@@ -639,9 +639,7 @@ ${tab === "flujos" && builder ? `
         <h3>⚙️ Configuración</h3>
         <button type="button" class="panel-close" onclick="cerrarPanelNodo()" title="Cerrar">×</button>
       </div>
-      <div id="panelNodoContenido" class="panel-nodo-body">
-        <p class="panel-empty">Selecciona un nodo en el canvas para editarlo.</p>
-      </div>
+      <div id="panelNodoContenido" class="panel-nodo-body"></div>
     </aside>
   </div>
 </div>

@@ -61,10 +61,7 @@ window.addEventListener("load", function(){
 
   document.getElementById("modalActivador")?.classList.remove("activo");
 
-  const panel = document.getElementById("panelNodo");
-  if(panel){
-    panel.classList.add("activo");
-  }
+  cerrarPanelNodo();
 });
 
 /* =========================
@@ -716,13 +713,7 @@ function abrirEditorSeguimiento(id){
   const nodo = document.getElementById(id);
   if(!nodo) return;
 
-  if(window.MacBotSeguimiento){
-    nodoSeleccionadoPanel = nodo;
-    window.MacBotSeguimiento.renderPanel(nodo);
-    const panel = document.getElementById("panelNodo");
-    if(panel) panel.classList.add("activo");
-    marcarNodoSeleccionado(nodo);
-  }
+  abrirPanelNodo(nodo);
 }
 
 function agregarSegmentoSeguimiento(){
@@ -745,29 +736,8 @@ function editarNodo(id){
   const nodo = document.getElementById(id);
   if(!nodo) return;
 
-  if(window.MacBotContenido && window.MacBotContenido.esNodoContenido(nodo)){
-    abrirPanelNodo(nodo);
-    return;
-  }
-
-  const campo =
-    nodo.querySelector("textarea") ||
-    nodo.querySelector("input") ||
-    nodo.querySelector("select");
-
-  if(campo){
-    campo.focus();
-
-    campo.style.boxShadow = "0 0 0 3px rgba(56,189,248,0.35)";
-    campo.style.borderColor = "#38bdf8";
-
-    setTimeout(() => {
-      campo.style.boxShadow = "";
-      campo.style.borderColor = "";
-    }, 1600);
-  } else {
-    alert("Este nodo no tiene campo editable");
-  }
+  console.log("⚙️ ABRIENDO PANEL CONFIG:", id);
+  abrirPanelNodo(nodo);
 }
 
 function borrarNodo(id){
@@ -1537,6 +1507,7 @@ function escaparHTML(texto){
 ========================= */
 
 let nodoSeleccionadoPanel = null;
+let configPanelOpen = false;
 
 document.addEventListener("click", function(e){
   const nodo = e.target.closest(".node");
@@ -1551,7 +1522,7 @@ document.addEventListener("click", function(e){
     return;
   }
 
-  abrirPanelNodo(nodo);
+  marcarNodoSeleccionado(nodo);
 });
 
 function abrirPanelNodo(nodo){
@@ -1559,6 +1530,8 @@ function abrirPanelNodo(nodo){
     cerrarPanelNodo();
     return;
   }
+
+  console.log("⚙️ ABRIENDO PANEL CONFIG:", nodo.id);
 
   if(nodoSeleccionadoPanel && nodoSeleccionadoPanel.id !== nodo.id){
     sincronizarPanelAntesDeSnapshot();
@@ -1583,7 +1556,9 @@ function abrirPanelNodo(nodo){
 
   if(!panel || !contenido) return;
 
+  configPanelOpen = true;
   panel.classList.add("activo");
+  panel.setAttribute("aria-hidden", "false");
   marcarNodoSeleccionado(nodo);
 
   if(window.MacBotSeguimiento && window.MacBotSeguimiento.esNodoSeguimiento(nodo)){
@@ -1748,6 +1723,7 @@ function guardarPanelNodo(){
 }
 
 function cerrarPanelNodo(){
+  console.log("❌ CERRANDO PANEL CONFIG");
   macbotUnlockCanvasInteraction();
 
   const panel = document.getElementById("panelNodo");
@@ -1765,17 +1741,20 @@ function cerrarPanelNodo(){
     window.MacBotIA.clearPanelActivo();
   }
 
+  configPanelOpen = false;
+  nodoSeleccionadoPanel = null;
+
   if(panel){
     panel.classList.remove("activo");
+    panel.setAttribute("aria-hidden", "true");
   }
 
-  if(contenido && document.getElementById("builderArea")){
-    contenido.innerHTML =
-      '<p class="panel-empty">Selecciona un nodo en el canvas para editarlo.</p>';
+  if(contenido){
+    contenido.innerHTML = "";
   }
 
   marcarNodoSeleccionado(null);
-  nodoSeleccionadoPanel = null;
+  console.log("🔓 CANVAS LIBERADO");
 }
 
 /* =========================
@@ -1821,7 +1800,7 @@ function capturarSnapshotBuilder(){
       desde: c.desde.id,
       hasta: c.hasta.id,
     })),
-    panelAbierto: !!(panel && panel.classList.contains("activo")),
+    panelAbierto: configPanelOpen,
     nodoSeleccionadoId: nodoSeleccionadoPanel?.id || null,
   };
 }

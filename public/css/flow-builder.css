@@ -347,7 +347,7 @@ body:has(#builderArea) {
 }
 
 .flow-panel.panel-nodo {
-  display: flex;
+  display: none;
   flex-direction: column;
   width: 540px;
   min-width: 540px;
@@ -360,6 +360,11 @@ body:has(#builderArea) {
   border-right: none;
   border-bottom: none;
   flex-shrink: 0;
+  overflow: hidden;
+}
+
+.flow-panel.panel-nodo.activo {
+  display: flex;
 }
 
 .flow-panel .panel-nodo-body {
