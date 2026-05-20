@@ -6,6 +6,7 @@ window.MacBotIA = (function () {
 
   let nodoActivo = null;
   let configActiva = crearConfigPorDefecto();
+  let renderVisualTimer = null;
 
   function esc(str) {
     return String(str || "")
@@ -83,7 +84,13 @@ window.MacBotIA = (function () {
 
   function obtenerRoutes(cfg) {
     const raw = cfg?.routes ?? cfg?.caminos;
-    return Array.isArray(raw) ? raw : [];
+    if (Array.isArray(raw)) return raw;
+    if (raw && typeof raw === "object") {
+      return Object.values(raw).filter(function (r) {
+        return r && typeof r === "object";
+      });
+    }
+    return [];
   }
 
   function textoCamino(route) {
@@ -97,6 +104,13 @@ window.MacBotIA = (function () {
     cfg.caminos = lista;
     cfg.routes = lista;
     return cfg;
+  }
+
+  function unlockCanvasBuilder() {
+    if (typeof window.macbotUnlockCanvasInteraction === "function") {
+      window.macbotUnlockCanvasInteraction();
+    }
+    console.log("🔓 CANVAS UNLOCKED");
   }
 
   function labelCaminoVisual(route) {
@@ -329,6 +343,7 @@ window.MacBotIA = (function () {
     console.log("💾 IA DATA A GUARDAR:", cfg);
     guardarConfigEnNodo(nodo, cfg);
     configActiva = cfg;
+    console.log("✅ IA NODE UPDATED");
     console.log("✅ NODO IA ACTUALIZADO");
   }
 
@@ -446,6 +461,7 @@ window.MacBotIA = (function () {
       enabled: true,
     };
 
+    asegurarArraysCaminos(configActiva);
     configActiva.caminos.push(nuevo);
     configActiva.routes = configActiva.caminos;
     console.log("🧠 localIA routes:", configActiva.routes);
@@ -612,8 +628,23 @@ window.MacBotIA = (function () {
     }
   }
 
+  function scheduleRenderVisualNodo() {
+    if (!nodoActivo) return;
+    if (renderVisualTimer) clearTimeout(renderVisualTimer);
+    renderVisualTimer = setTimeout(function () {
+      renderVisualTimer = null;
+      try {
+        renderVisualNodoIA(nodoActivo, configActiva);
+      } catch (err) {
+        console.warn("IA: error render visual", err.message);
+      }
+    }, 180);
+  }
+
   function renderPanel(nodo) {
     if (!nodo) return;
+    console.log("🧠 IA PANEL OPEN");
+    unlockCanvasBuilder();
     nodoActivo = nodo;
     configActiva = leerConfigDeNodo(nodo);
     asegurarArraysCaminos(configActiva);
@@ -702,12 +733,15 @@ window.MacBotIA = (function () {
   }
 
   function onFormChange() {
-    syncCamposPanelDraft();
-    if (nodoActivo) {
-      renderVisualNodoIA(nodoActivo, configActiva);
-    }
-    if (typeof window.macbotRecordHistoryDebounced === "function") {
-      window.macbotRecordHistoryDebounced();
+    try {
+      syncCamposPanelDraft();
+      scheduleRenderVisualNodo();
+      if (typeof window.macbotRecordHistoryDebounced === "function") {
+        window.macbotRecordHistoryDebounced();
+      }
+    } catch (err) {
+      console.warn("IA: onFormChange", err.message);
+      unlockCanvasBuilder();
     }
   }
 
@@ -717,58 +751,66 @@ window.MacBotIA = (function () {
       console.warn("💾 Guardar IA: sin nodo activo");
       return;
     }
-    syncCamposPanelDraft();
 
-    const routes = (configActiva.routes || configActiva.caminos || [])
-      .map(function (r) {
-        const nombre = textoCamino(r);
-        return {
-          ...r,
-          text: nombre,
-          name: nombre,
-          nombre: nombre,
-          synonyms: Array.isArray(r.synonyms)
-            ? r.synonyms
-            : String(r.synonyms || "")
-                .split(",")
-                .map(function (s) {
-                  return s.trim();
-                })
-                .filter(Boolean),
-          priority: parseInt(r.priority, 10) || 50,
-          mediaId: r.mediaId ? String(r.mediaId).trim() : null,
-          enabled: r.enabled !== false,
-        };
-      })
-      .filter(function (r) {
-        return r.id && textoCamino(r);
-      });
+    try {
+      if (renderVisualTimer) {
+        clearTimeout(renderVisualTimer);
+        renderVisualTimer = null;
+      }
 
-    console.log("💾 ROUTES LIMPIAS:", routes);
+      syncCamposPanelDraft();
 
-    const nextData = {
-      ...configActiva,
-      routes: routes,
-      caminos: routes,
-    };
+      const routes = normalizarCaminos(obtenerRoutes(configActiva), true);
+      console.log("💾 ROUTES LIMPIAS:", routes);
 
-    updateIANode(nodoActivo, nextData);
+      const nextData = {
+        ...configActiva,
+        routes: routes,
+        caminos: routes,
+      };
 
-    if (typeof actualizarLineas === "function") actualizarLineas();
-    if (typeof cerrarPanelNodo === "function") {
-      cerrarPanelNodo();
+      updateIANode(nodoActivo, nextData);
+
+      if (typeof actualizarHandlersPuertosCanvas === "function") {
+        actualizarHandlersPuertosCanvas();
+      }
+      if (typeof actualizarLineas === "function") actualizarLineas();
+      if (typeof registrarHistorialBuilder === "function") {
+        registrarHistorialBuilder();
+      }
+
+      unlockCanvasBuilder();
+
+      if (typeof cerrarPanelNodo === "function") {
+        cerrarPanelNodo();
+      }
+    } catch (err) {
+      console.error("IA: error al guardar panel", err);
+      unlockCanvasBuilder();
+      alert("No se pudo guardar el nodo IA: " + err.message);
     }
   }
 
   function flushPanelToNode() {
     if (!nodoActivo) return;
-    syncCamposPanelDraft();
-    guardarConfigEnNodo(nodoActivo, configActiva);
+    try {
+      syncCamposPanelDraft();
+      const routes = normalizarCaminos(obtenerRoutes(configActiva), true);
+      const draft = { ...configActiva, routes: routes, caminos: routes };
+      guardarConfigEnNodo(nodoActivo, draft);
+    } catch (err) {
+      console.warn("IA: flushPanelToNode", err.message);
+    }
   }
 
   function clearPanelActivo() {
+    if (renderVisualTimer) {
+      clearTimeout(renderVisualTimer);
+      renderVisualTimer = null;
+    }
     nodoActivo = null;
     configActiva = crearConfigPorDefecto();
+    unlockCanvasBuilder();
   }
 
   function getNodoActivo() {

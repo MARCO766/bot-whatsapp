@@ -5,6 +5,7 @@ let nodoArrastrando = null;
 let lineaTemporal = null;
 let puertoOrigenConexion = null;
 let puertoHandleOrigen = null;
+let canvasPanningActive = false;
 
 const MACBOT_BUILDER = window.MACBOT_BUILDER || {};
 
@@ -890,7 +891,25 @@ function validarFlujoAntesDeGuardar(nodos, conexionesGuardadas){
   return avisos;
 }
 
+function macbotUnlockCanvasInteraction(){
+  canvasPanningActive = false;
+  const wrap = getCanvasViewport();
+  if(wrap){
+    wrap.classList.remove("panning");
+  }
+  if(lineaTemporal){
+    lineaTemporal.remove();
+    lineaTemporal = null;
+  }
+  nodoArrastrando = null;
+  puertoOrigenConexion = null;
+  puertoHandleOrigen = null;
+}
+
+window.macbotUnlockCanvasInteraction = macbotUnlockCanvasInteraction;
+
 async function guardarFlujo(){
+  console.log("💾 CLICK GUARDAR FLUJO");
   const titulo = document.getElementById("tituloFlujo");
 
   if(!titulo){
@@ -898,7 +917,15 @@ async function guardarFlujo(){
     return;
   }
 
-  sincronizarPanelAntesDeSnapshot();
+  macbotUnlockCanvasInteraction();
+
+  try {
+    sincronizarPanelAntesDeSnapshot();
+  } catch (err) {
+    console.error("[BUILDER] Error sincronizando panel antes de guardar:", err.message);
+    alert("Error al preparar el guardado: " + err.message);
+    return;
+  }
 
   const nombre = titulo.innerText.replace("🔀", "").trim();
 
@@ -906,6 +933,11 @@ async function guardarFlujo(){
 
   document.querySelectorAll("#canvasFlujo .node").forEach(nodo => {
     nodo.querySelectorAll("input, textarea, select").forEach(campo => {
+      if(campo.classList.contains("ia-data")){
+        campo.setAttribute("value", campo.value);
+        return;
+      }
+
       campo.setAttribute("value", campo.value);
 
       if(campo.tagName === "TEXTAREA"){
@@ -958,7 +990,9 @@ async function guardarFlujo(){
 
   console.log("[BUILDER] Guardando flujo:", conexionesGuardadas.length, "conexión(es)", conexionesGuardadas);
 
-  const res = await fetch("/guardar-flujo-builder", {
+  let res;
+  try {
+    res = await fetch("/guardar-flujo-builder", {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
@@ -968,7 +1002,13 @@ async function guardarFlujo(){
       nombre,
       data
     })
-  });
+    });
+  } catch (err) {
+    console.error("[BUILDER] Error guardando flujo:", err.message);
+    macbotUnlockCanvasInteraction();
+    alert("Error al guardar el flujo: " + err.message);
+    return;
+  }
 
   const respuesta = await res.text();
 
@@ -978,6 +1018,7 @@ async function guardarFlujo(){
     return;
   }
 
+  console.log("✅ FLUJO GUARDADO");
   alert(respuesta);
 }
 
@@ -1399,7 +1440,6 @@ function initCanvasViewport(){
     { passive: false }
   );
 
-  let panning = false;
   let panStart = { x: 0, y: 0, panX: 0, panY: 0 };
 
   wrap.addEventListener("mousedown", function(e){
@@ -1416,7 +1456,7 @@ function initCanvasViewport(){
       return;
     }
 
-    panning = true;
+    canvasPanningActive = true;
     wrap.classList.add("panning");
     panStart = {
       x: e.clientX,
@@ -1428,7 +1468,7 @@ function initCanvasViewport(){
   });
 
   document.addEventListener("mousemove", function(e){
-    if(!panning){
+    if(!canvasPanningActive){
       return;
     }
 
@@ -1438,11 +1478,11 @@ function initCanvasViewport(){
   });
 
   document.addEventListener("mouseup", function(){
-    if(!panning){
+    if(!canvasPanningActive){
       return;
     }
 
-    panning = false;
+    canvasPanningActive = false;
     wrap.classList.remove("panning");
   });
 
@@ -1708,6 +1748,8 @@ function guardarPanelNodo(){
 }
 
 function cerrarPanelNodo(){
+  macbotUnlockCanvasInteraction();
+
   const panel = document.getElementById("panelNodo");
   const contenido = document.getElementById("panelNodoContenido");
 
