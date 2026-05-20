@@ -114,4 +114,5 @@ module.exports = {
   esArchivoImagen,
   prepararImagenParaWhatsApp,
   resolverMimeImagen,
+  mimeCompatibleWhatsApp,
 };

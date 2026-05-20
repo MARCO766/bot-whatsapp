@@ -251,12 +251,17 @@ async function ejecutarBloqueContenido(numero, bloque, usuarioId) {
   }
 
   if (tipo.includes("imagen") || tipo === "image") {
-    const enviado = await enviarMediaWhatsApp(numero, "image", media, captionMediaBloque(bloque), {
+    const caption = captionMediaBloque(bloque);
+    console.log("🖼️ BLOQUE CONTENIDO IMAGEN:", { numero, mediaUrl: media, caption });
+    const enviado = await enviarMediaWhatsApp(numero, "image", media, caption, {
       usuarioId,
     });
-    if (enviado) console.log("✅ IMAGEN ENVIADA");
-    else console.log("❌ IMAGEN NO ENVIADA (Meta o URL inválida)");
-    return;
+    if (enviado && enviado.whatsapp_message_id) {
+      console.log("✅ IMAGEN ENVIADA A WHATSAPP:", enviado.whatsapp_message_id);
+      return caption || media;
+    }
+    console.log("❌ IMAGEN NO ENVIADA — Meta no confirmó message_id");
+    return false;
   }
 
   if (tipo.includes("video")) {

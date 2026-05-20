@@ -1,5 +1,6 @@
 const axios = require("axios");
 const rt = require("./realtimeService");
+const { prepararImagenParaWhatsApp, mimeCompatibleWhatsApp } = require("./imageWhatsAppService");
 
 const TOKEN = process.env.TOKEN;
 const PHONE_ID = process.env.PHONE_ID;
@@ -149,6 +150,111 @@ async function resolverCredencialesWhatsApp(opciones = {}) {
   return { tokenEnviar, phoneIdEnviar };
 }
 
+function esUrlPublicaHttps(url) {
+  const u = String(url || "").trim();
+  if (!u.startsWith("https://")) return false;
+  if (u.includes("/object/sign/")) return false;
+  if (/[?&]token=/.test(u)) return false;
+  return true;
+}
+
+function pareceUrlWebp(url, contentType) {
+  const u = String(url || "").toLowerCase();
+  const ct = String(contentType || "").toLowerCase();
+  return u.includes(".webp") || ct.includes("webp");
+}
+
+async function verificarUrlAccesible(url) {
+  try {
+    const head = await axios.head(url, {
+      timeout: 12000,
+      maxRedirects: 5,
+      validateStatus: (s) => s >= 200 && s < 400,
+    });
+    return true;
+  } catch {
+    try {
+      const get = await axios.get(url, {
+        timeout: 12000,
+        responseType: "arraybuffer",
+        maxContentLength: 512 * 1024,
+      });
+      return !!get.data?.byteLength;
+    } catch {
+      return false;
+    }
+  }
+}
+
+async function obtenerContentTypeRemoto(url) {
+  try {
+    const head = await axios.head(url, { timeout: 12000, maxRedirects: 5 });
+    return head.headers["content-type"] || "";
+  } catch {
+    return "";
+  }
+}
+
+async function rehostImagenJpegPublica(urlOrigen, opciones = {}) {
+  console.log("🔄 Convirtiendo imagen a JPEG público para Meta:", urlOrigen);
+
+  const res = await axios.get(urlOrigen, {
+    responseType: "arraybuffer",
+    timeout: 45000,
+    maxContentLength: 12 * 1024 * 1024,
+  });
+
+  const prep = await prepararImagenParaWhatsApp(
+    Buffer.from(res.data),
+    res.headers["content-type"],
+    urlOrigen
+  );
+
+  const uid = opciones.usuarioId || "flow";
+  const ruta = `whatsapp-meta/${uid}/${Date.now()}-${Math.random().toString(36).slice(2)}.${prep.extension}`;
+
+  await axios.post(`${SUPABASE_URL}/storage/v1/object/archivos/${ruta}`, prep.buffer, {
+    headers: {
+      apikey: SUPABASE_KEY,
+      Authorization: `Bearer ${SUPABASE_KEY}`,
+      "Content-Type": prep.mimetype,
+      "x-upsert": "true",
+    },
+  });
+
+  const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/archivos/${ruta}`;
+  console.log("✅ URL JPEG pública para Meta:", publicUrl);
+  return publicUrl;
+}
+
+async function resolverLinkImagenWhatsApp(mediaUrl, opciones = {}) {
+  let url = String(mediaUrl || "").trim();
+
+  if (!esUrlPublicaHttps(url)) {
+    throw new Error(
+      "La URL de imagen debe ser HTTPS pública (sin token firmado). Usa /storage/v1/object/public/..."
+    );
+  }
+
+  const contentType = await obtenerContentTypeRemoto(url);
+  const necesitaConversion =
+    pareceUrlWebp(url, contentType) ||
+    (contentType && !mimeCompatibleWhatsApp(contentType));
+
+  if (necesitaConversion) {
+    console.log("🖼️ Imagen WEBP/incompatible — convirtiendo antes de Meta");
+    return rehostImagenJpegPublica(url, opciones);
+  }
+
+  const accesible = await verificarUrlAccesible(url);
+  if (!accesible) {
+    console.warn("⚠️ Meta no podría leer la URL — rehost JPEG:", url);
+    return rehostImagenJpegPublica(url, opciones);
+  }
+
+  return url;
+}
+
 function construirPayloadMediaWhatsApp(numeroDestino, tipoApi, mediaUrl, caption, opciones = {}) {
   const payload = {
     messaging_product: "whatsapp",
@@ -159,7 +265,7 @@ function construirPayloadMediaWhatsApp(numeroDestino, tipoApi, mediaUrl, caption
   if (tipoApi === "image") {
     payload.image = {
       link: mediaUrl,
-      caption: caption || "",
+      ...(caption ? { caption: String(caption) } : {}),
     };
     return payload;
   }
@@ -194,21 +300,9 @@ function construirPayloadMediaWhatsApp(numeroDestino, tipoApi, mediaUrl, caption
 }
 
 async function enviarMediaWhatsApp(numero, tipo, mediaUrl, caption = "", opciones = {}) {
-  const url = String(mediaUrl || "").trim();
+  const urlOriginal = String(mediaUrl || "").trim();
   const tipoApi = normalizarTipoMediaWhatsApp(tipo);
   const numeroDestino = normalizarNumeroWhatsApp(numero);
-
-  console.log("📤 ENVIANDO MEDIA A META:", {
-    numero: numeroDestino,
-    tipo: tipoApi,
-    mediaUrl: url,
-    caption: caption || "",
-  });
-
-  if (!url || !url.startsWith("https://")) {
-    console.error("❌ MEDIA URL INVÁLIDA:", url);
-    return false;
-  }
 
   if (!numeroDestino) {
     console.error("❌ NÚMERO DESTINO INVÁLIDO:", numero);
@@ -220,7 +314,41 @@ async function enviarMediaWhatsApp(numero, tipo, mediaUrl, caption = "", opcione
     return false;
   }
 
+  let urlEnvio = urlOriginal;
+
   try {
+    if (tipoApi === "image") {
+      console.log("🖼️ ENVIANDO IMAGEN A META:", {
+        numero: numeroDestino,
+        mediaUrl: urlOriginal,
+        caption: caption || "",
+      });
+
+      if (!urlOriginal) {
+        console.error("❌ IMAGEN SIN URL");
+        return false;
+      }
+
+      urlEnvio = await resolverLinkImagenWhatsApp(urlOriginal, opciones);
+
+      if (urlEnvio !== urlOriginal) {
+        console.log("🖼️ URL FINAL PARA META (JPEG):", urlEnvio);
+      }
+    } else {
+      console.log("📤 ENVIANDO MEDIA A META:", {
+        numero: numeroDestino,
+        tipo: tipoApi,
+        mediaUrl: urlOriginal,
+        caption: caption || "",
+      });
+
+      if (!urlOriginal || !esUrlPublicaHttps(urlOriginal)) {
+        console.error("❌ MEDIA URL INVÁLIDA:", urlOriginal);
+        return false;
+      }
+      urlEnvio = urlOriginal;
+    }
+
     const { tokenEnviar, phoneIdEnviar } = await resolverCredencialesWhatsApp(opciones);
 
     if (!tokenEnviar || !phoneIdEnviar) {
@@ -231,7 +359,7 @@ async function enviarMediaWhatsApp(numero, tipo, mediaUrl, caption = "", opcione
     const payload = construirPayloadMediaWhatsApp(
       numeroDestino,
       tipoApi,
-      url,
+      urlEnvio,
       caption,
       opciones
     );
@@ -252,27 +380,29 @@ async function enviarMediaWhatsApp(numero, tipo, mediaUrl, caption = "", opcione
       }
     );
 
-    console.log("✅ RESPUESTA META MEDIA:", respuestaMeta.data);
+    if (tipoApi === "image") {
+      console.log("✅ RESPUESTA META IMAGEN:", respuestaMeta.data);
+    } else {
+      console.log("✅ RESPUESTA META MEDIA:", respuestaMeta.data);
+    }
 
     if (respuestaMeta.data?.error) {
-      console.error("❌ ERROR META MEDIA:", respuestaMeta.data.error);
+      if (tipoApi === "image") {
+        console.error("❌ ERROR META IMAGEN:", respuestaMeta.data.error);
+      } else {
+        console.error("❌ ERROR META MEDIA:", respuestaMeta.data.error);
+      }
       return false;
     }
 
     const whatsappMessageId = respuestaMeta.data?.messages?.[0]?.id || null;
 
     if (!whatsappMessageId) {
-      console.error("❌ META NO DEVOLVIÓ MESSAGE ID:", respuestaMeta.data);
+      console.error("❌ META NO DEVOLVIÓ message_id — NO se guarda en bandeja:", respuestaMeta.data);
       return false;
     }
 
-    console.log("✅ MEDIA REALMENTE ENVIADA:", whatsappMessageId);
-    console.log("📎 WAMID MEDIA (comparar con webhook statuses):", whatsappMessageId, {
-      numero: numeroDestino,
-      tipo: tipoApi,
-      mediaUrl: url,
-      caption: caption || "",
-    });
+    console.log("✅ message_id Meta:", whatsappMessageId);
 
     const insertRes = await axios.post(
       `${SUPABASE_URL}/rest/v1/mensajes`,
@@ -281,8 +411,8 @@ async function enviarMediaWhatsApp(numero, tipo, mediaUrl, caption = "", opcione
         usuario_id: opciones.usuarioId || null,
         direccion: "saliente",
         tipo: tipoApi,
-        contenido: caption || url,
-        imagen_url: url,
+        contenido: caption || urlOriginal,
+        imagen_url: urlEnvio,
         whatsapp_message_id: whatsappMessageId,
         estado_envio: "sent",
       },
@@ -297,24 +427,28 @@ async function enviarMediaWhatsApp(numero, tipo, mediaUrl, caption = "", opcione
     );
 
     const row = insertRes.data?.[0];
-    if (opciones.usuarioId) {
+    if (opciones.usuarioId && row) {
       rt.nuevoMensaje(null, opciones.usuarioId, {
-        id: row?.id,
+        id: row.id,
         cliente_numero: numeroDestino,
         usuario_id: opciones.usuarioId,
         direccion: "saliente",
         tipo: tipoApi,
-        contenido: caption || url,
-        imagen_url: url,
+        contenido: caption || urlOriginal,
+        imagen_url: urlEnvio,
         whatsapp_message_id: whatsappMessageId,
         estado_envio: "sent",
-        creado_en: row?.creado_en || new Date().toISOString(),
+        creado_en: row.creado_en || new Date().toISOString(),
       });
     }
 
     return row;
   } catch (error) {
-    console.error("❌ ERROR META MEDIA:", error.response?.data || error.message);
+    if (tipoApi === "image") {
+      console.error("❌ ERROR META IMAGEN:", error.response?.data || error.message);
+    } else {
+      console.error("❌ ERROR META MEDIA:", error.response?.data || error.message);
+    }
     return false;
   }
 }
