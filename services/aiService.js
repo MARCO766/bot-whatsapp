@@ -6,6 +6,7 @@ const {
 } = require("./iaLocalRouter");
 const {
   usePythonAi,
+  resolveDetectIntentEndpoint,
   buildRoutesFromConfig,
   detectarIntentPython,
   mapPythonToAnalisis,
@@ -717,6 +718,13 @@ function resolverTextoRespuestaIA(config, ctx, resultado) {
 async function resolverAnalisisRouter(config, mensajeLead, memoria) {
   if (usePythonAi()) {
     const routes = buildRoutesFromConfig(config);
+    console.log(
+      "🐍 USE_PYTHON_AI activo — rutas:",
+      routes.length,
+      "| endpoint:",
+      resolveDetectIntentEndpoint()
+    );
+
     if (routes.length) {
       try {
         const context =
@@ -730,10 +738,14 @@ async function resolverAnalisisRouter(config, mensajeLead, memoria) {
           routes,
           threshold: config.scoreMinimo || 40,
         });
-        return mapPythonToAnalisis(py);
+        const analisis = mapPythonToAnalisis(py);
+        console.log("🐍 Detección vía Python OK:", analisis.intent, analisis.score, analisis.routeId);
+        return analisis;
       } catch (error) {
         console.log("🐍 Python falló, usando fallback JS:", error.message);
       }
+    } else {
+      console.log("🐍 Python omitido: config sin caminos/rutas válidos");
     }
   }
 
@@ -989,16 +1001,22 @@ async function runAI(body = {}) {
   };
 
   if (esConfigRouterLocal(config)) {
-    const analisis = analizarRutaLocal(config, ctx.ultimo_mensaje, ctx.memoriaIA);
+    const analisis = await resolverAnalisisRouter(
+      config,
+      ctx.ultimo_mensaje,
+      ctx.memoriaIA
+    );
     ctx.intent = analisis.intent;
     ctx.score = analisis.score;
     ctx.route = analisis.route;
 
+    const motorPython = analisis.source === "python";
+
     return {
       ok: true,
       modo: "router_local",
-      proveedor: "local",
-      motor: "local",
+      proveedor: motorPython ? "python" : "local",
+      motor: motorPython ? "python" : "local",
       resultado: analisis.intent || "sin_coincidencia",
       tipo: analisis.matched ? "route" : "fallback",
       context: {
@@ -1007,6 +1025,7 @@ async function runAI(body = {}) {
         route: ctx.route,
         ranking: analisis.ranking,
         ai: ctx.ai,
+        source: analisis.source || "local",
       },
       error: null,
     };

@@ -4,14 +4,20 @@
 
 const axios = require("axios");
 
-const PYTHON_AI_URL = String(process.env.PYTHON_AI_URL || "http://localhost:8000").replace(
-  /\/$/,
-  ""
-);
 const PYTHON_AI_TIMEOUT_MS = Number(process.env.PYTHON_AI_TIMEOUT_MS) || 5000;
 
 function usePythonAi() {
-  return String(process.env.USE_PYTHON_AI || "").toLowerCase() === "true";
+  const v = String(process.env.USE_PYTHON_AI || "").trim().toLowerCase();
+  return v === "true" || v === "1" || v === "yes";
+}
+
+function resolveDetectIntentEndpoint() {
+  let base = String(process.env.PYTHON_AI_URL || "http://localhost:8000").trim();
+  base = base.replace(/\/+$/, "");
+  if (/\/detect-intent$/i.test(base)) {
+    return base;
+  }
+  return `${base}/detect-intent`;
 }
 
 function nombreRuta(route) {
@@ -19,7 +25,8 @@ function nombreRuta(route) {
 }
 
 function buildRoutesFromConfig(config) {
-  const caminos = Array.isArray(config?.caminos) ? config.caminos : [];
+  const raw = config?.caminos ?? config?.routes;
+  const caminos = Array.isArray(raw) ? raw : [];
   return caminos
     .map((r) => ({
       id: String(r.id || "").trim(),
@@ -61,9 +68,11 @@ async function detectarIntentPython({ message, context, routes, threshold }) {
     threshold: Math.min(100, Math.max(0, parseInt(threshold, 10) || 40)),
   };
 
-  console.log("🐍 Enviando a Python IA:", payload);
+  const url = resolveDetectIntentEndpoint();
+  console.log("🐍 Enviando a Python IA:", { url, routes: routes.length, threshold: payload.threshold });
+  console.log("🐍 Payload Python IA:", payload);
 
-  const res = await axios.post(`${PYTHON_AI_URL}/detect-intent`, payload, {
+  const res = await axios.post(url, payload, {
     timeout: PYTHON_AI_TIMEOUT_MS,
     headers: { "Content-Type": "application/json" },
     validateStatus: (s) => s >= 200 && s < 300,
@@ -75,6 +84,7 @@ async function detectarIntentPython({ message, context, routes, threshold }) {
 
 module.exports = {
   usePythonAi,
+  resolveDetectIntentEndpoint,
   buildRoutesFromConfig,
   detectarIntentPython,
   mapPythonToAnalisis,
