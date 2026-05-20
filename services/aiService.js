@@ -4,6 +4,12 @@ const {
   normalizarConfigRouter,
   analizarRutaLocal,
 } = require("./iaLocalRouter");
+const {
+  usePythonAi,
+  buildRoutesFromConfig,
+  detectarIntentPython,
+  mapPythonToAnalisis,
+} = require("./pythonAiClient");
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const DEFAULT_MODEL = "gpt-4o-mini";
@@ -708,6 +714,32 @@ function resolverTextoRespuestaIA(config, ctx, resultado) {
   return "";
 }
 
+async function resolverAnalisisRouter(config, mensajeLead, memoria) {
+  if (usePythonAi()) {
+    const routes = buildRoutesFromConfig(config);
+    if (routes.length) {
+      try {
+        const context =
+          memoria?.ultimaPregunta ||
+          memoria?.ultimoMensajeBot ||
+          memoria?.ultimaSalidaBot ||
+          "";
+        const py = await detectarIntentPython({
+          message: mensajeLead,
+          context,
+          routes,
+          threshold: config.scoreMinimo || 40,
+        });
+        return mapPythonToAnalisis(py);
+      } catch (error) {
+        console.log("🐍 Python falló, usando fallback JS:", error.message);
+      }
+    }
+  }
+
+  return analizarRutaLocal(config, mensajeLead, memoria);
+}
+
 async function ejecutarNodoIARouter(nodo, contexto, opts = {}) {
   const numero = contexto?.numero || contexto?.from || contexto?.telefono;
   const usuarioId = contexto?.usuarioId || null;
@@ -738,7 +770,7 @@ async function ejecutarNodoIARouter(nodo, contexto, opts = {}) {
     ultimoNodo: contexto.ultimoNodoContenido || "",
   };
 
-  const analisis = analizarRutaLocal(config, mensajeLead, memoria);
+  const analisis = await resolverAnalisisRouter(config, mensajeLead, memoria);
 
   contexto.intent = analisis.intent || "";
   contexto.score = analisis.score ?? "";
