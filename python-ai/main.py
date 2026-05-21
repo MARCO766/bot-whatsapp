@@ -415,12 +415,69 @@ def clasificar_consulta_intent(texto: str) -> str:
     return "general"
 
 
-def _recortar(texto: str, max_len: int = 140) -> str:
+def _acortar_sin_puntos(texto: str, max_len: int = 120) -> str:
     t = (texto or "").strip().rstrip(".")
     if len(t) <= max_len:
         return t
-    corto = t[: max_len - 3].rsplit(" ", 1)[0]
-    return corto + "..."
+    parte = t[:max_len].rsplit(" ", 1)[0]
+    return parte if parte else t[:max_len]
+
+
+def _limpiar_reply(reply: str) -> str:
+    s = str(reply or "")
+    s = re.sub(r"\.{2,}", "", s)
+    s = re.sub(r"\betc\.?\b", "", s, flags=re.I)
+    s = re.sub(r"\sy más\b", "", s, flags=re.I)
+    s = re.sub(r"\bmás información\b", "", s, flags=re.I)
+    s = re.sub(r"\s+", " ", s).strip()
+    return s
+
+
+CARITAS_ROTACION = ["🙂", "😊", "😄", "😌", "🤩", "🥹"]
+
+EMOJI_OPCIONES_INTENT: dict[str, list[str]] = {
+    "precio": ["🙂"],
+    "metodos_pago": ["😊"],
+    "bonos_lista": ["😄"],
+    "bonos_confirmacion": ["😄"],
+    "confianza": ["🥹", "🙂", "😌"],
+    "personajes": ["🤩"],
+    "ninos": ["😊"],
+    "acceso": ["😌"],
+    "saludo": ["😄"],
+    "incluye": ["😄"],
+    "garantia": ["🙂", "😌"],
+    "general": ["🙂"],
+}
+
+
+def _emoji_en_historial(chat_history: list[ChatTurnIn]) -> str:
+    for turn in reversed(chat_history or []):
+        if normalize_text(turn.role) in ("assistant", "bot", "ia"):
+            texto = turn.text or ""
+            for e in CARITAS_ROTACION:
+                if e in texto:
+                    return e
+    return ""
+
+
+def _seleccionar_emoji(intent: str, chat_history: list[ChatTurnIn]) -> str:
+    opciones = EMOJI_OPCIONES_INTENT.get(intent, ["🙂"])
+    prev = _emoji_en_historial(chat_history)
+    for e in opciones:
+        if e != prev:
+            return e
+    if prev in CARITAS_ROTACION:
+        idx = (CARITAS_ROTACION.index(prev) + 1) % len(CARITAS_ROTACION)
+        return CARITAS_ROTACION[idx]
+    return opciones[0]
+
+
+def _finalizar_reply(msg: str, emoji: str) -> str:
+    limpio = _limpiar_reply(msg)
+    if emoji and emoji not in limpio:
+        return _limpiar_reply(f"{limpio} {emoji}")
+    return limpio
 
 
 def _personajes_detectados(texto: str, product: ProductDataIn) -> list[str]:
@@ -438,38 +495,6 @@ def _personajes_detectados(texto: str, product: ProductDataIn) -> list[str]:
             nombres.append(label)
             vistos.add(label)
     return nombres
-
-
-EMOJIS_POOL = ["😊", "✨", "👍", "🎁", "✂️", "✅", ""]
-
-EMOJI_POR_INTENT: dict[str, str] = {
-    "metodos_pago": "✅",
-    "bonos_confirmacion": "🎁",
-    "bonos_lista": "🎁",
-    "personajes": "✂️",
-    "confianza": "",
-    "precio": "",
-    "acceso": "",
-    "ninos": "✨",
-    "incluye": "🎁",
-    "garantia": "",
-    "saludo": "👍",
-    "general": "",
-}
-
-
-def _emoji_para(intent: str, texto: str) -> str:
-    if intent in EMOJI_POR_INTENT:
-        return EMOJI_POR_INTENT[intent]
-    idx = sum(ord(c) for c in (texto + intent)) % len(EMOJIS_POOL)
-    return EMOJIS_POOL[idx]
-
-
-def _con_emoji(msg: str, intent: str, texto: str) -> str:
-    emoji = _emoji_para(intent, texto)
-    if not emoji or emoji in msg:
-        return msg.strip()
-    return f"{msg.rstrip('.')}. {emoji}".replace("..", ".").strip()
 
 
 def _metodos_pago_literal(product: ProductDataIn) -> str:
@@ -490,23 +515,15 @@ def _metodos_pago_literal(product: ProductDataIn) -> str:
     return "QR o depósito bancario"
 
 
-def _bonos_lista_texto(product: ProductDataIn) -> str:
+def _bonos_lista_texto(product: ProductDataIn, emoji: str) -> str:
     bon = _campo_producto(product, "bonuses")
     if bon:
         limpio = bon.replace("\n", ", ").strip().rstrip(".")
-        if len(limpio) <= 180:
-            pref = "Trae 6 bonos: " if "6" in limpio[:20] or "seis" in limpio[:20] else "Trae bonos: "
-            return pref + limpio
-        return "Trae 6 bonos: " + _recortar(limpio, 150)
-    inc = _campo_producto(product, "includes").lower()
-    if "bono" in inc:
-        return (
-            "Trae 6 bonos incluidos según el pack "
-            "(guías, abecedario 3D, lámparas origami y personajes gigantes)."
-        )
-    return (
-        "Trae 6 bonos: guía para empezar, abecedario 3D, curso de lámparas origami "
-        "y personajes gigantes como Goku, Vegeta y Kid Buu."
+        if len(limpio) <= 160:
+            return _limpiar_reply(f"Trae varios bonos {emoji} como {limpio}")
+    return _limpiar_reply(
+        f"Trae varios bonos {emoji} como abecedario 3D, lámparas origami "
+        "y personajes gigantes como Goku y Vegeta"
     )
 
 
@@ -542,14 +559,25 @@ def _naturalizar_metodos_pago(metodos: str) -> str:
         return "puedes pagar por depósito o transferencia"
     if "tigo" in bajo:
         return "también aceptamos Tigo Money"
-    return _recortar(f"puedes pagar con {m}", 60)
+    return _acortar_sin_puntos(f"puedes pagar con {m}", 60)
 
 
-def _fallback_corto(fallback: str) -> str:
+def _fallback_corto(fallback: str, emoji: str) -> str:
     fb = (fallback or "").strip()
     if fb and len(fb) < 100 and "pack digital ideal" not in fb.lower():
-        return fb
-    return "No entendí bien. ¿Quieres saber precio, formas de pago o qué incluye?"
+        return _limpiar_reply(fb)
+    return _finalizar_reply(
+        "No te entendí muy bien ¿quieres saber precio, bonos o formas de pago?",
+        emoji,
+    )
+
+
+def _resumen_precio_corto(includes: str, bonuses: str) -> str:
+    inc = (includes or "").lower()
+    m = re.search(r"\d[\d.]*\s*plantillas?", inc)
+    plantillas = m.group() if m else "las plantillas"
+    bonos = "los 6 bonos gratis" if "6" in (bonuses or inc) else "los bonos"
+    return f"incluye {plantillas} y {bonos}"
 
 
 def generar_reply_por_intent(
@@ -558,107 +586,117 @@ def generar_reply_por_intent(
     tone: str,
     texto: str,
     fallback: str,
+    chat_history: list[ChatTurnIn],
 ) -> str:
     del tone
-    fb = _fallback_corto(fallback)
+    emoji = _seleccionar_emoji(consulta_intent, chat_history)
+    print("😀 emoji seleccionado:", emoji)
+    fb = _fallback_corto(fallback, emoji)
 
     if consulta_intent == "confianza":
-        return (
-            "Te entiendo, es normal tener dudas. Es un producto digital y apenas "
-            "confirmas el pago te enviamos el acceso; también te guiamos si necesitas ayuda."
+        reply = _limpiar_reply(
+            f"Te entiendo {emoji} hoy en día uno tiene dudas. "
+            "Apenas confirmas el pago te enviamos acceso y si necesitas ayuda te guiamos"
         )
 
-    if consulta_intent == "personajes":
+    elif consulta_intent == "personajes":
         chars = _personajes_detectados(texto, product)
         if chars:
             lista = ", ".join(chars[:-1]) + " y " + chars[-1] if len(chars) > 1 else chars[0]
-            msg = f"Sí, incluye personajes gigantes como {lista} para armar en papel."
+            reply = _limpiar_reply(f"Sí {emoji} incluye {lista} para armar en papel")
         else:
-            msg = "Sí, trae personajes en papel para imprimir y armar (Dragon Ball y más)."
-        return _con_emoji(msg, consulta_intent, texto)
+            reply = _limpiar_reply(
+                f"Sí {emoji} incluye Goku, Vegeta y Kid Buu para armar en papel"
+            )
 
-    if consulta_intent == "bonos_lista":
-        return _bonos_lista_texto(product)
+    elif consulta_intent == "bonos_lista":
+        reply = _bonos_lista_texto(product, emoji)
 
-    if consulta_intent == "bonos_confirmacion":
-        msg = (
-            "Sí, los bonos vienen incluidos sin costo extra. "
-            "Llegan junto con el acceso al pack."
+    elif consulta_intent == "bonos_confirmacion":
+        reply = _limpiar_reply(
+            f"Sí {emoji} los bonos vienen incluidos sin costo extra. "
+            "Llegan junto con el acceso al pack"
         )
-        return _con_emoji(msg, consulta_intent, texto)
 
-    if consulta_intent == "metodos_pago":
+    elif consulta_intent == "metodos_pago":
         met = _metodos_pago_literal(product)
         if "formas de pago" in texto or texto.strip() in ("pago", "pagos"):
-            msg = f"Tenemos pago por {met}. ¿Cuál prefieres usar?"
-        else:
-            msg = f"Puedes pagar por {met}. Eliges el método que te quede más cómodo."
-        return _con_emoji(msg, consulta_intent, texto)
-
-    if consulta_intent == "ninos":
-        msg = (
-            "Sí, es ideal para niños: los mantiene entretenidos y "
-            "estimula su creatividad con actividades de papel."
-        )
-        return _con_emoji(msg, consulta_intent, texto)
-
-    if consulta_intent == "acceso":
-        acc = _campo_producto(product, "access")
-        if acc and len(acc) < 90:
-            msg = f"Es digital e inmediato. {_recortar(acc, 85)}"
-        else:
-            msg = (
-                "Es digital e inmediato. Apenas confirmas el pago te enviamos "
-                "el acceso para descargar desde celular o computadora."
+            reply = _limpiar_reply(
+                f"Tenemos pago por {met} {emoji} ¿cuál prefieres usar?"
             )
-        return _con_emoji(msg, consulta_intent, texto)
+        else:
+            reply = _limpiar_reply(
+                f"Puedes pagar por {met} {emoji} eliges el método que te quede más cómodo"
+            )
 
-    if consulta_intent == "precio":
+    elif consulta_intent == "ninos":
+        reply = _limpiar_reply(
+            f"Sí {emoji} es ideal para niños porque los mantiene entretenidos "
+            "y usando su creatividad"
+        )
+
+    elif consulta_intent == "acceso":
+        acc = _campo_producto(product, "access")
+        if acc and len(acc) <= 100:
+            reply = _limpiar_reply(
+                f"El acceso es inmediato {emoji} apenas confirmas el pago "
+                f"{_acortar_sin_puntos(acc, 80)}"
+            )
+        else:
+            reply = _limpiar_reply(
+                f"El acceso es inmediato {emoji} apenas confirmas el pago te enviamos todo"
+            )
+
+    elif consulta_intent == "precio":
         precio = _campo_producto(product, "price")
         if not precio:
-            return fb
-        resumen = _resumen_precio_incluye(
-            _campo_producto(product, "includes"),
-            _campo_producto(product, "bonuses"),
-        )
-        msg = f"Está en {precio}"
-        if resumen:
-            msg += f" e {resumen.replace('Incluye ', 'incluye ', 1)}"
+            reply = fb
         else:
-            msg += "."
-        return msg
+            det = _resumen_precio_corto(
+                _campo_producto(product, "includes"),
+                _campo_producto(product, "bonuses"),
+            )
+            reply = _limpiar_reply(f"Está en {precio} {emoji} {det}")
 
-    if consulta_intent == "garantia":
+    elif consulta_intent == "garantia":
         g = _campo_producto(product, "guarantee")
-        if g:
-            return f"Tranquilo, {_recortar(g, 110)}."
-        return fb
+        reply = (
+            _limpiar_reply(f"Tranquilo {emoji} {_acortar_sin_puntos(g, 100)}")
+            if g
+            else fb
+        )
 
-    if consulta_intent == "incluye":
+    elif consulta_intent == "incluye":
         inc = _campo_producto(product, "includes")
         bon = _campo_producto(product, "bonuses")
         if inc:
-            cuerpo = _recortar(inc, 140)
+            cuerpo = _acortar_sin_puntos(inc, 120)
             if bon:
-                cuerpo += f" y {_recortar(bon, 50)}"
-            return _con_emoji(f"Incluye {cuerpo}", consulta_intent, texto)
-        return fb
+                cuerpo += f" y {_acortar_sin_puntos(bon, 60)}"
+            reply = _limpiar_reply(f"Incluye {cuerpo} {emoji}")
+        else:
+            reply = fb
 
-    if consulta_intent == "saludo":
-        return _con_emoji(
-            "Hola, qué gusto. ¿Te cuento precio, formas de pago o qué incluye?",
-            consulta_intent,
-            texto,
+    elif consulta_intent == "saludo":
+        reply = _limpiar_reply(
+            f"Hola {emoji} dime ¿quieres saber precio, bonos o formas de pago?"
         )
 
-    faq = _campo_producto(product, "faq")
-    if faq and len(texto) > 4:
-        for linea in faq.split("\n"):
-            ln = normalize_text(linea)
-            if ln and any(p in texto for p in ln.split()[:4] if len(p) > 3):
-                return _recortar(linea.strip(), 120)
+    else:
+        faq = _campo_producto(product, "faq")
+        reply = fb
+        if faq and len(texto) > 4:
+            for linea in faq.split("\n"):
+                ln = normalize_text(linea)
+                if ln and any(p in texto for p in ln.split()[:4] if len(p) > 3):
+                    reply = _limpiar_reply(
+                        f"Sí {emoji} {_acortar_sin_puntos(linea.strip(), 120)}"
+                    )
+                    break
 
-    return fb
+    reply = _limpiar_reply(reply)
+    print("💬 reply limpio:", reply)
+    return reply
 
 
 def generar_reply_producto(
@@ -668,13 +706,13 @@ def generar_reply_producto(
     fallback: str,
     chat_history: list[ChatTurnIn],
 ) -> str:
-    del chat_history, tone
+    del tone
     texto = corregir_texto(normalize_text(message))
     consulta_intent = clasificar_consulta_intent(texto)
     print("🧠 IA PRO intención detectada:", consulta_intent)
-    reply = generar_reply_por_intent(consulta_intent, product, tone, texto, fallback)
-    print("💬 IA PRO respuesta final:", reply)
-    return reply
+    return generar_reply_por_intent(
+        consulta_intent, product, tone, texto, fallback, chat_history
+    )
 
 
 @app.get("/health")
