@@ -13,7 +13,9 @@ const {
 } = require("./pythonAiClient");
 
 const MAX_CHAT_HISTORY = 8;
+const MAX_LAST_REPLIES = 3;
 const TONOS_VALIDOS = new Set(["amable", "vendedor", "premium", "tecnico", "agresivo"]);
+const lastRepliesPorChat = new Map();
 
 function decodeHtmlEntities(str) {
   return String(str || "")
@@ -172,9 +174,35 @@ function esBonosConfirmacion(m) {
   );
 }
 
+function chatKey(usuarioId, numero) {
+  return `${usuarioId || "0"}:${numero || ""}`;
+}
+
+function getLastReplies(usuarioId, numero) {
+  const key = chatKey(usuarioId, numero);
+  const list = lastRepliesPorChat.get(key);
+  return Array.isArray(list) ? list.slice(-MAX_LAST_REPLIES) : [];
+}
+
+function pushLastReply(usuarioId, numero, reply) {
+  const key = chatKey(usuarioId, numero);
+  const prev = getLastReplies(usuarioId, numero);
+  const next = [...prev, String(reply || "").trim()].filter(Boolean).slice(-MAX_LAST_REPLIES);
+  lastRepliesPorChat.set(key, next);
+  return next;
+}
+
+function esPreguntaContenido(m) {
+  const temas =
+    /animal|animales|granja|videojuego|videojuegos|goku|vegeta|dragon|minecraft|personaje|figura|dinosaurio|princesa/;
+  if (temas.test(m)) return true;
+  return /tiene |trae |incluye |hay |viene |cuenta con /.test(m) && temas.test(m);
+}
+
 function clasificarConsultaIntent(mensaje) {
   const m = normMsg(mensaje);
   if (esConfianza(m)) return "confianza";
+  if (esPreguntaContenido(m)) return "contenido_producto";
   if (/goku|vegeta|buu|personaje|personajes|muestra|muestras|dragon|figura|papel/.test(m)) {
     return "personajes";
   }
@@ -214,80 +242,179 @@ function limpiarReply(reply) {
     .trim();
 }
 
-const CARITAS_ROTACION = ["🙂", "😊", "😄", "😌", "🤩", "🥹"];
+const CARITAS_SOLO = ["🙂", "😊", "😄", "😌", "🤩", "🥹", "😅"];
 
-const EMOJI_OPCIONES_INTENT = {
-  precio: ["🙂"],
-  metodos_pago: ["😊"],
-  bonos_lista: ["😄"],
-  bonos_confirmacion: ["😄"],
-  confianza: ["🥹", "🙂", "😌"],
-  personajes: ["🤩"],
-  ninos: ["😊"],
-  acceso: ["😌"],
-  saludo: ["😄"],
-  incluye: ["😄"],
-  garantia: ["🙂", "😌"],
-  general: ["🙂"],
+const VARIACIONES = {
+  confianza_general: [
+    "Te entiendo 🥹 hoy en día uno desconfía mucho. Por eso te guiamos paso a paso.",
+    "Es normal tener dudas 🙂 especialmente en compras online. Si quieres te explico cómo funciona todo.",
+    "Te entiendo 😌 nadie quiere perder dinero. Apenas confirmas el pago te enviamos acceso inmediato.",
+    "Sí te entiendo 🥹 por eso intentamos hacer todo claro y sencillo para darte confianza.",
+    "Tranqui 🙂 si quieres primero te explico cómo recibes el producto antes de pagar.",
+  ],
+  confianza_empatia: [
+    "Uf te entiendo 🥹 cuando ya pasó algo malo uno desconfía más. Por eso te guiamos en todo el proceso.",
+    "Lo siento si te pasó eso 😌 aquí el acceso se envía apenas confirmas el pago y te ayudamos si algo falla.",
+    "Te entiendo total 🥹 por eso el proceso es claro: pagas, recibes acceso y te acompañamos si necesitas.",
+    "Es válido que dudes 🙂 si quieres te explico paso a paso antes de que decidas pagar.",
+  ],
+  confianza_estafa: [
+    "No es estafa 🙂 es un producto digital y apenas confirmas el pago te enviamos acceso.",
+    "Tranquilo 😌 no pedimos datos raros: pagas y recibes acceso inmediato con soporte si lo necesitas.",
+    "Entiendo la duda 🙂 es 100% digital y el acceso llega apenas se confirma tu pago.",
+    "Te aseguro que es legítimo 🙂 si quieres te explico cómo recibes todo antes de pagar.",
+  ],
+  precio: [
+    "Cuesta {precio} 🙂 y ya vienen incluidas las plantillas junto con los bonos.",
+    "Está en {precio} 😊 con plantillas y bonos incluidos en el mismo pack.",
+    "El valor es {precio} 🙂 incluye plantillas y bonos sin pagar extra por eso.",
+    "Por {precio} 😌 te llevas las plantillas y los bonos incluidos.",
+  ],
+  metodos_pago: [
+    "Puedes pagar por {metodos} 😊 elige el método que te quede más cómodo.",
+    "Aceptamos {metodos} 🙂 dime cuál prefieres y te guío.",
+    "El pago puede ser por {metodos} 😌 como te sea más fácil.",
+    "Sí 🙂 puedes usar {metodos} sin problema.",
+  ],
+  metodos_pago_formas: [
+    "Tenemos {metodos} 😊 ¿cuál te queda mejor: QR o depósito?",
+    "Puedes pagar con {metodos} 🙂 ¿con cuál te sientes más cómodo?",
+    "Las opciones son {metodos} 😌 ¿cuál prefieres usar?",
+  ],
+  bonos_lista: [
+    "Trae varios bonos 😄 como abecedario 3D, lámparas origami y personajes como Goku y Vegeta.",
+    "Los bonos incluyen guías, abecedario 3D, lámparas y personajes gigantes 😄 todo sin costo extra.",
+    "Sí 😄 vienen bonos como guía, abecedario 3D, lámparas y personajes de Dragon Ball.",
+    "Trae 6 bonos 😄 entre ellos guías, lámparas origami y personajes para armar.",
+  ],
+  bonos_confirmacion: [
+    "Sí 😄 los bonos vienen incluidos sin costo extra y llegan con el acceso.",
+    "Claro 🙂 los bonos van incluidos, no pagas aparte por ellos.",
+    "Sí 😄 llegan juntos al pack apenas recibes el acceso.",
+    "Exacto 🙂 bonos incluidos sin costo adicional.",
+  ],
+  personajes: [
+    "Sí 🤩 incluye Goku, Vegeta y Kid Buu para armar en papel.",
+    "Sí 🤩 trae personajes como Goku y Vegeta en figuras para imprimir.",
+    "Claro 🤩 hay personajes de Dragon Ball y más figuras para armar.",
+  ],
+  ninos: [
+    "Sí 😊 es ideal para niños porque los mantiene entretenidos y usando su creatividad.",
+    "Perfecto para niños 🙂 actividades de papel que entretienen y estimulan creatividad.",
+    "Sí 😊 a los niños les encanta armar e imprimir las figuras.",
+  ],
+  acceso: [
+    "El acceso es inmediato 😌 apenas confirmas el pago te enviamos todo.",
+    "Es digital 🙂 al confirmar el pago recibes el acceso al toque.",
+    "Apenas pagas 😌 te enviamos el acceso para descargar en celular o PC.",
+  ],
+  incluye: [
+    "Incluye plantillas, figuras y bonos 😄 todo en un solo pack.",
+    "Trae plantillas para imprimir, decoración y bonos 😄 bastante completo.",
+    "Viene con plantillas, personajes y bonos incluidos 😄",
+  ],
+  saludo: [
+    "Hola 😄 dime, ¿quieres saber precio, bonos o formas de pago?",
+    "Hola 🙂 cuéntame, ¿te interesa el precio o cómo pagar?",
+    "Buenas 😄 ¿te ayudo con precio, contenido o formas de pago?",
+  ],
+  contenido_si: [
+    "Sí 🤩 incluye animales, personajes y muchas figuras para armar.",
+    "Sí 🤩 trae ese tipo de contenido dentro del pack de figuras.",
+    "Claro 🤩 sí está incluido en las plantillas y personajes del pack.",
+  ],
+  contenido_no: [
+    "No vi ese contenido específico 🙂 pero sí incluye muchas figuras y personajes.",
+    "Ese tema no lo vi listado 🙂 aunque el pack trae muchas figuras y actividades.",
+    "No estoy seguro de ese detalle 🙂 pero sí trae bastantes personajes y plantillas.",
+  ],
+  fallback: [
+    "No te entendí muy bien 🙂 ¿quieres saber precio, bonos o formas de pago?",
+    "Perdón 🙂 no capté bien. ¿Precio, bonos o cómo pagar?",
+    "¿Me repites 🙂? ¿Buscas precio, formas de pago o qué incluye?",
+  ],
 };
 
-function emojiEnHistorial(chatHistory) {
+function refinarIntent(intent, m) {
+  if (intent === "confianza") {
+    if (/ya me estafaron|me estafaron|estafaron antes|me timaron/.test(m)) return "confianza_empatia";
+    if (/no es estafa|es estafa|estafa/.test(m)) return "confianza_estafa";
+    return "confianza_general";
+  }
+  if (intent === "metodos_pago") {
+    if (/formas de pago|medios de pago|metodos de pago/.test(m) || m.trim() === "pago" || m.trim() === "pagos") {
+      return "metodos_pago_formas";
+    }
+    return "metodos_pago";
+  }
+  return intent;
+}
+
+function firmaReply(texto) {
+  let s = normMsg(texto);
+  for (const e of CARITAS_SOLO) s = s.split(e).join("");
+  return s.replace(/\s+/g, " ").trim().slice(0, 90);
+}
+
+function esRepetida(variacion, usadas) {
+  const firmaV = firmaReply(variacion);
+  for (const u of usadas) {
+    const firmaU = firmaReply(u);
+    if (!firmaU) continue;
+    if (firmaV === firmaU || firmaV.slice(0, 45) === firmaU.slice(0, 45)) return true;
+  }
+  return false;
+}
+
+function historialUsadas(chatHistory, lastReplies) {
+  const usadas = (lastReplies || []).slice(-MAX_LAST_REPLIES);
   const hist = Array.isArray(chatHistory) ? chatHistory : [];
-  for (let i = hist.length - 1; i >= 0; i--) {
+  for (let i = hist.length - 1; i >= 0 && usadas.length < MAX_LAST_REPLIES; i--) {
     const role = String(hist[i].role || "").toLowerCase();
     if (role === "assistant" || role === "bot" || role === "ia") {
-      const text = String(hist[i].text || "");
-      for (const e of CARITAS_ROTACION) {
-        if (text.includes(e)) return e;
-      }
+      const t = String(hist[i].text || "").trim();
+      if (t && !usadas.includes(t)) usadas.push(t);
     }
   }
-  return "";
+  return usadas.slice(0, MAX_LAST_REPLIES);
 }
 
-function seleccionarEmoji(intent, chatHistory) {
-  const opciones = EMOJI_OPCIONES_INTENT[intent] || ["🙂"];
-  const prev = emojiEnHistorial(chatHistory);
-  for (const e of opciones) {
-    if (e !== prev) return e;
-  }
-  if (CARITAS_ROTACION.includes(prev)) {
-    return CARITAS_ROTACION[(CARITAS_ROTACION.indexOf(prev) + 1) % CARITAS_ROTACION.length];
-  }
-  return opciones[0];
+function elegirVariacion(pool, usadas, texto) {
+  let disponibles = pool.filter((v) => !esRepetida(v, usadas));
+  if (!disponibles.length) disponibles = [...pool];
+  const idx =
+    disponibles.length > 1
+      ? [...texto, String(usadas.length)].reduce((a, c) => a + [...c].reduce((s, ch) => s + ch.charCodeAt(0), 0), 0) %
+        disponibles.length
+      : 0;
+  return disponibles[idx];
 }
 
-function personajesDetectados(m, p) {
-  const corpus = [p.includes, p.faq, p.description, p.bonuses].join(" ").toLowerCase();
-  const mapa = [
-    ["goku", "Goku"],
-    ["vegeta", "Vegeta"],
-    ["kid buu", "Kid Buu"],
-    ["buu", "Kid Buu"],
+function textoProductoCompleto(p) {
+  return [p.description, p.includes, p.bonuses, p.faq].join(" ").toLowerCase();
+}
+
+function contenidoEnProducto(m, p) {
+  const corpus = textoProductoCompleto(p);
+  const keys = [
+    "animal",
+    "animales",
+    "granja",
+    "goku",
+    "vegeta",
+    "buu",
+    "videojuego",
+    "videojuegos",
+    "dragon",
+    "minecraft",
+    "dinosaurio",
+    "princesa",
+    "figura",
+    "personaje",
   ];
-  const out = [];
-  const vistos = new Set();
-  for (const [key, label] of mapa) {
-    if ((m.includes(key) || corpus.includes(key)) && !vistos.has(label)) {
-      out.push(label);
-      vistos.add(label);
-    }
-  }
-  return out;
-}
-
-function resumenPrecioIncluye(includes, bonuses) {
-  const inc = String(includes || "").toLowerCase();
-  const partes = [];
-  const matchPlant = inc.match(/\d[\d.]*\s*plantillas?/);
-  if (matchPlant) partes.push(`las ${matchPlant[0]}`);
-  else if (inc.includes("plantilla")) partes.push("las plantillas");
-  if (bonuses || inc.includes("bono")) {
-    partes.push(/6/.test(bonuses || inc) ? "los 6 bonos gratis" : "los bonos incluidos");
-  }
-  if (!partes.length) return "";
-  if (partes.length === 1) return `Incluye ${partes[0]}.`;
-  return `Incluye ${partes[0]} y ${partes[1]}.`;
+  const preguntados = keys.filter((k) => m.includes(k));
+  if (!preguntados.length) return /personaje|figura/.test(m);
+  return preguntados.some((k) => corpus.includes(k));
 }
 
 function metodosPagoLiteral(paymentMethods) {
@@ -302,101 +429,77 @@ function metodosPagoLiteral(paymentMethods) {
   return "QR o depósito bancario";
 }
 
-function bonosListaTexto(p, emoji) {
-  if (p.bonuses?.trim()) {
-    const limpio = p.bonuses.replace(/\n/g, ", ").trim().replace(/\.$/, "");
-    if (limpio.length <= 160) {
-      return limpiarReply(`Trae varios bonos ${emoji} como ${limpio}`);
-    }
-  }
-  return limpiarReply(
-    `Trae varios bonos ${emoji} como abecedario 3D, lámparas origami y personajes gigantes como Goku y Vegeta`
-  );
-}
-
-function resumenPrecioCorto(includes, bonuses) {
-  const inc = String(includes || "").toLowerCase();
-  const matchPlant = inc.match(/\d[\d.]*\s*plantillas?/);
-  const plantillas = matchPlant ? matchPlant[0] : "las plantillas";
-  const bonos = /6/.test(bonuses || inc) ? "los 6 bonos gratis" : "los bonos";
-  return `incluye ${plantillas} y ${bonos}`;
-}
-
-function fallbackCorto(fallback, emoji) {
-  const fb = String(fallback || "").trim();
-  if (fb && fb.length < 100 && !/pack digital ideal/i.test(fb)) return limpiarReply(fb);
-  return limpiarReply(`No te entendí muy bien ${emoji} ¿quieres saber precio, bonos o formas de pago?`);
-}
-
-function generarReplyPorIntent(consultaIntent, config, mensaje, chatHistory) {
+function construirReply(consultaIntent, config, mensaje, usadas) {
   const p = config.productData || {};
   const m = normMsg(mensaje);
-  const emoji = seleccionarEmoji(consultaIntent, chatHistory);
-  console.log("😀 emoji seleccionado:", emoji);
-  const fb = fallbackCorto(config.mensajeFallback, emoji);
-  let reply = fb;
+  const intentFino = refinarIntent(consultaIntent, m);
+  const fb = String(config.mensajeFallback || "").trim();
 
-  if (consultaIntent === "confianza") {
-    reply = limpiarReply(
-      `Te entiendo ${emoji} hoy en día uno tiene dudas. Apenas confirmas el pago te enviamos acceso y si necesitas ayuda te guiamos`
-    );
-  } else if (consultaIntent === "personajes") {
-    const chars = personajesDetectados(m, p);
-    reply = chars.length
-      ? limpiarReply(
-          `Sí ${emoji} incluye ${chars.length > 1 ? `${chars.slice(0, -1).join(", ")} y ${chars[chars.length - 1]}` : chars[0]} para armar en papel`
-        )
-      : limpiarReply(`Sí ${emoji} incluye Goku, Vegeta y Kid Buu para armar en papel`);
-  } else if (consultaIntent === "bonos_lista") {
-    reply = bonosListaTexto(p, emoji);
-  } else if (consultaIntent === "bonos_confirmacion") {
-    reply = limpiarReply(
-      `Sí ${emoji} los bonos vienen incluidos sin costo extra. Llegan junto con el acceso al pack`
-    );
-  } else if (consultaIntent === "metodos_pago") {
-    const met = metodosPagoLiteral(p.paymentMethods);
-    reply =
-      /formas de pago/.test(m) || m.trim() === "pago" || m.trim() === "pagos"
-        ? limpiarReply(`Tenemos pago por ${met} ${emoji} ¿cuál prefieres usar?`)
-        : limpiarReply(`Puedes pagar por ${met} ${emoji} eliges el método que te quede más cómodo`);
-  } else if (consultaIntent === "ninos") {
-    reply = limpiarReply(
-      `Sí ${emoji} es ideal para niños porque los mantiene entretenidos y usando su creatividad`
-    );
-  } else if (consultaIntent === "acceso") {
-    reply =
-      p.access && p.access.length <= 100
-        ? limpiarReply(
-            `El acceso es inmediato ${emoji} apenas confirmas el pago ${acortarSinPuntos(p.access, 80)}`
-          )
-        : limpiarReply(`El acceso es inmediato ${emoji} apenas confirmas el pago te enviamos todo`);
-  } else if (consultaIntent === "precio") {
-    if (p.price) {
-      reply = limpiarReply(`Está en ${p.price} ${emoji} ${resumenPrecioCorto(p.includes, p.bonuses)}`);
-    }
-  } else if (consultaIntent === "garantia") {
-    if (p.guarantee) reply = limpiarReply(`Tranquilo ${emoji} ${acortarSinPuntos(p.guarantee, 100)}`);
-  } else if (consultaIntent === "incluye") {
-    if (p.includes) {
-      let cuerpo = acortarSinPuntos(p.includes, 120);
-      if (p.bonuses) cuerpo += ` y ${acortarSinPuntos(p.bonuses, 60)}`;
-      reply = limpiarReply(`Incluye ${cuerpo} ${emoji}`);
-    }
-  } else if (consultaIntent === "saludo") {
-    reply = limpiarReply(`Hola ${emoji} dime ¿quieres saber precio, bonos o formas de pago?`);
+  if (intentFino === "contenido_producto") {
+    const pool = contenidoEnProducto(m, p) ? VARIACIONES.contenido_si : VARIACIONES.contenido_no;
+    return limpiarReply(elegirVariacion(pool, usadas, m));
   }
 
-  console.log("💬 reply limpio:", reply);
+  if (intentFino.startsWith("confianza")) {
+    const pool = VARIACIONES[intentFino] || VARIACIONES.confianza_general;
+    return limpiarReply(elegirVariacion(pool, usadas, m));
+  }
+
+  if (intentFino === "precio") {
+    if (!p.price) return limpiarReply(elegirVariacion(VARIACIONES.fallback, usadas, m));
+    const plantilla = elegirVariacion(VARIACIONES.precio, usadas, m);
+    return limpiarReply(plantilla.replace("{precio}", p.price));
+  }
+
+  if (intentFino === "metodos_pago" || intentFino === "metodos_pago_formas") {
+    const met = metodosPagoLiteral(p.paymentMethods);
+    const plantilla = elegirVariacion(VARIACIONES[intentFino], usadas, m);
+    return limpiarReply(plantilla.replace("{metodos}", met));
+  }
+
+  if (intentFino === "bonos_lista") {
+    if (p.bonuses?.trim()) {
+      const limpio = p.bonuses.replace(/\n/g, ", ").trim();
+      if (limpio.length < 140 && limpio.includes(",")) {
+        const custom = `Trae bonos 😄 como ${limpio}`;
+        if (!esRepetida(custom, usadas)) return limpiarReply(custom);
+      }
+    }
+    return limpiarReply(elegirVariacion(VARIACIONES.bonos_lista, usadas, m));
+  }
+
+  const poolKey = VARIACIONES[intentFino] ? intentFino : consultaIntent;
+  if (VARIACIONES[poolKey]) {
+    return limpiarReply(elegirVariacion(VARIACIONES[poolKey], usadas, m));
+  }
+
+  if (consultaIntent === "garantia" && p.guarantee) {
+    return limpiarReply(`Tranquilo 🙂 ${acortarSinPuntos(p.guarantee, 100)}`);
+  }
+
+  if (fb && fb.length < 100 && !/pack digital ideal/i.test(fb) && !esRepetida(fb, usadas)) {
+    return limpiarReply(fb);
+  }
+
+  return limpiarReply(elegirVariacion(VARIACIONES.fallback, usadas, m));
+}
+
+function generarReplyPorIntent(consultaIntent, config, mensaje, chatHistory, lastReplies) {
+  const usadas = historialUsadas(chatHistory, lastReplies);
+  console.log("🧠 anti repetición:", usadas);
+  const intentFino = refinarIntent(consultaIntent, normMsg(mensaje));
+  console.log("🧠 intención:", intentFino);
+  const reply = construirReply(consultaIntent, config, mensaje, usadas);
+  console.log("💬 respuesta elegida:", reply);
   return reply;
 }
 
-function generarReplyFallbackLocal(config, mensaje, chatHistory) {
+function generarReplyFallbackLocal(config, mensaje, chatHistory, lastReplies) {
   const consultaIntent = clasificarConsultaIntent(mensaje);
-  console.log("🧠 IA PRO intención detectada:", consultaIntent);
-  return generarReplyPorIntent(consultaIntent, config, mensaje, chatHistory || []);
+  return generarReplyPorIntent(consultaIntent, config, mensaje, chatHistory || [], lastReplies);
 }
 
-async function resolverAnalisisPro(config, mensajeLead, chatHistory) {
+async function resolverAnalisisPro(config, mensajeLead, chatHistory, lastReplies) {
   const routes = buildRoutesFromConfig(config);
   const threshold = config.scoreMinimo || 40;
 
@@ -409,6 +512,7 @@ async function resolverAnalisisPro(config, mensajeLead, chatHistory) {
         productData: config.productData,
         tone: config.tone,
         chat_history: chatHistory,
+        last_replies: lastReplies || [],
         fallbackMessage: config.mensajeFallback,
         enabledConversation: config.enabledConversation,
       });
@@ -449,7 +553,7 @@ async function resolverAnalisisPro(config, mensajeLead, chatHistory) {
     intent: "consulta",
     score: analisis.score || 0,
     routeId: null,
-    reply: generarReplyFallbackLocal(config, mensajeLead, chatHistory),
+    reply: generarReplyFallbackLocal(config, mensajeLead, chatHistory, lastReplies),
     source: "js-local",
   };
 }
@@ -484,7 +588,8 @@ async function ejecutarNodoIAPro(nodo, contexto, opts = {}) {
     chatHistory = appendChatHistory(chatHistory, "user", mensajeLead);
   }
 
-  const resultado = await resolverAnalisisPro(config, mensajeLead, chatHistory);
+  const lastReplies = getLastReplies(usuarioId, numero);
+  const resultado = await resolverAnalisisPro(config, mensajeLead, chatHistory, lastReplies);
 
   contexto.intent = resultado.intent || "";
   contexto.score = resultado.score ?? "";
@@ -511,7 +616,7 @@ async function ejecutarNodoIAPro(nodo, contexto, opts = {}) {
     await enviarTextoWhatsApp(numero, reply, { usuarioId });
     contexto.ultimaRespuestaIA = reply;
     chatHistory = appendChatHistory(chatHistory, "assistant", reply);
-    console.log("💬 reply limpio:", reply);
+    pushLastReply(usuarioId, numero, reply);
   }
 
   console.log("⏸️ IA PRO sigue esperando");

@@ -4,6 +4,7 @@ MacBot — detector de intención local (solo scoring; Node sigue el flujo).
 
 from __future__ import annotations
 
+import random
 import re
 import unicodedata
 from typing import Any
@@ -77,6 +78,7 @@ class DetectIntentProRequest(BaseModel):
     productData: ProductDataIn = Field(default_factory=ProductDataIn)
     tone: str = "amable"
     chat_history: list[ChatTurnIn] = Field(default_factory=list)
+    last_replies: list[str] = Field(default_factory=list)
     fallbackMessage: str = ""
     enabledConversation: bool = True
 
@@ -350,10 +352,36 @@ def _es_bonos_confirmacion(texto: str) -> bool:
     )
 
 
+def _es_pregunta_contenido(texto: str) -> bool:
+    temas = [
+        "animal",
+        "animales",
+        "granja",
+        "videojuego",
+        "videojuegos",
+        "goku",
+        "vegeta",
+        "dragon",
+        "minecraft",
+        "personaje",
+        "figura",
+        "dinosaurio",
+        "princesa",
+    ]
+    if any(k in texto for k in temas):
+        return True
+    return any(
+        p in texto for p in ["tiene ", "trae ", "incluye ", "hay ", "viene ", "cuenta con "]
+    ) and any(k in texto for k in temas)
+
+
 def clasificar_consulta_intent(texto: str) -> str:
     """Clasifica la pregunta del lead (solo consulta, no ruta de pago)."""
     if _es_confianza(texto):
         return "confianza"
+
+    if _es_pregunta_contenido(texto):
+        return "contenido_producto"
 
     if any(k in texto for k in PERSONAJES_PALABRAS) or any(
         k in texto for k in PERSONAJES_DBZ
@@ -580,6 +608,235 @@ def _resumen_precio_corto(includes: str, bonuses: str) -> str:
     return f"incluye {plantillas} y {bonos}"
 
 
+CARITAS_SOLO = ["🙂", "😊", "😄", "😌", "🤩", "🥹", "😅"]
+
+VARIACIONES: dict[str, list[str]] = {
+    "confianza_general": [
+        "Te entiendo 🥹 hoy en día uno desconfía mucho. Por eso te guiamos paso a paso.",
+        "Es normal tener dudas 🙂 especialmente en compras online. Si quieres te explico cómo funciona todo.",
+        "Te entiendo 😌 nadie quiere perder dinero. Apenas confirmas el pago te enviamos acceso inmediato.",
+        "Sí te entiendo 🥹 por eso intentamos hacer todo claro y sencillo para darte confianza.",
+        "Tranqui 🙂 si quieres primero te explico cómo recibes el producto antes de pagar.",
+    ],
+    "confianza_empatia": [
+        "Uf te entiendo 🥹 cuando ya pasó algo malo uno desconfía más. Por eso te guiamos en todo el proceso.",
+        "Lo siento si te pasó eso 😌 aquí el acceso se envía apenas confirmas el pago y te ayudamos si algo falla.",
+        "Te entiendo total 🥹 por eso el proceso es claro: pagas, recibes acceso y te acompañamos si necesitas.",
+        "Es válido que dudes 🙂 si quieres te explico paso a paso antes de que decidas pagar.",
+    ],
+    "confianza_estafa": [
+        "No es estafa 🙂 es un producto digital y apenas confirmas el pago te enviamos acceso.",
+        "Tranquilo 😌 no pedimos datos raros: pagas y recibes acceso inmediato con soporte si lo necesitas.",
+        "Entiendo la duda 🙂 es 100% digital y el acceso llega apenas se confirma tu pago.",
+        "Te aseguro que es legítimo 🙂 si quieres te explico cómo recibes todo antes de pagar.",
+    ],
+    "precio": [
+        "Cuesta {precio} 🙂 y ya vienen incluidas las plantillas junto con los bonos.",
+        "Está en {precio} 😊 con plantillas y bonos incluidos en el mismo pack.",
+        "El valor es {precio} 🙂 incluye plantillas y bonos sin pagar extra por eso.",
+        "Por {precio} 😌 te llevas las plantillas y los bonos incluidos.",
+    ],
+    "metodos_pago": [
+        "Puedes pagar por {metodos} 😊 elige el método que te quede más cómodo.",
+        "Aceptamos {metodos} 🙂 dime cuál prefieres y te guío.",
+        "El pago puede ser por {metodos} 😌 como te sea más fácil.",
+        "Sí 🙂 puedes usar {metodos} sin problema.",
+    ],
+    "metodos_pago_formas": [
+        "Tenemos {metodos} 😊 ¿cuál te queda mejor: QR o depósito?",
+        "Puedes pagar con {metodos} 🙂 ¿con cuál te sientes más cómodo?",
+        "Las opciones son {metodos} 😌 ¿cuál prefieres usar?",
+    ],
+    "bonos_lista": [
+        "Trae varios bonos 😄 como abecedario 3D, lámparas origami y personajes como Goku y Vegeta.",
+        "Los bonos incluyen guías, abecedario 3D, lámparas y personajes gigantes 😄 todo sin costo extra.",
+        "Sí 😄 vienen bonos como guía, abecedario 3D, lámparas y personajes de Dragon Ball.",
+        "Trae 6 bonos 😄 entre ellos guías, lámparas origami y personajes para armar.",
+    ],
+    "bonos_confirmacion": [
+        "Sí 😄 los bonos vienen incluidos sin costo extra y llegan con el acceso.",
+        "Claro 🙂 los bonos van incluidos, no pagas aparte por ellos.",
+        "Sí 😄 llegan juntos al pack apenas recibes el acceso.",
+        "Exacto 🙂 bonos incluidos sin costo adicional.",
+    ],
+    "personajes": [
+        "Sí 🤩 incluye Goku, Vegeta y Kid Buu para armar en papel.",
+        "Sí 🤩 trae personajes como Goku y Vegeta en figuras para imprimir.",
+        "Claro 🤩 hay personajes de Dragon Ball y más figuras para armar.",
+    ],
+    "ninos": [
+        "Sí 😊 es ideal para niños porque los mantiene entretenidos y usando su creatividad.",
+        "Perfecto para niños 🙂 actividades de papel que entretienen y estimulan creatividad.",
+        "Sí 😊 a los niños les encanta armar e imprimir las figuras.",
+    ],
+    "acceso": [
+        "El acceso es inmediato 😌 apenas confirmas el pago te enviamos todo.",
+        "Es digital 🙂 al confirmar el pago recibes el acceso al toque.",
+        "Apenas pagas 😌 te enviamos el acceso para descargar en celular o PC.",
+    ],
+    "incluye": [
+        "Incluye plantillas, figuras y bonos 😄 todo en un solo pack.",
+        "Trae plantillas para imprimir, decoración y bonos 😄 bastante completo.",
+        "Viene con plantillas, personajes y bonos incluidos 😄",
+    ],
+    "saludo": [
+        "Hola 😄 dime, ¿quieres saber precio, bonos o formas de pago?",
+        "Hola 🙂 cuéntame, ¿te interesa el precio o cómo pagar?",
+        "Buenas 😄 ¿te ayudo con precio, contenido o formas de pago?",
+    ],
+    "contenido_si": [
+        "Sí 🤩 incluye animales, personajes y muchas figuras para armar.",
+        "Sí 🤩 trae ese tipo de contenido dentro del pack de figuras.",
+        "Claro 🤩 sí está incluido en las plantillas y personajes del pack.",
+    ],
+    "contenido_no": [
+        "No vi ese contenido específico 🙂 pero sí incluye muchas figuras y personajes.",
+        "Ese tema no lo vi listado 🙂 aunque el pack trae muchas figuras y actividades.",
+        "No estoy seguro de ese detalle 🙂 pero sí trae bastantes personajes y plantillas.",
+    ],
+    "fallback": [
+        "No te entendí muy bien 🙂 ¿quieres saber precio, bonos o formas de pago?",
+        "Perdón 🙂 no capté bien. ¿Precio, bonos o cómo pagar?",
+        "¿Me repites 🙂? ¿Buscas precio, formas de pago o qué incluye?",
+    ],
+}
+
+
+def refinar_intent(intent: str, texto: str) -> str:
+    if intent == "confianza":
+        if any(k in texto for k in ["ya me estafaron", "me estafaron", "estafaron antes", "me timaron"]):
+            return "confianza_empatia"
+        if any(k in texto for k in ["no es estafa", "es estafa", "estafa"]):
+            return "confianza_estafa"
+        return "confianza_general"
+    if intent == "metodos_pago":
+        if any(k in texto for k in ["formas de pago", "medios de pago", "metodos de pago"]) or texto.strip() in (
+            "pago",
+            "pagos",
+        ):
+            return "metodos_pago_formas"
+        return "metodos_pago"
+    return intent
+
+
+def _firma_reply(texto: str) -> str:
+    s = normalize_text(texto)
+    for e in CARITAS_SOLO:
+        s = s.replace(e, "")
+    return re.sub(r"\s+", " ", s).strip()[:90]
+
+
+def _es_repetida(variacion: str, usadas: list[str]) -> bool:
+    firma_v = _firma_reply(variacion)
+    for u in usadas:
+        firma_u = _firma_reply(u)
+        if not firma_u:
+            continue
+        if firma_v == firma_u or firma_v[:45] == firma_u[:45]:
+            return True
+    return False
+
+
+def _historial_usadas(
+    chat_history: list[ChatTurnIn], last_replies: list[str]
+) -> list[str]:
+    usadas: list[str] = list(last_replies or [])[-3:]
+    for turn in reversed(chat_history or []):
+        if normalize_text(turn.role) in ("assistant", "bot", "ia"):
+            t = (turn.text or "").strip()
+            if t and t not in usadas:
+                usadas.append(t)
+            if len(usadas) >= 3:
+                break
+    return usadas[:3]
+
+
+def _elegir_variacion(pool: list[str], usadas: list[str], texto: str) -> str:
+    disponibles = [v for v in pool if not _es_repetida(v, usadas)]
+    if not disponibles:
+        disponibles = list(pool)
+    if len(disponibles) > 1:
+        random.seed(sum(ord(c) for c in (texto + str(len(usadas)))) % 9973)
+    return random.choice(disponibles)
+
+
+def _contenido_en_producto(texto: str, product: ProductDataIn) -> bool:
+    corpus = _texto_producto_completo(product)
+    keys = [
+        "animal",
+        "animales",
+        "granja",
+        "goku",
+        "vegeta",
+        "buu",
+        "videojuego",
+        "videojuegos",
+        "dragon",
+        "minecraft",
+        "dinosaurio",
+        "princesa",
+        "figura",
+        "personaje",
+    ]
+    preguntados = [k for k in keys if k in texto]
+    if not preguntados:
+        return "personaje" in texto or "figura" in texto
+    return any(k in corpus for k in preguntados)
+
+
+def _construir_reply(
+    intent: str,
+    product: ProductDataIn,
+    texto: str,
+    fallback: str,
+    usadas: list[str],
+) -> str:
+    intent_fino = refinar_intent(intent, texto)
+
+    if intent_fino == "contenido_producto":
+        pool = VARIACIONES["contenido_si"] if _contenido_en_producto(texto, product) else VARIACIONES["contenido_no"]
+        return _limpiar_reply(_elegir_variacion(pool, usadas, texto))
+
+    if intent_fino.startswith("confianza"):
+        return _limpiar_reply(_elegir_variacion(VARIACIONES.get(intent_fino, VARIACIONES["confianza_general"]), usadas, texto))
+
+    if intent_fino == "precio":
+        precio = _campo_producto(product, "price")
+        if not precio:
+            return _limpiar_reply(_elegir_variacion(VARIACIONES["fallback"], usadas, texto))
+        plantilla = _elegir_variacion(VARIACIONES["precio"], usadas, texto)
+        return _limpiar_reply(plantilla.replace("{precio}", precio))
+
+    if intent_fino in ("metodos_pago", "metodos_pago_formas"):
+        met = _metodos_pago_literal(product)
+        pool = VARIACIONES[intent_fino]
+        plantilla = _elegir_variacion(pool, usadas, texto)
+        return _limpiar_reply(plantilla.replace("{metodos}", met))
+
+    if intent_fino == "bonos_lista":
+        bon = _campo_producto(product, "bonuses")
+        if bon and len(bon) < 140 and "," in bon:
+            custom = f"Trae bonos 😄 como {bon.replace(chr(10), ', ').strip()}"
+            if not _es_repetida(custom, usadas):
+                return _limpiar_reply(custom)
+        return _limpiar_reply(_elegir_variacion(VARIACIONES["bonos_lista"], usadas, texto))
+
+    pool_key = intent_fino if intent_fino in VARIACIONES else intent
+    if pool_key in VARIACIONES:
+        return _limpiar_reply(_elegir_variacion(VARIACIONES[pool_key], usadas, texto))
+
+    if intent == "garantia":
+        g = _campo_producto(product, "guarantee")
+        if g:
+            return _limpiar_reply(f"Tranquilo 🙂 {_acortar_sin_puntos(g, 100)}")
+
+    fb = (fallback or "").strip()
+    if fb and len(fb) < 100 and "pack digital ideal" not in fb.lower() and not _es_repetida(fb, usadas):
+        return _limpiar_reply(fb)
+
+    return _limpiar_reply(_elegir_variacion(VARIACIONES["fallback"], usadas, texto))
+
+
 def generar_reply_por_intent(
     consulta_intent: str,
     product: ProductDataIn,
@@ -587,115 +844,15 @@ def generar_reply_por_intent(
     texto: str,
     fallback: str,
     chat_history: list[ChatTurnIn],
+    last_replies: list[str] | None = None,
 ) -> str:
     del tone
-    emoji = _seleccionar_emoji(consulta_intent, chat_history)
-    print("😀 emoji seleccionado:", emoji)
-    fb = _fallback_corto(fallback, emoji)
-
-    if consulta_intent == "confianza":
-        reply = _limpiar_reply(
-            f"Te entiendo {emoji} hoy en día uno tiene dudas. "
-            "Apenas confirmas el pago te enviamos acceso y si necesitas ayuda te guiamos"
-        )
-
-    elif consulta_intent == "personajes":
-        chars = _personajes_detectados(texto, product)
-        if chars:
-            lista = ", ".join(chars[:-1]) + " y " + chars[-1] if len(chars) > 1 else chars[0]
-            reply = _limpiar_reply(f"Sí {emoji} incluye {lista} para armar en papel")
-        else:
-            reply = _limpiar_reply(
-                f"Sí {emoji} incluye Goku, Vegeta y Kid Buu para armar en papel"
-            )
-
-    elif consulta_intent == "bonos_lista":
-        reply = _bonos_lista_texto(product, emoji)
-
-    elif consulta_intent == "bonos_confirmacion":
-        reply = _limpiar_reply(
-            f"Sí {emoji} los bonos vienen incluidos sin costo extra. "
-            "Llegan junto con el acceso al pack"
-        )
-
-    elif consulta_intent == "metodos_pago":
-        met = _metodos_pago_literal(product)
-        if "formas de pago" in texto or texto.strip() in ("pago", "pagos"):
-            reply = _limpiar_reply(
-                f"Tenemos pago por {met} {emoji} ¿cuál prefieres usar?"
-            )
-        else:
-            reply = _limpiar_reply(
-                f"Puedes pagar por {met} {emoji} eliges el método que te quede más cómodo"
-            )
-
-    elif consulta_intent == "ninos":
-        reply = _limpiar_reply(
-            f"Sí {emoji} es ideal para niños porque los mantiene entretenidos "
-            "y usando su creatividad"
-        )
-
-    elif consulta_intent == "acceso":
-        acc = _campo_producto(product, "access")
-        if acc and len(acc) <= 100:
-            reply = _limpiar_reply(
-                f"El acceso es inmediato {emoji} apenas confirmas el pago "
-                f"{_acortar_sin_puntos(acc, 80)}"
-            )
-        else:
-            reply = _limpiar_reply(
-                f"El acceso es inmediato {emoji} apenas confirmas el pago te enviamos todo"
-            )
-
-    elif consulta_intent == "precio":
-        precio = _campo_producto(product, "price")
-        if not precio:
-            reply = fb
-        else:
-            det = _resumen_precio_corto(
-                _campo_producto(product, "includes"),
-                _campo_producto(product, "bonuses"),
-            )
-            reply = _limpiar_reply(f"Está en {precio} {emoji} {det}")
-
-    elif consulta_intent == "garantia":
-        g = _campo_producto(product, "guarantee")
-        reply = (
-            _limpiar_reply(f"Tranquilo {emoji} {_acortar_sin_puntos(g, 100)}")
-            if g
-            else fb
-        )
-
-    elif consulta_intent == "incluye":
-        inc = _campo_producto(product, "includes")
-        bon = _campo_producto(product, "bonuses")
-        if inc:
-            cuerpo = _acortar_sin_puntos(inc, 120)
-            if bon:
-                cuerpo += f" y {_acortar_sin_puntos(bon, 60)}"
-            reply = _limpiar_reply(f"Incluye {cuerpo} {emoji}")
-        else:
-            reply = fb
-
-    elif consulta_intent == "saludo":
-        reply = _limpiar_reply(
-            f"Hola {emoji} dime ¿quieres saber precio, bonos o formas de pago?"
-        )
-
-    else:
-        faq = _campo_producto(product, "faq")
-        reply = fb
-        if faq and len(texto) > 4:
-            for linea in faq.split("\n"):
-                ln = normalize_text(linea)
-                if ln and any(p in texto for p in ln.split()[:4] if len(p) > 3):
-                    reply = _limpiar_reply(
-                        f"Sí {emoji} {_acortar_sin_puntos(linea.strip(), 120)}"
-                    )
-                    break
-
-    reply = _limpiar_reply(reply)
-    print("💬 reply limpio:", reply)
+    usadas = _historial_usadas(chat_history, last_replies or [])
+    print("🧠 anti repetición:", usadas)
+    intent_fino = refinar_intent(consulta_intent, texto)
+    print("🧠 intención:", intent_fino)
+    reply = _construir_reply(consulta_intent, product, texto, fallback, usadas)
+    print("💬 respuesta elegida:", reply)
     return reply
 
 
@@ -705,13 +862,19 @@ def generar_reply_producto(
     tone: str,
     fallback: str,
     chat_history: list[ChatTurnIn],
+    last_replies: list[str] | None = None,
 ) -> str:
     del tone
     texto = corregir_texto(normalize_text(message))
     consulta_intent = clasificar_consulta_intent(texto)
-    print("🧠 IA PRO intención detectada:", consulta_intent)
     return generar_reply_por_intent(
-        consulta_intent, product, tone, texto, fallback, chat_history
+        consulta_intent,
+        product,
+        tone,
+        texto,
+        fallback,
+        chat_history,
+        last_replies,
     )
 
 
@@ -793,6 +956,7 @@ def detect_intent_pro(body: DetectIntentProRequest) -> DetectIntentProResponse:
         body.tone or "amable",
         body.fallbackMessage or "",
         body.chat_history or [],
+        body.last_replies or [],
     )
     print("💬 IA PRO responde:", reply)
     return DetectIntentProResponse(
