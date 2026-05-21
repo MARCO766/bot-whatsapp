@@ -2,8 +2,8 @@ const crypto = require("crypto");
 const {
   parseRemarketingFromNodo,
   obtenerPasosActivosValidos,
-  normalizarUnidad,
 } = require("./parseRemarketingGlobalNode");
+const { normalizarUnidad, unidadParaLog } = require("./unidades");
 const { insertarProgramados, cancelarPendientesCliente } = require("./remarketingRepository");
 const { aplicarEtiquetaCliente } = require("./aplicarEtiqueta");
 const { ESTADOS_REMARKETING } = require("./constants");
@@ -11,8 +11,9 @@ const { nowUtc, toTimestamptzUtc } = require("./timestamps");
 
 function formatearDelayLog(paso) {
   const v = paso.delay?.valor ?? paso.delay;
-  const u = normalizarUnidad(paso.delay?.unidad || paso.unidad);
-  return v + " " + u;
+  const raw = paso.delay?.unidad || paso.unidad || "minutos";
+  const u = normalizarUnidad(raw);
+  return v + " unidad=" + raw + " normalizada=" + u + " (" + unidadParaLog(u) + ")";
 }
 
 async function programarRemarketingGlobal({

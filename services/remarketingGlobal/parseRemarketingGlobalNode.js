@@ -1,21 +1,6 @@
-const UNIDADES = ["minutos", "horas", "dias"];
+const { normalizarUnidad, delayToSeconds, unidadParaLog } = require("./unidades");
+
 const TIPOS = ["texto", "imagen", "audio", "pdf", "video"];
-
-function normalizarUnidad(unidad) {
-  const u = String(unidad || "minutos").toLowerCase();
-  if (u === "dia" || u === "día" || u === "dias" || u === "días") return "dias";
-  if (u === "hora" || u === "horas") return "horas";
-  return "minutos";
-}
-
-function delayToSeconds(valor, unidad) {
-  const n = parseInt(valor, 10);
-  if (isNaN(n) || n <= 0) return 0;
-  const u = normalizarUnidad(unidad);
-  if (u === "horas") return n * 3600;
-  if (u === "dias") return n * 86400;
-  return n * 60;
-}
 
 function crearConfigPorDefecto() {
   return {
@@ -236,7 +221,10 @@ function obtenerPrimerPasoParaProgramar(steps) {
     return {
       id: paso.id || "r" + (i + 1),
       nombre: paso.nombre || "R" + (i + 1),
-      delay: { valor: parseInt(valor, 10) || 1, unidad: normalizarUnidad(unidad) },
+      delay: {
+        valor: parseInt(valor, 10) || 1,
+        unidad: unidadParaLog(normalizarUnidad(unidad)),
+      },
       segundos,
       mensaje: {
         tipo: TIPOS.includes(tipo) ? tipo : "texto",
@@ -349,5 +337,7 @@ module.exports = {
   esNodoRemarketingGlobal,
   buscarNodoRemarketingEnFlujo,
   leerConfigDesdeNodoGuardado,
+  normalizarUnidad,
   delayToSeconds,
+  unidadParaLog,
 };

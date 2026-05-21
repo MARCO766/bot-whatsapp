@@ -3,8 +3,8 @@ const {
   buscarNodoRemarketingEnFlujo,
   obtenerPrimerPasoParaProgramar,
   parseRemarketingFromNodo,
-  normalizarUnidad,
 } = require("./parseRemarketingGlobalNode");
+const { normalizarUnidad } = require("./unidades");
 const {
   insertarProgramados,
   cancelarPendientesCliente,
@@ -15,8 +15,15 @@ const { nowUtc, toTimestamptzUtc } = require("./timestamps");
 
 function delayLabel(paso) {
   const v = paso.delay?.valor ?? paso.delay;
-  const u = normalizarUnidad(paso.delay?.unidad || paso.unidad);
-  return v + " " + u;
+  const rawUnidad = paso.delay?.unidad || paso.unidad || "minutos";
+  const u = normalizarUnidad(rawUnidad);
+  return (
+    v +
+    " unidad=" +
+    rawUnidad +
+    " normalizada=" +
+    u
+  );
 }
 
 function buildRow({
@@ -120,6 +127,7 @@ async function manejarRemarketingGlobalPorMensajeEntrante({
 
   console.log("[REMARKETING] programando R1");
   console.log("[RM DEBUG] R1 encontrado delay=" + delayLabel(r1));
+  console.log("[RM DEBUG] R1 programado para " + cliente_numero);
 
   let flujoAnterior = flujo_id_anterior;
   if (!flujoAnterior) {
