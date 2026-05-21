@@ -1,19 +1,16 @@
 /**
- * Worker Remarketing Global — consulta correr_en, envía y marca enviado.
- * No usa run_at.
+ * Worker Remarketing Global — mínimo: leer pendientes por correr_en, enviar R1, marcar enviado.
+ * Columnas reales: correr_en, carga_útil_del_mensaje (no mensaje_payload / run_at).
  */
 const axios = require("axios");
-const {
-  enviarTextoWhatsApp,
-  enviarMediaWhatsApp,
-} = require("../services/whatsappService");
-const { ESTADOS_REMARKETING } = require("../services/remarketingGlobal/constants");
+const { enviarTextoWhatsApp } = require("../services/whatsappService");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
+const TABLA = "remarketing_global_programados";
 
 let workerIniciado = false;
-let procesando = false;
+let tickEnCurso = false;
 
 function supabaseHeaders(extra = {}) {
   return {
@@ -28,33 +25,59 @@ function nowIso() {
   return new Date().toISOString();
 }
 
-/**
- * Pendientes vencidos: estado=pendiente AND correr_en <= now
- */
-async function buscarPendientesVencidos(now, limite = 40) {
-  if (!SUPABASE_URL || !SUPABASE_KEY) {
-    throw new Error("Supabase no configurado");
-  }
+/** carga_útil_del_mensaje (jsonb) — sin usar mensaje_payload */
+function leerCargaUtilDelMensaje(item) {
+  const raw =
+    item["carga_útil_del_mensaje"] ??
+    item.carga_util_del_mensaje ??
+    item.carga_util ??
+    null;
 
-  const nowEncoded = encodeURIComponent(now);
+  if (!raw) return {};
+  if (typeof raw === "object" && !Array.isArray(raw)) return raw;
+  if (typeof raw === "string") {
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return { texto: raw };
+    }
+  }
+  return {};
+}
+
+function extraerTextoParaEnviar(item) {
+  const carga = leerCargaUtilDelMensaje(item);
+  const texto = String(carga.texto || carga.text || carga.mensaje || "").trim();
+  return texto;
+}
+
+/**
+ * PostgREST equivalente a:
+ * .from('remarketing_global_programados')
+ * .select('*')
+ * .eq('estado', 'pendiente')
+ * .lte('correr_en', now)
+ */
+async function buscarPendientesVencidos() {
+  const now = new Date().toISOString();
   const url =
-    `${SUPABASE_URL}/rest/v1/remarketing_global_programados` +
-    `?estado=eq.${ESTADOS_REMARKETING.PENDIENTE}` +
-    `&correr_en=lte.${nowEncoded}` +
+    `${SUPABASE_URL}/rest/v1/${TABLA}` +
+    `?select=*` +
+    `&estado=eq.pendiente` +
+    `&correr_en=lte.${encodeURIComponent(now)}` +
     `&order=correr_en.asc` +
-    `&limit=${limite}` +
-    `&select=*`;
+    `&limit=40`;
 
   const response = await axios.get(url, { headers: supabaseHeaders() });
-  return response.data || [];
+  return { data: response.data || [], error: null, now, url };
 }
 
 async function marcarEnviado(id) {
   const enviadoEn = nowIso();
   await axios.patch(
-    `${SUPABASE_URL}/rest/v1/remarketing_global_programados?id=eq.${id}`,
+    `${SUPABASE_URL}/rest/v1/${TABLA}?id=eq.${id}`,
     {
-      estado: ESTADOS_REMARKETING.ENVIADO,
+      estado: "enviado",
       enviado_en: enviadoEn,
       actualizado_en: enviadoEn,
     },
@@ -62,154 +85,139 @@ async function marcarEnviado(id) {
   );
 }
 
-async function marcarErrorEnvio(id, detalle) {
+async function marcarError(id, mensaje) {
   const ahora = nowIso();
-  try {
-    await axios.patch(
-      `${SUPABASE_URL}/rest/v1/remarketing_global_programados?id=eq.${id}`,
-      {
-        estado: ESTADOS_REMARKETING.CANCELADO,
-        cancelado_en: ahora,
-        actualizado_en: ahora,
-        error_detalle: String(detalle || "error_envio").slice(0, 500),
-      },
-      { headers: supabaseHeaders({ Prefer: "return=minimal" }) }
-    );
-  } catch (_) {
-    /* no bloquear worker */
-  }
+  await axios.patch(
+    `${SUPABASE_URL}/rest/v1/${TABLA}?id=eq.${id}`,
+    {
+      estado: "error",
+      error_detalle: String(mensaje || "error").slice(0, 500),
+      actualizado_en: ahora,
+    },
+    { headers: supabaseHeaders({ Prefer: "return=minimal" }) }
+  );
 }
 
-async function enviarPayloadRemarketing(item) {
-  const payload = item.mensaje_payload || {};
-  const tipo = String(item.mensaje_tipo || payload.tipo || "texto").toLowerCase();
-  const opciones = { usuarioId: item.usuario_id };
+async function procesarPendientes(data) {
+  for (const item of data) {
+    const id = item.id;
+    const numero = item.cliente_numero;
 
-  if (tipo === "texto") {
-    const texto = String(payload.texto || "").trim();
-    if (!texto) throw new Error("Mensaje de texto vacío");
-    await enviarTextoWhatsApp(item.cliente_numero, texto, opciones);
-    return;
-  }
+    try {
+      const texto = extraerTextoParaEnviar(item);
+      if (!texto) {
+        throw new Error("Texto vacío en carga_útil_del_mensaje");
+      }
 
-  const url = String(payload.url || "").trim();
-  if (!url) throw new Error("URL de media vacía");
+      console.log("[RM WORKER] enviando cliente=" + (numero || "—"));
+      console.log(
+        "[RM WORKER] payload=" +
+          JSON.stringify(leerCargaUtilDelMensaje(item))
+      );
 
-  if (tipo === "imagen") {
-    await enviarMediaWhatsApp(
-      item.cliente_numero,
-      "image",
-      url,
-      payload.caption || "",
-      opciones
-    );
-    return;
-  }
+      await enviarTextoWhatsApp(numero, texto, {
+        usuarioId: item.usuario_id,
+      });
 
-  if (tipo === "audio") {
-    await enviarMediaWhatsApp(item.cliente_numero, "audio", url, "", opciones);
-    return;
-  }
-
-  if (tipo === "pdf") {
-    await enviarMediaWhatsApp(
-      item.cliente_numero,
-      "document",
-      url,
-      payload.caption || "",
-      opciones
-    );
-    return;
-  }
-
-  if (tipo === "video") {
-    await enviarMediaWhatsApp(
-      item.cliente_numero,
-      "video",
-      url,
-      payload.caption || "",
-      opciones
-    );
-    return;
-  }
-
-  throw new Error("Tipo de mensaje no soportado: " + tipo);
-}
-
-async function ejecutarTick() {
-  if (procesando) {
-    console.log("[RM WORKER] tick omitido (tick anterior en curso)");
-    return;
-  }
-
-  procesando = true;
-  const now = nowIso();
-
-  console.log("[RM WORKER] tick");
-  console.log("[RM WORKER] now=" + now);
-  console.log("[RM WORKER] buscando pendientes con correr_en <= now");
-
-  try {
-    const pendientes = await buscarPendientesVencidos(now);
-    console.log("[RM WORKER] pendientes encontrados=" + pendientes.length);
-
-    if (!pendientes.length) {
-      return;
-    }
-
-    for (const item of pendientes) {
-      try {
-        console.log(
-          "[RM WORKER] enviando cliente=" + (item.cliente_numero || "—")
-        );
-        console.log(
-          "[RM WORKER] payload=" + JSON.stringify(item.mensaje_payload || {})
-        );
-        console.log(
-          "[RM WORKER] id=" +
-            (item.id || "—") +
-            " correr_en=" +
-            (item.correr_en || "—")
-        );
-
-        await enviarPayloadRemarketing(item);
-        await marcarEnviado(item.id);
-        console.log("[RM WORKER] enviado OK");
-      } catch (errItem) {
-        const msg = errItem.response?.data || errItem.message || String(errItem);
-        console.log("[RM WORKER ERROR]", msg);
-        if (item.id) {
-          await marcarErrorEnvio(item.id, msg);
+      await marcarEnviado(id);
+      console.log("[RM WORKER] enviado OK");
+    } catch (err) {
+      const msg =
+        err?.response?.data != null
+          ? JSON.stringify(err.response.data)
+          : err?.message || String(err);
+      console.log("[RM WORKER ERROR]", msg);
+      if (id) {
+        try {
+          await marcarError(id, msg);
+        } catch (patchErr) {
+          console.log(
+            "[RM WORKER ERROR] no se pudo marcar error en DB:",
+            patchErr.response?.data || patchErr.message
+          );
         }
       }
     }
-  } catch (error) {
-    const msg = error.response?.data || error.message || String(error);
-    console.log("[RM WORKER ERROR]", msg);
-  } finally {
-    procesando = false;
   }
 }
 
-function startRemarketingGlobalWorker() {
-  if (workerIniciado) return;
+async function ejecutarProcesamiento() {
+  if (tickEnCurso) return;
+  tickEnCurso = true;
+
+  try {
+    if (!SUPABASE_URL || !SUPABASE_KEY) {
+      console.log("[RM WORKER] data=");
+      console.log(
+        "[RM WORKER] error=" +
+          JSON.stringify({ mensaje: "SUPABASE_URL o SUPABASE_SECRET_KEY vacíos" })
+      );
+      return;
+    }
+
+    let data = [];
+    let error = null;
+
+    try {
+      const resultado = await buscarPendientesVencidos();
+      data = resultado.data;
+      console.log("[RM WORKER] now=" + resultado.now);
+      console.log("[RM WORKER] query url=" + resultado.url);
+      console.log("[RM WORKER] data=" + JSON.stringify(data));
+      console.log("[RM WORKER] error=");
+    } catch (err) {
+      error = err.response?.data ?? err.message ?? String(err);
+      console.log("[RM WORKER] data=");
+      console.log("[RM WORKER] error=" + JSON.stringify(error));
+      return;
+    }
+
+    console.log("[RM WORKER] pendientes encontrados=" + data.length);
+
+    if (data.length > 0) {
+      await procesarPendientes(data);
+    }
+  } finally {
+    tickEnCurso = false;
+  }
+}
+
+function iniciarRemarketingGlobalWorker() {
+  if (workerIniciado) {
+    console.log("[RM WORKER] ya estaba iniciado (skip duplicado)");
+    return;
+  }
   workerIniciado = true;
 
   const intervaloMs = parseInt(
-    process.env.REMARKETING_POLL_MS || process.env.SEGUIMIENTO_POLL_MS || "15000",
+    process.env.REMARKETING_POLL_MS || "15000",
     10
   );
 
-  void ejecutarTick();
-  setInterval(() => void ejecutarTick(), intervaloMs);
-
   console.log(
-    "🔥 Worker Remarketing Global activo cada",
-    intervaloMs,
-    "ms (columna correr_en)"
+    "[RM WORKER] iniciado | tabla=" +
+      TABLA +
+      " | poll=" +
+      intervaloMs +
+      "ms | supabase=" +
+      (SUPABASE_URL ? "OK" : "FALTA")
   );
+
+  setInterval(() => {
+    console.log("[RM WORKER] tick real");
+    void ejecutarProcesamiento();
+  }, intervaloMs);
+
+  console.log("[RM WORKER] tick real");
+  void ejecutarProcesamiento();
+}
+
+/** Alias histórico */
+function startRemarketingGlobalWorker() {
+  iniciarRemarketingGlobalWorker();
 }
 
 module.exports = {
+  iniciarRemarketingGlobalWorker,
   startRemarketingGlobalWorker,
 };
