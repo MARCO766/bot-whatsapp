@@ -90,15 +90,12 @@ class DetectIntentProResponse(BaseModel):
 
 
 PROMPT_INTERNO_PRO = (
-    "Eres un asesor de ventas para WhatsApp. "
-    "Responde corto, humano y claro. "
-    "Nunca inventes datos. "
-    "Usa SOLO información del producto. "
-    "Máximo 2–3 líneas. "
-    "Ayuda al cliente. "
-    "No avances el flujo salvo que detectes intención de un camino. "
-    "Si hay intención de camino: no respondas texto, devuelve route_id. "
-    "Si no sabes: usa fallback amable."
+    "Eres un asesor de ventas premium por WhatsApp. "
+    "Suena humano, cercano y natural (2–4 líneas). "
+    "Reescribe la info del producto; no copies campos literales. "
+    "Usa 1–3 emojis, beneficio + pregunta suave. "
+    "Nunca inventes datos fuera del producto. "
+    "Rutas/caminos: solo route_id, sin texto."
 )
 
 
@@ -220,17 +217,203 @@ def _campo_producto(product: ProductDataIn, key: str) -> str:
     return str(val).strip()
 
 
-def _prefijo_tono(tone: str) -> str:
+def _apertura_tono(tone: str) -> str:
     t = normalize_text(tone)
     if t == "vendedor":
         return "¡Claro! "
     if t == "premium":
-        return "Con gusto. "
+        return ""
     if t == "tecnico":
         return ""
     if t == "agresivo":
-        return "¡Vamos! "
-    return "Sí 😊 "
+        return "¡Mira! "
+    return "😊 "
+
+
+def _pregunta_suave(clave: str, texto: str, nombre: str) -> str:
+    t = normalize_text(texto)
+    if clave == "precio":
+        if any(w in t for w in ["hijo", "niño", "nina", "regalo", "regalar"]):
+            return "¿Te ayudo con el acceso cuando quieras?"
+        return "¿Es para ti o para regalar?"
+    if clave == "incluye":
+        return "¿Quieres que te cuente cómo recibirlo?"
+    if clave == "pago":
+        return "¿Con cuál método te queda más cómodo?"
+    if clave == "acceso":
+        return "¿Ya tienes claro cómo descargarlo o te guío?"
+    if clave == "confianza":
+        return "¿Te cuento cómo es el acceso después del pago?"
+    if clave == "sirve":
+        return "¿Para quién lo estás pensando?"
+    if clave == "general":
+        return f"¿Qué te gustaría saber de {nombre}?"
+    return "¿En qué más te ayudo?"
+
+
+def _frase_incluye_natural(includes: str, bonuses: str) -> str:
+    partes: list[str] = []
+    if includes:
+        inc = includes.strip().rstrip(".")
+        if inc:
+            partes.append(f"incluye {inc}")
+    if bonuses:
+        bon = bonuses.strip().rstrip(".")
+        if bon:
+            if partes:
+                partes.append(f"además {bon}")
+            else:
+                partes.append(f"trae {bon}")
+    if not partes:
+        return ""
+    return " e ".join(partes)
+
+
+def _beneficio_desde_descripcion(desc: str) -> str:
+    if not desc:
+        return ""
+    d = desc.strip()
+    if len(d) <= 90:
+        return f"La verdad {d[0].lower() + d[1:]}" if d else ""
+    corto = d.split(".")[0].strip()
+    if len(corto) > 100:
+        corto = corto[:97] + "..."
+    if corto:
+        return f"La verdad {corto[0].lower() + corto[1:]}"
+    return ""
+
+
+def _naturalizar_metodos_pago(metodos: str) -> str:
+    m = metodos.strip().rstrip(".")
+    if not m:
+        return ""
+    bajo = m.lower()
+    if "qr" in bajo and "deposito" in bajo:
+        return "puedes pagar por QR o depósito bancario sin problema"
+    if "qr" in bajo:
+        return "puedes pagar por QR sin problema"
+    if "deposito" in bajo or "transferencia" in bajo:
+        return "puedes pagar por depósito o transferencia"
+    if "tigo" in bajo:
+        return "también puedes usar Tigo Money"
+    return f"puedes pagar así: {m}"
+
+
+def _fallback_conversacional(fallback: str) -> str:
+    fb = (fallback or "").strip()
+    if fb and len(fb.split()) > 3:
+        return fb
+    return (
+        "Cuéntame un poquito más 😊 ¿Te interesa el precio, qué incluye o cómo pagar?"
+    )
+
+
+def _reply_precio(product: ProductDataIn, tone: str, texto: str) -> str | None:
+    precio = _campo_producto(product, "price")
+    if not precio:
+        return None
+    nombre = _campo_producto(product, "name") or "este pack"
+    inc = _frase_incluye_natural(
+        _campo_producto(product, "includes"),
+        _campo_producto(product, "bonuses"),
+    )
+    benef = _beneficio_desde_descripcion(_campo_producto(product, "description"))
+    abrir = _apertura_tono(tone)
+    cuerpo = f"Cuesta solo {precio}"
+    if inc:
+        cuerpo += f" e {inc}"
+    elif nombre:
+        cuerpo += f" por {nombre}"
+    if benef:
+        cuerpo += f". {benef}"
+    pregunta = _pregunta_suave("precio", texto, nombre)
+    return f"{abrir}{cuerpo}. {pregunta}"
+
+
+def _reply_incluye(product: ProductDataIn, tone: str, texto: str) -> str | None:
+    inc = _frase_incluye_natural(
+        _campo_producto(product, "includes"),
+        _campo_producto(product, "bonuses"),
+    )
+    if not inc:
+        return None
+    abrir = _apertura_tono(tone) or "Te cuento 😊 "
+    benef = _beneficio_desde_descripcion(_campo_producto(product, "description"))
+    cuerpo = f"Va bastante completo: {inc.capitalize()}"
+    if benef and "verdad" not in benef.lower():
+        cuerpo += f". {benef}"
+    pregunta = _pregunta_suave("incluye", texto, _campo_producto(product, "name"))
+    return f"{abrir}{cuerpo} {pregunta}"
+
+
+def _reply_confianza(product: ProductDataIn, tone: str, texto: str) -> str:
+    abrir = "Te entiendo 😊 " if normalize_text(tone) != "agresivo" else "Tranquilo — "
+    acceso = _campo_producto(product, "access")
+    garantia = _campo_producto(product, "guarantee")
+    cuerpo = (
+        "hoy en día uno duda bastante, y es normal. "
+        "Es un producto digital y apenas se confirma el pago te enviamos acceso inmediato"
+    )
+    if acceso:
+        cuerpo += f" ({acceso.rstrip('.')})"
+    cuerpo += "."
+    if garantia:
+        cuerpo += f" Además {garantia.rstrip('.')}."
+    else:
+        cuerpo += " Si necesitas ayuda para descargarlo, te guiamos paso a paso."
+    pregunta = _pregunta_suave("confianza", texto, _campo_producto(product, "name"))
+    return f"{abrir}{cuerpo} {pregunta}"
+
+
+def _reply_sirve(product: ProductDataIn, tone: str, texto: str) -> str | None:
+    desc = _campo_producto(product, "description")
+    nombre = _campo_producto(product, "name") or "este material"
+    abrir = _apertura_tono(tone) or "Claro 😊 "
+    if any(w in texto for w in ["estafa", "fraude", "engaño", "confianza", "seguro", "real"]):
+        return _reply_confianza(product, tone, texto)
+    if desc:
+        cuerpo = f"Sí, {nombre} está pensado para eso. {desc}"
+        if len(cuerpo) > 220:
+            cuerpo = f"Sí, encaja muy bien para lo que buscas. {desc.split('.')[0]}."
+    else:
+        cuerpo = f"Sí, muchos clientes lo usan justo para eso con {nombre}."
+    pregunta = _pregunta_suave("sirve", texto, nombre)
+    return f"{abrir}{cuerpo} {pregunta}"
+
+
+def _reply_pago(product: ProductDataIn, tone: str, texto: str) -> str | None:
+    metodos = _naturalizar_metodos_pago(_campo_producto(product, "paymentMethods"))
+    if not metodos:
+        return None
+    abrir = _apertura_tono(tone)
+    if not abrir.strip():
+        abrir = "Sí 😊 "
+    acceso = _campo_producto(product, "access")
+    cuerpo = f"{metodos.capitalize()}"
+    if acceso:
+        cuerpo += f". Apenas confirmes el pago {acceso.rstrip('.').lower()}"
+    else:
+        cuerpo += ". Apenas confirmes el pago te enviamos acceso al toque 🚀"
+    pregunta = _pregunta_suave("pago", texto, _campo_producto(product, "name"))
+    return f"{abrir}{cuerpo} {pregunta}"
+
+
+def _reply_acceso(product: ProductDataIn, tone: str, texto: str) -> str | None:
+    acceso = _campo_producto(product, "access")
+    if not acceso:
+        return None
+    abrir = _apertura_tono(tone) or "Perfecto 😊 "
+    cuerpo = f"El acceso es súper simple: {acceso.rstrip('.')}"
+    pregunta = _pregunta_suave("acceso", texto, _campo_producto(product, "name"))
+    return f"{abrir}{cuerpo} {pregunta}"
+
+
+def _reply_garantia(product: ProductDataIn, tone: str, texto: str) -> str | None:
+    g = _campo_producto(product, "guarantee")
+    if not g:
+        return None
+    abrir = _apertura_tono(tone) or "Tranquilo 😊 "
+    return f"{abrir}Sobre la garantía: {g.rstrip('.')}. ¿Te ayudo con el pago o el acceso?"
 
 
 def generar_reply_producto(
@@ -241,82 +424,113 @@ def generar_reply_producto(
     chat_history: list[ChatTurnIn],
 ) -> str:
     texto = corregir_texto(normalize_text(message))
-    pref = _prefijo_tono(tone)
     nombre = _campo_producto(product, "name") or "el producto"
-    fb = (fallback or "").strip() or (
-        "No tengo ese dato a mano 😊 ¿Te ayudo con precio, acceso o formas de pago?"
-    )
-
-    if any(k in texto for k in ["precio", "cuesta", "sale", "valor", "cuanto", "cuánto"]):
-        precio = _campo_producto(product, "price")
-        if precio:
-            return f"{pref}El precio de {nombre} es {precio}."
-        return fb
-
-    if any(k in texto for k in ["incluye", "inclusiones", "que trae", "que lleva", "bono", "bonos"]):
-        incluye = _campo_producto(product, "includes")
-        bonos = _campo_producto(product, "bonuses")
-        partes = [p for p in [incluye, bonos and f"Bonos: {bonos}" if bonos else ""] if p]
-        if partes:
-            return f"{pref}{' '.join(partes)}"
-        return fb
-
-    if any(k in texto for k in ["garantia", "garantía", "devolucion", "reembolso"]):
-        g = _campo_producto(product, "guarantee")
-        if g:
-            return f"{pref}Garantía: {g}"
-        return fb
-
-    if any(k in texto for k in ["acceso", "accedo", "entrega", "recibo", "descarga", "ingreso"]):
-        a = _campo_producto(product, "access")
-        if a:
-            return f"{pref}Acceso/entrega: {a}"
-        return fb
+    fb = _fallback_conversacional(fallback)
 
     if any(
         k in texto
-        for k in ["pago", "pagar", "metodo", "método", "transferencia", "deposito", "qr", "tigo"]
+        for k in [
+            "estafa",
+            "fraude",
+            "engaño",
+            "estafador",
+            "confianza",
+            "seguro",
+            "legitimo",
+            "legal",
+            "real es",
+        ]
     ):
-        p = _campo_producto(product, "paymentMethods")
-        if p:
-            return f"{pref}Formas de pago: {p}"
-        return fb
+        return _reply_confianza(product, tone, texto)
 
-    if any(k in texto for k in ["mas info", "más info", "informacion", "información", "detalle", "cuentame"]):
+    if any(
+        k in texto
+        for k in ["sirve", "funciona", "vale la pena", "recomiendas", "bueno para", "me conviene"]
+    ):
+        r = _reply_sirve(product, tone, texto)
+        if r:
+            return r
+
+    if any(k in texto for k in ["precio", "cuesta", "sale", "valor", "cuanto", "cuánto", "costo"]):
+        r = _reply_precio(product, tone, texto)
+        if r:
+            return r
+
+    if any(k in texto for k in ["incluye", "inclusiones", "que trae", "que lleva", "bono", "bonos", "viene con"]):
+        r = _reply_incluye(product, tone, texto)
+        if r:
+            return r
+
+    if any(k in texto for k in ["garantia", "garantía", "devolucion", "reembolso"]):
+        r = _reply_garantia(product, tone, texto)
+        if r:
+            return r
+
+    if any(k in texto for k in ["acceso", "accedo", "entrega", "recibo", "descarga", "ingreso", "como recibo"]):
+        r = _reply_acceso(product, tone, texto)
+        if r:
+            return r
+
+    if any(
+        k in texto
+        for k in [
+            "pago",
+            "pagar",
+            "metodo",
+            "método",
+            "transferencia",
+            "deposito",
+            "como pago",
+            "forma de pago",
+        ]
+    ) and "qr" not in texto.split() and "quiero" not in texto:
+        r = _reply_pago(product, tone, texto)
+        if r:
+            return r
+
+    if any(k in texto for k in ["mas info", "más info", "informacion", "información", "detalle", "cuentame", "que es"]):
         desc = _campo_producto(product, "description")
         if desc:
-            return f"{pref}{desc}"
-        return fb
+            abrir = _apertura_tono(tone) or "Mira 😊 "
+            pregunta = _pregunta_suave("general", texto, nombre)
+            if len(desc) > 160:
+                desc = desc.split(".")[0] + "."
+            return f"{abrir}{nombre}: {desc} {pregunta}"
 
-    if any(k in texto for k in ["hola", "buenas", "hey", "saludo"]):
+    if any(k in texto for k in ["hola", "buenas", "hey", "saludos", "buen dia"]):
         desc = _campo_producto(product, "description")
+        abrir = "Hola 😊 " if normalize_text(tone) != "tecnico" else "Hola, "
         if desc:
-            return f"{pref}Hola, te cuento sobre {nombre}: {desc}"
-        return f"{pref}Hola, ¿en qué te ayudo con {nombre}?"
+            corto = desc.split(".")[0] + "." if "." in desc else desc
+            return f"{abrir}qué gusto que escribas. Te cuento: {corto} ¿Qué te gustaría saber primero?"
+        return f"{abrir}qué gusto que escribas. ¿Te cuento precio, qué incluye o cómo pagar?"
 
     faq = _campo_producto(product, "faq")
     if faq and len(texto) > 4:
         for linea in faq.split("\n"):
             ln = normalize_text(linea)
-            if ln and any(p in texto for p in ln.split()[:3] if len(p) > 3):
-                return f"{pref}{linea.strip()}"
+            if ln and any(p in texto for p in ln.split()[:4] if len(p) > 3):
+                abrir = _apertura_tono(tone) or "Te leo 😊 "
+                return f"{abrir}{linea.strip().rstrip('.')}. ¿Te aclaro algo más?"
 
     ultimo_bot = ""
     for turn in reversed(chat_history or []):
         if normalize_text(turn.role) in ("assistant", "bot", "ia"):
             ultimo_bot = turn.text or ""
             break
-    if ultimo_bot and any(
-        w in normalize_text(ultimo_bot) for w in ["precio", "incluye", "pago"]
-    ):
-        if any(k in texto for k in ["si", "sí", "ok", "dale", "y eso", "como", "cuanto"]):
-            desc = _campo_producto(product, "description")
-            if desc:
-                return f"{pref}{desc}"
+    if ultimo_bot and any(w in normalize_text(ultimo_bot) for w in ["precio", "incluye", "pago"]):
+        if any(k in texto for k in ["si", "sí", "ok", "dale", "bueno", "perfecto"]):
+            r = _reply_incluye(product, tone, texto) or _reply_acceso(product, tone, texto)
+            if r:
+                return r
 
     desc = _campo_producto(product, "description")
     if desc:
-        return f"{pref}{desc}"
+        abrir = _apertura_tono(tone) or "Claro 😊 "
+        corto = desc.split(".")[0] + "." if "." in desc else desc
+        pregunta = _pregunta_suave("general", texto, nombre)
+        return f"{abrir}{corto} {pregunta}"
+
     return fb
 
 

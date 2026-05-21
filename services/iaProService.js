@@ -125,31 +125,130 @@ function appendChatHistory(history, role, text) {
   return next.slice(-MAX_CHAT_HISTORY);
 }
 
+function fraseIncluyeNatural(includes, bonuses) {
+  const partes = [];
+  if (includes?.trim()) partes.push(`incluye ${includes.trim().replace(/\.$/, "")}`);
+  if (bonuses?.trim()) {
+    partes.push(
+      partes.length ? `además ${bonuses.trim().replace(/\.$/, "")}` : `trae ${bonuses.trim().replace(/\.$/, "")}`
+    );
+  }
+  return partes.join(" e ");
+}
+
+function naturalizarPago(metodos) {
+  const m = String(metodos || "").toLowerCase();
+  if (!m.trim()) return "";
+  if (m.includes("qr") && m.includes("deposito")) {
+    return "puedes pagar por QR o depósito bancario sin problema";
+  }
+  if (m.includes("qr")) return "puedes pagar por QR sin problema";
+  if (m.includes("deposito") || m.includes("transferencia")) {
+    return "puedes pagar por depósito o transferencia";
+  }
+  return `puedes pagar así: ${metodos.trim()}`;
+}
+
+function beneficioCorto(desc) {
+  if (!desc?.trim()) return "";
+  const corto = desc.trim().split(".")[0];
+  if (!corto) return "";
+  return corto.length > 100 ? `La verdad ${corto.slice(0, 97)}...` : `La verdad ${corto.charAt(0).toLowerCase() + corto.slice(1)}`;
+}
+
 function generarReplyFallbackLocal(config, mensaje) {
   const p = config.productData || {};
-  const m = String(mensaje || "").toLowerCase();
-  const fb = config.mensajeFallback;
+  const m = String(mensaje || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+  const nombre = p.name || "este pack";
+  const fb =
+    config.mensajeFallback?.trim() ||
+    "Cuéntame un poquito más 😊 ¿Te interesa el precio, qué incluye o cómo pagar?";
 
-  if (/precio|cuanto|cuesta|sale|valor/.test(m)) {
-    return p.price ? `El precio es ${p.price}.` : fb;
+  if (/estafa|fraude|engano|confianza|seguro|legitimo|real es/.test(m)) {
+    let msg =
+      "Te entiendo 😊 hoy en día uno duda bastante, y es normal. Es un producto digital y apenas se confirma el pago te enviamos acceso inmediato";
+    if (p.access) msg += ` (${p.access.replace(/\.$/, "")})`;
+    msg += ".";
+    if (p.guarantee) msg += ` Además ${p.guarantee.replace(/\.$/, "")}.`;
+    else msg += " Si necesitas ayuda para descargarlo, te guiamos paso a paso.";
+    return `${msg} ¿Te cuento cómo es el acceso después del pago?`;
   }
-  if (/incluye|bono/.test(m)) {
-    const parts = [p.includes, p.bonuses && `Bonos: ${p.bonuses}`].filter(Boolean);
-    return parts.length ? parts.join(" ") : fb;
+
+  if (/sirve|funciona|vale la pena|bueno para|me conviene/.test(m)) {
+    const desc = p.description?.trim();
+    if (desc) {
+      const corto = desc.length > 180 ? desc.split(".")[0] + "." : desc;
+      return `Claro 😊 Sí, ${nombre} encaja muy bien para lo que buscas. ${corto} ¿Para quién lo estás pensando?`;
+    }
+    return `Claro 😊 Sí, muchos lo usan con ${nombre}. ¿Para quién lo estás pensando?`;
   }
-  if (/garantia|devolucion/.test(m)) {
-    return p.guarantee || fb;
+
+  if (/precio|cuanto|cuesta|sale|valor|costo/.test(m)) {
+    if (!p.price) return fb;
+    const inc = fraseIncluyeNatural(p.includes, p.bonuses);
+    const benef = beneficioCorto(p.description);
+    let msg = `😊 Cuesta solo ${p.price}`;
+    if (inc) msg += ` e ${inc}`;
+    if (benef) msg += `. ${benef}`;
+    return `${msg}. ¿Es para ti o para regalar?`;
   }
-  if (/acceso|entrega|descarga/.test(m)) {
-    return p.access || fb;
+
+  if (/incluye|inclusiones|que trae|bono|bonos|viene con/.test(m)) {
+    const inc = fraseIncluyeNatural(p.includes, p.bonuses);
+    if (!inc) return fb;
+    const benef = beneficioCorto(p.description);
+    let msg = `Te cuento 😊 Va bastante completo: ${inc.charAt(0).toUpperCase() + inc.slice(1)}`;
+    if (benef && !/verdad/i.test(benef)) msg += `. ${benef}`;
+    return `${msg}. ¿Quieres que te cuente cómo recibirlo?`;
   }
-  if (/pago|pagar|deposito|qr|transferencia/.test(m)) {
-    return p.paymentMethods || fb;
+
+  if (/garantia|devolucion|reembolso/.test(m)) {
+    if (!p.guarantee) return fb;
+    return `Tranquilo 😊 Sobre la garantía: ${p.guarantee.replace(/\.$/, "")}. ¿Te ayudo con el pago o el acceso?`;
   }
-  if (/mas info|informacion|detalle/.test(m)) {
-    return p.description || fb;
+
+  if (/acceso|accedo|entrega|descarga|ingreso|como recibo/.test(m)) {
+    if (!p.access) return fb;
+    return `Perfecto 😊 El acceso es súper simple: ${p.access.replace(/\.$/, "")}. ¿Ya tienes claro cómo descargarlo o te guío?`;
   }
-  return p.description || fb;
+
+  if (/pago|pagar|metodo|transferencia|deposito|forma de pago/.test(m) && !/quiero\s+qr|^qr$/.test(m)) {
+    const met = naturalizarPago(p.paymentMethods);
+    if (!met) return fb;
+    let msg = `Sí 😊 ${met.charAt(0).toUpperCase() + met.slice(1)}`;
+    if (p.access) msg += `. Apenas confirmes el pago ${p.access.replace(/\.$/, "").toLowerCase()}`;
+    else msg += ". Apenas confirmes el pago te enviamos acceso al toque 🚀";
+    return `${msg}. ¿Con cuál método te queda más cómodo?`;
+  }
+
+  if (/mas info|informacion|detalle|que es|cuentame/.test(m)) {
+    if (!p.description) return fb;
+    const corto =
+      p.description.length > 160 ? p.description.split(".")[0] + "." : p.description;
+    return `Mira 😊 ${nombre}: ${corto} ¿Qué te gustaría saber de ${nombre}?`;
+  }
+
+  if (/hola|buenas|hey|saludos/.test(m)) {
+    if (p.description) {
+      const corto = p.description.includes(".")
+        ? p.description.split(".")[0] + "."
+        : p.description;
+      return `Hola 😊 qué gusto que escribas. Te cuento: ${corto} ¿Qué te gustaría saber primero?`;
+    }
+    return "Hola 😊 qué gusto que escribas. ¿Te cuento precio, qué incluye o cómo pagar?";
+  }
+
+  if (p.description) {
+    const corto = p.description.includes(".")
+      ? p.description.split(".")[0] + "."
+      : p.description;
+    return `Claro 😊 ${corto} ¿En qué más te ayudo?`;
+  }
+
+  return fb;
 }
 
 async function resolverAnalisisPro(config, mensajeLead, chatHistory) {
