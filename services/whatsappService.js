@@ -60,7 +60,12 @@ async function actualizarConversacionSaliente(usuarioId, numero, texto) {
 }
 
 async function enviarTextoWhatsApp(numero, texto, opciones = {}) {
+  const debugOpenAI = !!opciones._debugOpenAI;
+
   try {
+    if (debugOpenAI) {
+      console.log("📤 OPENAI enviando WhatsApp (Meta API)", { numero, usuarioId: opciones.usuarioId });
+    }
 
     let tokenEnviar = TOKEN;
     let phoneIdEnviar = PHONE_ID;
@@ -103,6 +108,12 @@ async function enviarTextoWhatsApp(numero, texto, opciones = {}) {
     );
 const whatsappMessageId =
   respuestaMeta.data?.messages?.[0]?.id || null;
+
+    if (debugOpenAI) {
+      console.log("✅ OPENAI enviado (Meta OK)", { whatsappMessageId });
+      console.log("💾 OPENAI guardando inbox (mensajes + conversaciones)");
+    }
+
     const insertRes = await axios.post(
       `${SUPABASE_URL}/rest/v1/mensajes`,
       {
@@ -142,6 +153,14 @@ const whatsappMessageId =
         creado_en: row?.creado_en || new Date().toISOString(),
       };
 
+      if (debugOpenAI) {
+        console.log("📡 OPENAI socket emit", {
+          evento: "nuevo_mensaje",
+          usuarioId: opciones.usuarioId,
+          mensajeId: payloadMensaje.id,
+        });
+      }
+
       rt.nuevoMensaje(null, opciones.usuarioId, payloadMensaje);
       rt.conversacionActualizada(null, opciones.usuarioId, {
         cliente_numero: numero,
@@ -149,10 +168,17 @@ const whatsappMessageId =
         ultimo_mensaje_en: payloadMensaje.creado_en,
         direccion: "saliente",
       });
+
+      if (debugOpenAI) {
+        console.log("💾 OPENAI guardado inbox OK", { mensajeId: row?.id });
+      }
     }
 
     return row;
   } catch (error) {
+    if (debugOpenAI) {
+      console.error("❌ OPENAI_AGENT ERROR", error.response?.data || error.message || error);
+    }
     console.log("ERROR ENVIANDO WHATSAPP:", error.response?.data || error.message);
     return null;
   }

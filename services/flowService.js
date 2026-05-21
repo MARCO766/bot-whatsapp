@@ -210,7 +210,7 @@ function segundosPausaBloque(bloque) {
   return !isNaN(segundos) && segundos > 0 ? segundos : 0;
 }
 
-async function ejecutarBloqueContenido(numero, bloque, usuarioId) {
+async function ejecutarBloqueContenido(numero, bloque, usuarioId, envioOpts = {}) {
   const tipo = tipoBloqueContenido(bloque);
   console.log("🧩 EJECUTANDO BLOQUE:", tipo, bloque);
 
@@ -225,7 +225,7 @@ async function ejecutarBloqueContenido(numero, bloque, usuarioId) {
       console.log("⚠️ TEXTO VACÍO, SE OMITE");
       return null;
     }
-    await enviarTextoWhatsApp(numero, mensaje, { usuarioId });
+    await enviarTextoWhatsApp(numero, mensaje, { usuarioId, ...envioOpts });
     console.log("✅ TEXTO ENVIADO");
     return mensaje;
   }
@@ -487,6 +487,8 @@ async function ejecutarFlujo(
     const html = nodo.html || "";
     const tipoNodo = detectarTipoNodo(nodo);
 
+    console.log("🧩 Tipo nodo detectado:", tipoNodo);
+
     console.log("➡️ NODO ACTUAL:", {
       id: nodo.id,
       type: nodo.type,
@@ -563,37 +565,41 @@ async function ejecutarFlujo(
 
     if (tipoNodo === "openai_agent") {
       const resumeIA = !!opts.iaResume;
+      const mensajeLeadOpenAI = resumeIA
+        ? opts.mensajeResume ||
+          flowContext.ultimo_mensaje ||
+          flowContext.ultimoMensaje ||
+          ""
+        : "";
 
-      flowContext = await ejecutarNodoOpenAIAgent(
-        nodo,
-        {
-          ...flowContext,
-          numero,
-          from: numero,
-          telefono: numero,
-          usuarioId,
-          chat_history: flowContext.chat_history || [],
-          mensaje: resumeIA
-            ? opts.mensajeResume ||
-              flowContext.ultimo_mensaje ||
-              flowContext.ultimoMensaje ||
-              ""
-            : "",
-          texto: resumeIA
-            ? opts.mensajeResume ||
-              flowContext.ultimo_mensaje ||
-              flowContext.ultimoMensaje ||
-              ""
-            : "",
-          body: resumeIA
-            ? opts.mensajeResume ||
-              flowContext.ultimo_mensaje ||
-              flowContext.ultimoMensaje ||
-              ""
-            : "",
-        },
-        { resume: resumeIA, usuarioId }
-      );
+      console.log("🧭 OPENAI_AGENT bloque flowService", {
+        nodoId,
+        numero,
+        usuarioId,
+        resumeIA,
+        mensajeLead: mensajeLeadOpenAI,
+      });
+
+      try {
+        flowContext = await ejecutarNodoOpenAIAgent(
+          nodo,
+          {
+            ...flowContext,
+            numero,
+            from: numero,
+            telefono: numero,
+            usuarioId,
+            chat_history: flowContext.chat_history || [],
+            mensaje: mensajeLeadOpenAI,
+            texto: mensajeLeadOpenAI,
+            body: mensajeLeadOpenAI,
+          },
+          { resume: resumeIA, usuarioId, nodoId }
+        );
+      } catch (error) {
+        console.error("❌ OPENAI_AGENT ERROR", error);
+        throw error;
+      }
 
       if (flowContext.openaiAgentPausar && !resumeIA) {
         guardarSesionIAPendiente({
@@ -947,7 +953,10 @@ async function reanudarFlujoIAPendiente(numero, mensaje, usuarioId) {
     return false;
   }
 
-  console.log("[FLUJO] Reanudando IA pendiente | nodo:", sesion.nodoId);
+  const nodoPendiente = flujoDatos.nodos?.find((n) => n.id === sesion.nodoId);
+  const tipoPendiente = nodoPendiente ? detectarTipoNodo(nodoPendiente) : "?";
+
+  console.log("[FLUJO] Reanudando IA pendiente | nodo:", sesion.nodoId, "| tipo:", tipoPendiente);
 
   await ejecutarFlujo(numero, flujoDatos, usuarioId, sesion.flujoId, {
     iaResume: true,
@@ -965,8 +974,19 @@ async function reanudarFlujoIAPendiente(numero, mensaje, usuarioId) {
 }
 
 async function procesarMensajeEntrante(numero, texto, usuarioId, messageId) {
+  console.log("[FLUJO] procesarMensajeEntrante", {
+    numero,
+    usuarioId,
+    texto: String(texto || "").slice(0, 60),
+  });
+
   const reanudado = await reanudarFlujoIAPendiente(numero, texto, usuarioId);
-  if (reanudado) return true;
+  if (reanudado) {
+    console.log("[FLUJO] reanudado IA/OpenAI pendiente OK");
+    return true;
+  }
+
+  console.log("[FLUJO] sin sesión IA pendiente → buscar activador");
   return buscarYEjecutarActivador(numero, texto, usuarioId, messageId);
 }
 

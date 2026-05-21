@@ -644,6 +644,7 @@ async function generarReply(config, mensajeLead, chatHistory, lastReplies) {
 
   if (tieneOpenAIKey()) {
     try {
+      console.log("🤖 OPENAI_AGENT request API");
       let reply = await llamarOpenAIConTimeout(config, mensajeLead, chatHistory, lastReplies, false);
       reply = limpiarReply(reply);
       if (reply) {
@@ -654,6 +655,8 @@ async function generarReply(config, mensajeLead, chatHistory, lastReplies) {
     } catch (err) {
       console.log("[OpenAI Agent]", err.message === "OPENAI_TIMEOUT" ? "timeout 6s" : err.message);
     }
+  } else {
+    console.log("🤖 OPENAI_AGENT sin API key → fallback_local");
   }
 
   let local = generarReplyLocalInteligente(config, mensajeLead, chatHistory, lastReplies);
@@ -696,34 +699,34 @@ async function enviarReplyComoContenido(numero, texto, usuarioId) {
 
   if (!usuarioId) {
     console.error(
-      "[OpenAI Agent] sin usuarioId — no se puede guardar en CRM (mismo pipeline que Contenido)"
+      "❌ OPENAI_AGENT ERROR",
+      "sin usuarioId — no se puede guardar en CRM (mismo pipeline que Contenido)"
     );
     return null;
   }
 
-  const { ejecutarBloqueContenido } = require("./flowService");
-  return ejecutarBloqueContenido(
-    numero,
-    { tipo: "texto", texto: reply, valor: reply },
-    usuarioId
-  );
+  console.log("📤 OPENAI enviando WhatsApp", { numero, usuarioId, preview: reply.slice(0, 80) });
+
+  try {
+    const { ejecutarBloqueContenido } = require("./flowService");
+    const enviado = await ejecutarBloqueContenido(
+      numero,
+      { tipo: "texto", texto: reply, valor: reply },
+      usuarioId,
+      { _debugOpenAI: true }
+    );
+    console.log("✅ OPENAI enviado", { ok: !!enviado });
+    return enviado;
+  } catch (error) {
+    console.error("❌ OPENAI_AGENT ERROR", error);
+    throw error;
+  }
 }
 
 async function ejecutarNodoOpenAIAgent(nodo, contexto, opts = {}) {
+  const nodoId = opts?.nodoId || nodo?.id || null;
   const numero = contexto?.numero || contexto?.from || contexto?.telefono;
   const usuarioId = contexto?.usuarioId || opts?.usuarioId || null;
-  const config = parseOpenAIAgentFromNodo(nodo);
-
-  if (!opts.resume) {
-    console.log("🤖 AGENTE OPENAI");
-    return {
-      ...contexto,
-      openaiAgentPausar: true,
-      iaPausar: true,
-      openaiAgentEjecutada: false,
-      chat_history: trimChatHistory(contexto.chat_history),
-    };
-  }
 
   const mensajeLead = String(
     contexto?.mensaje ||
@@ -734,60 +737,95 @@ async function ejecutarNodoOpenAIAgent(nodo, contexto, opts = {}) {
       ""
   ).trim();
 
-  console.log("💬 pregunta:", mensajeLead);
-
-  let chatHistory = trimChatHistory(contexto.chat_history);
-  if (mensajeLead) {
-    chatHistory = appendChatHistory(chatHistory, "user", mensajeLead);
-  }
-
-  const lastReplies = getLastReplies(usuarioId, numero);
-  const memoria = contexto.memoriaIA || {};
-
-  const resultado = await resolverAnalisisOpenAI(
-    config,
+  console.log("🚀 OPENAI_AGENT iniciado", {
+    nodoId,
+    numero,
+    usuarioId,
     mensajeLead,
-    chatHistory,
-    memoria,
-    lastReplies
-  );
+    resume: !!opts.resume,
+  });
 
-  contexto.intent = resultado.intent || "";
-  contexto.score = resultado.score ?? "";
+  try {
+    const config = parseOpenAIAgentFromNodo(nodo);
 
-  if (resultado.action === "route" && resultado.routeId) {
+    if (!opts.resume) {
+      console.log("⏸️ OPENAI_AGENT pausa (espera mensaje del lead)", { nodoId, numero });
+      return {
+        ...contexto,
+        openaiAgentPausar: true,
+        iaPausar: true,
+        openaiAgentEjecutada: false,
+        chat_history: trimChatHistory(contexto.chat_history),
+      };
+    }
+
+    console.log("🤖 OPENAI_AGENT preparando respuesta", {
+      nodoId,
+      mensajeLead,
+      tieneApiKey: tieneOpenAIKey(),
+    });
+
+    let chatHistory = trimChatHistory(contexto.chat_history);
+    if (mensajeLead) {
+      chatHistory = appendChatHistory(chatHistory, "user", mensajeLead);
+    }
+
+    const lastReplies = getLastReplies(usuarioId, numero);
+    const memoria = contexto.memoriaIA || {};
+
+    const resultado = await resolverAnalisisOpenAI(
+      config,
+      mensajeLead,
+      chatHistory,
+      memoria,
+      lastReplies
+    );
+
+    contexto.intent = resultado.intent || "";
+    contexto.score = resultado.score ?? "";
+
+    if (resultado.action === "route" && resultado.routeId) {
+      console.log("➡️ OPENAI_AGENT route (sin texto)", resultado.routeId);
+      return {
+        ...contexto,
+        openaiAgentPausar: false,
+        iaPausar: false,
+        openaiAgentRouteId: resultado.routeId,
+        iaRouteId: resultado.routeId,
+        route: resultado.routeId,
+        openaiAgentEjecutada: true,
+        chat_history: chatHistory,
+        intent: resultado.intent,
+        score: resultado.score,
+      };
+    }
+
+    let reply = limpiarReply(String(resultado.reply || "").trim());
+    console.log("🧠 OPENAI response:", reply);
+
+    if (reply && numero) {
+      await enviarReplyComoContenido(numero, reply, usuarioId);
+      contexto.ultimaRespuestaIA = reply;
+      chatHistory = appendChatHistory(chatHistory, "assistant", reply);
+      pushLastReply(usuarioId, numero, reply);
+    } else {
+      console.log("⚠️ OPENAI_AGENT sin reply o sin numero", { reply: !!reply, numero });
+    }
+
     return {
       ...contexto,
-      openaiAgentPausar: false,
-      iaPausar: false,
-      openaiAgentRouteId: resultado.routeId,
-      iaRouteId: resultado.routeId,
-      route: resultado.routeId,
+      openaiAgentPausar: true,
+      iaPausar: true,
+      openaiAgentReply: true,
       openaiAgentEjecutada: true,
       chat_history: chatHistory,
-      intent: resultado.intent,
+      intent: resultado.intent || "consulta",
       score: resultado.score,
     };
+  } catch (error) {
+    console.error("❌ OPENAI_AGENT ERROR", error);
+    throw error;
   }
-
-  let reply = limpiarReply(String(resultado.reply || "").trim());
-  if (reply && numero) {
-    await enviarReplyComoContenido(numero, reply, usuarioId);
-    contexto.ultimaRespuestaIA = reply;
-    chatHistory = appendChatHistory(chatHistory, "assistant", reply);
-    pushLastReply(usuarioId, numero, reply);
-  }
-
-  return {
-    ...contexto,
-    openaiAgentPausar: true,
-    iaPausar: true,
-    openaiAgentReply: true,
-    openaiAgentEjecutada: true,
-    chat_history: chatHistory,
-    intent: resultado.intent || "consulta",
-    score: resultado.score,
-  };
 }
 
 module.exports = {

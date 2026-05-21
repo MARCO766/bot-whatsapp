@@ -76,6 +76,11 @@ function detectarTipoNodo(nodo) {
   }
 
   if (esTipoOpenAIAgent(nodo)) {
+    console.log("🧩 Tipo nodo detectado: openai_agent (detectarTipoNodo)", {
+      id: nodo.id,
+      tipoRaw: resolverTipoRaw(nodo),
+      className: String(nodo.className || "").slice(0, 80),
+    });
     return "openai_agent";
   }
 
