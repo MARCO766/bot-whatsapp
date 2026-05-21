@@ -15,6 +15,7 @@ const {
   parseIAFromNodo,
 } = require("./aiService");
 const { ejecutarNodoIAPro, parseIAProFromNodo } = require("./iaProService");
+const { ejecutarNodoOpenAIAgent } = require("./openaiAgentService");
 const {
   guardarSesionIAPendiente,
   obtenerSesionIAPendiente,
@@ -555,6 +556,80 @@ async function ejecutarFlujo(
         await continuarASiguientes(nodoId, visitados, "contenido");
         return;
       }
+    }
+
+    if (tipoNodo === "openai_agent") {
+      const resumeIA = !!opts.iaResume;
+
+      flowContext = await ejecutarNodoOpenAIAgent(
+        nodo,
+        {
+          ...flowContext,
+          numero,
+          from: numero,
+          telefono: numero,
+          usuarioId,
+          chat_history: flowContext.chat_history || [],
+          mensaje: resumeIA
+            ? opts.mensajeResume ||
+              flowContext.ultimo_mensaje ||
+              flowContext.ultimoMensaje ||
+              ""
+            : "",
+          texto: resumeIA
+            ? opts.mensajeResume ||
+              flowContext.ultimo_mensaje ||
+              flowContext.ultimoMensaje ||
+              ""
+            : "",
+          body: resumeIA
+            ? opts.mensajeResume ||
+              flowContext.ultimo_mensaje ||
+              flowContext.ultimoMensaje ||
+              ""
+            : "",
+        },
+        { resume: resumeIA }
+      );
+
+      if (flowContext.openaiAgentPausar && !resumeIA) {
+        guardarSesionIAPendiente({
+          usuarioId,
+          numero,
+          flujoId,
+          nodoId,
+          visitados: Array.from(visitados),
+          flowContext: {
+            ...flowContext,
+            ultimo_mensaje: "",
+          },
+        });
+        console.log("[FLUJO] Agente OpenAI en espera — nodo:", nodoId);
+        return;
+      }
+
+      const routeHandle =
+        flowContext.openaiAgentRouteId ||
+        flowContext.iaRouteId ||
+        flowContext.route ||
+        null;
+
+      if (flowContext.openaiAgentPausar && resumeIA && !routeHandle) {
+        console.log("⏸️ Agente OpenAI sigue esperando");
+        return;
+      }
+
+      if (resumeIA && routeHandle) {
+        limpiarSesionIAPendiente(usuarioId, numero);
+        logConexionesSalientes(nodoId, "OpenAI");
+        await continuarASiguientes(nodoId, visitados, "openai_agent", routeHandle);
+        return;
+      }
+
+      if (resumeIA) {
+        limpiarSesionIAPendiente(usuarioId, numero);
+      }
+      return;
     }
 
     if (tipoNodo === "ia_pro") {

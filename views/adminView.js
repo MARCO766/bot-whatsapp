@@ -19,7 +19,7 @@ function renderAdminPage({
 
 <link rel="stylesheet" href="/css/admin.css">
 <link rel="stylesheet" href="/css/flow-builder.css">
-${builder ? '<link rel="stylesheet" href="/css/seguimiento.css"><link rel="stylesheet" href="/css/contenido.css"><link rel="stylesheet" href="/css/conversion-node.css"><link rel="stylesheet" href="/css/ia-node.css"><link rel="stylesheet" href="/css/ia-pro-node.css">' : ""}
+${builder ? '<link rel="stylesheet" href="/css/seguimiento.css"><link rel="stylesheet" href="/css/contenido.css"><link rel="stylesheet" href="/css/conversion-node.css"><link rel="stylesheet" href="/css/ia-node.css"><link rel="stylesheet" href="/css/ia-pro-node.css"><link rel="stylesheet" href="/css/openai-agent-node.css">' : ""}
 </head>
 
 <body>
@@ -45,6 +45,7 @@ ${builder ? '<link rel="stylesheet" href="/css/seguimiento.css"><link rel="style
     <button type="button" class="menu-nodo-btn menu-nodo-btn-contenido" onclick="agregarNodoContenido()">💬 Contenido</button>
     <button type="button" class="menu-nodo-btn menu-nodo-btn-ia" onclick="agregarNodoIA()">⚡ Agente Rápido</button>
     <button type="button" class="menu-nodo-btn menu-nodo-btn-ia-pro" onclick="agregarNodoIAPro()">🤖 Agente IA Pro</button>
+    <button type="button" class="menu-nodo-btn menu-nodo-btn-openai-agent" onclick="agregarNodoOpenAIAgent()">🤖 Agente OpenAI</button>
     <button type="button" class="menu-nodo-btn menu-nodo-btn-seguimiento" onclick="agregarNodo('seguimiento')">🔔 Seguimiento</button>
     <button type="button" class="menu-nodo-btn menu-nodo-btn-espera" onclick="agregarNodo('espera')">⏳ Espera</button>
     <button type="button" class="menu-nodo-btn menu-nodo-btn-etiqueta" onclick="agregarNodo('etiqueta')">🏷️ Etiqueta</button>
@@ -720,6 +721,7 @@ ${builder ? `
 <script src="/js/builder/contenido.js"></script>
 <script src="/js/builder/ia.js"></script>
 <script src="/js/builder/ia-pro.js"></script>
+<script src="/js/builder/openai-agent.js"></script>
 <script src="/js/builder.js"></script>
 ` : ""}
 

@@ -229,6 +229,16 @@ function cargarFlujoGuardado(){
     }
   });
 
+  document.querySelectorAll(".openai-agent-node").forEach((nodo) => {
+    try {
+      if(window.MacBotOpenAIAgent){
+        window.MacBotOpenAIAgent.refrescarNodoCargado(nodo);
+      }
+    } catch (e) {
+      console.warn("OpenAI Agent: error al refrescar nodo cargado", e);
+    }
+  });
+
   document.querySelectorAll(".ia-pro-node").forEach((nodo) => {
     try {
       if(window.MacBotIAPro){
@@ -275,6 +285,12 @@ function agregarNodo(tipo){
 
   if(!canvas){
     alert("No existe canvasFlujo");
+    return;
+  }
+
+  if(tipo === "openai_agent" && window.MacBotOpenAIAgent && window.MacBotOpenAIAgent.crearNodoEnCanvas){
+    registrarHistorialBuilder();
+    window.MacBotOpenAIAgent.crearNodoEnCanvas();
     return;
   }
 
@@ -1659,6 +1675,9 @@ function abrirPanelNodo(nodo){
       window.MacBotContenido.clearPanelActivo();
     }
 
+    if(window.MacBotOpenAIAgent && window.MacBotOpenAIAgent.clearPanelActivo){
+      window.MacBotOpenAIAgent.clearPanelActivo();
+    }
     if(window.MacBotIAPro && window.MacBotIAPro.clearPanelActivo){
       window.MacBotIAPro.clearPanelActivo();
     }
@@ -1686,6 +1705,11 @@ function abrirPanelNodo(nodo){
 
   if(window.MacBotContenido && window.MacBotContenido.esNodoContenido(nodo)){
     window.MacBotContenido.renderPanel(nodo);
+    return;
+  }
+
+  if(window.MacBotOpenAIAgent && window.MacBotOpenAIAgent.esNodoOpenAIAgent(nodo)){
+    window.MacBotOpenAIAgent.renderPanel(nodo);
     return;
   }
 
@@ -1860,6 +1884,9 @@ function cerrarPanelNodo(){
     window.MacBotContenido.clearPanelActivo();
   }
 
+  if(window.MacBotOpenAIAgent && window.MacBotOpenAIAgent.clearPanelActivo){
+    window.MacBotOpenAIAgent.clearPanelActivo();
+  }
   if(window.MacBotIAPro && window.MacBotIAPro.clearPanelActivo){
     window.MacBotIAPro.clearPanelActivo();
   }
@@ -1896,6 +1923,9 @@ function sincronizarPanelAntesDeSnapshot(){
     window.MacBotContenido.flushPanelToNode();
   }
 
+  if(window.MacBotOpenAIAgent && window.MacBotOpenAIAgent.flushPanelToNode){
+    window.MacBotOpenAIAgent.flushPanelToNode();
+  }
   if(window.MacBotIAPro && window.MacBotIAPro.flushPanelToNode){
     window.MacBotIAPro.flushPanelToNode();
   }
@@ -1998,6 +2028,20 @@ function restaurarSnapshotBuilder(snapshot){
         }
       } catch (err) {
         console.warn("Contenido: error al restaurar nodo", err.message);
+      }
+    }
+
+    if(
+      (item.className && item.className.includes("openai-agent-node")) ||
+      item.tipo === "openai_agent" ||
+      (item.html && item.html.includes("openai-agent-data"))
+    ){
+      try{
+        if(window.MacBotOpenAIAgent){
+          window.MacBotOpenAIAgent.refrescarNodoCargado(nodo);
+        }
+      } catch (err) {
+        console.warn("OpenAI Agent: error al restaurar nodo", err.message);
       }
     }
 

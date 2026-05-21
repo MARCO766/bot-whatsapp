@@ -1,0 +1,125 @@
+.menu-nodo-btn-openai-agent {
+  background: linear-gradient(135deg, rgba(30, 27, 75, 0.5), rgba(49, 46, 129, 0.45));
+  border-color: rgba(34, 211, 238, 0.55);
+}
+
+.menu-nodo-btn-openai-agent:hover {
+  box-shadow: 0 0 18px rgba(34, 211, 238, 0.45);
+}
+
+.node.openai-agent-node {
+  width: auto;
+  min-width: auto;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+  overflow: visible;
+}
+
+.node.openai-agent-node .openai-agent-node-shell {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+
+.node.openai-agent-node .openai-agent-core-column {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.node.openai-agent-node .openai-agent-circle {
+  position: relative;
+  width: 112px;
+  height: 112px;
+  border-radius: 50%;
+  background: linear-gradient(145deg, #1e1b4b 0%, #312e81 55%, #4338ca 100%);
+  border: 3px solid rgba(255, 255, 255, 0.35);
+  box-shadow: 0 0 28px rgba(34, 211, 238, 0.55), 0 8px 24px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 12px;
+  box-sizing: border-box;
+}
+
+.node.openai-agent-node .openai-agent-title {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 800;
+  color: #fff;
+  text-align: center;
+  line-height: 1.15;
+  max-width: 88px;
+}
+
+.node.openai-agent-node .openai-agent-desc-pill {
+  margin: 8px 0 0;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: #4338ca;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  color: #fff;
+  font-size: 10px;
+  text-align: center;
+}
+
+.node.openai-agent-node .openai-agent-routes-branch {
+  display: flex;
+  align-items: center;
+  margin-left: 8px;
+}
+
+.node.openai-agent-node .openai-agent-routes-stem {
+  width: 24px;
+  height: 2px;
+  background: rgba(103, 232, 249, 0.7);
+}
+
+.node.openai-agent-node .openai-agent-routes-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.node.openai-agent-node .openai-agent-route-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px 6px 10px;
+  border-radius: 999px;
+  background: rgba(30, 27, 75, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  position: relative;
+}
+
+.node.openai-agent-node .openai-agent-route-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #67e8f9;
+}
+
+.node.openai-agent-node .openai-agent-route-name {
+  font-size: 11px;
+  color: #fff;
+  font-weight: 600;
+}
+
+.node.openai-agent-node .openai-agent-port-route.port.out {
+  position: absolute;
+  right: -8px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.openai-agent-panel h5 {
+  margin: 16px 0 8px;
+  color: #67e8f9;
+  font-size: 13px;
+}

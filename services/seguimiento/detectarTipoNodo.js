@@ -11,8 +11,21 @@ function resolverTipoRaw(nodo) {
   ).toLowerCase();
 }
 
+function esTipoOpenAIAgent(nodo) {
+  if (!nodo) return false;
+  const tipo = resolverTipoRaw(nodo);
+  const html = nodo.html || "";
+  const className = String(nodo.className || "");
+  return (
+    tipo === "openai_agent" ||
+    className.includes("openai-agent-node") ||
+    html.includes("openai-agent-data")
+  );
+}
+
 function esTipoIAPro(nodo) {
   if (!nodo) return false;
+  if (esTipoOpenAIAgent(nodo)) return false;
   const tipo = resolverTipoRaw(nodo);
   const html = nodo.html || "";
   const className = String(nodo.className || "");
@@ -25,6 +38,7 @@ function esTipoIAPro(nodo) {
 
 function esTipoIA(nodo) {
   if (!nodo) return false;
+  if (esTipoOpenAIAgent(nodo)) return false;
   if (esTipoIAPro(nodo)) return false;
 
   const tipo = resolverTipoRaw(nodo);
@@ -59,6 +73,10 @@ function detectarTipoNodo(nodo) {
 
   if (nodo.id === "nodo_inicio" || className.includes("node-start")) {
     return "inicio";
+  }
+
+  if (esTipoOpenAIAgent(nodo)) {
+    return "openai_agent";
   }
 
   if (esTipoIAPro(nodo)) {
@@ -110,5 +128,6 @@ module.exports = {
   detectarTipoNodo,
   esTipoIA,
   esTipoIAPro,
+  esTipoOpenAIAgent,
   resolverTipoRaw,
 };
