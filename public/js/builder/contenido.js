@@ -721,20 +721,55 @@ window.MacBotContenido = (function () {
     });
   }
 
+  function eliminarVariante(index) {
+    if (variantesActivas.length <= 1) return;
+
+    const idx = parseInt(index, 10);
+    if (isNaN(idx) || idx < 0 || idx >= variantesActivas.length) return;
+
+    if (!confirm("¿Eliminar esta variante?")) return;
+
+    if (isEditingBlock) cancelarEdicionBloque();
+
+    const eraActiva = variantePanelIndex === idx;
+    variantesActivas.splice(idx, 1);
+
+    if (eraActiva) {
+      variantePanelIndex = idx > 0 ? idx - 1 : 0;
+    } else if (variantePanelIndex > idx) {
+      variantePanelIndex--;
+    }
+
+    onPanelChange();
+  }
+
   function renderVariantChips() {
     const wrap = document.getElementById("cntVariantChips");
     if (!wrap) return;
 
+    const puedeEliminar = variantesActivas.length > 1;
+
     wrap.innerHTML = variantesActivas
       .map(function (_, i) {
+        const delBtn = puedeEliminar
+          ? '<button type="button" class="cnt-variant-del" data-index="' +
+            i +
+            '" title="Eliminar variante" aria-label="Eliminar variante ' +
+            (i + 1) +
+            '">×</button>'
+          : "";
+
         return (
+          '<span class="cnt-variant-chip-wrap">' +
           '<button type="button" class="cnt-variant-chip' +
           (i === variantePanelIndex ? " active" : "") +
           '" data-index="' +
           i +
           '">Variante ' +
           (i + 1) +
-          "</button>"
+          "</button>" +
+          delBtn +
+          "</span>"
         );
       })
       .join("");
@@ -747,6 +782,13 @@ window.MacBotContenido = (function () {
         renderPanelPreview();
         renderPanelBloques();
         renderPanelStats();
+      });
+    });
+
+    wrap.querySelectorAll(".cnt-variant-del").forEach(function (btn) {
+      btn.addEventListener("click", function (ev) {
+        ev.stopPropagation();
+        eliminarVariante(parseInt(btn.dataset.index, 10));
       });
     });
   }

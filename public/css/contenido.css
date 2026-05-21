@@ -350,6 +350,33 @@
   gap: 6px;
 }
 
+.cnt-variant-chip-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.cnt-variant-del {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: rgba(251, 113, 133, 0.25);
+  color: #fda4af;
+  font-size: 14px;
+  line-height: 1;
+  font-weight: 700;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: 0.15s ease;
+}
+
+.cnt-variant-del:hover {
+  background: rgba(251, 113, 133, 0.45);
+  color: #fff;
+}
+
 .cnt-variant-chip {
   padding: 6px 10px;
   border-radius: 999px;
