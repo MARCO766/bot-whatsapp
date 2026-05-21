@@ -3,7 +3,6 @@
  * No modifica Agente Rápido ni Agente IA Pro.
  */
 
-const { enviarTextoWhatsApp } = require("./whatsappService");
 const { analizarRutaLocal, normalizarConfigRouter } = require("./iaLocalRouter");
 
 const MAX_CHAT_HISTORY = 5;
@@ -691,9 +690,28 @@ async function resolverAnalisisOpenAI(config, mensajeLead, chatHistory, memoria,
   };
 }
 
+async function enviarReplyComoContenido(numero, texto, usuarioId) {
+  const reply = String(texto || "").trim();
+  if (!reply || !numero) return null;
+
+  if (!usuarioId) {
+    console.error(
+      "[OpenAI Agent] sin usuarioId — no se puede guardar en CRM (mismo pipeline que Contenido)"
+    );
+    return null;
+  }
+
+  const { ejecutarBloqueContenido } = require("./flowService");
+  return ejecutarBloqueContenido(
+    numero,
+    { tipo: "texto", texto: reply, valor: reply },
+    usuarioId
+  );
+}
+
 async function ejecutarNodoOpenAIAgent(nodo, contexto, opts = {}) {
   const numero = contexto?.numero || contexto?.from || contexto?.telefono;
-  const usuarioId = contexto?.usuarioId || null;
+  const usuarioId = contexto?.usuarioId || opts?.usuarioId || null;
   const config = parseOpenAIAgentFromNodo(nodo);
 
   if (!opts.resume) {
@@ -754,7 +772,7 @@ async function ejecutarNodoOpenAIAgent(nodo, contexto, opts = {}) {
 
   let reply = limpiarReply(String(resultado.reply || "").trim());
   if (reply && numero) {
-    await enviarTextoWhatsApp(numero, reply, { usuarioId });
+    await enviarReplyComoContenido(numero, reply, usuarioId);
     contexto.ultimaRespuestaIA = reply;
     chatHistory = appendChatHistory(chatHistory, "assistant", reply);
     pushLastReply(usuarioId, numero, reply);

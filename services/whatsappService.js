@@ -8,6 +8,57 @@ const PHONE_ID = process.env.PHONE_ID;
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
 
+function supabaseHeaders(extra = {}) {
+  return {
+    apikey: SUPABASE_KEY,
+    Authorization: `Bearer ${SUPABASE_KEY}`,
+    ...extra,
+  };
+}
+
+async function actualizarConversacionSaliente(usuarioId, numero, texto) {
+  if (!usuarioId || !numero || !SUPABASE_URL || !SUPABASE_KEY) return;
+
+  const headers = supabaseHeaders({ "Content-Type": "application/json" });
+  const ahora = new Date().toISOString();
+
+  try {
+    const res = await axios.get(
+      `${SUPABASE_URL}/rest/v1/conversaciones?cliente_numero=eq.${numero}&usuario_id=eq.${usuarioId}&select=*`,
+      { headers }
+    );
+    const conv = res.data?.[0];
+
+    if (conv) {
+      await axios.patch(
+        `${SUPABASE_URL}/rest/v1/conversaciones?cliente_numero=eq.${numero}&usuario_id=eq.${usuarioId}`,
+        {
+          ultimo_mensaje: texto,
+          ultimo_mensaje_en: ahora,
+          estado: "abierta",
+        },
+        { headers }
+      );
+      return;
+    }
+
+    await axios.post(
+      `${SUPABASE_URL}/rest/v1/conversaciones`,
+      {
+        cliente_numero: numero,
+        usuario_id: usuarioId,
+        ultimo_mensaje: texto,
+        ultimo_mensaje_en: ahora,
+        estado: "abierta",
+        unread_count: 0,
+      },
+      { headers }
+    );
+  } catch (err) {
+    console.log("[WhatsApp] conversacion saliente:", err.response?.data || err.message);
+  }
+}
+
 async function enviarTextoWhatsApp(numero, texto, opciones = {}) {
   try {
 
@@ -76,7 +127,9 @@ const whatsappMessageId =
 
     const row = insertRes.data?.[0];
     if (opciones.usuarioId) {
-      rt.nuevoMensaje(null, opciones.usuarioId, {
+      await actualizarConversacionSaliente(opciones.usuarioId, numero, texto);
+
+      const payloadMensaje = {
         id: row?.id,
         cliente_numero: numero,
         usuario_id: opciones.usuarioId,
@@ -87,10 +140,13 @@ const whatsappMessageId =
         whatsapp_message_id: whatsappMessageId,
         estado_envio: "sent",
         creado_en: row?.creado_en || new Date().toISOString(),
-      });
+      };
+
+      rt.nuevoMensaje(null, opciones.usuarioId, payloadMensaje);
       rt.conversacionActualizada(null, opciones.usuarioId, {
         cliente_numero: numero,
         ultimo_mensaje: texto,
+        ultimo_mensaje_en: payloadMensaje.creado_en,
         direccion: "saliente",
       });
     }

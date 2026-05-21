@@ -358,6 +358,9 @@ async function ejecutarFlujo(
     flowContext.ultimoMensaje = opts.mensajeResume;
   }
 
+  flowContext.usuarioId = usuarioId;
+  flowContext.numero = flowContext.numero || numero;
+
   await enriquecerContextoFlujo(flowContext, numero, usuarioId);
 
   console.log(
@@ -589,7 +592,7 @@ async function ejecutarFlujo(
               ""
             : "",
         },
-        { resume: resumeIA }
+        { resume: resumeIA, usuarioId }
       );
 
       if (flowContext.openaiAgentPausar && !resumeIA) {
@@ -1160,6 +1163,7 @@ async function buscarYEjecutarActivador(numero, textoCliente, usuarioId = null, 
 
 module.exports = {
   agregarEtiquetaCliente,
+  ejecutarBloqueContenido,
   ejecutarFlujo,
   buscarYEjecutarActivador,
   procesarMensajeEntrante,
