@@ -59,66 +59,66 @@ async function actualizarConversacionSaliente(usuarioId, numero, texto) {
   }
 }
 
-async function resolverCredencialesTexto(opciones = {}) {
-  let tokenEnviar = TOKEN;
-  let phoneIdEnviar = PHONE_ID;
-
-  if (opciones.usuarioId) {
-    const responseConexion = await axios.get(
-      `${SUPABASE_URL}/rest/v1/conexiones_whatsapp?usuario_id=eq.${opciones.usuarioId}&activo=eq.true&select=*`,
-      {
-        headers: {
-          apikey: SUPABASE_KEY,
-          Authorization: `Bearer ${SUPABASE_KEY}`,
-        },
-      }
-    );
-
-    const conexion = responseConexion.data?.[0];
-    if (conexion) {
-      tokenEnviar = conexion.token;
-      phoneIdEnviar = conexion.phone_id;
-    }
-  }
-
-  return { tokenEnviar, phoneIdEnviar };
-}
-
-/**
- * Mismo pipeline que inbox manual / nodo Contenido: insert mensajes + conversaciones + socket.
- */
-async function registrarMensajeSalienteEnInbox(
-  usuarioId,
-  numero,
-  texto,
-  whatsappMessageId,
-  opciones = {}
-) {
+async function enviarTextoWhatsApp(numero, texto, opciones = {}) {
   const debugOpenAI = !!opciones._debugOpenAI;
-  const sala = `user_${usuarioId}`;
-
-  if (!usuarioId || !numero || !whatsappMessageId) {
-    const err = new Error("Faltan usuarioId, numero o whatsapp_message_id para inbox");
-    if (debugOpenAI) {
-      console.error("❌ OPENAI falló guardado/emit inbox:", err.message);
-    }
-    throw err;
-  }
-
-  if (debugOpenAI) {
-    console.log("💾 OPENAI insertando mensaje saliente en inbox:", {
-      usuario_id: usuarioId,
-      numero,
-      reply: texto,
-    });
-  }
 
   try {
+    if (debugOpenAI) {
+      console.log("📤 OPENAI enviando WhatsApp (Meta API)", { numero, usuarioId: opciones.usuarioId });
+    }
+
+    let tokenEnviar = TOKEN;
+    let phoneIdEnviar = PHONE_ID;
+
+    if (opciones.usuarioId) {
+
+      const responseConexion = await axios.get(
+        `${SUPABASE_URL}/rest/v1/conexiones_whatsapp?usuario_id=eq.${opciones.usuarioId}&activo=eq.true&select=*`,
+        {
+          headers: {
+            apikey: SUPABASE_KEY,
+            Authorization: `Bearer ${SUPABASE_KEY}`
+          }
+        }
+      );
+
+      const conexion = responseConexion.data?.[0];
+
+      if (conexion) {
+        tokenEnviar = conexion.token;
+        phoneIdEnviar = conexion.phone_id;
+      }
+    }
+
+    const respuestaMeta = await axios.post(
+  `https://graph.facebook.com/v19.0/${phoneIdEnviar}/messages`,
+      {
+        messaging_product: "whatsapp",
+        to: numero,
+        text: {
+          body: texto
+        }
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${tokenEnviar}`,
+          "Content-Type": "application/json"
+        }
+      }
+    );
+const whatsappMessageId =
+  respuestaMeta.data?.messages?.[0]?.id || null;
+
+    if (debugOpenAI) {
+      console.log("✅ OPENAI enviado (Meta OK)", { whatsappMessageId });
+      console.log("💾 OPENAI guardando inbox (mensajes + conversaciones)");
+    }
+
     const insertRes = await axios.post(
       `${SUPABASE_URL}/rest/v1/mensajes`,
       {
         cliente_numero: numero,
-        usuario_id: usuarioId,
+        usuario_id: opciones.usuarioId || null,
         direccion: "saliente",
         tipo: "texto",
         contenido: texto,
@@ -128,123 +128,58 @@ async function registrarMensajeSalienteEnInbox(
       },
       {
         headers: {
-          ...supabaseHeaders(),
+          apikey: SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_KEY}`,
           "Content-Type": "application/json",
           Prefer: "return=representation",
         },
       }
     );
 
-    const row = insertRes.data?.[0] || null;
-    await actualizarConversacionSaliente(usuarioId, numero, texto);
+    const row = insertRes.data?.[0];
+    if (opciones.usuarioId) {
+      await actualizarConversacionSaliente(opciones.usuarioId, numero, texto);
 
-    const payloadMensaje = {
-      id: row?.id,
-      cliente_numero: numero,
-      usuario_id: usuarioId,
-      direccion: "saliente",
-      tipo: "texto",
-      contenido: texto,
-      imagen_url: null,
-      whatsapp_message_id: whatsappMessageId,
-      estado_envio: "sent",
-      creado_en: row?.creado_en || new Date().toISOString(),
-    };
+      const payloadMensaje = {
+        id: row?.id,
+        cliente_numero: numero,
+        usuario_id: opciones.usuarioId,
+        direccion: "saliente",
+        tipo: "texto",
+        contenido: texto,
+        imagen_url: null,
+        whatsapp_message_id: whatsappMessageId,
+        estado_envio: "sent",
+        creado_en: row?.creado_en || new Date().toISOString(),
+      };
 
-    if (debugOpenAI) {
-      console.log("📡 OPENAI emitiendo mensaje a bandeja:", sala);
-    }
-
-    rt.nuevoMensaje(null, usuarioId, payloadMensaje);
-    rt.conversacionActualizada(null, usuarioId, {
-      cliente_numero: numero,
-      ultimo_mensaje: texto,
-      ultimo_mensaje_en: payloadMensaje.creado_en,
-      direccion: "saliente",
-    });
-
-    if (debugOpenAI) {
-      console.log("✅ OPENAI visible en bandeja", { mensajeId: row?.id, sala });
-    }
-
-    return {
-      ...row,
-      whatsapp_message_id: whatsappMessageId,
-    };
-  } catch (error) {
-    if (debugOpenAI) {
-      console.error("❌ OPENAI falló guardado/emit inbox:", error.response?.data || error.message || error);
-    }
-    throw error;
-  }
-}
-
-async function enviarTextoWhatsApp(numero, texto, opciones = {}) {
-  const debugOpenAI = !!opciones._debugOpenAI;
-  let respuestaMeta = null;
-
-  try {
-    const { tokenEnviar, phoneIdEnviar } = await resolverCredencialesTexto(opciones);
-
-    respuestaMeta = await axios.post(
-      `https://graph.facebook.com/v19.0/${phoneIdEnviar}/messages`,
-      {
-        messaging_product: "whatsapp",
-        to: numero,
-        text: {
-          body: texto,
-        },
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${tokenEnviar}`,
-          "Content-Type": "application/json",
-        },
+      if (debugOpenAI) {
+        console.log("📡 OPENAI socket emit", {
+          evento: "nuevo_mensaje",
+          usuarioId: opciones.usuarioId,
+          mensajeId: payloadMensaje.id,
+        });
       }
-    );
+
+      rt.nuevoMensaje(null, opciones.usuarioId, payloadMensaje);
+      rt.conversacionActualizada(null, opciones.usuarioId, {
+        cliente_numero: numero,
+        ultimo_mensaje: texto,
+        ultimo_mensaje_en: payloadMensaje.creado_en,
+        direccion: "saliente",
+      });
+
+      if (debugOpenAI) {
+        console.log("💾 OPENAI guardado inbox OK", { mensajeId: row?.id });
+      }
+    }
+
+    return row;
   } catch (error) {
     if (debugOpenAI) {
-      console.error("❌ OPENAI falló guardado/emit inbox:", error.response?.data || error.message || error);
+      console.error("❌ OPENAI_AGENT ERROR", error.response?.data || error.message || error);
     }
     console.log("ERROR ENVIANDO WHATSAPP:", error.response?.data || error.message);
-    return null;
-  }
-
-  const whatsappMessageId =
-    respuestaMeta?.data?.messages?.[0]?.id ||
-    respuestaMeta?.messages?.[0]?.id ||
-    null;
-
-  if (debugOpenAI) {
-    console.log("✅ OPENAI WhatsApp enviado:", whatsappMessageId);
-  }
-
-  if (!whatsappMessageId) {
-    console.error("ERROR ENVIANDO WHATSAPP: Meta sin message id", respuestaMeta?.data);
-    return null;
-  }
-
-  if (!opciones.usuarioId) {
-    console.warn("[WhatsApp] Texto enviado sin usuarioId — no se guarda en inbox");
-    return {
-      whatsapp_message_id: whatsappMessageId,
-      messages: respuestaMeta?.data?.messages,
-    };
-  }
-
-  try {
-    return await registrarMensajeSalienteEnInbox(
-      opciones.usuarioId,
-      numero,
-      texto,
-      whatsappMessageId,
-      opciones
-    );
-  } catch (error) {
-    console.log(
-      "ERROR GUARDANDO MENSAJE INBOX (WhatsApp ya enviado):",
-      error.response?.data || error.message
-    );
     return null;
   }
 }
@@ -714,7 +649,6 @@ async function enviarBotonesWhatsApp(numero, texto, botones, opciones = {}) {
 
 module.exports = {
   enviarTextoWhatsApp,
-  registrarMensajeSalienteEnInbox,
   enviarMediaWhatsApp,
   enviarBotonesWhatsApp,
 };

@@ -694,54 +694,6 @@ async function resolverAnalisisOpenAI(config, mensajeLead, chatHistory, memoria,
   };
 }
 
-async function enviarReplyEnInbox(numero, reply, usuarioId) {
-  const texto = String(reply || "").trim();
-  if (!texto || !numero) return null;
-
-  if (!usuarioId) {
-    console.error(
-      "❌ OPENAI falló guardado/emit inbox:",
-      "sin usuarioId (mismo pipeline que Contenido/manual)"
-    );
-    return null;
-  }
-
-  console.log("📤 OPENAI enviando WhatsApp", {
-    usuario_id: usuarioId,
-    numero,
-    preview: texto.slice(0, 80),
-  });
-
-  try {
-    const meta = await enviarTextoWhatsApp(numero, texto, {
-      usuarioId,
-      _debugOpenAI: true,
-    });
-
-    const wamid =
-      meta?.whatsapp_message_id ||
-      meta?.messages?.[0]?.id ||
-      null;
-
-    if (!wamid) {
-      console.error("❌ OPENAI falló guardado/emit inbox: sin wamid de Meta");
-      return null;
-    }
-
-    console.log("✅ OPENAI WhatsApp enviado:", wamid);
-
-    if (!meta?.id && !meta?.cliente_numero) {
-      console.error("❌ OPENAI falló guardado/emit inbox: sin registro en Supabase");
-      return null;
-    }
-
-    return meta;
-  } catch (error) {
-    console.error("❌ OPENAI falló guardado/emit inbox:", error);
-    return null;
-  }
-}
-
 async function ejecutarNodoOpenAIAgent(nodo, contexto, opts = {}) {
   const nodoId = opts?.nodoId || nodo?.id || null;
   const numero = contexto?.numero || contexto?.from || contexto?.telefono;
@@ -823,7 +775,7 @@ async function ejecutarNodoOpenAIAgent(nodo, contexto, opts = {}) {
     console.log("🧠 OPENAI response:", reply);
 
     if (reply && numero) {
-      await enviarReplyEnInbox(numero, reply, usuarioId);
+      await enviarTextoWhatsApp(numero, reply, { usuarioId });
       contexto.ultimaRespuestaIA = reply;
       chatHistory = appendChatHistory(chatHistory, "assistant", reply);
       pushLastReply(usuarioId, numero, reply);

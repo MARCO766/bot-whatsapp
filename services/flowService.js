@@ -210,7 +210,7 @@ function segundosPausaBloque(bloque) {
   return !isNaN(segundos) && segundos > 0 ? segundos : 0;
 }
 
-async function ejecutarBloqueContenido(numero, bloque, usuarioId, envioOpts = {}) {
+async function ejecutarBloqueContenido(numero, bloque, usuarioId) {
   const tipo = tipoBloqueContenido(bloque);
   console.log("🧩 EJECUTANDO BLOQUE:", tipo, bloque);
 
@@ -225,7 +225,7 @@ async function ejecutarBloqueContenido(numero, bloque, usuarioId, envioOpts = {}
       console.log("⚠️ TEXTO VACÍO, SE OMITE");
       return null;
     }
-    await enviarTextoWhatsApp(numero, mensaje, { usuarioId, ...envioOpts });
+    await enviarTextoWhatsApp(numero, mensaje, { usuarioId });
     console.log("✅ TEXTO ENVIADO");
     return mensaje;
   }
@@ -1183,7 +1183,6 @@ async function buscarYEjecutarActivador(numero, textoCliente, usuarioId = null, 
 
 module.exports = {
   agregarEtiquetaCliente,
-  ejecutarBloqueContenido,
   ejecutarFlujo,
   buscarYEjecutarActivador,
   procesarMensajeEntrante,
