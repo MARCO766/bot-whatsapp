@@ -1,6 +1,5 @@
 /**
  * Reset aislado de automatización por lead (comando resetbot).
- * No borra mensajes, conversaciones, clientes ni etiquetas.
  */
 
 const axios = require("axios");
@@ -28,8 +27,13 @@ function esComandoResetFlujo(texto) {
 async function cancelarSeguimientosPendientesLead(numero, usuarioId) {
   if (!SUPABASE_URL || !SUPABASE_KEY || !numero) return;
 
+  console.log("[RESETBOT DEBUG] limpiando tabla seguimientos_programados");
+
   const ahora = new Date().toISOString();
-  let url = `${SUPABASE_URL}/rest/v1/seguimientos_programados?cliente_numero=eq.${encodeURIComponent(numero)}&estado=eq.pendiente`;
+  const estadosIn = "pendiente,enviado,cancelado,respondido";
+  let url =
+    `${SUPABASE_URL}/rest/v1/seguimientos_programados?cliente_numero=eq.${encodeURIComponent(numero)}` +
+    `&estado=in.(${estadosIn})`;
   if (usuarioId) {
     url += `&usuario_id=eq.${encodeURIComponent(usuarioId)}`;
   }
@@ -51,40 +55,10 @@ async function cancelarSeguimientosPendientesLead(numero, usuarioId) {
       }
     );
   } catch (err) {
-    console.log("[RESETBOT] seguimientos:", err.response?.data || err.message);
+    console.log("[RESETBOT DEBUG] seguimientos:", err.response?.data || err.message);
   }
 }
 
-async function limpiarHistorialAutomatizacionLead(numero, usuarioId) {
-  if (!SUPABASE_URL || !SUPABASE_KEY || !numero || !usuarioId) return;
-
-  const base = `cliente_numero=eq.${encodeURIComponent(numero)}&usuario_id=eq.${encodeURIComponent(usuarioId)}`;
-
-  try {
-    await axios.delete(
-      `${SUPABASE_URL}/rest/v1/crm_historial_cliente?${base}&tipo=eq.flujo`,
-      { headers: supabaseHeaders() }
-    );
-  } catch (err) {
-    console.log("[RESETBOT] historial flujo:", err.response?.data || err.message);
-  }
-
-  try {
-    await axios.delete(
-      `${SUPABASE_URL}/rest/v1/crm_historial_cliente?${base}&tipo=eq.remarketing_embudo`,
-      { headers: supabaseHeaders() }
-    );
-  } catch (err) {
-    console.log(
-      "[RESETBOT] historial remarketing:",
-      err.response?.data || err.message
-    );
-  }
-}
-
-/**
- * Limpia automatización completa (flujo + remarketing + sesiones) para pruebas.
- */
 async function resetearFlujoLead(numero, usuarioId) {
   const num = String(numero || "").trim();
   const uid =
@@ -92,24 +66,24 @@ async function resetearFlujoLead(numero, usuarioId) {
 
   if (!num) return { ok: false, motivo: "sin_numero" };
 
-  limpiarSesionIAPendiente(uid, num);
-
   try {
     const { resetearEmbudoLeadParaResetbot } = require("./remarketingGlobal/embudoMode");
     await resetearEmbudoLeadParaResetbot(uid, num);
   } catch (err) {
-    console.log("[RESETBOT] embudo:", err.message);
+    console.log("[RESETBOT DEBUG] embudo:", err.message);
   }
 
   try {
     const { resetRemarketingLeadPorResetbot } = require("./remarketingGlobal/remarketingRepository");
+    console.log("[RESETBOT DEBUG] limpiando tabla remarketing_global_programados");
     await resetRemarketingLeadPorResetbot(num, uid);
   } catch (err) {
-    console.log("[RESETBOT] remarketing programados:", err.message);
+    console.log("[RESETBOT DEBUG] remarketing programados:", err.message);
   }
 
   await cancelarSeguimientosPendientesLead(num, uid);
-  await limpiarHistorialAutomatizacionLead(num, uid);
+
+  limpiarSesionIAPendiente(uid, num);
 
   try {
     await enviarTextoWhatsApp(num, MENSAJE_CONFIRMACION, {
@@ -117,10 +91,9 @@ async function resetearFlujoLead(numero, usuarioId) {
       _soloEnvioMeta: true,
     });
   } catch (err) {
-    console.log("[RESETBOT] WhatsApp confirmación:", err.message || err);
+    console.log("[RESETBOT DEBUG] WhatsApp confirmación:", err.message || err);
   }
 
-  console.log("[RESETBOT] reset completo OK | lead:", num, "| usuario:", uid);
   return { ok: true };
 }
 

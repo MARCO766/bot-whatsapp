@@ -1057,16 +1057,25 @@ async function procesarMensajeEntrante(numero, texto, usuarioId, messageId) {
 
   try {
     const {
-      debeBloquearFlujoNormal,
+      evaluarBloqueoFlujoNormal,
+      logFlujoDebug,
       reprogramarRemarketingSiModoActivo,
     } = require("./remarketingGlobal/embudoMode");
-    const bloqueo = await debeBloquearFlujoNormal(usuarioId, numero);
-    if (bloqueo.bloquear) {
+
+    const ev = await evaluarBloqueoFlujoNormal(usuarioId, numero);
+    logFlujoDebug(numero, usuarioId, ev);
+
+    if (ev.bloquear && ev.motivo === "remarketing_activo") {
       console.log(
         "[RM MODE] lead en remarketing_activo → no ejecutar flujo normal | flujo=" +
-          bloqueo.flujo_id
+          (ev.flujo_id || "—")
       );
       await reprogramarRemarketingSiModoActivo(usuarioId, numero);
+      return true;
+    }
+
+    if (ev.bloquear && ev.motivo === "lead_comprado") {
+      console.log("[RM MODE] lead comprado → no ejecutar flujo normal");
       return true;
     }
   } catch (rmModeErr) {
@@ -1275,14 +1284,17 @@ async function buscarYEjecutarActivador(numero, textoCliente, usuarioId = null, 
     } = require("./remarketingGlobal/embudoMode");
     const compra = await leadEstaComprado(usuarioId, numero, flujo.id, null);
     if (compra.comprado) {
-      console.log("[RM MODE] lead comprado → no ejecutar flujo normal");
+      console.log(
+        "[RM MODE] lead comprado → no ejecutar flujo normal | razon=" +
+          (compra.razon || "—")
+      );
       await marcarLeadCompradoEnFlujo({
         usuario_id: usuarioId,
         cliente_numero: numero,
         flujo_id: flujo.id,
         motivo: "Lead ya compró en este flujo",
       });
-      return true;
+      return false;
     }
     await setModoEmbudo(usuarioId, numero, flujo.id, ESTADO_EMBUDO.FLUJO_ACTIVO);
   } catch (rmErr) {

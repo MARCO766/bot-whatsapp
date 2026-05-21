@@ -148,7 +148,7 @@ async function resetRemarketingLeadPorResetbot(numero, usuarioId) {
 
   const ahora = nowUtc();
   const estadosIn =
-    "pendiente,enviado,cancelado,cancelado_por_respuesta";
+    "pendiente,enviado,cancelado,cancelado_por_respuesta,respondido,fuera_ventana_24h";
 
   let url =
     `${SUPABASE_URL}/rest/v1/remarketing_global_programados?cliente_numero=eq.${encodeURIComponent(numero)}` +
