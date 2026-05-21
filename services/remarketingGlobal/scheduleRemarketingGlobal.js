@@ -1,5 +1,8 @@
 const crypto = require("crypto");
-const { parseRemarketingFromNodo } = require("./parseRemarketingGlobalNode");
+const {
+  parseRemarketingFromNodo,
+  normalizarPaso,
+} = require("./parseRemarketingGlobalNode");
 const { insertarProgramados, cancelarPendientesCliente } = require("./remarketingRepository");
 const { aplicarEtiquetaCliente } = require("./aplicarEtiqueta");
 const { ESTADOS_REMARKETING } = require("./constants");
@@ -12,14 +15,18 @@ async function programarRemarketingGlobal({
   nodo,
   cancelarAnteriores = true,
 }) {
-  const config = parseRemarketingFromNodo(nodo);
+  const config = nodo.config || parseRemarketingFromNodo(nodo);
 
   if (!config.activo) {
     console.log("[REMARKETING] Nodo pausado — no se programa");
     return { campanaId: null, programados: 0, omitido: true };
   }
 
-  if (!config.steps.length) {
+  const pasos = (config.steps || [])
+    .map((p, i) => normalizarPaso(p, i))
+    .filter(Boolean);
+
+  if (!pasos.length) {
     console.log("[REMARKETING] Sin pasos válidos configurados");
     return { campanaId: null, programados: 0, omitido: true };
   }
@@ -39,7 +46,7 @@ async function programarRemarketingGlobal({
   let acumuladoSegundos = 0;
   const rows = [];
 
-  config.steps.forEach((paso, index) => {
+  pasos.forEach((paso, index) => {
     acumuladoSegundos += paso.segundos;
     const runAt = toTimestamptzUtc(Date.now() + acumuladoSegundos * 1000);
 

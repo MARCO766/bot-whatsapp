@@ -27,7 +27,8 @@ async function evaluarParadaAntesDeEnviar(item) {
   }
 
   if (cond.detener_si_etiqueta_pagado) {
-    const tagPagado = etiquetas.pagado || "PAGADO";
+    const tagPagado =
+      cond.detener_etiqueta_nombre || etiquetas.pagado || "PAGADO";
     const pagado = await tieneEtiqueta(
       item.cliente_numero,
       item.usuario_id,

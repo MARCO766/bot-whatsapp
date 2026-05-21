@@ -48,6 +48,9 @@ window.addEventListener("load", function(){
   ensureInfiniteViewport();
   console.log("🎨 Flow lines premium loaded");
   cargarFlujoGuardado();
+  if(window.MacBotRemarketingGlobal && window.MacBotRemarketingGlobal.initAfterLoad){
+    window.MacBotRemarketingGlobal.initAfterLoad();
+  }
   crearNodoInicioAutomatico();
   resizeWorldSurface();
   initCanvasViewport();
@@ -179,6 +182,20 @@ function cargarFlujoGuardado(){
 
   if(flujoCargado.nodos){
     flujoCargado.nodos.forEach(item => {
+      if(
+        window.MacBotRemarketingGlobal &&
+        window.MacBotRemarketingGlobal.esRegistroRemarketing(item)
+      ){
+        return;
+      }
+
+      if(
+        item.tipo === "remarketing_global" ||
+        (item.className && item.className.includes("remarketing-global-node"))
+      ){
+        return;
+      }
+
       const nodo = document.createElement("div");
 
       nodo.id = item.id;
@@ -209,6 +226,10 @@ function cargarFlujoGuardado(){
     });
   }
 
+  if(window.MacBotRemarketingGlobal){
+    window.MacBotRemarketingGlobal.eliminarNodosLegacyDelCanvas();
+  }
+
   document.querySelectorAll(".follow-node").forEach((nodo) => {
     try {
       if(window.MacBotSeguimiento){
@@ -216,16 +237,6 @@ function cargarFlujoGuardado(){
       }
     } catch (e) {
       console.warn("Seguimiento: error al refrescar nodo cargado", e);
-    }
-  });
-
-  document.querySelectorAll(".remarketing-global-node").forEach((nodo) => {
-    try {
-      if(window.MacBotRemarketingGlobal){
-        window.MacBotRemarketingGlobal.refrescarNodoCargado(nodo);
-      }
-    } catch (e) {
-      console.warn("Remarketing: error al refrescar nodo cargado", e);
     }
   });
 
@@ -1069,9 +1080,12 @@ async function guardarFlujo(){
 
   const nombre = titulo.innerText.replace("🔀", "").trim();
 
-  const nodos = [];
+  let nodos = [];
 
   document.querySelectorAll("#canvasFlujo .node").forEach(nodo => {
+    if(esNodoRemarketingGlobal(nodo)){
+      return;
+    }
     nodo.querySelectorAll("input, textarea, select").forEach(campo => {
       if(campo.classList.contains("ia-data")){
         campo.setAttribute("value", campo.value);
@@ -1108,6 +1122,10 @@ async function guardarFlujo(){
   if(nodos.length === 0){
     alert("Primero agrega al menos un nodo");
     return;
+  }
+
+  if(window.MacBotRemarketingGlobal && window.MacBotRemarketingGlobal.mergeIntoNodosArray){
+    nodos = window.MacBotRemarketingGlobal.mergeIntoNodosArray(nodos);
   }
 
   const conexionesGuardadas = obtenerConexionesParaGuardar();
@@ -1741,8 +1759,10 @@ function abrirPanelNodo(nodo){
   panel.setAttribute("aria-hidden", "false");
   marcarNodoSeleccionado(nodo);
 
-  if(window.MacBotRemarketingGlobal && window.MacBotRemarketingGlobal.esNodoRemarketingGlobal(nodo)){
-    window.MacBotRemarketingGlobal.renderPanel(nodo);
+  if(esNodoRemarketingGlobal(nodo)){
+    if(window.MacBotRemarketingGlobal && window.MacBotRemarketingGlobal.abrirModal){
+      window.MacBotRemarketingGlobal.abrirModal();
+    }
     return;
   }
 
@@ -2008,7 +2028,7 @@ function capturarSnapshotBuilder(){
 
   const panel = document.getElementById("panelNodo");
 
-  return {
+  const snap = {
     nodoCount,
     nodos,
     conexiones: conexiones.map((c) => ({
@@ -2018,6 +2038,12 @@ function capturarSnapshotBuilder(){
     panelAbierto: configPanelOpen,
     nodoSeleccionadoId: nodoSeleccionadoPanel?.id || null,
   };
+
+  if(window.MacBotRemarketingGlobal && window.MacBotRemarketingGlobal.getConfig){
+    snap.remarketingGlobal = window.MacBotRemarketingGlobal.getConfig();
+  }
+
+  return snap;
 }
 
 function restaurarSnapshotBuilder(snapshot){
@@ -2078,17 +2104,10 @@ function restaurarSnapshotBuilder(snapshot){
     }
 
     if(
-      (item.className && item.className.includes("remarketing-global-node")) ||
-      item.tipo === "remarketing_global" ||
-      (item.html && item.html.includes("remarketing-global-data"))
+      window.MacBotRemarketingGlobal &&
+      window.MacBotRemarketingGlobal.esRegistroRemarketing(item)
     ){
-      try{
-        if(window.MacBotRemarketingGlobal){
-          window.MacBotRemarketingGlobal.refrescarNodoCargado(nodo);
-        }
-      } catch (err) {
-        console.warn("Remarketing: error al restaurar nodo", err.message);
-      }
+      return;
     }
 
     if(
@@ -2150,6 +2169,14 @@ function restaurarSnapshotBuilder(snapshot){
 
   nodoCount = snapshot.nodoCount || 0;
   ultimoNodo = null;
+
+  if(window.MacBotRemarketingGlobal){
+    window.MacBotRemarketingGlobal.eliminarNodosLegacyDelCanvas();
+    if(snapshot.remarketingGlobal && window.MacBotRemarketingGlobal.applyConfig){
+      window.MacBotRemarketingGlobal.applyConfig(snapshot.remarketingGlobal);
+    }
+    window.MacBotRemarketingGlobal.initBuilder();
+  }
 
   (snapshot.conexiones || []).forEach((c) => {
     const par = normalizarConexionGuardada(c);

@@ -25,11 +25,17 @@ async function activarRemarketingSiAplica({
       null
     );
 
+    const nodoMotor = {
+      id: nodo.id || "remarketing_global_fixed",
+      html: nodo.html,
+      config: nodo.config || undefined,
+    };
+
     const resultado = await programarRemarketingGlobal({
       numero,
       usuarioId,
       flujoId,
-      nodo,
+      nodo: nodoMotor,
       cancelarAnteriores: true,
     });
 
