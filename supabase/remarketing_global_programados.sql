@@ -35,7 +35,14 @@ create table if not exists public.remarketing_global_programados (
 
   constraint remarketing_paso_index_nonneg check (paso_index >= 0),
   constraint remarketing_estado_valido check (
-    estado in ('pendiente', 'enviado', 'cancelado', 'respondido', 'fuera_ventana_24h')
+    estado in (
+      'pendiente',
+      'enviado',
+      'cancelado',
+      'respondido',
+      'fuera_ventana_24h',
+      'cancelado_por_respuesta'
+    )
   )
 );
 

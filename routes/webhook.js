@@ -533,11 +533,51 @@ try {
   console.log("[WEBHOOK] cancelar seguimientos:", cancelErr.message);
 }
 
+/* Remarketing Global: primer mensaje y cada mensaje entrante (antes del flujo / IA) */
 try {
-  const { manejarRemarketingPorRespuesta } = require("../services/remarketingGlobal/onLeadReply");
-  await manejarRemarketingPorRespuesta(from, usuarioIdWebhook);
+  const {
+    resolverFlujoActivadorPorTexto,
+  } = require("../services/remarketingGlobal/resolverFlujoActivador");
+  const {
+    manejarRemarketingGlobalPorMensajeEntrante,
+  } = require("../services/remarketingGlobal/porMensajeEntrante");
+
+  let flujoParaRm = null;
+  const resuelto = await resolverFlujoActivadorPorTexto(
+    textoParaActivador,
+    usuarioIdWebhook
+  );
+
+  if (resuelto.ok) {
+    flujoParaRm = { id: resuelto.flujo.id, data: resuelto.flujoDatos };
+  } else {
+    const { obtenerSesionIAPendiente } = require("../services/iaFlowSession");
+    const { obtenerFlujoPorId } = require("../services/remarketingGlobal/resolverFlujoActivador");
+    const sesion = obtenerSesionIAPendiente(usuarioIdWebhook, from);
+    if (sesion?.flujoId) {
+      const flujoIa = await obtenerFlujoPorId(sesion.flujoId, usuarioIdWebhook);
+      if (flujoIa) {
+        flujoParaRm = { id: flujoIa.flujo.id, data: flujoIa.flujoDatos };
+        console.log("[RM DEBUG] flujo desde sesión IA pendiente:", sesion.flujoId);
+      }
+    }
+    if (!flujoParaRm) {
+      console.log(
+        "[RM DEBUG] sin flujo para remarketing:",
+        resuelto.motivo
+      );
+    }
+  }
+
+  if (flujoParaRm) {
+    await manejarRemarketingGlobalPorMensajeEntrante({
+      usuario_id: usuarioIdWebhook,
+      cliente_numero: from,
+      flujoActivo: flujoParaRm,
+    });
+  }
 } catch (rmErr) {
-  console.log("[WEBHOOK] remarketing por respuesta:", rmErr.message);
+  console.log("[RM DEBUG] error remarketing webhook:", rmErr.message);
 }
 
 console.log("🔎 ACTIVADOR — texto:", textoParaActivador, "| usuario:", usuarioIdWebhook);

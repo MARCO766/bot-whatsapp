@@ -342,14 +342,6 @@ async function ejecutarFlujo(
 ) {
   if (!flujoData || !flujoData.nodos) return;
 
-  /* Remarketing Global: al entrar el lead (antes del grafo del flujo) */
-  try {
-    const { activarRemarketingSiAplica } = require("./remarketingGlobal/activarEnFlujo");
-    await activarRemarketingSiAplica({ numero, flujoData, usuarioId, flujoId });
-  } catch (rmErr) {
-    console.error("[REMARKETING] activación al entrar:", rmErr.message);
-  }
-
   if (!flujoData.conexiones) {
     flujoData.conexiones = [];
   }

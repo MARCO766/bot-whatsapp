@@ -84,6 +84,20 @@ async function resetearFlujoLead(numero, usuarioId) {
   await limpiarHistorialFlujoLead(num, uid);
 
   try {
+    const { cancelarPendientesCliente } = require("./remarketingGlobal/remarketingRepository");
+    const { ESTADOS_REMARKETING } = require("./remarketingGlobal/constants");
+    await cancelarPendientesCliente(
+      num,
+      uid,
+      ESTADOS_REMARKETING.CANCELADO,
+      "resetbot",
+      null
+    );
+  } catch (err) {
+    console.log("[RESETBOT] remarketing:", err.message);
+  }
+
+  try {
     await enviarTextoWhatsApp(num, MENSAJE_CONFIRMACION, {
       usuarioId: uid,
       _soloEnvioMeta: true,

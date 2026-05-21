@@ -11,6 +11,7 @@ const {
 } = require("./remarketingRepository");
 const { evaluarParadaAntesDeEnviar } = require("./stopConditions");
 const { aplicarEtiquetaCliente } = require("./aplicarEtiqueta");
+const { programarSiguientePasoTrasEnvio } = require("./porMensajeEntrante");
 const { ESTADOS_REMARKETING } = require("./constants");
 
 async function enviarMensajeRemarketing(item) {
@@ -162,11 +163,20 @@ async function procesarRemarketingItem(item) {
     }
 
     console.log(
-      "[REMARKETING] ✓ Enviado",
-      item.paso_nombre || item.paso_id,
-      "→",
-      item.cliente_numero
+      "[RM DEBUG] enviado " +
+        (item.paso_nombre || item.paso_id) +
+        " → " +
+        item.cliente_numero
     );
+
+    try {
+      await programarSiguientePasoTrasEnvio(item);
+    } catch (chainErr) {
+      console.log(
+        "[RM DEBUG] error programando siguiente paso:",
+        chainErr.message
+      );
+    }
 
     return { ok: true };
   } catch (error) {

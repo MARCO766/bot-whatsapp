@@ -58,6 +58,7 @@ async function actualizarEstado(id, estado, extra = {}) {
   }
   if (
     estado === ESTADOS_REMARKETING.CANCELADO ||
+    estado === ESTADOS_REMARKETING.CANCELADO_POR_RESPUESTA ||
     estado === ESTADOS_REMARKETING.FUERA_VENTANA_24H
   ) {
     payload.cancelado_en = nowUtc();
@@ -104,16 +105,32 @@ async function cancelarPendientesCliente(numero, usuarioId, estado, motivo, fluj
     url += `&flujo_id=eq.${flujoId}`;
   }
 
-  await axios.patch(
-    url,
-    {
-      estado,
-      actualizado_en: ahora,
-      [campoFecha]: ahora,
-      error_detalle: motivo || null,
-    },
-    { headers: headers({ Prefer: "return=minimal" }) }
-  );
+  const payload = {
+    estado,
+    actualizado_en: ahora,
+    [campoFecha]: ahora,
+    error_detalle: motivo || null,
+  };
+
+  try {
+    await axios.patch(url, payload, {
+      headers: headers({ Prefer: "return=minimal" }),
+    });
+  } catch (error) {
+    if (estado === ESTADOS_REMARKETING.CANCELADO_POR_RESPUESTA) {
+      await axios.patch(
+        url,
+        {
+          ...payload,
+          estado: ESTADOS_REMARKETING.CANCELADO,
+          error_detalle: motivo || "cancelado_por_respuesta",
+        },
+        { headers: headers({ Prefer: "return=minimal" }) }
+      );
+      return;
+    }
+    throw error;
+  }
 }
 
 async function clienteRespondioDespues(numero, usuarioId, checkpointAt) {

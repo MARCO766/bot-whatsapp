@@ -285,7 +285,7 @@ function buscarNodoRemarketingEnFlujo(flujoData) {
 
   const config = parseRemarketingFromNodo(found);
 
-  console.log("[REMARKETING] nodo encontrado", {
+  console.log("[RM DEBUG] nodo encontrado", {
     id: found.id,
     tipo: found.tipo || found.type,
     activo: config.activo,
