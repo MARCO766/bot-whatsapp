@@ -3,6 +3,7 @@
  * No modifica Agente Rápido ni Agente IA Pro.
  */
 
+const { enviarTextoWhatsApp } = require("./whatsappService");
 const { analizarRutaLocal, normalizarConfigRouter } = require("./iaLocalRouter");
 
 const MAX_CHAT_HISTORY = 5;
@@ -693,33 +694,51 @@ async function resolverAnalisisOpenAI(config, mensajeLead, chatHistory, memoria,
   };
 }
 
-async function enviarReplyComoContenido(numero, texto, usuarioId) {
-  const reply = String(texto || "").trim();
-  if (!reply || !numero) return null;
+async function enviarReplyEnInbox(numero, reply, usuarioId) {
+  const texto = String(reply || "").trim();
+  if (!texto || !numero) return null;
 
   if (!usuarioId) {
     console.error(
-      "❌ OPENAI_AGENT ERROR",
-      "sin usuarioId — no se puede guardar en CRM (mismo pipeline que Contenido)"
+      "❌ OPENAI falló guardado/emit inbox:",
+      "sin usuarioId (mismo pipeline que Contenido/manual)"
     );
     return null;
   }
 
-  console.log("📤 OPENAI enviando WhatsApp", { numero, usuarioId, preview: reply.slice(0, 80) });
+  console.log("📤 OPENAI enviando WhatsApp", {
+    usuario_id: usuarioId,
+    numero,
+    preview: texto.slice(0, 80),
+  });
 
   try {
-    const { ejecutarBloqueContenido } = require("./flowService");
-    const enviado = await ejecutarBloqueContenido(
-      numero,
-      { tipo: "texto", texto: reply, valor: reply },
+    const meta = await enviarTextoWhatsApp(numero, texto, {
       usuarioId,
-      { _debugOpenAI: true }
-    );
-    console.log("✅ OPENAI enviado", { ok: !!enviado });
-    return enviado;
+      _debugOpenAI: true,
+    });
+
+    const wamid =
+      meta?.whatsapp_message_id ||
+      meta?.messages?.[0]?.id ||
+      null;
+
+    if (!wamid) {
+      console.error("❌ OPENAI falló guardado/emit inbox: sin wamid de Meta");
+      return null;
+    }
+
+    console.log("✅ OPENAI WhatsApp enviado:", wamid);
+
+    if (!meta?.id && !meta?.cliente_numero) {
+      console.error("❌ OPENAI falló guardado/emit inbox: sin registro en Supabase");
+      return null;
+    }
+
+    return meta;
   } catch (error) {
-    console.error("❌ OPENAI_AGENT ERROR", error);
-    throw error;
+    console.error("❌ OPENAI falló guardado/emit inbox:", error);
+    return null;
   }
 }
 
@@ -804,7 +823,7 @@ async function ejecutarNodoOpenAIAgent(nodo, contexto, opts = {}) {
     console.log("🧠 OPENAI response:", reply);
 
     if (reply && numero) {
-      await enviarReplyComoContenido(numero, reply, usuarioId);
+      await enviarReplyEnInbox(numero, reply, usuarioId);
       contexto.ultimaRespuestaIA = reply;
       chatHistory = appendChatHistory(chatHistory, "assistant", reply);
       pushLastReply(usuarioId, numero, reply);
