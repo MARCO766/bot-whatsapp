@@ -139,8 +139,16 @@ function toRuntimeConfig(merged) {
       detener_si_responde: !!c.detenerSiResponde,
       reiniciar_si_responde: !!c.reiniciarSiResponde,
       detener_si_compra: !!c.detenerSiCompra,
-      detener_si_etiqueta_pagado: !!c.detenerEtiqueta,
-      detener_etiqueta_nombre: c.detenerEtiqueta || "PAGADO",
+      detener_si_etiqueta_pagado: !!(
+        c.detenerSiEtiquetaPagado ??
+        c.detener_si_etiqueta_pagado ??
+        true
+      ),
+      detener_etiqueta_nombre:
+        c.detenerEtiquetaNombre ||
+        c.detener_etiqueta_nombre ||
+        c.detenerEtiqueta ||
+        "PAGADO",
       detener_si_humano_toma_chat: !!c.detenerSiHumano,
       detener_si_otro_flujo: !!c.detenerSiOtroFlujo,
     },

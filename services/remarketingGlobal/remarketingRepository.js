@@ -74,10 +74,23 @@ async function actualizarEstado(id, estado, extra = {}) {
   );
 }
 
-async function cancelarCampana(campanaId, estado, motivo) {
+async function cancelarCampana(campanaId, estado, motivo, debugCtx = {}) {
   const ahora = nowUtc();
   const campoFecha =
     estado === ESTADOS_REMARKETING.RESPONDIDO ? "respondido_en" : "cancelado_en";
+
+  if (debugCtx.log !== false) {
+    const { logCancelacionRemarketing } = require("./cancelacionDebug");
+    logCancelacionRemarketing(motivo, debugCtx.cliente_numero || debugCtx.numero, {
+      etiquetas: debugCtx.etiquetas,
+      compraDetectada: debugCtx.compraDetectada,
+      payload: {
+        campana_id: campanaId,
+        estado,
+        ...debugCtx,
+      },
+    });
+  }
 
   await axios.patch(
     `${SUPABASE_URL}/rest/v1/remarketing_global_programados?campana_id=eq.${campanaId}&estado=eq.${ESTADOS_REMARKETING.PENDIENTE}`,
@@ -179,6 +192,23 @@ async function ultimoMensajeEntranteEn(numero, usuarioId, horas = 24) {
   return (response.data || [])[0] || null;
 }
 
+async function obtenerEtiquetasCliente(numero, usuarioId) {
+  if (!numero) return [];
+
+  let url = `${SUPABASE_URL}/rest/v1/clientes_etiquetas?cliente_numero=eq.${encodeURIComponent(numero)}&select=etiqueta`;
+
+  if (usuarioId) {
+    url += `&usuario_id=eq.${usuarioId}`;
+  }
+
+  try {
+    const response = await axios.get(url, { headers: headers() });
+    return (response.data || []).map((r) => r.etiqueta).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
 async function tieneEtiqueta(numero, usuarioId, nombreEtiqueta) {
   if (!nombreEtiqueta) return false;
 
@@ -192,15 +222,85 @@ async function tieneEtiqueta(numero, usuarioId, nombreEtiqueta) {
   return (response.data || []).length > 0;
 }
 
-async function tieneConversion(numero, usuarioId) {
-  let url = `${SUPABASE_URL}/rest/v1/crm_conversiones?cliente_numero=eq.${encodeURIComponent(numero)}&select=id&limit=1`;
+/** Conversiones con valor 0 u origen flujo sin compra explícita NO cuentan como compra. */
+function esCompraRealExplicita(row) {
+  if (!row) return { compra: false, razon: "sin_fila" };
+
+  const meta =
+    row.metadata && typeof row.metadata === "object" ? row.metadata : {};
+
+  if (meta.compra === true || meta.compro === true) {
+    return { compra: true, razon: "metadata.compra_true" };
+  }
+
+  const origen = String(row.origen || "").toLowerCase();
+  if (["hotmart", "stripe", "mercadopago", "webhook", "qr"].includes(origen)) {
+    return { compra: true, razon: "origen_pago_" + origen };
+  }
+
+  const valor = parseFloat(row.valor);
+  if (!Number.isFinite(valor) || valor <= 0) {
+    return { compra: false, razon: "valor_cero_o_invalido" };
+  }
+
+  if (origen === "flujo" && meta.trigger === "nodo_flujo") {
+    return { compra: true, razon: "nodo_conversion_valor_positivo" };
+  }
+
+  if (origen === "manual") {
+    return { compra: true, razon: "manual_valor_positivo" };
+  }
+
+  return { compra: false, razon: "conversion_sin_compra_explicita" };
+}
+
+/**
+ * Solo compra real: metadata.compra, pago externo, o conversión de nodo con valor > 0.
+ * NO cualquier fila en crm_conversiones (evita falsos positivos con valor 0).
+ */
+async function leadTieneCompraExplicita(numero, usuarioId) {
+  if (!numero) {
+    return { compra: false, fila: null, razon: "sin_numero" };
+  }
+
+  let url = `${SUPABASE_URL}/rest/v1/crm_conversiones?cliente_numero=eq.${encodeURIComponent(numero)}&select=id,valor,origen,metadata,creado_en,flujo_id,nodo_id&order=creado_en.desc&limit=20`;
 
   if (usuarioId) {
     url += `&usuario_id=eq.${usuarioId}`;
   }
 
-  const response = await axios.get(url, { headers: headers() });
-  return (response.data || []).length > 0;
+  try {
+    const response = await axios.get(url, { headers: headers() });
+    const rows = response.data || [];
+
+    for (const row of rows) {
+      const check = esCompraRealExplicita(row);
+      if (check.compra) {
+        return { compra: true, fila: row, razon: check.razon };
+      }
+    }
+
+    return {
+      compra: false,
+      fila: rows[0] || null,
+      razon: rows.length
+        ? "hay_conversiones_pero_ninguna_compra_explicita"
+        : "sin_conversiones",
+    };
+  } catch (err) {
+    return {
+      compra: false,
+      fila: null,
+      razon: "error_consulta",
+      error: err.message,
+    };
+  }
+}
+
+/** @deprecated Usar leadTieneCompraExplicita — evita falsos positivos */
+async function tieneConversion(numero, usuarioId) {
+  const res = await leadTieneCompraExplicita(numero, usuarioId);
+  return res.compra;
 }
 
 module.exports = {
@@ -212,6 +312,9 @@ module.exports = {
   cancelarPendientesCliente,
   clienteRespondioDespues,
   ultimoMensajeEntranteEn,
+  obtenerEtiquetasCliente,
   tieneEtiqueta,
+  esCompraRealExplicita,
+  leadTieneCompraExplicita,
   tieneConversion,
 };
