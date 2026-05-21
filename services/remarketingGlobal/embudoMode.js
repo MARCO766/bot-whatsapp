@@ -257,12 +257,16 @@ async function leadEstaComprado(usuarioId, numero, flujoId, config, opts = {}) {
     return { comprado: false, razon: "ventana_reset" };
   }
 
+  const cliente = await obtenerClienteDesdeDb(usuarioId, numero);
+  if (cliente.estado_embudo === "nuevo") {
+    return { comprado: false, razon: "estado_embudo_nuevo" };
+  }
+
   const modo = await getModoEmbudo(usuarioId, numero, flujoId);
   if (modo.estado === ESTADO_EMBUDO.COMPRADO) {
     return { comprado: true, razon: "modo_embudo_comprado" };
   }
 
-  const cliente = await obtenerClienteDesdeDb(usuarioId, numero);
   if (cliente.estado_embudo === "compro") {
     return { comprado: true, razon: "estado_embudo_compro" };
   }
@@ -330,7 +334,55 @@ async function puedeProgramarRemarketing({
   cliente_numero,
   flujo_id,
   config,
+  flujo_datos,
 }) {
+  const diag = await obtenerDiagnosticoLead(
+    usuario_id,
+    cliente_numero,
+    flujo_id
+  );
+  const enVentana = leadEnVentanaReset(usuario_id, cliente_numero);
+  const modoActivo = await obtenerModoRemarketingActivoParaLead(
+    usuario_id,
+    cliente_numero
+  );
+  const remarketingActivo =
+    modoActivo?.estado === ESTADO_EMBUDO.REMARKETING_ACTIVO;
+
+  let nodoRmActivo = null;
+  if (flujo_datos) {
+    const { buscarNodoRemarketingEnFlujo } = require("./parseRemarketingGlobalNode");
+    const nodo = buscarNodoRemarketingEnFlujo(flujo_datos);
+    nodoRmActivo = nodo ? nodo.config?.activo !== false : false;
+  }
+
+  const flujoTerminado = remarketingActivo;
+
+  console.log("[RM DEBUG] estado_embudo=" + (diag.estado_embudo ?? "—"));
+  console.log("[RM DEBUG] comprado=" + (diag.comprado ? "true" : "false"));
+  console.log(
+    "[RM DEBUG] remarketing_activo=" + (remarketingActivo ? "true" : "false")
+  );
+  console.log("[RM DEBUG] flujo_terminado=" + (flujoTerminado ? "true" : "false"));
+  console.log("[RM DEBUG] flujo_id actual=" + (flujo_id || "—"));
+  console.log(
+    "[RM DEBUG] nodo_remarketing_activo=" +
+      (nodoRmActivo === null ? "—" : nodoRmActivo ? "true" : "false")
+  );
+  console.log("[RM DEBUG] ventana_reset=" + (enVentana ? "true" : "false"));
+
+  if (enVentana) {
+    console.log("[RM DEBUG] puede programar remarketing=SI");
+    console.log("[RM DEBUG] motivo si NO programa=— (ventana_reset post-resetbot)");
+    return { ok: true, razon: "ventana_reset" };
+  }
+
+  if (nodoRmActivo === false) {
+    console.log("[RM DEBUG] puede programar remarketing=NO");
+    console.log("[RM DEBUG] motivo si NO programa=nodo remarketing inactivo en flujo");
+    return { ok: false, razon: "nodo_inactivo" };
+  }
+
   const compra = await leadEstaComprado(
     usuario_id,
     cliente_numero,
@@ -339,6 +391,8 @@ async function puedeProgramarRemarketing({
   );
 
   if (compra.comprado) {
+    console.log("[RM DEBUG] puede programar remarketing=NO");
+    console.log("[RM DEBUG] motivo si NO programa=" + (compra.razon || "lead_comprado"));
     console.log("[RM MODE] lead comprado → no programar remarketing");
     await marcarLeadCompradoEnFlujo({
       usuario_id,
@@ -350,6 +404,8 @@ async function puedeProgramarRemarketing({
     return { ok: false, razon: compra.razon };
   }
 
+  console.log("[RM DEBUG] puede programar remarketing=SI");
+  console.log("[RM DEBUG] motivo si NO programa=—");
   return { ok: true };
 }
 
@@ -485,6 +541,7 @@ async function reprogramarRemarketingSiModoActivo(usuarioId, numero) {
     cliente_numero: numero,
     flujo_id: bloqueo.flujo_id,
     config: null,
+    flujo_datos: flujoPack.flujoDatos,
   });
 
   if (!puede.ok) return false;

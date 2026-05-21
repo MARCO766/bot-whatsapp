@@ -300,6 +300,7 @@ function esNodoRemarketingGlobal(nodo) {
 }
 
 function buscarNodoRemarketingEnFlujo(flujoData) {
+  console.log("[RM DEBUG] buscando remarketing_global en flujo");
   if (!flujoData?.nodos?.length) {
     console.log("[REMARKETING] flujo sin nodos en data");
     return null;

@@ -384,7 +384,19 @@ async function ejecutarFlujo(
   let remarketingProgramadoEnEjecucion = false;
 
   async function programarRemarketingSiAplica(nodoRemarketing) {
-    if (remarketingProgramadoEnEjecucion || !numero || !usuarioId || !flujoId) {
+    if (remarketingProgramadoEnEjecucion) {
+      console.log("[RM DEBUG] omitido: remarketing ya programado en esta ejecución");
+      return;
+    }
+    if (!numero || !usuarioId || !flujoId) {
+      console.log(
+        "[RM DEBUG] omitido programar al inicio flujo | numero=" +
+          !!numero +
+          " usuarioId=" +
+          !!usuarioId +
+          " flujoId=" +
+          (flujoId || "—")
+      );
       return;
     }
     try {

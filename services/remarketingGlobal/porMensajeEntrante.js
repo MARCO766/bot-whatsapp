@@ -122,8 +122,12 @@ async function manejarRemarketingGlobalPorMensajeEntrante({
     cliente_numero,
     flujo_id,
     config,
+    flujo_datos,
   });
   if (!puede.ok) {
+    console.log(
+      "[RM DEBUG] programación abortada | motivo=" + (puede.razon || "—")
+    );
     return null;
   }
 
@@ -248,11 +252,20 @@ async function programarRemarketingAlDetectarNodo({
   nodoRemarketing,
   flujo_id_anterior,
 }) {
+  console.log("[RM DEBUG] buscando remarketing_global | flujo_id=" + flujo_id);
+
   const nodo = nodoRemarketing || buscarNodoRemarketingEnFlujo(flujo_datos);
-  if (!nodo || nodo.config?.activo === false) {
+  if (!nodo) {
+    console.log("[RM DEBUG] nodo remarketing_global NO encontrado en flujo");
     return null;
   }
 
+  if (nodo.config?.activo === false) {
+    console.log("[RM DEBUG] nodo encontrado pero activo=false — no programar");
+    return null;
+  }
+
+  console.log("[RM DEBUG] nodo encontrado | id=" + (nodo.id || "—"));
   console.log(
     "[RM DEBUG] nodo remarketing_global detectado en flujo, programando R1"
   );
