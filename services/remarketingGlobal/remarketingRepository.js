@@ -91,6 +91,23 @@ async function cancelarCampana(campanaId, estado, motivo) {
   );
 }
 
+async function obtenerFlujoIdRemarketingPendiente(numero, usuarioId) {
+  if (!numero || !usuarioId) return null;
+
+  let url =
+    `${SUPABASE_URL}/rest/v1/remarketing_global_programados?cliente_numero=eq.${encodeURIComponent(numero)}` +
+    `&usuario_id=eq.${usuarioId}&estado=eq.${ESTADOS_REMARKETING.PENDIENTE}` +
+    `&select=flujo_id&order=creado_en.desc&limit=1`;
+
+  try {
+    const res = await axios.get(url, { headers: headers() });
+    const row = (res.data || [])[0];
+    return row?.flujo_id || null;
+  } catch {
+    return null;
+  }
+}
+
 async function cancelarPendientesCliente(numero, usuarioId, estado, motivo, flujoId) {
   const ahora = nowUtc();
   const campoFecha =
@@ -189,6 +206,7 @@ async function tieneConversion(numero, usuarioId) {
 module.exports = {
   insertarProgramados,
   obtenerPendientesVencidos,
+  obtenerFlujoIdRemarketingPendiente,
   actualizarEstado,
   cancelarCampana,
   cancelarPendientesCliente,
