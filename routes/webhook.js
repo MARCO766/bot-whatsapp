@@ -533,36 +533,7 @@ try {
   console.log("[WEBHOOK] cancelar seguimientos:", cancelErr.message);
 }
 
-/* Remarketing Global: scoped al flujo ACTUAL del lead (no otro flujo del usuario) */
-try {
-  const { resolverFlujoActualDelLead } = require("../services/remarketingGlobal/flujoActivoDelLead");
-  const {
-    manejarRemarketingGlobalPorMensajeEntrante,
-  } = require("../services/remarketingGlobal/porMensajeEntrante");
-
-  const flujoLead = await resolverFlujoActualDelLead({
-    cliente_numero: from,
-    usuario_id: usuarioIdWebhook,
-    texto_mensaje: textoParaActivador,
-  });
-
-  if (flujoLead.ok) {
-    await manejarRemarketingGlobalPorMensajeEntrante({
-      usuario_id: usuarioIdWebhook,
-      cliente_numero: from,
-      flujo_id: flujoLead.flujoId,
-      flujo_datos: flujoLead.flujoDatos,
-      flujo_id_anterior: flujoLead.flujoIdAnterior || null,
-    });
-  } else {
-    console.log(
-      "[RM DEBUG] no hay remarketing_global activo | motivo:",
-      flujoLead.motivo
-    );
-  }
-} catch (rmErr) {
-  console.log("[RM DEBUG] error remarketing webhook:", rmErr.message);
-}
+/* Remarketing Global: se ejecuta en flowService (pipeline principal), antes de ejecutarFlujo */
 
 console.log("🔎 ACTIVADOR — texto:", textoParaActivador, "| usuario:", usuarioIdWebhook);
 

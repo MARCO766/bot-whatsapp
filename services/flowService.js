@@ -942,6 +942,53 @@ if (html.includes("🏷️ Etiqueta")) {
   await ejecutarNodo("nodo_inicio");
 }
 
+async function invocarRemarketingDesdePipeline({
+  usuario_id,
+  cliente_numero,
+  flujo_id,
+  flujo_datos,
+}) {
+  if (!usuario_id || !cliente_numero || !flujo_id) {
+    console.log("[RM DEBUG] omitido pipeline: falta usuario, cliente o flujo_id");
+    return;
+  }
+
+  console.log("[RM DEBUG] LLAMANDO REMARKETING DESDE PIPELINE PRINCIPAL", {
+    usuario_id,
+    cliente_numero,
+    flujo_id,
+  });
+
+  try {
+    const { obtenerFlujoIdRemarketingPendiente } = require("./remarketingGlobal/remarketingRepository");
+    const {
+      manejarRemarketingGlobalPorMensajeEntrante,
+    } = require("./remarketingGlobal/porMensajeEntrante");
+
+    let flujo_id_anterior = null;
+    const flujoPendiente = await obtenerFlujoIdRemarketingPendiente(
+      cliente_numero,
+      usuario_id
+    );
+    if (flujoPendiente && flujoPendiente !== flujo_id) {
+      flujo_id_anterior = flujoPendiente;
+    }
+
+    await manejarRemarketingGlobalPorMensajeEntrante({
+      usuario_id,
+      cliente_numero,
+      flujo_id,
+      flujo_datos,
+      flujo_id_anterior,
+    });
+  } catch (err) {
+    console.log(
+      "[RM DEBUG] error remarketing pipeline:",
+      err.response?.data || err.message
+    );
+  }
+}
+
 async function reanudarFlujoIAPendiente(numero, mensaje, usuarioId) {
   const sesion = obtenerSesionIAPendiente(usuarioId, numero);
   if (!sesion?.flujoId || !sesion?.nodoId) return false;
@@ -969,6 +1016,13 @@ async function reanudarFlujoIAPendiente(numero, mensaje, usuarioId) {
   const tipoPendiente = nodoPendiente ? detectarTipoNodo(nodoPendiente) : "?";
 
   console.log("[FLUJO] Reanudando IA pendiente | nodo:", sesion.nodoId, "| tipo:", tipoPendiente);
+
+  await invocarRemarketingDesdePipeline({
+    usuario_id: usuarioId,
+    cliente_numero: numero,
+    flujo_id: sesion.flujoId,
+    flujo_datos: flujoDatos,
+  });
 
   await ejecutarFlujo(numero, flujoDatos, usuarioId, sesion.flujoId, {
     iaResume: true,
@@ -1189,6 +1243,13 @@ async function buscarYEjecutarActivador(numero, textoCliente, usuarioId = null, 
   }
 
   console.log("✅ FLUJO ENCONTRADO:", flujo.nombre || "—", "| id:", flujo.id);
+
+  await invocarRemarketingDesdePipeline({
+    usuario_id: usuarioId,
+    cliente_numero: numero,
+    flujo_id: flujo.id,
+    flujo_datos: flujoDatos,
+  });
 
   await ejecutarFlujo(numero, flujoDatos, usuarioId, flujo.id, {
     ultimoMensaje: textoCliente,

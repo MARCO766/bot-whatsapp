@@ -62,6 +62,7 @@ async function manejarRemarketingGlobalPorMensajeEntrante({
   flujo_datos,
   flujo_id_anterior,
 }) {
+  console.log("[RM DEBUG] ENTRÓ A manejarRemarketingGlobalPorMensajeEntrante");
   console.log("[RM DEBUG] mensaje entrante => reiniciando remarketing");
 
   if (!cliente_numero || !usuario_id || !flujo_id) {
