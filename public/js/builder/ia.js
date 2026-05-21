@@ -863,7 +863,7 @@ window.MacBotIA = (function () {
     const id =
       "nodo_" + (typeof nodoCount !== "undefined" ? nodoCount : window.nodoCount);
     const nodo = document.createElement(TAG_DIV);
-    nodo.className = "node ia-node";
+    nodo.className = "node ia-node node-ia";
     nodo.id = id;
     nodo.dataset.tipo = "ia";
 

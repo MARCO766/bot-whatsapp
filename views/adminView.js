@@ -42,12 +42,12 @@ ${builder ? '<link rel="stylesheet" href="/css/seguimiento.css"><link rel="style
   <div class="menu menu-nodos" id="menuNodos" style="${builder ? "display:flex;" : "display:none;"}">
     <span class="menu-nodos-title">Nodos</span>
     <button type="button" class="menu-nodo-btn active" disabled>🧩 Paleta</button>
-    <button type="button" class="menu-nodo-btn" onclick="agregarNodoContenido()">💬 Contenido</button>
+    <button type="button" class="menu-nodo-btn menu-nodo-btn-contenido" onclick="agregarNodoContenido()">💬 Contenido</button>
     <button type="button" class="menu-nodo-btn menu-nodo-btn-ia" onclick="agregarNodoIA()">🤖 IA</button>
-    <button type="button" class="menu-nodo-btn" onclick="agregarNodo('seguimiento')">🔔 Seguimiento</button>
-    <button type="button" class="menu-nodo-btn" onclick="agregarNodo('espera')">⏳ Espera</button>
-    <button type="button" class="menu-nodo-btn" onclick="agregarNodo('etiqueta')">🏷️ Etiqueta</button>
-    <button type="button" class="menu-nodo-btn" onclick="agregarNodo('conversion')">💰 Conversión</button>
+    <button type="button" class="menu-nodo-btn menu-nodo-btn-seguimiento" onclick="agregarNodo('seguimiento')">🔔 Seguimiento</button>
+    <button type="button" class="menu-nodo-btn menu-nodo-btn-espera" onclick="agregarNodo('espera')">⏳ Espera</button>
+    <button type="button" class="menu-nodo-btn menu-nodo-btn-etiqueta" onclick="agregarNodo('etiqueta')">🏷️ Etiqueta</button>
+    <button type="button" class="menu-nodo-btn menu-nodo-btn-conversion" onclick="agregarNodo('conversion')">💰 Conversión</button>
   </div>
 </div>
 

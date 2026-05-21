@@ -387,7 +387,7 @@ window.MacBotContenido = (function () {
   function asegurarEstructuraNodo(nodo) {
     if (!nodo) return;
 
-    nodo.classList.add("content-node");
+    nodo.classList.add("content-node", "node-contenido");
     nodo.classList.remove("blue");
     nodo.dataset.tipo = "contenido";
 
@@ -1003,7 +1003,7 @@ window.MacBotContenido = (function () {
       .replace(/>/g, "&gt;");
 
     const nodo = document.createElement("div");
-    nodo.className = "node content-node";
+    nodo.className = "node content-node node-contenido";
     nodo.id = "nodo_" + nodoCount;
     nodo.dataset.tipo = "contenido";
     nodo.style.left = 120 + nodoCount * 20 + "px";

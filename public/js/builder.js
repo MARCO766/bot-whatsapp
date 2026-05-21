@@ -290,7 +290,7 @@ function agregarNodo(tipo){
   let contenido = "";
 
   if(tipo === "seguimiento"){
-    nodo.classList.add("follow-node");
+    nodo.classList.add("follow-node", "node-seguimiento");
 
     contenido = `
       <div class="follow-header">
@@ -309,7 +309,7 @@ function agregarNodo(tipo){
   }
 
   if(tipo === "espera"){
-    nodo.classList.add("orange");
+    nodo.classList.add("node-espera");
 
     contenido = `
       <div class="node-actions">
@@ -322,7 +322,7 @@ function agregarNodo(tipo){
   }
 
   if(tipo === "conversion"){
-    nodo.classList.add("conversion-node");
+    nodo.classList.add("conversion-node", "node-conversion");
 
     contenido = `
       <div class="node-actions">
@@ -354,6 +354,8 @@ function agregarNodo(tipo){
   }
 
   if(tipo === "etiqueta"){
+    nodo.classList.add("node-etiqueta");
+
     const opcionesEtiquetas = etiquetasData.map(e => {
       return `<option value="${e.nombre}">${e.nombre}</option>`;
     }).join("");
@@ -380,7 +382,7 @@ function agregarNodo(tipo){
   }
 
   if(tipo === "ia"){
-    nodo.classList.add("ia-node");
+    nodo.classList.add("ia-node", "node-ia");
     const cfgIa = JSON.stringify({
       nombreNodo: "🤖 IA",
       modo: "detectar_intencion",
