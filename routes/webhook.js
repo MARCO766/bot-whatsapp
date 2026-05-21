@@ -6,6 +6,10 @@ const axios = require("axios");
 const { enviarEventoMeta } = require("../services/metaService");
 const { procesarMensajeEntrante } = require("../services/flowService");
 const {
+  esComandoResetFlujo,
+  resetearFlujoLead,
+} = require("../services/resetFlujoLeadService");
+const {
   cancelarSeguimientosPorRespuesta,
 } = require("../services/seguimiento/cancelOnReply");
 const {
@@ -496,21 +500,6 @@ if (conversacionActual) {
 
 }
 
-if (text.includes("reset")) {
-  
-  await axios.post(
-    `https://graph.facebook.com/v19.0/${PHONE_ID}/messages`,
-    {
-      messaging_product: "whatsapp",
-      to: from,
-      text: { body: "🔄 Conversación reiniciada. Ya puedes probar como cliente nuevo." }
-    },
-    { headers: { Authorization: `Bearer ${TOKEN}` } }
-  );
-
-  return res.sendStatus(200);
-}
-
 if (message.type === "interactive" && message.interactive?.button_reply) {
   const reply = message.interactive.button_reply;
   text = reply.title || reply.id || "";
@@ -526,6 +515,16 @@ if (message.type === "interactive" && message.interactive?.button_reply) {
   }
 }
 
+const textoParaActivador =
+  message.type === "text" && message.text?.body
+    ? message.text.body
+    : text;
+
+if (esComandoResetFlujo(textoParaActivador)) {
+  await resetearFlujoLead(from, usuarioIdWebhook);
+  return res.sendStatus(200);
+}
+
 await enviarEventoMeta(usuarioIdWebhook, "Lead", from);
 
 try {
@@ -533,11 +532,6 @@ try {
 } catch (cancelErr) {
   console.log("[WEBHOOK] cancelar seguimientos:", cancelErr.message);
 }
-
-const textoParaActivador =
-  message.type === "text" && message.text?.body
-    ? message.text.body
-    : text;
 
 console.log("🔎 ACTIVADOR — texto:", textoParaActivador, "| usuario:", usuarioIdWebhook);
 

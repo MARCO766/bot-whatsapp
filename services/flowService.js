@@ -21,6 +21,10 @@ const {
   obtenerSesionIAPendiente,
   limpiarSesionIAPendiente,
 } = require("./iaFlowSession");
+const {
+  esComandoResetFlujo,
+  resetearFlujoLead,
+} = require("./resetFlujoLeadService");
 const { esTipoIA, resolverTipoRaw } = require("./seguimiento/detectarTipoNodo");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -983,6 +987,11 @@ async function procesarMensajeEntrante(numero, texto, usuarioId, messageId) {
     usuarioId,
     texto: String(texto || "").slice(0, 60),
   });
+
+  if (esComandoResetFlujo(texto)) {
+    await resetearFlujoLead(numero, usuarioId);
+    return true;
+  }
 
   const reanudado = await reanudarFlujoIAPendiente(numero, texto, usuarioId);
   if (reanudado) {
