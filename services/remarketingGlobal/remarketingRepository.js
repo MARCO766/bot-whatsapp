@@ -39,7 +39,7 @@ async function obtenerPendientesVencidos(limite = 40) {
   const ahoraEncoded = encodeTimestampFilter(new Date());
 
   const response = await axios.get(
-    `${SUPABASE_URL}/rest/v1/remarketing_global_programados?estado=eq.${ESTADOS_REMARKETING.PENDIENTE}&run_at=lte.${ahoraEncoded}&order=run_at.asc&limit=${limite}&select=*`,
+    `${SUPABASE_URL}/rest/v1/remarketing_global_programados?estado=eq.${ESTADOS_REMARKETING.PENDIENTE}&correr_en=lte.${ahoraEncoded}&order=correr_en.asc&limit=${limite}&select=*`,
     { headers: headers() }
   );
 

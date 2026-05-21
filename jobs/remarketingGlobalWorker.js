@@ -1,4 +1,9 @@
-const { procesarRemarketingVencidos } = require("../services/remarketingGlobal/executeRemarketing");
+const {
+  obtenerPendientesVencidos,
+} = require("../services/remarketingGlobal/remarketingRepository");
+const {
+  procesarRemarketingItem,
+} = require("../services/remarketingGlobal/executeRemarketing");
 
 let workerIniciado = false;
 let procesando = false;
@@ -16,19 +21,51 @@ function startRemarketingGlobalWorker() {
     if (procesando) return;
     procesando = true;
 
-    try {
-      const resultado = await procesarRemarketingVencidos();
+    const now = new Date().toISOString();
 
-      if (resultado.procesados > 0) {
-        console.log(
-          "🔥 Worker remarketing global:",
-          resultado.procesados,
-          "procesados"
-        );
+    console.log("[RM WORKER] tick");
+    console.log("[RM WORKER] now=" + now);
+    console.log(
+      "[RM WORKER] buscando estado=pendiente y correr_en <= now"
+    );
+
+    try {
+      const pendientes = await obtenerPendientesVencidos(40);
+      console.log(
+        "[RM WORKER] pendientes encontrados=" + pendientes.length
+      );
+
+      if (!pendientes.length) {
+        console.log("[RM WORKER] sin pendientes vencidos para enviar");
+      } else {
+        for (const item of pendientes) {
+          console.log("[RM WORKER] procesando id=" + (item.id || "—"));
+          console.log(
+            "[RM WORKER] enviando cliente=" + (item.cliente_numero || "—")
+          );
+          console.log(
+            "[RM WORKER] payload=" +
+              JSON.stringify(item.mensaje_payload || {})
+          );
+          console.log(
+            "[RM WORKER] correr_en=" +
+              (item.correr_en || item.run_at || "—")
+          );
+
+          const resultado = await procesarRemarketingItem(item);
+
+          if (resultado?.ok) {
+            console.log("[RM WORKER] enviado OK");
+          } else {
+            console.log(
+              "[RM WORKER] no enviado | motivo=" + (resultado?.motivo || "—")
+            );
+          }
+        }
       }
     } catch (error) {
       console.log(
-        "ERROR worker remarketing:",
+        "[RM WORKER] ERROR tick:",
         error.response?.data || error.message
       );
     } finally {
