@@ -53,6 +53,55 @@ class DetectIntentResponse(BaseModel):
     matched: bool = False
 
 
+class ProductDataIn(BaseModel):
+    name: str = ""
+    description: str = ""
+    price: str = ""
+    includes: str = ""
+    bonuses: str = ""
+    guarantee: str = ""
+    access: str = ""
+    paymentMethods: str = ""
+    faq: str = ""
+
+
+class ChatTurnIn(BaseModel):
+    role: str = ""
+    text: str = ""
+
+
+class DetectIntentProRequest(BaseModel):
+    message: str = ""
+    threshold: int = 40
+    routes: list[RouteIn] = Field(default_factory=list)
+    productData: ProductDataIn = Field(default_factory=ProductDataIn)
+    tone: str = "amable"
+    chat_history: list[ChatTurnIn] = Field(default_factory=list)
+    fallbackMessage: str = ""
+    enabledConversation: bool = True
+
+
+class DetectIntentProResponse(BaseModel):
+    action: str = "reply"
+    intent: str = ""
+    score: int = 0
+    route_id: str | None = None
+    reply: str = ""
+
+
+PROMPT_INTERNO_PRO = (
+    "Eres un asesor de ventas para WhatsApp. "
+    "Responde corto, humano y claro. "
+    "Nunca inventes datos. "
+    "Usa SOLO información del producto. "
+    "Máximo 2–3 líneas. "
+    "Ayuda al cliente. "
+    "No avances el flujo salvo que detectes intención de un camino. "
+    "Si hay intención de camino: no respondas texto, devuelve route_id. "
+    "Si no sabes: usa fallback amable."
+)
+
+
 def normalize_text(text: str) -> str:
     s = str(text or "").lower()
     s = unicodedata.normalize("NFD", s)
@@ -141,6 +190,136 @@ def score_ruta(texto: str, route: RouteIn, contexto: str) -> int:
     return min(100, score)
 
 
+def detectar_ruta_ganadora(
+    message: str, routes: list[RouteIn], threshold: int, context: str = ""
+) -> tuple[dict[str, Any] | None, list[dict[str, Any]]]:
+    normalizado = normalize_text(message)
+    corregido = corregir_texto(normalizado)
+    ranking: list[dict[str, Any]] = []
+    for route in routes:
+        if not route.id or not route.name:
+            continue
+        sc = score_ruta(corregido, route, context)
+        ranking.append(
+            {
+                "id": route.id,
+                "name": route.name,
+                "score": sc,
+                "priority": route.priority,
+            }
+        )
+    ranking.sort(key=lambda x: (-x["score"], -x["priority"]))
+    winner = ranking[0] if ranking else None
+    if winner and winner["score"] >= threshold:
+        return winner, ranking
+    return None, ranking
+
+
+def _campo_producto(product: ProductDataIn, key: str) -> str:
+    val = getattr(product, key, "") or ""
+    return str(val).strip()
+
+
+def _prefijo_tono(tone: str) -> str:
+    t = normalize_text(tone)
+    if t == "vendedor":
+        return "¡Claro! "
+    if t == "premium":
+        return "Con gusto. "
+    if t == "tecnico":
+        return ""
+    if t == "agresivo":
+        return "¡Vamos! "
+    return "Sí 😊 "
+
+
+def generar_reply_producto(
+    message: str,
+    product: ProductDataIn,
+    tone: str,
+    fallback: str,
+    chat_history: list[ChatTurnIn],
+) -> str:
+    texto = corregir_texto(normalize_text(message))
+    pref = _prefijo_tono(tone)
+    nombre = _campo_producto(product, "name") or "el producto"
+    fb = (fallback or "").strip() or (
+        "No tengo ese dato a mano 😊 ¿Te ayudo con precio, acceso o formas de pago?"
+    )
+
+    if any(k in texto for k in ["precio", "cuesta", "sale", "valor", "cuanto", "cuánto"]):
+        precio = _campo_producto(product, "price")
+        if precio:
+            return f"{pref}El precio de {nombre} es {precio}."
+        return fb
+
+    if any(k in texto for k in ["incluye", "inclusiones", "que trae", "que lleva", "bono", "bonos"]):
+        incluye = _campo_producto(product, "includes")
+        bonos = _campo_producto(product, "bonuses")
+        partes = [p for p in [incluye, bonos and f"Bonos: {bonos}" if bonos else ""] if p]
+        if partes:
+            return f"{pref}{' '.join(partes)}"
+        return fb
+
+    if any(k in texto for k in ["garantia", "garantía", "devolucion", "reembolso"]):
+        g = _campo_producto(product, "guarantee")
+        if g:
+            return f"{pref}Garantía: {g}"
+        return fb
+
+    if any(k in texto for k in ["acceso", "accedo", "entrega", "recibo", "descarga", "ingreso"]):
+        a = _campo_producto(product, "access")
+        if a:
+            return f"{pref}Acceso/entrega: {a}"
+        return fb
+
+    if any(
+        k in texto
+        for k in ["pago", "pagar", "metodo", "método", "transferencia", "deposito", "qr", "tigo"]
+    ):
+        p = _campo_producto(product, "paymentMethods")
+        if p:
+            return f"{pref}Formas de pago: {p}"
+        return fb
+
+    if any(k in texto for k in ["mas info", "más info", "informacion", "información", "detalle", "cuentame"]):
+        desc = _campo_producto(product, "description")
+        if desc:
+            return f"{pref}{desc}"
+        return fb
+
+    if any(k in texto for k in ["hola", "buenas", "hey", "saludo"]):
+        desc = _campo_producto(product, "description")
+        if desc:
+            return f"{pref}Hola, te cuento sobre {nombre}: {desc}"
+        return f"{pref}Hola, ¿en qué te ayudo con {nombre}?"
+
+    faq = _campo_producto(product, "faq")
+    if faq and len(texto) > 4:
+        for linea in faq.split("\n"):
+            ln = normalize_text(linea)
+            if ln and any(p in texto for p in ln.split()[:3] if len(p) > 3):
+                return f"{pref}{linea.strip()}"
+
+    ultimo_bot = ""
+    for turn in reversed(chat_history or []):
+        if normalize_text(turn.role) in ("assistant", "bot", "ia"):
+            ultimo_bot = turn.text or ""
+            break
+    if ultimo_bot and any(
+        w in normalize_text(ultimo_bot) for w in ["precio", "incluye", "pago"]
+    ):
+        if any(k in texto for k in ["si", "sí", "ok", "dale", "y eso", "como", "cuanto"]):
+            desc = _campo_producto(product, "description")
+            if desc:
+                return f"{pref}{desc}"
+
+    desc = _campo_producto(product, "description")
+    if desc:
+        return f"{pref}{desc}"
+    return fb
+
+
 @app.get("/health")
 def health():
     return {"ok": True, "service": "python-ai"}
@@ -154,33 +333,15 @@ def detect_intent(body: DetectIntentRequest) -> DetectIntentResponse:
 
     print("📩 mensaje:", message)
 
-    normalizado = normalize_text(message)
-    corregido = corregir_texto(normalizado)
-
-    ranking: list[dict[str, Any]] = []
-    for route in body.routes:
-        if not route.id or not route.name:
-            continue
-        sc = score_ruta(corregido, route, context)
-        ranking.append(
-            {
-                "id": route.id,
-                "name": route.name,
-                "score": sc,
-                "priority": route.priority,
-            }
-        )
-
-    ranking.sort(key=lambda x: (-x["score"], -x["priority"]))
-
-    winner = ranking[0] if ranking else None
+    winner, ranking = detectar_ruta_ganadora(message, body.routes, threshold, context)
     print("🎯 ganador:", winner)
 
-    if not winner or winner["score"] < threshold:
+    if not winner:
+        top = ranking[0] if ranking else None
         return DetectIntentResponse(
-            intent=winner["name"] if winner else "",
-            score=winner["score"] if winner else 0,
-            route_id=winner["id"] if winner else None,
+            intent=top["name"] if top else "",
+            score=top["score"] if top else 0,
+            route_id=top["id"] if top else None,
             matched=False,
         )
 
@@ -189,6 +350,61 @@ def detect_intent(body: DetectIntentRequest) -> DetectIntentResponse:
         score=winner["score"],
         route_id=winner["id"],
         matched=True,
+    )
+
+
+@app.post("/detect-intent-pro", response_model=DetectIntentProResponse)
+def detect_intent_pro(body: DetectIntentProRequest) -> DetectIntentProResponse:
+    message = body.message or ""
+    threshold = max(0, min(100, int(body.threshold or 40)))
+    print("🤖 AGENTE IA PRO — mensaje:", message)
+    print("📋 prompt interno (fijo):", PROMPT_INTERNO_PRO[:80], "...")
+
+    history_ctx = " ".join(
+        (t.text or "") for t in (body.chat_history or [])[-4:]
+    )
+    winner, ranking = detectar_ruta_ganadora(
+        message, body.routes, threshold, history_ctx
+    )
+    print("🎯 ganador Pro:", winner)
+
+    if winner:
+        print("➡️ IA PRO sale por ruta:", winner["id"])
+        return DetectIntentProResponse(
+            action="route",
+            intent=winner["name"],
+            score=winner["score"],
+            route_id=winner["id"],
+            reply="",
+        )
+
+    top = ranking[0] if ranking else None
+    score_bajo = top["score"] if top else 0
+
+    if not body.enabledConversation:
+        fb = (body.fallbackMessage or "").strip() or (
+            "No entendí bien 😊 ¿Qué opción prefieres?"
+        )
+        return DetectIntentProResponse(
+            action="reply",
+            intent="router",
+            score=score_bajo,
+            reply=fb,
+        )
+
+    reply = generar_reply_producto(
+        message,
+        body.productData,
+        body.tone or "amable",
+        body.fallbackMessage or "",
+        body.chat_history or [],
+    )
+    print("💬 IA PRO responde:", reply)
+    return DetectIntentProResponse(
+        action="reply",
+        intent="consulta",
+        score=score_bajo,
+        reply=reply,
     )
 
 

@@ -11,13 +11,21 @@ function usePythonAi() {
   return v === "true" || v === "1" || v === "yes";
 }
 
-function resolveDetectIntentEndpoint() {
+function resolvePythonBaseUrl() {
   let base = String(process.env.PYTHON_AI_URL || "http://localhost:8000").trim();
   base = base.replace(/\/+$/, "");
-  if (/\/detect-intent$/i.test(base)) {
-    return base;
+  if (/\/detect-intent(-pro)?$/i.test(base)) {
+    return base.replace(/\/detect-intent(-pro)?$/i, "");
   }
-  return `${base}/detect-intent`;
+  return base;
+}
+
+function resolveDetectIntentEndpoint() {
+  return `${resolvePythonBaseUrl()}/detect-intent`;
+}
+
+function resolveDetectIntentProEndpoint() {
+  return `${resolvePythonBaseUrl()}/detect-intent-pro`;
 }
 
 function nombreRuta(route) {
@@ -82,10 +90,40 @@ async function detectarIntentPython({ message, context, routes, threshold }) {
   return res.data;
 }
 
+function mapPythonProToResult(pythonResult) {
+  const action = pythonResult?.action === "route" ? "route" : "reply";
+  return {
+    ok: true,
+    action,
+    intent: String(pythonResult?.intent || ""),
+    score: Number(pythonResult?.score) || 0,
+    routeId: action === "route" ? pythonResult.route_id || null : null,
+    reply: action === "reply" ? String(pythonResult?.reply || "").trim() : "",
+    source: "python-pro",
+  };
+}
+
+async function detectarIntentProPython(payload) {
+  const url = resolveDetectIntentProEndpoint();
+  console.log("🐍 Enviando a Python IA Pro:", url);
+
+  const res = await axios.post(url, payload, {
+    timeout: PYTHON_AI_TIMEOUT_MS,
+    headers: { "Content-Type": "application/json" },
+    validateStatus: (s) => s >= 200 && s < 300,
+  });
+
+  console.log("🐍 Respuesta Python IA Pro:", res.data);
+  return res.data;
+}
+
 module.exports = {
   usePythonAi,
   resolveDetectIntentEndpoint,
+  resolveDetectIntentProEndpoint,
   buildRoutesFromConfig,
   detectarIntentPython,
   mapPythonToAnalisis,
+  detectarIntentProPython,
+  mapPythonProToResult,
 };

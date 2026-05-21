@@ -23,7 +23,7 @@ window.MacBotIA = (function () {
   function crearConfigPorDefecto() {
     return {
       version: 3,
-      nombreNodo: "Agente IA",
+      nombreNodo: "Agente Rápido",
       scoreMinimo: 40,
       caminos: [],
       comportamiento: {
@@ -92,7 +92,7 @@ window.MacBotIA = (function () {
 
     return {
       version: 3,
-      nombreNodo: String(src.nombreNodo || src.label || "Agente IA").trim(),
+      nombreNodo: String(src.nombreNodo || src.label || "Agente Rápido").trim(),
       scoreMinimo: Math.min(
         100,
         Math.max(0, parseInt(src.scoreMinimo ?? src.threshold, 10) || 40)
@@ -296,7 +296,7 @@ window.MacBotIA = (function () {
     const titleEl = nodo.querySelector(".ia-title");
     if (!body || !titleEl) return;
 
-    const titulo = config.nombreNodo || "Agente IA";
+    const titulo = config.nombreNodo || "Agente Rápido";
     titleEl.textContent = titulo;
 
     nodo.classList.remove("ia-node--with-routes");
@@ -675,7 +675,7 @@ window.MacBotIA = (function () {
 
     contenido.innerHTML =
       '<div class="ia-panel">' +
-      "<h4>🤖 IA local ultra</h4>" +
+      "<h4>⚡ Agente Rápido</h4>" +
       '<p class="ia-panel-desc">Router silencioso: no responde ni avanza hasta que el lead escriba.</p>' +
       '<section class="ia-panel-seccion"><h5>1. Config compartida</h5>' +
       '<div class="panel-campo"><label>Nombre del nodo</label>' +
@@ -895,7 +895,7 @@ window.MacBotIA = (function () {
       '<div class="ia-icon-wrap">' +
       IA_ICON_SVG +
       "</div>" +
-      '<h3 class="ia-title">Agente IA</h3>' +
+      '<h3 class="ia-title">Agente Rápido</h3>' +
       "</div>" +
       '<div class="ia-body"><p class="ia-desc-pill ia-desc-pill--empty">Doble click para configurar</p></div>' +
       "</div>" +

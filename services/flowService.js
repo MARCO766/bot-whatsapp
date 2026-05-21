@@ -14,6 +14,7 @@ const {
   esConfigRouterLocal,
   parseIAFromNodo,
 } = require("./aiService");
+const { ejecutarNodoIAPro, parseIAProFromNodo } = require("./iaProService");
 const {
   guardarSesionIAPendiente,
   obtenerSesionIAPendiente,
@@ -376,7 +377,7 @@ async function ejecutarFlujo(
         c.source === nodoId ||
         c.sourceNode === nodoId
     );
-    if (!salientes.length && (etiqueta === "ia" || etiqueta === "IA")) {
+    if (!salientes.length && (etiqueta === "ia" || etiqueta === "ia_pro" || etiqueta === "IA")) {
       console.warn("⚠️ Nodo IA sin conexión saliente");
       return;
     }
@@ -391,7 +392,7 @@ async function ejecutarFlujo(
   async function continuarASiguientes(nodoId, visitados, etiqueta, sourceHandle) {
     let siguientes = obtenerSiguientesNodos(conexiones, nodoId);
 
-    if (etiqueta === "ia") {
+    if (etiqueta === "ia" || etiqueta === "ia_pro") {
       console.log(
         "🔌 CONEXIONES DESDE IA:",
         conexiones
@@ -441,14 +442,14 @@ async function ejecutarFlujo(
 
     if (!ids.length) {
       console.log("[FLUJO] Sin siguiente nodo:", nodoId, etiqueta ? "(" + etiqueta + ")" : "");
-      if (etiqueta === "ia") {
+      if (etiqueta === "ia" || etiqueta === "ia_pro") {
         console.warn("⚠️ Nodo IA sin conexión saliente");
       }
       return;
     }
 
-    if (etiqueta === "ia") {
-      logConexionesSalientes(nodoId, "IA");
+    if (etiqueta === "ia" || etiqueta === "ia_pro") {
+      logConexionesSalientes(nodoId, etiqueta === "ia_pro" ? "IA Pro" : "IA");
       console.log("➡️ SIGUIENTE NODO IA:", ids.join(", "));
     }
 
@@ -556,7 +557,82 @@ async function ejecutarFlujo(
       }
     }
 
+    if (tipoNodo === "ia_pro") {
+      const resumeIA = !!opts.iaResume;
+
+      flowContext = await ejecutarNodoIAPro(
+        nodo,
+        {
+          ...flowContext,
+          numero,
+          from: numero,
+          telefono: numero,
+          usuarioId,
+          chat_history: flowContext.chat_history || [],
+          mensaje: resumeIA
+            ? opts.mensajeResume ||
+              flowContext.ultimo_mensaje ||
+              flowContext.ultimoMensaje ||
+              ""
+            : "",
+          texto: resumeIA
+            ? opts.mensajeResume ||
+              flowContext.ultimo_mensaje ||
+              flowContext.ultimoMensaje ||
+              ""
+            : "",
+          body: resumeIA
+            ? opts.mensajeResume ||
+              flowContext.ultimo_mensaje ||
+              flowContext.ultimoMensaje ||
+              ""
+            : "",
+        },
+        { resume: resumeIA }
+      );
+
+      if (flowContext.iaProPausar && !resumeIA) {
+        guardarSesionIAPendiente({
+          usuarioId,
+          numero,
+          flujoId,
+          nodoId,
+          visitados: Array.from(visitados),
+          flowContext: {
+            ...flowContext,
+            ultimo_mensaje: "",
+          },
+        });
+        console.log("[FLUJO] IA Pro en espera — nodo:", nodoId);
+        return;
+      }
+
+      const routeHandle =
+        flowContext.iaProRouteId ||
+        flowContext.iaRouteId ||
+        flowContext.route ||
+        null;
+
+      if (flowContext.iaProPausar && resumeIA && !routeHandle) {
+        console.log("⏸️ IA PRO sigue esperando");
+        return;
+      }
+
+      if (resumeIA && routeHandle) {
+        limpiarSesionIAPendiente(usuarioId, numero);
+        logConexionesSalientes(nodoId, "IA Pro");
+        await continuarASiguientes(nodoId, visitados, "ia_pro", routeHandle);
+        return;
+      }
+
+      if (resumeIA) {
+        limpiarSesionIAPendiente(usuarioId, numero);
+      }
+      return;
+    }
+
     if (tipoNodo === "ia" || esTipoIA(nodo)) {
+      console.log("⚡ AGENTE RAPIDO intacto");
       const configIA = parseIAFromNodo(nodo);
       const esRouter = esConfigRouterLocal(configIA);
       const resumeIA = !!opts.iaResume;

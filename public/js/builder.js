@@ -229,6 +229,16 @@ function cargarFlujoGuardado(){
     }
   });
 
+  document.querySelectorAll(".ia-pro-node").forEach((nodo) => {
+    try {
+      if(window.MacBotIAPro){
+        window.MacBotIAPro.refrescarNodoCargado(nodo);
+      }
+    } catch (e) {
+      console.warn("IA Pro: error al refrescar nodo cargado", e);
+    }
+  });
+
   document.querySelectorAll(".ia-node").forEach((nodo) => {
     try {
       if(window.MacBotIA){
@@ -265,6 +275,12 @@ function agregarNodo(tipo){
 
   if(!canvas){
     alert("No existe canvasFlujo");
+    return;
+  }
+
+  if(tipo === "ia_pro" && window.MacBotIAPro && window.MacBotIAPro.crearNodoEnCanvas){
+    registrarHistorialBuilder();
+    window.MacBotIAPro.crearNodoEnCanvas();
     return;
   }
 
@@ -1643,6 +1659,9 @@ function abrirPanelNodo(nodo){
       window.MacBotContenido.clearPanelActivo();
     }
 
+    if(window.MacBotIAPro && window.MacBotIAPro.clearPanelActivo){
+      window.MacBotIAPro.clearPanelActivo();
+    }
     if(window.MacBotIA && window.MacBotIA.clearPanelActivo){
       window.MacBotIA.clearPanelActivo();
     }
@@ -1667,6 +1686,11 @@ function abrirPanelNodo(nodo){
 
   if(window.MacBotContenido && window.MacBotContenido.esNodoContenido(nodo)){
     window.MacBotContenido.renderPanel(nodo);
+    return;
+  }
+
+  if(window.MacBotIAPro && window.MacBotIAPro.esNodoIAPro(nodo)){
+    window.MacBotIAPro.renderPanel(nodo);
     return;
   }
 
@@ -1836,6 +1860,9 @@ function cerrarPanelNodo(){
     window.MacBotContenido.clearPanelActivo();
   }
 
+  if(window.MacBotIAPro && window.MacBotIAPro.clearPanelActivo){
+    window.MacBotIAPro.clearPanelActivo();
+  }
   if(window.MacBotIA && window.MacBotIA.clearPanelActivo){
     window.MacBotIA.clearPanelActivo();
   }
@@ -1869,6 +1896,9 @@ function sincronizarPanelAntesDeSnapshot(){
     window.MacBotContenido.flushPanelToNode();
   }
 
+  if(window.MacBotIAPro && window.MacBotIAPro.flushPanelToNode){
+    window.MacBotIAPro.flushPanelToNode();
+  }
   if(window.MacBotIA && window.MacBotIA.flushPanelToNode){
     window.MacBotIA.flushPanelToNode();
   }
@@ -1972,9 +2002,23 @@ function restaurarSnapshotBuilder(snapshot){
     }
 
     if(
+      (item.className && item.className.includes("ia-pro-node")) ||
+      item.tipo === "ia_pro" ||
+      (item.html && item.html.includes("ia-pro-data"))
+    ){
+      try{
+        if(window.MacBotIAPro){
+          window.MacBotIAPro.refrescarNodoCargado(nodo);
+        }
+      } catch (err) {
+        console.warn("IA Pro: error al restaurar nodo", err.message);
+      }
+    }
+
+    if(
       (item.className && item.className.includes("ia-node")) ||
       item.tipo === "ia" ||
-      (item.html && item.html.includes("ia-data"))
+      (item.html && item.html.includes("ia-data") && !item.html.includes("ia-pro-data"))
     ){
       try{
         if(window.MacBotIA){

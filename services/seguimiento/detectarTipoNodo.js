@@ -11,8 +11,21 @@ function resolverTipoRaw(nodo) {
   ).toLowerCase();
 }
 
+function esTipoIAPro(nodo) {
+  if (!nodo) return false;
+  const tipo = resolverTipoRaw(nodo);
+  const html = nodo.html || "";
+  const className = String(nodo.className || "");
+  return (
+    tipo === "ia_pro" ||
+    className.includes("ia-pro-node") ||
+    html.includes("ia-pro-data")
+  );
+}
+
 function esTipoIA(nodo) {
   if (!nodo) return false;
+  if (esTipoIAPro(nodo)) return false;
 
   const tipo = resolverTipoRaw(nodo);
   const html = nodo.html || "";
@@ -24,8 +37,8 @@ function esTipoIA(nodo) {
     tipo === "nodoia" ||
     tipo === "local_ai" ||
     tipo === "ia_local" ||
-    tipo.includes("ia") ||
-    tipo.includes("ai")
+    (tipo.includes("ia") && tipo !== "ia_pro") ||
+    (tipo.includes("ai") && !tipo.includes("ia_pro"))
   ) {
     return true;
   }
@@ -46,6 +59,10 @@ function detectarTipoNodo(nodo) {
 
   if (nodo.id === "nodo_inicio" || className.includes("node-start")) {
     return "inicio";
+  }
+
+  if (esTipoIAPro(nodo)) {
+    return "ia_pro";
   }
 
   if (esTipoIA(nodo)) {
@@ -92,5 +109,6 @@ function detectarTipoNodo(nodo) {
 module.exports = {
   detectarTipoNodo,
   esTipoIA,
+  esTipoIAPro,
   resolverTipoRaw,
 };
