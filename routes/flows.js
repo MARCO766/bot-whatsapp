@@ -20,7 +20,8 @@ const upload = multer({
 const { protegerPanel } = require("../middlewares/auth");
 const {
   enviarTextoWhatsApp,
-  enviarMediaWhatsApp
+  registrarMensajeSalienteEnInbox,
+  enviarMediaWhatsApp,
 } = require("../services/whatsappService");
 const {
   esArchivoImagen,
@@ -257,29 +258,18 @@ router.post("/inbox/responder", protegerPanel, upload.single("archivo"), async (
       }
 
       const usuarioIdManual = String(req.session.usuario.id).trim();
-      await enviarTextoWhatsApp(
+      const meta = await enviarTextoWhatsApp(numero, respuesta, {
+        usuarioId: usuarioIdManual,
+        _soloEnvioMeta: true,
+      });
+      const wamid = meta?.messages?.[0]?.id || null;
+      await registrarMensajeSalienteEnInbox({
+        usuarioId: usuarioIdManual,
         numero,
-        respuesta,
-        {
-          usuarioId: usuarioIdManual,
-          _inboxTrace: "manual",
-        }
-      );
-
-      await axios.patch(
-  `${SUPABASE_URL}/rest/v1/conversaciones?cliente_numero=eq.${numero}&usuario_id=eq.${req.session.usuario.id}`,
-  {
-    ultimo_mensaje: respuesta,
-    ultimo_mensaje_en: new Date().toISOString()
-  },
-  {
-    headers: {
-      apikey: SUPABASE_KEY,
-      Authorization: `Bearer ${SUPABASE_KEY}`,
-      "Content-Type": "application/json"
-    }
-  }
-);
+        texto: respuesta,
+        wamid,
+        tipo: "text",
+      });
 
       return finishInbox(req, res, numero);
     }

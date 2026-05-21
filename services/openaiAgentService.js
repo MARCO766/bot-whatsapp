@@ -4,7 +4,10 @@
  */
 
 const axios = require("axios");
-const { enviarTextoWhatsApp } = require("./whatsappService");
+const {
+  enviarTextoWhatsApp,
+  registrarMensajeSalienteEnInbox,
+} = require("./whatsappService");
 const { analizarRutaLocal, normalizarConfigRouter } = require("./iaLocalRouter");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -664,78 +667,34 @@ async function generarReply(config, mensajeLead, chatHistory, lastReplies) {
   return local;
 }
 
-/**
- * Mismo pipeline que bandeja manual: routes/flows.js POST /inbox/responder
- * → enviarTextoWhatsApp(numero, texto, { usuarioId }) + patch conversaciones.
- */
+/** Mismo guardado/socket que POST /inbox/responder (texto manual). */
 async function enviarOpenAIConPipelineManual(numero, reply, usuarioId) {
   const texto = String(reply || "").trim();
   const numeroCanon = String(numero || "").trim();
   const uid =
     usuarioId != null && usuarioId !== "" ? String(usuarioId).trim() : null;
 
-  console.log("🤖 OPENAI reply:", texto);
-  console.log("🤖 OPENAI pipeline ids:", {
-    numero: numeroCanon,
-    usuarioId: uid,
-    tipoUsuarioId: typeof usuarioId,
-  });
-
   if (!texto || !numeroCanon) return null;
   if (!uid) {
-    console.error("⚠️ OpenAI sin usuarioId — no puede usar pipeline manual de bandeja");
+    console.error("⚠️ OpenAI sin usuarioId — no puede pintar bandeja");
     return null;
   }
 
-  console.log("💾 OPENAI usando pipeline manual de inbox (mismo enviarTextoWhatsApp)");
+  const meta = await enviarTextoWhatsApp(numeroCanon, texto, {
+    usuarioId: uid,
+    _soloEnvioMeta: true,
+  });
+  if (!meta) return null;
 
-  let row = null;
-  try {
-    row = await enviarTextoWhatsApp(numeroCanon, texto, {
-      usuarioId: uid,
-      _inboxTrace: "openai",
-    });
-  } catch (err) {
-    console.error(
-      "⚠️ OpenAI envió WhatsApp pero no pudo pintar bandeja:",
-      err.response?.data || err.message || err
-    );
-    return null;
-  }
+  const wamid = meta?.messages?.[0]?.id || null;
+  await registrarMensajeSalienteEnInbox({
+    usuarioId: uid,
+    numero: numeroCanon,
+    texto,
+    wamid,
+    tipo: "text",
+  });
 
-  const wamid = row?.whatsapp_message_id || null;
-  console.log("✅ OPENAI Meta OK:", wamid);
-
-  if (!row) {
-    console.error(
-      "⚠️ OpenAI envió WhatsApp pero no pudo pintar bandeja: enviarTextoWhatsApp sin resultado"
-    );
-    return wamid;
-  }
-
-  if (SUPABASE_URL && SUPABASE_KEY) {
-    try {
-      await axios.patch(
-        `${SUPABASE_URL}/rest/v1/conversaciones?cliente_numero=eq.${numeroCanon}&usuario_id=eq.${uid}`,
-        {
-          ultimo_mensaje: texto,
-          ultimo_mensaje_en: new Date().toISOString(),
-        },
-        {
-          headers: {
-            apikey: SUPABASE_KEY,
-            Authorization: `Bearer ${SUPABASE_KEY}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
-    } catch (patchErr) {
-      console.log("[OpenAI] patch conversaciones (como manual):", patchErr.message);
-    }
-  }
-
-  console.log("✅ OPENAI mensaje pintado en bandeja");
-  console.log("📤 OPENAI enviado al lead", wamid || "");
   return wamid;
 }
 

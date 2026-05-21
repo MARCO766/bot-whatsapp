@@ -16,31 +16,6 @@ function supabaseHeaders(extra = {}) {
   };
 }
 
-function camposDiagnosticoInbox(payload, trace) {
-  return {
-    trace,
-    usuario_id: payload?.usuario_id ?? null,
-    numero: payload?.cliente_numero ?? payload?.numero ?? null,
-    telefono: payload?.telefono ?? null,
-    phone: payload?.phone ?? null,
-    conversation_id: payload?.conversation_id ?? null,
-    contacto_id: payload?.contacto_id ?? null,
-    body: payload?.body ?? null,
-    mensaje: payload?.mensaje ?? null,
-    texto: payload?.texto ?? payload?.contenido ?? null,
-    tipo: payload?.tipo ?? null,
-    direction: payload?.direction ?? null,
-    direccion: payload?.direccion ?? null,
-    from_me: payload?.from_me ?? null,
-    role: payload?.role ?? null,
-    estado: payload?.estado ?? null,
-    estado_envio: payload?.estado_envio ?? null,
-    created_at: payload?.created_at ?? null,
-    creado_en: payload?.creado_en ?? null,
-    whatsapp_message_id: payload?.whatsapp_message_id ?? null,
-  };
-}
-
 async function actualizarConversacionSaliente(usuarioId, numero, texto) {
   if (!usuarioId || !numero || !SUPABASE_URL || !SUPABASE_KEY) return;
 
@@ -84,33 +59,99 @@ async function actualizarConversacionSaliente(usuarioId, numero, texto) {
   }
 }
 
-async function enviarTextoWhatsApp(numero, texto, opciones = {}) {
-  const inboxTrace =
-    opciones._inboxTrace || (opciones._debugOpenAI ? "openai" : null);
-  const usuarioId = opciones.usuarioId ?? null;
+async function resolverCredencialesEnvio(opciones = {}) {
+  let tokenEnviar = TOKEN;
+  let phoneIdEnviar = PHONE_ID;
 
-  try {
-    let tokenEnviar = TOKEN;
-    let phoneIdEnviar = PHONE_ID;
-
-    if (usuarioId) {
-      const responseConexion = await axios.get(
-        `${SUPABASE_URL}/rest/v1/conexiones_whatsapp?usuario_id=eq.${usuarioId}&activo=eq.true&select=*`,
-        {
-          headers: {
-            apikey: SUPABASE_KEY,
-            Authorization: `Bearer ${SUPABASE_KEY}`,
-          },
-        }
-      );
-
-      const conexion = responseConexion.data?.[0];
-
-      if (conexion) {
-        tokenEnviar = conexion.token;
-        phoneIdEnviar = conexion.phone_id;
+  if (opciones.usuarioId) {
+    const responseConexion = await axios.get(
+      `${SUPABASE_URL}/rest/v1/conexiones_whatsapp?usuario_id=eq.${opciones.usuarioId}&activo=eq.true&select=*`,
+      {
+        headers: {
+          apikey: SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_KEY}`,
+        },
       }
+    );
+
+    const conexion = responseConexion.data?.[0];
+    if (conexion) {
+      tokenEnviar = conexion.token;
+      phoneIdEnviar = conexion.phone_id;
     }
+  }
+
+  return { tokenEnviar, phoneIdEnviar };
+}
+
+/**
+ * Mismo guardado + socket que bandeja manual (POST /inbox/responder texto).
+ */
+async function registrarMensajeSalienteEnInbox({
+  usuarioId,
+  numero,
+  texto,
+  wamid,
+  tipo = "texto",
+}) {
+  const tipoDb = tipo === "text" ? "texto" : tipo || "texto";
+
+  const insertPayload = {
+    cliente_numero: numero,
+    usuario_id: usuarioId || null,
+    direccion: "saliente",
+    tipo: tipoDb,
+    contenido: texto,
+    imagen_url: null,
+    whatsapp_message_id: wamid || null,
+    estado_envio: "sent",
+  };
+
+  const insertRes = await axios.post(
+    `${SUPABASE_URL}/rest/v1/mensajes`,
+    insertPayload,
+    {
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`,
+        "Content-Type": "application/json",
+        Prefer: "return=representation",
+      },
+    }
+  );
+
+  const row = insertRes.data?.[0];
+  if (!usuarioId) return row;
+
+  await actualizarConversacionSaliente(usuarioId, numero, texto);
+
+  const payloadMensaje = {
+    id: row?.id,
+    cliente_numero: numero,
+    usuario_id: usuarioId,
+    direccion: "saliente",
+    tipo: tipoDb,
+    contenido: texto,
+    imagen_url: null,
+    whatsapp_message_id: wamid || null,
+    estado_envio: "sent",
+    creado_en: row?.creado_en || new Date().toISOString(),
+  };
+
+  rt.nuevoMensaje(null, usuarioId, payloadMensaje);
+  rt.conversacionActualizada(null, usuarioId, {
+    cliente_numero: numero,
+    ultimo_mensaje: texto,
+    ultimo_mensaje_en: payloadMensaje.creado_en,
+    direccion: "saliente",
+  });
+
+  return row;
+}
+
+async function enviarTextoWhatsApp(numero, texto, opciones = {}) {
+  try {
+    const { tokenEnviar, phoneIdEnviar } = await resolverCredencialesEnvio(opciones);
 
     const respuestaMeta = await axios.post(
       `https://graph.facebook.com/v19.0/${phoneIdEnviar}/messages`,
@@ -128,103 +169,35 @@ async function enviarTextoWhatsApp(numero, texto, opciones = {}) {
         },
       }
     );
-    const whatsappMessageId =
-      respuestaMeta.data?.messages?.[0]?.id || null;
 
-    const insertPayload = {
-      cliente_numero: numero,
-      usuario_id: usuarioId || null,
-      direccion: "saliente",
-      tipo: "texto",
-      contenido: texto,
-      imagen_url: null,
-      whatsapp_message_id: whatsappMessageId,
-      estado_envio: "sent",
-    };
+    const meta = respuestaMeta.data;
 
-    if (inboxTrace === "manual") {
-      console.log("? MANUAL INSERT PAYLOAD:", insertPayload);
-      console.log("? MANUAL INSERT CAMPOS:", camposDiagnosticoInbox(insertPayload, "manual"));
-    } else if (inboxTrace === "openai") {
-      console.log("?? OPENAI INSERT PAYLOAD:", insertPayload);
-      console.log("?? OPENAI INSERT CAMPOS:", camposDiagnosticoInbox(insertPayload, "openai"));
+    if (opciones._soloEnvioMeta) {
+      return meta;
     }
 
-    if (!usuarioId && inboxTrace) {
-      console.warn(
-        `[INBOX] ${inboxTrace.toUpperCase()} sin usuarioId ? INSERT sin due?o y sin socket`
-      );
-    }
+    const wamid = meta?.messages?.[0]?.id || null;
+    const usuarioId = opciones.usuarioId ?? null;
 
-    const insertRes = await axios.post(
-      `${SUPABASE_URL}/rest/v1/mensajes`,
-      insertPayload,
-      {
-        headers: {
-          apikey: SUPABASE_KEY,
-          Authorization: `Bearer ${SUPABASE_KEY}`,
-          "Content-Type": "application/json",
-          Prefer: "return=representation",
-        },
-      }
-    );
-
-    const row = insertRes.data?.[0];
     if (usuarioId) {
-      await actualizarConversacionSaliente(usuarioId, numero, texto);
-
-      const payloadMensaje = {
-        id: row?.id,
-        cliente_numero: numero,
-        usuario_id: usuarioId,
-        direccion: "saliente",
+      return await registrarMensajeSalienteEnInbox({
+        usuarioId,
+        numero,
+        texto,
+        wamid,
         tipo: "texto",
-        contenido: texto,
-        imagen_url: null,
-        whatsapp_message_id: whatsappMessageId,
-        estado_envio: "sent",
-        creado_en: row?.creado_en || new Date().toISOString(),
-      };
-
-      const socketRoom = `user_${usuarioId}`;
-      const convPayload = {
-        cliente_numero: numero,
-        ultimo_mensaje: texto,
-        ultimo_mensaje_en: payloadMensaje.creado_en,
-        direccion: "saliente",
-      };
-
-      if (inboxTrace === "manual") {
-        console.log("? MANUAL SOCKET EVENT:", "nuevo_mensaje", socketRoom, payloadMensaje);
-        console.log(
-          "? MANUAL SOCKET EVENT:",
-          "conversacion_actualizada",
-          socketRoom,
-          convPayload
-        );
-      } else if (inboxTrace === "openai") {
-        console.log("?? OPENAI SOCKET EVENT:", "nuevo_mensaje", socketRoom, payloadMensaje);
-        console.log(
-          "?? OPENAI SOCKET EVENT:",
-          "conversacion_actualizada",
-          socketRoom,
-          convPayload
-        );
-      }
-
-      rt.nuevoMensaje(null, usuarioId, payloadMensaje);
-      rt.conversacionActualizada(null, usuarioId, convPayload);
+      });
     }
 
-    return row;
+    return await registrarMensajeSalienteEnInbox({
+      usuarioId: null,
+      numero,
+      texto,
+      wamid,
+      tipo: "texto",
+    });
   } catch (error) {
-    const detalle = error.response?.data || error.message || error;
-    if (inboxTrace === "manual") {
-      console.error("? MANUAL enviarTextoWhatsApp:", detalle);
-    } else if (inboxTrace === "openai") {
-      console.error("? OPENAI enviarTextoWhatsApp:", detalle);
-    }
-    console.log("ERROR ENVIANDO WHATSAPP:", detalle);
+    console.log("ERROR ENVIANDO WHATSAPP:", error.response?.data || error.message);
     return null;
   }
 }
@@ -693,6 +666,7 @@ async function enviarBotonesWhatsApp(numero, texto, botones, opciones = {}) {
 
 module.exports = {
   enviarTextoWhatsApp,
+  registrarMensajeSalienteEnInbox,
   enviarMediaWhatsApp,
   enviarBotonesWhatsApp,
 };
