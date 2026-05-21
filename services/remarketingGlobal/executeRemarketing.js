@@ -14,8 +14,10 @@ const { aplicarEtiquetaCliente } = require("./aplicarEtiqueta");
 const { programarSiguientePasoTrasEnvio } = require("./porMensajeEntrante");
 const { ESTADOS_REMARKETING } = require("./constants");
 
+const { leerCargaUtilDesdeFila } = require("./dbRow");
+
 async function enviarMensajeRemarketing(item) {
-  const payload = item.mensaje_payload || {};
+  const payload = leerCargaUtilDesdeFila(item);
   const tipo = (item.mensaje_tipo || payload.tipo || "texto").toLowerCase();
   const opciones = { usuarioId: item.usuario_id };
 

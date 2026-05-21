@@ -26,39 +26,10 @@ function delayLabel(paso) {
   );
 }
 
-function buildRow({
-  campanaId,
-  usuarioId,
-  numero,
-  flujoId,
-  nodoId,
-  paso,
-  pasoIndex,
-  config,
-  checkpointAt,
-  runAt,
-}) {
-  return {
-    campana_id: campanaId,
-    usuario_id: usuarioId || null,
-    cliente_numero: numero,
-    flujo_id: flujoId,
-    nodo_id: nodoId,
-    paso_index: pasoIndex,
-    paso_id: paso.id,
-    paso_nombre: paso.nombre,
-    run_at: runAt,
-    mensaje_tipo: paso.mensaje.tipo,
-    mensaje_payload: {
-      tipo: paso.mensaje.tipo,
-      texto: paso.mensaje.texto,
-      url: paso.mensaje.url,
-      caption: paso.mensaje.caption,
-    },
-    config_snapshot: config,
-    checkpoint_at: checkpointAt,
-    estado: ESTADOS_REMARKETING.PENDIENTE,
-  };
+const { buildRemarketingProgramadoRow } = require("./dbRow");
+
+function buildRow(params) {
+  return buildRemarketingProgramadoRow(params);
 }
 
 function resolverNodoRemarketing(flujo_datos, nodoRemarketing) {
@@ -227,7 +198,7 @@ async function manejarRemarketingGlobalPorMensajeEntrante({
         cliente_numero +
         " en " +
         (mins < 1 ? r1.segundos + "s" : mins + " min") +
-        " | run_at=" +
+        " | correr_en=" +
         runAt
     );
     console.log("[RM DEBUG] insert OK | filas=" + insertados.length);
@@ -286,7 +257,8 @@ async function programarSiguientePasoTrasEnvio(item) {
     return null;
   }
 
-  const config = item.config_snapshot || {};
+  const { leerConfigDesdeFila } = require("./dbRow");
+  const config = leerConfigDesdeFila(item);
   const { obtenerPasosActivosValidos } = require("./parseRemarketingGlobalNode");
   const pasos = obtenerPasosActivosValidos(config.steps);
   const nextIndex = (item.paso_index || 0) + 1;

@@ -1,13 +1,20 @@
 /**
- * Worker Remarketing Global — mínimo: leer pendientes por correr_en, enviar R1, marcar enviado.
- * Columnas reales: correr_en, carga_útil_del_mensaje (no mensaje_payload / run_at).
+ * Worker Remarketing Global — envía R1 pendientes (correr_en vencido).
  */
 const axios = require("axios");
-const { enviarTextoWhatsApp } = require("../services/whatsappService");
+const {
+  enviarTextoWhatsApp,
+  enviarMediaWhatsApp,
+} = require("../services/whatsappService");
+const {
+  leerCargaUtilDesdeFila,
+} = require("../services/remarketingGlobal/dbRow");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
 const TABLA = "remarketing_global_programados";
+const COL_FECHA =
+  process.env.REMARKETING_LEGACY_COLUMNS === "true" ? "run_at" : "correr_en";
 
 let workerIniciado = false;
 let tickEnCurso = false;
@@ -25,51 +32,18 @@ function nowIso() {
   return new Date().toISOString();
 }
 
-/** carga_útil_del_mensaje (jsonb) — sin usar mensaje_payload */
-function leerCargaUtilDelMensaje(item) {
-  const raw =
-    item["carga_útil_del_mensaje"] ??
-    item.carga_util_del_mensaje ??
-    item.carga_util ??
-    null;
-
-  if (!raw) return {};
-  if (typeof raw === "object" && !Array.isArray(raw)) return raw;
-  if (typeof raw === "string") {
-    try {
-      return JSON.parse(raw);
-    } catch {
-      return { texto: raw };
-    }
-  }
-  return {};
-}
-
-function extraerTextoParaEnviar(item) {
-  const carga = leerCargaUtilDelMensaje(item);
-  const texto = String(carga.texto || carga.text || carga.mensaje || "").trim();
-  return texto;
-}
-
-/**
- * PostgREST equivalente a:
- * .from('remarketing_global_programados')
- * .select('*')
- * .eq('estado', 'pendiente')
- * .lte('correr_en', now)
- */
 async function buscarPendientesVencidos() {
   const now = new Date().toISOString();
   const url =
     `${SUPABASE_URL}/rest/v1/${TABLA}` +
     `?select=*` +
     `&estado=eq.pendiente` +
-    `&correr_en=lte.${encodeURIComponent(now)}` +
-    `&order=correr_en.asc` +
+    `&${COL_FECHA}=lte.${encodeURIComponent(now)}` +
+    `&order=${COL_FECHA}.asc` +
     `&limit=40`;
 
   const response = await axios.get(url, { headers: supabaseHeaders() });
-  return { data: response.data || [], error: null, now, url };
+  return { data: response.data || [], now, url };
 }
 
 async function marcarEnviado(id) {
@@ -87,39 +61,97 @@ async function marcarEnviado(id) {
 
 async function marcarError(id, mensaje) {
   const ahora = nowIso();
-  await axios.patch(
-    `${SUPABASE_URL}/rest/v1/${TABLA}?id=eq.${id}`,
-    {
-      estado: "error",
-      error_detalle: String(mensaje || "error").slice(0, 500),
-      actualizado_en: ahora,
-    },
-    { headers: supabaseHeaders({ Prefer: "return=minimal" }) }
-  );
+  const payload = {
+    estado: "error",
+    error_detalle: String(mensaje || "error").slice(0, 500),
+    actualizado_en: ahora,
+  };
+  try {
+    await axios.patch(
+      `${SUPABASE_URL}/rest/v1/${TABLA}?id=eq.${id}`,
+      payload,
+      { headers: supabaseHeaders({ Prefer: "return=minimal" }) }
+    );
+  } catch {
+    await axios.patch(
+      `${SUPABASE_URL}/rest/v1/${TABLA}?id=eq.${id}`,
+      {
+        estado: "cancelado",
+        error_detalle: payload.error_detalle,
+        cancelado_en: ahora,
+        actualizado_en: ahora,
+      },
+      { headers: supabaseHeaders({ Prefer: "return=minimal" }) }
+    );
+  }
+}
+
+async function enviarMensajeProgramado(item) {
+  const carga = leerCargaUtilDesdeFila(item);
+  const tipo = String(
+    item.mensaje_tipo || carga.tipo || "texto"
+  ).toLowerCase();
+  const opciones = { usuarioId: item.usuario_id };
+  const numero = item.cliente_numero;
+
+  if (tipo === "texto") {
+    const texto = String(carga.texto || carga.text || "").trim();
+    if (!texto) throw new Error("Texto vacío en carga del mensaje");
+    await enviarTextoWhatsApp(numero, texto, opciones);
+    return;
+  }
+
+  const url = String(carga.url || "").trim();
+  if (!url) throw new Error("URL de media vacía");
+
+  if (tipo === "imagen") {
+    await enviarMediaWhatsApp(
+      numero,
+      "image",
+      url,
+      carga.caption || "",
+      opciones
+    );
+    return;
+  }
+  if (tipo === "audio") {
+    await enviarMediaWhatsApp(numero, "audio", url, "", opciones);
+    return;
+  }
+  if (tipo === "pdf") {
+    await enviarMediaWhatsApp(
+      numero,
+      "document",
+      url,
+      carga.caption || "",
+      opciones
+    );
+    return;
+  }
+  if (tipo === "video") {
+    await enviarMediaWhatsApp(
+      numero,
+      "video",
+      url,
+      carga.caption || "",
+      opciones
+    );
+    return;
+  }
+
+  throw new Error("Tipo no soportado: " + tipo);
 }
 
 async function procesarPendientes(data) {
   for (const item of data) {
-    const id = item.id;
-    const numero = item.cliente_numero;
-
     try {
-      const texto = extraerTextoParaEnviar(item);
-      if (!texto) {
-        throw new Error("Texto vacío en carga_útil_del_mensaje");
-      }
-
-      console.log("[RM WORKER] enviando cliente=" + (numero || "—"));
+      console.log("[RM WORKER] enviando cliente=" + (item.cliente_numero || "—"));
       console.log(
-        "[RM WORKER] payload=" +
-          JSON.stringify(leerCargaUtilDelMensaje(item))
+        "[RM WORKER] payload=" + JSON.stringify(leerCargaUtilDesdeFila(item))
       );
 
-      await enviarTextoWhatsApp(numero, texto, {
-        usuarioId: item.usuario_id,
-      });
-
-      await marcarEnviado(id);
+      await enviarMensajeProgramado(item);
+      await marcarEnviado(item.id);
       console.log("[RM WORKER] enviado OK");
     } catch (err) {
       const msg =
@@ -127,16 +159,7 @@ async function procesarPendientes(data) {
           ? JSON.stringify(err.response.data)
           : err?.message || String(err);
       console.log("[RM WORKER ERROR]", msg);
-      if (id) {
-        try {
-          await marcarError(id, msg);
-        } catch (patchErr) {
-          console.log(
-            "[RM WORKER ERROR] no se pudo marcar error en DB:",
-            patchErr.response?.data || patchErr.message
-          );
-        }
-      }
+      if (item.id) await marcarError(item.id, msg);
     }
   }
 }
@@ -150,32 +173,29 @@ async function ejecutarProcesamiento() {
       console.log("[RM WORKER] data=");
       console.log(
         "[RM WORKER] error=" +
-          JSON.stringify({ mensaje: "SUPABASE_URL o SUPABASE_SECRET_KEY vacíos" })
+          JSON.stringify({ mensaje: "Supabase no configurado" })
       );
       return;
     }
 
-    let data = [];
-    let error = null;
-
     try {
-      const resultado = await buscarPendientesVencidos();
-      data = resultado.data;
-      console.log("[RM WORKER] now=" + resultado.now);
-      console.log("[RM WORKER] query url=" + resultado.url);
+      const { data, now, url } = await buscarPendientesVencidos();
+      console.log("[RM WORKER] now=" + now);
+      console.log(
+        "[RM WORKER] buscando pendientes con " + COL_FECHA + " <= now"
+      );
+      console.log("[RM WORKER] query url=" + url);
       console.log("[RM WORKER] data=" + JSON.stringify(data));
       console.log("[RM WORKER] error=");
+      console.log("[RM WORKER] pendientes encontrados=" + data.length);
+
+      if (data.length > 0) {
+        await procesarPendientes(data);
+      }
     } catch (err) {
-      error = err.response?.data ?? err.message ?? String(err);
+      const error = err.response?.data ?? err.message ?? String(err);
       console.log("[RM WORKER] data=");
       console.log("[RM WORKER] error=" + JSON.stringify(error));
-      return;
-    }
-
-    console.log("[RM WORKER] pendientes encontrados=" + data.length);
-
-    if (data.length > 0) {
-      await procesarPendientes(data);
     }
   } finally {
     tickEnCurso = false;
@@ -183,24 +203,13 @@ async function ejecutarProcesamiento() {
 }
 
 function iniciarRemarketingGlobalWorker() {
-  if (workerIniciado) {
-    console.log("[RM WORKER] ya estaba iniciado (skip duplicado)");
-    return;
-  }
+  if (workerIniciado) return;
   workerIniciado = true;
 
-  const intervaloMs = parseInt(
-    process.env.REMARKETING_POLL_MS || "15000",
-    10
-  );
+  const intervaloMs = parseInt(process.env.REMARKETING_POLL_MS || "15000", 10);
 
   console.log(
-    "[RM WORKER] iniciado | tabla=" +
-      TABLA +
-      " | poll=" +
-      intervaloMs +
-      "ms | supabase=" +
-      (SUPABASE_URL ? "OK" : "FALTA")
+    "[RM WORKER] iniciado | poll=" + intervaloMs + "ms | columnas=correr_en,carga_útil_del_mensaje"
   );
 
   setInterval(() => {
@@ -212,7 +221,6 @@ function iniciarRemarketingGlobalWorker() {
   void ejecutarProcesamiento();
 }
 
-/** Alias histórico */
 function startRemarketingGlobalWorker() {
   iniciarRemarketingGlobalWorker();
 }

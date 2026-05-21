@@ -8,6 +8,7 @@ const { insertarProgramados, cancelarPendientesCliente } = require("./remarketin
 const { aplicarEtiquetaCliente } = require("./aplicarEtiqueta");
 const { ESTADOS_REMARKETING } = require("./constants");
 const { nowUtc, toTimestamptzUtc } = require("./timestamps");
+const { buildRemarketingProgramadoRow } = require("./dbRow");
 
 function formatearDelayLog(paso) {
   const v = paso.delay?.valor ?? paso.delay;
@@ -78,27 +79,20 @@ async function programarRemarketingGlobal({
       );
     }
 
-    rows.push({
-      campana_id: campanaId,
-      usuario_id: usuarioId || null,
-      cliente_numero: numero,
-      flujo_id: flujoId || null,
-      nodo_id: nodo.id || "remarketing_global_fixed",
-      paso_index: index,
-      paso_id: paso.id,
-      paso_nombre: paso.nombre,
-      run_at: runAt,
-      mensaje_tipo: paso.mensaje.tipo,
-      mensaje_payload: {
-        tipo: paso.mensaje.tipo,
-        texto: paso.mensaje.texto,
-        url: paso.mensaje.url,
-        caption: paso.mensaje.caption,
-      },
-      config_snapshot: config,
-      checkpoint_at: checkpointAt,
-      estado: ESTADOS_REMARKETING.PENDIENTE,
-    });
+    rows.push(
+      buildRemarketingProgramadoRow({
+        campanaId,
+        usuarioId,
+        numero,
+        flujoId,
+        nodoId: nodo.id || "remarketing_global_fixed",
+        paso,
+        pasoIndex: index,
+        config,
+        checkpointAt,
+        runAt,
+      })
+    );
   });
 
   let insertados = [];
