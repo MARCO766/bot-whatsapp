@@ -47,6 +47,23 @@ async function obtenerPendientesVencidos(limite = 40) {
 }
 
 async function actualizarEstado(id, estado, extra = {}) {
+  if (
+    estado === ESTADOS_REMARKETING.CANCELADO ||
+    estado === ESTADOS_REMARKETING.CANCELADO_POR_RESPUESTA
+  ) {
+    const { logAntesDeCancelarRemarketing } = require("./cancelacionDebug");
+    logAntesDeCancelarRemarketing(
+      "remarketingRepository.js",
+      "actualizarEstado",
+      extra.error_detalle || estado,
+      {
+        row: { id, estado, ...extra },
+        cliente_numero: extra.cliente_numero,
+        flujo_id: extra.flujo_id,
+      }
+    );
+  }
+
   const payload = {
     estado,
     actualizado_en: nowUtc(),
@@ -79,18 +96,20 @@ async function cancelarCampana(campanaId, estado, motivo, debugCtx = {}) {
   const campoFecha =
     estado === ESTADOS_REMARKETING.RESPONDIDO ? "respondido_en" : "cancelado_en";
 
-  if (debugCtx.log !== false) {
-    const { logCancelacionRemarketing } = require("./cancelacionDebug");
-    logCancelacionRemarketing(motivo, debugCtx.cliente_numero || debugCtx.numero, {
+  const { logAntesDeCancelarRemarketing } = require("./cancelacionDebug");
+  logAntesDeCancelarRemarketing(
+    "remarketingRepository.js",
+    "cancelarCampana",
+    motivo,
+    {
+      cliente_numero: debugCtx.cliente_numero || debugCtx.numero,
+      flujo_id: debugCtx.flujo_id || debugCtx.flujoId,
+      row: { campana_id: campanaId, estado, ...debugCtx },
       etiquetas: debugCtx.etiquetas,
       compraDetectada: debugCtx.compraDetectada,
-      payload: {
-        campana_id: campanaId,
-        estado,
-        ...debugCtx,
-      },
-    });
-  }
+      detalle: debugCtx.detalle,
+    }
+  );
 
   await axios.patch(
     `${SUPABASE_URL}/rest/v1/remarketing_global_programados?campana_id=eq.${campanaId}&estado=eq.${ESTADOS_REMARKETING.PENDIENTE}`,
@@ -122,6 +141,19 @@ async function obtenerFlujoIdRemarketingPendiente(numero, usuarioId) {
 }
 
 async function cancelarPendientesCliente(numero, usuarioId, estado, motivo, flujoId) {
+  const { logAntesDeCancelarRemarketing } = require("./cancelacionDebug");
+  logAntesDeCancelarRemarketing(
+    "remarketingRepository.js",
+    "cancelarPendientesCliente",
+    motivo,
+    {
+      numero,
+      cliente_numero: numero,
+      flujo_id: flujoId,
+      row: { estado, usuario_id: usuarioId },
+    }
+  );
+
   const ahora = nowUtc();
   const campoFecha =
     estado === ESTADOS_REMARKETING.RESPONDIDO ? "respondido_en" : "cancelado_en";
@@ -258,7 +290,9 @@ function esCompraRealExplicita(row) {
  * Solo compra real: metadata.compra, pago externo, o conversión de nodo con valor > 0.
  * NO cualquier fila en crm_conversiones (evita falsos positivos con valor 0).
  */
-async function leadTieneCompraExplicita(numero, usuarioId) {
+async function leadTieneCompraExplicita(numero, usuarioId, opts = {}) {
+  const { checkpointAt } = opts;
+
   if (!numero) {
     return { compra: false, fila: null, razon: "sin_numero" };
   }
@@ -272,8 +306,31 @@ async function leadTieneCompraExplicita(numero, usuarioId) {
   try {
     const response = await axios.get(url, { headers: headers() });
     const rows = response.data || [];
+    const tsCheckpoint = checkpointAt ? new Date(checkpointAt).getTime() : null;
 
     for (const row of rows) {
+      const origen = String(row.origen || "").toLowerCase();
+      const esPagoExterno = ["hotmart", "stripe", "mercadopago", "webhook", "qr"].includes(
+        origen
+      );
+
+      if (tsCheckpoint && row.creado_en && !esPagoExterno) {
+        const tsConv = new Date(row.creado_en).getTime();
+        if (!Number.isNaN(tsConv) && tsConv >= tsCheckpoint) {
+          console.log(
+            "[RM CANCEL DEBUG] ignorando conversion posterior al checkpoint (mismo ciclo flujo/hola)",
+            {
+              conversion_id: row.id,
+              creado_en: row.creado_en,
+              checkpoint_at: checkpointAt,
+              origen: row.origen,
+              valor: row.valor,
+            }
+          );
+          continue;
+        }
+      }
+
       const check = esCompraRealExplicita(row);
       if (check.compra) {
         return { compra: true, fila: row, razon: check.razon };
