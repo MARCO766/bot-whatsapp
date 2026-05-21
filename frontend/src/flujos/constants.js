@@ -43,5 +43,6 @@ export const NODE_PREVIEW_COLORS = {
   espera: "#8b5cf6",
   etiqueta: "#3b82f6",
   conversion: "#facc15",
+  remarketing_global: "#ff6b35",
   conectar: "#22c55e",
 };

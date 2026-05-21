@@ -19,7 +19,7 @@ function renderAdminPage({
 
 <link rel="stylesheet" href="/css/admin.css">
 <link rel="stylesheet" href="/css/flow-builder.css">
-${builder ? '<link rel="stylesheet" href="/css/seguimiento.css"><link rel="stylesheet" href="/css/contenido.css"><link rel="stylesheet" href="/css/conversion-node.css"><link rel="stylesheet" href="/css/ia-node.css"><link rel="stylesheet" href="/css/ia-pro-node.css"><link rel="stylesheet" href="/css/openai-agent-node.css">' : ""}
+${builder ? '<link rel="stylesheet" href="/css/seguimiento.css"><link rel="stylesheet" href="/css/contenido.css"><link rel="stylesheet" href="/css/conversion-node.css"><link rel="stylesheet" href="/css/remarketing-global-node.css"><link rel="stylesheet" href="/css/ia-node.css"><link rel="stylesheet" href="/css/ia-pro-node.css"><link rel="stylesheet" href="/css/openai-agent-node.css">' : ""}
 </head>
 
 <body>
@@ -50,6 +50,7 @@ ${builder ? '<link rel="stylesheet" href="/css/seguimiento.css"><link rel="style
     <button type="button" class="menu-nodo-btn menu-nodo-btn-espera" onclick="agregarNodo('espera')">⏳ Espera</button>
     <button type="button" class="menu-nodo-btn menu-nodo-btn-etiqueta" onclick="agregarNodo('etiqueta')">🏷️ Etiqueta</button>
     <button type="button" class="menu-nodo-btn menu-nodo-btn-conversion" onclick="agregarNodo('conversion')">💰 Conversión</button>
+    <button type="button" class="menu-nodo-btn menu-nodo-btn-remarketing" onclick="agregarRemarketingGlobal()">🔥 Remarketing Global</button>
   </div>
 </div>
 
@@ -718,6 +719,7 @@ ${tab === "flujos" && builder ? `
 </script>
 ${builder ? `
 <script src="/js/builder/seguimiento.js"></script>
+<script src="/js/builder/remarketing-global.js"></script>
 <script src="/js/builder/contenido.js"></script>
 <script src="/js/builder/ia.js"></script>
 <script src="/js/builder/ia-pro.js"></script>

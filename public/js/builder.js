@@ -219,6 +219,16 @@ function cargarFlujoGuardado(){
     }
   });
 
+  document.querySelectorAll(".remarketing-global-node").forEach((nodo) => {
+    try {
+      if(window.MacBotRemarketingGlobal){
+        window.MacBotRemarketingGlobal.refrescarNodoCargado(nodo);
+      }
+    } catch (e) {
+      console.warn("Remarketing: error al refrescar nodo cargado", e);
+    }
+  });
+
   document.querySelectorAll(".node").forEach((nodo) => {
     try {
       if(window.MacBotContenido && window.MacBotContenido.esNodoContenido(nodo)){
@@ -641,6 +651,12 @@ function iniciarConexion(e, id, portSide){
   e.stopPropagation();
 
   nodoArrastrando = document.getElementById(id);
+
+  if(esNodoRemarketingGlobal(nodoArrastrando)){
+    removerLineaTemporal();
+    nodoArrastrando = null;
+    return;
+  }
   puertoOrigenConexion = portSide === "in" ? "in" : "out";
   const portEl = e.target?.closest?.(".port");
   puertoHandleOrigen = portEl?.dataset?.handle || null;
@@ -707,6 +723,12 @@ function soltarConexion(e){
       }
 
       if(nodoDesde && nodoHasta){
+        if(esNodoRemarketingGlobal(nodoDesde) || esNodoRemarketingGlobal(nodoHasta)){
+          removerLineaTemporal();
+          nodoArrastrando = null;
+          return;
+        }
+
         registrarHistorialBuilder();
         const handleOrigen =
           nodoDesde === nodoArrastrando
@@ -728,6 +750,10 @@ function conectarNodos(nodo1, nodo2, sourceHandle){
   const canvas = document.getElementById("canvasFlujo");
   if(!canvas || !nodo1 || !nodo2 || !nodo1.id || !nodo2.id) return;
   if(nodo1.id === nodo2.id) return;
+
+  if(esNodoRemarketingGlobal(nodo1) || esNodoRemarketingGlobal(nodo2)){
+    return;
+  }
 
   const yaExiste = conexiones.some(function (c) {
     return (
@@ -831,6 +857,13 @@ window.eliminarConexionesPorHandle = eliminarConexionesPorHandle;
    CONTENIDO (MacBotContenido — solo panel lateral)
 ========================= */
 
+function esNodoRemarketingGlobal(nodo) {
+  return (
+    window.MacBotRemarketingGlobal &&
+    window.MacBotRemarketingGlobal.esNodoRemarketingGlobal(nodo)
+  );
+}
+
 function agregarNodoContenido() {
   if (window.MacBotContenido && window.MacBotContenido.crearNodoEnCanvas) {
     window.MacBotContenido.crearNodoEnCanvas();
@@ -920,6 +953,9 @@ function borrarNodo(id){
   nodo.remove();
 
   if(eraSeleccionado){
+    if(window.MacBotRemarketingGlobal && window.MacBotRemarketingGlobal.clearPanelActivo){
+      window.MacBotRemarketingGlobal.clearPanelActivo();
+    }
     if(window.MacBotSeguimiento && window.MacBotSeguimiento.clearPanelActivo){
       window.MacBotSeguimiento.clearPanelActivo();
     }
@@ -987,6 +1023,9 @@ function validarFlujoAntesDeGuardar(nodos, conexionesGuardadas){
 
   nodos.forEach(n => {
     if(n.id === "nodo_inicio") return;
+    if(n.tipo === "remarketing_global" || (n.className && n.className.includes("remarketing-global-node"))){
+      return;
+    }
     if(!conectados.has(n.id)){
       avisos.push("Nodo suelto (sin conexiones): " + n.id);
     }
@@ -1667,6 +1706,10 @@ function abrirPanelNodo(nodo){
   if(nodoSeleccionadoPanel && nodoSeleccionadoPanel.id !== nodo.id){
     sincronizarPanelAntesDeSnapshot();
 
+    if(window.MacBotRemarketingGlobal && window.MacBotRemarketingGlobal.clearPanelActivo){
+      window.MacBotRemarketingGlobal.clearPanelActivo();
+    }
+
     if(window.MacBotSeguimiento && window.MacBotSeguimiento.clearPanelActivo){
       window.MacBotSeguimiento.clearPanelActivo();
     }
@@ -1697,6 +1740,11 @@ function abrirPanelNodo(nodo){
   panel.classList.add("activo");
   panel.setAttribute("aria-hidden", "false");
   marcarNodoSeleccionado(nodo);
+
+  if(window.MacBotRemarketingGlobal && window.MacBotRemarketingGlobal.esNodoRemarketingGlobal(nodo)){
+    window.MacBotRemarketingGlobal.renderPanel(nodo);
+    return;
+  }
 
   if(window.MacBotSeguimiento && window.MacBotSeguimiento.esNodoSeguimiento(nodo)){
     window.MacBotSeguimiento.renderPanel(nodo);
@@ -1876,6 +1924,10 @@ function cerrarPanelNodo(){
   const panel = document.getElementById("panelNodo");
   const contenido = document.getElementById("panelNodoContenido");
 
+  if(window.MacBotRemarketingGlobal && window.MacBotRemarketingGlobal.clearPanelActivo){
+    window.MacBotRemarketingGlobal.clearPanelActivo();
+  }
+
   if(window.MacBotSeguimiento && window.MacBotSeguimiento.clearPanelActivo){
     window.MacBotSeguimiento.clearPanelActivo();
   }
@@ -1915,6 +1967,10 @@ function cerrarPanelNodo(){
 ========================= */
 
 function sincronizarPanelAntesDeSnapshot(){
+  if(window.MacBotRemarketingGlobal && window.MacBotRemarketingGlobal.flushPanelToNode){
+    window.MacBotRemarketingGlobal.flushPanelToNode();
+  }
+
   if(window.MacBotSeguimiento && window.MacBotSeguimiento.flushPanelToNode){
     window.MacBotSeguimiento.flushPanelToNode();
   }
@@ -1972,6 +2028,10 @@ function restaurarSnapshotBuilder(snapshot){
 
   builderHistorial.restaurando = true;
 
+  if(window.MacBotRemarketingGlobal && window.MacBotRemarketingGlobal.clearPanelActivo){
+    window.MacBotRemarketingGlobal.clearPanelActivo();
+  }
+
   if(window.MacBotSeguimiento && window.MacBotSeguimiento.clearPanelActivo){
     window.MacBotSeguimiento.clearPanelActivo();
   }
@@ -2014,6 +2074,20 @@ function restaurarSnapshotBuilder(snapshot){
         }
       } catch (err) {
         console.warn("Seguimiento: error al restaurar nodo", err.message);
+      }
+    }
+
+    if(
+      (item.className && item.className.includes("remarketing-global-node")) ||
+      item.tipo === "remarketing_global" ||
+      (item.html && item.html.includes("remarketing-global-data"))
+    ){
+      try{
+        if(window.MacBotRemarketingGlobal){
+          window.MacBotRemarketingGlobal.refrescarNodoCargado(nodo);
+        }
+      } catch (err) {
+        console.warn("Remarketing: error al restaurar nodo", err.message);
       }
     }
 

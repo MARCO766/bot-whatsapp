@@ -367,6 +367,13 @@ async function ejecutarFlujo(
 
   await enriquecerContextoFlujo(flowContext, numero, usuarioId);
 
+  try {
+    const { activarRemarketingSiAplica } = require("./remarketingGlobal/activarEnFlujo");
+    await activarRemarketingSiAplica({ numero, flujoData, usuarioId, flujoId });
+  } catch (rmErr) {
+    console.log("[REMARKETING] activación al entrar:", rmErr.message);
+  }
+
   console.log(
     "[FLUJO] Inicio ejecución | nodos:",
     nodos.length,

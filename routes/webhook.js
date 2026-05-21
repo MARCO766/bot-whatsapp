@@ -533,6 +533,13 @@ try {
   console.log("[WEBHOOK] cancelar seguimientos:", cancelErr.message);
 }
 
+try {
+  const { manejarRemarketingPorRespuesta } = require("../services/remarketingGlobal/onLeadReply");
+  await manejarRemarketingPorRespuesta(from, usuarioIdWebhook);
+} catch (rmErr) {
+  console.log("[WEBHOOK] remarketing por respuesta:", rmErr.message);
+}
+
 console.log("🔎 ACTIVADOR — texto:", textoParaActivador, "| usuario:", usuarioIdWebhook);
 
 const activadorEjecutado = await procesarMensajeEntrante(

@@ -96,6 +96,15 @@ function detectarTipoNodo(nodo) {
     return "seguimiento";
   }
 
+  const tipoRaw = resolverTipoRaw(nodo);
+  if (
+    tipoRaw === "remarketing_global" ||
+    className.includes("remarketing-global-node") ||
+    html.includes("remarketing-global-data")
+  ) {
+    return "remarketing_global";
+  }
+
   if (
     html.includes("contenido-variantes-data") ||
     className.includes("content-node") ||

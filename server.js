@@ -202,5 +202,7 @@ io.on("connection", (socket) => {
 server.listen(PORT, () => {
   const { startSeguimientoWorker } = require("./jobs/seguimientoWorker");
   startSeguimientoWorker(app);
+  const { startRemarketingGlobalWorker } = require("./jobs/remarketingGlobalWorker");
+  startRemarketingGlobalWorker();
   console.log("🚀 Servidor corriendo en puerto", PORT);
 });
