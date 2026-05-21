@@ -340,7 +340,19 @@ async function ejecutarFlujo(
   flujoId = null,
   opts = {}
 ) {
-  if (!flujoData || !flujoData.nodos || !flujoData.conexiones) return;
+  if (!flujoData || !flujoData.nodos) return;
+
+  /* Remarketing Global: al entrar el lead (antes del grafo del flujo) */
+  try {
+    const { activarRemarketingSiAplica } = require("./remarketingGlobal/activarEnFlujo");
+    await activarRemarketingSiAplica({ numero, flujoData, usuarioId, flujoId });
+  } catch (rmErr) {
+    console.error("[REMARKETING] activación al entrar:", rmErr.message);
+  }
+
+  if (!flujoData.conexiones) {
+    flujoData.conexiones = [];
+  }
 
   const nodos = flujoData.nodos;
   const conexiones = normalizarConexionesFlujo(flujoData.conexiones);
@@ -366,13 +378,6 @@ async function ejecutarFlujo(
   flowContext.numero = flowContext.numero || numero;
 
   await enriquecerContextoFlujo(flowContext, numero, usuarioId);
-
-  try {
-    const { activarRemarketingSiAplica } = require("./remarketingGlobal/activarEnFlujo");
-    await activarRemarketingSiAplica({ numero, flujoData, usuarioId, flujoId });
-  } catch (rmErr) {
-    console.log("[REMARKETING] activación al entrar:", rmErr.message);
-  }
 
   console.log(
     "[FLUJO] Inicio ejecución | nodos:",

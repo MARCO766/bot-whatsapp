@@ -27,7 +27,7 @@ async function insertarProgramados(rows) {
   } catch (error) {
     const detalle = error.response?.data || error.message;
     console.error(
-      "[REMARKETING] Supabase POST ERROR:",
+      "[REMARKETING] ERROR insertando programación:",
       error.response?.status || "sin status",
       typeof detalle === "object" ? JSON.stringify(detalle) : detalle
     );

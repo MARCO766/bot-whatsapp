@@ -1,12 +1,19 @@
 const crypto = require("crypto");
 const {
   parseRemarketingFromNodo,
-  normalizarPaso,
+  obtenerPasosActivosValidos,
+  normalizarUnidad,
 } = require("./parseRemarketingGlobalNode");
 const { insertarProgramados, cancelarPendientesCliente } = require("./remarketingRepository");
 const { aplicarEtiquetaCliente } = require("./aplicarEtiqueta");
 const { ESTADOS_REMARKETING } = require("./constants");
 const { nowUtc, toTimestamptzUtc } = require("./timestamps");
+
+function formatearDelayLog(paso) {
+  const v = paso.delay?.valor ?? paso.delay;
+  const u = normalizarUnidad(paso.delay?.unidad || paso.unidad);
+  return v + " " + u;
+}
 
 async function programarRemarketingGlobal({
   numero,
@@ -15,29 +22,37 @@ async function programarRemarketingGlobal({
   nodo,
   cancelarAnteriores = true,
 }) {
-  const config = nodo.config || parseRemarketingFromNodo(nodo);
+  const config =
+    nodo?.config && nodo.config.steps
+      ? nodo.config
+      : parseRemarketingFromNodo(nodo);
 
   if (!config.activo) {
-    console.log("[REMARKETING] Nodo pausado — no se programa");
+    console.log("[REMARKETING] motor pausado (activo=false) — no se programa");
     return { campanaId: null, programados: 0, omitido: true };
   }
 
-  const pasos = (config.steps || [])
-    .map((p, i) => normalizarPaso(p, i))
-    .filter(Boolean);
+  const pasos = obtenerPasosActivosValidos(config.steps);
 
   if (!pasos.length) {
-    console.log("[REMARKETING] Sin pasos válidos configurados");
+    console.log(
+      "[REMARKETING] sin pasos válidos (revisa mensaje en R1 y guarda el flujo)"
+    );
     return { campanaId: null, programados: 0, omitido: true };
   }
 
-  if (cancelarAnteriores && flujoId) {
+  const primerPaso = pasos[0];
+  console.log(
+    "[REMARKETING] R1 encontrado delay=" + formatearDelayLog(primerPaso)
+  );
+
+  if (cancelarAnteriores) {
     await cancelarPendientesCliente(
       numero,
       usuarioId,
       ESTADOS_REMARKETING.CANCELADO,
       "Nueva campaña remarketing",
-      flujoId
+      flujoId || null
     );
   }
 
@@ -50,12 +65,24 @@ async function programarRemarketingGlobal({
     acumuladoSegundos += paso.segundos;
     const runAt = toTimestamptzUtc(Date.now() + acumuladoSegundos * 1000);
 
+    if (index === 0) {
+      console.log(
+        "[REMARKETING] programando R1 para " +
+          numero +
+          " | run_at +" +
+          paso.segundos +
+          "s (" +
+          formatearDelayLog(paso) +
+          ")"
+      );
+    }
+
     rows.push({
       campana_id: campanaId,
       usuario_id: usuarioId || null,
       cliente_numero: numero,
       flujo_id: flujoId || null,
-      nodo_id: nodo.id,
+      nodo_id: nodo.id || "remarketing_global_fixed",
       paso_index: index,
       paso_id: paso.id,
       paso_nombre: paso.nombre,
@@ -73,26 +100,31 @@ async function programarRemarketingGlobal({
     });
   });
 
-  const insertados = await insertarProgramados(rows);
+  let insertados = [];
 
-  if (config.etiquetas?.activo) {
-    await aplicarEtiquetaCliente(
+  try {
+    insertados = await insertarProgramados(rows);
+    console.log(
+      "[REMARKETING] insert OK | filas:",
+      insertados.length,
+      "| cliente:",
       numero,
-      config.etiquetas.activo,
-      usuarioId
+      "| campaña:",
+      campanaId
     );
+  } catch (error) {
+    console.error(
+      "[REMARKETING] ERROR insertando programación:",
+      error.response?.data || error.message
+    );
+    throw error;
   }
 
-  console.log(
-    "[REMARKETING] Programados:",
-    insertados.length,
-    "paso(s) | cliente:",
-    numero,
-    "| campaña:",
-    campanaId
-  );
+  if (config.etiquetas?.activo) {
+    await aplicarEtiquetaCliente(numero, config.etiquetas.activo, usuarioId);
+  }
 
-  return { campanaId, programados: insertados.length, config };
+  return { campanaId, programados: insertados.length, config, pasos };
 }
 
 module.exports = {

@@ -87,81 +87,21 @@ function crearConfigPorDefecto() {
   };
 }
 
-/** Convierte config UI → formato runtime (snake interno) */
-function toRuntimeConfig(data) {
-  const cfg = normalizarConfig(data);
-  const c = cfg.condiciones || {};
-  const e = cfg.etiquetas || {};
-  const i = cfg.inteligente || {};
-
-  return {
-    ...cfg,
-    condiciones: {
-      detener_si_responde: !!c.detenerSiResponde,
-      reiniciar_si_responde: !!c.reiniciarSiResponde,
-      detener_si_compra: !!c.detenerSiCompra,
-      detener_si_etiqueta_pagado: !!c.detenerEtiqueta,
-      detener_etiqueta_nombre: c.detenerEtiqueta || "PAGADO",
-      detener_si_humano_toma_chat: !!c.detenerSiHumano,
-      detener_si_otro_flujo: !!c.detenerSiOtroFlujo,
-    },
-    etiquetas: {
-      activo: e.alEntrar,
-      interesado: e.siResponde,
-      no_respondio: e.siNoResponde,
-      pagado: e.siCompra,
-    },
-    modo_inteligente: {
-      no_repetir_mensaje_seguido: !!i.noRepetirMensaje,
-      respetar_ventana_24h: !!i.respetarVentana24h,
-      min_minutos_entre_envios: parseInt(i.minMinutosEntreBot, 10) || 0,
-    },
-  };
-}
-
-function normalizarPaso(paso, index) {
-  if (!paso || typeof paso !== "object" || paso.activo === false) return null;
-
-  const valor = paso.delay != null ? paso.delay : paso.tiempo;
-  const unidad = normalizarUnidad(paso.unidad);
-  const segundos = delayToSeconds(valor, unidad);
-  if (segundos <= 0) return null;
-
-  const tipo = String(paso.tipo || "texto").toLowerCase();
-  const texto = (paso.texto || "").trim();
-  const url = (paso.media_url || paso.url || "").trim();
-
-  if (tipo === "texto" && !texto) return null;
-  if (tipo !== "texto" && !url && !texto) return null;
-
-  return {
-    id: paso.id || "r" + (index + 1),
-    nombre: paso.nombre || "R" + (index + 1),
-    delay: { valor: parseInt(valor, 10) || 1, unidad },
-    segundos,
-    mensaje: {
-      tipo: TIPOS.includes(tipo) ? tipo : "texto",
-      texto,
-      url,
-      caption: (paso.caption || "").trim(),
-    },
-  };
-}
-
-function normalizarConfig(data) {
+/** Fusiona input guardado con defaults (sin recursión). */
+function mergeConfigInput(data) {
   const base = crearConfigPorDefecto();
-  if (!data || typeof data !== "object") return toRuntimeConfig(base);
+  if (!data || typeof data !== "object") return { ...base };
 
   const rawC = data.condiciones || {};
   const rawE = data.etiquetas || {};
   const rawI = data.inteligente || data.modo_inteligente || {};
 
-  const merged = {
+  return {
     type: "remarketing_global",
     activo: data.activo !== false,
-    fixed: true,
-    noEdges: true,
-    steps: Array.isArray(data.steps) ? data.steps : base.steps,
+    fixed: data.fixed !== false,
+    noEdges: data.noEdges !== false,
+    steps: Array.isArray(data.steps) && data.steps.length ? data.steps : base.steps,
     condiciones: {
       detenerSiResponde:
         rawC.detenerSiResponde ?? rawC.detener_si_responde ?? base.condiciones.detenerSiResponde,
@@ -196,61 +136,179 @@ function normalizarConfig(data) {
         base.inteligente.minMinutosEntreBot,
     },
   };
+}
 
-  return toRuntimeConfig(merged);
+/** Formato runtime para motor / snapshot en DB. */
+function toRuntimeConfig(merged) {
+  const c = merged.condiciones || {};
+  const e = merged.etiquetas || {};
+  const i = merged.inteligente || {};
+
+  return {
+    type: "remarketing_global",
+    activo: merged.activo !== false,
+    fixed: merged.fixed !== false,
+    noEdges: merged.noEdges !== false,
+    steps: merged.steps || [],
+    condiciones: {
+      detener_si_responde: !!c.detenerSiResponde,
+      reiniciar_si_responde: !!c.reiniciarSiResponde,
+      detener_si_compra: !!c.detenerSiCompra,
+      detener_si_etiqueta_pagado: !!c.detenerEtiqueta,
+      detener_etiqueta_nombre: c.detenerEtiqueta || "PAGADO",
+      detener_si_humano_toma_chat: !!c.detenerSiHumano,
+      detener_si_otro_flujo: !!c.detenerSiOtroFlujo,
+    },
+    etiquetas: {
+      activo: e.alEntrar,
+      interesado: e.siResponde,
+      no_respondio: e.siNoResponde,
+      pagado: e.siCompra,
+    },
+    modo_inteligente: {
+      no_repetir_mensaje_seguido: !!i.noRepetirMensaje,
+      respetar_ventana_24h: !!i.respetarVentana24h,
+      min_minutos_entre_envios: parseInt(i.minMinutosEntreBot, 10) || 0,
+    },
+  };
+}
+
+function normalizarConfig(data) {
+  return toRuntimeConfig(mergeConfigInput(data));
+}
+
+function normalizarPaso(paso, index) {
+  if (!paso || typeof paso !== "object" || paso.activo === false) return null;
+
+  const valor = paso.delay != null ? paso.delay : paso.tiempo;
+  const unidad = normalizarUnidad(paso.unidad);
+  const segundos = delayToSeconds(valor, unidad);
+  if (segundos <= 0) return null;
+
+  const tipo = String(paso.tipo || "texto").toLowerCase();
+  const texto = (paso.texto || "").trim();
+  const url = (paso.media_url || paso.url || "").trim();
+
+  if (tipo === "texto" && !texto) return null;
+  if (tipo !== "texto" && !url && !texto) return null;
+
+  return {
+    id: paso.id || "r" + (index + 1),
+    nombre: paso.nombre || "R" + (index + 1),
+    delay: { valor: parseInt(valor, 10) || 1, unidad },
+    segundos,
+    mensaje: {
+      tipo: TIPOS.includes(tipo) ? tipo : "texto",
+      texto,
+      url,
+      caption: (paso.caption || "").trim(),
+    },
+  };
+}
+
+function obtenerPasosActivosValidos(steps) {
+  return (steps || [])
+    .map((p, i) => normalizarPaso(p, i))
+    .filter(Boolean);
 }
 
 function leerJsonDeHtml(html) {
   if (!html) return null;
+
   const match = html.match(
-    /class="remarketing-global-data"[^>]*>([\s\S]*?)<\/textarea>/i
+    /class=["']remarketing-global-data["'][^>]*>([\s\S]*?)<\/textarea>/i
   );
-  if (!match) return null;
+  if (match) {
+    try {
+      return JSON.parse(match[1].trim());
+    } catch {
+      /* fallthrough */
+    }
+  }
+
   try {
-    return JSON.parse(match[1].trim());
+    return JSON.parse(html.trim());
   } catch {
     return null;
   }
 }
 
+function leerConfigDesdeNodoGuardado(nodo) {
+  if (!nodo) return null;
+  if (nodo.config && typeof nodo.config === "object") return nodo.config;
+  const fromHtml = leerJsonDeHtml(nodo.html);
+  if (fromHtml) return fromHtml;
+  return null;
+}
+
 function parseRemarketingFromNodo(nodo) {
-  if (!nodo) return normalizarConfig(null);
-  const raw = nodo.config || leerJsonDeHtml(nodo.html);
+  const raw = leerConfigDesdeNodoGuardado(nodo);
   return normalizarConfig(raw);
 }
 
 function esNodoRemarketingGlobal(nodo) {
   if (!nodo) return false;
-  const tipo = String(nodo.tipo || nodo.dataset?.tipo || "").toLowerCase();
+
+  const tipo = String(nodo.tipo || nodo.type || nodo.dataset?.tipo || "").toLowerCase();
   const className = String(nodo.className || "");
   const html = nodo.html || "";
   const id = nodo.id || "";
-  return (
-    id === "remarketing_global_fixed" ||
-    tipo === "remarketing_global" ||
-    className.includes("remarketing-global") ||
-    html.includes("remarketing-global-data")
-  );
+
+  if (id === "remarketing_global_fixed") return true;
+  if (tipo === "remarketing_global") return true;
+  if (className.includes("remarketing-global")) return true;
+  if (html.includes("remarketing-global-data")) return true;
+
+  const raw = leerJsonDeHtml(html);
+  if (raw && raw.type === "remarketing_global") return true;
+
+  return false;
 }
 
 function buscarNodoRemarketingEnFlujo(flujoData) {
-  if (!flujoData?.nodos?.length) return null;
+  if (!flujoData?.nodos?.length) {
+    console.log("[REMARKETING] flujo sin nodos en data");
+    return null;
+  }
+
   const found = flujoData.nodos.find(esNodoRemarketingGlobal);
-  if (!found) return null;
+  if (!found) {
+    const tipos = flujoData.nodos.map((n) => n.tipo || n.type || n.id).join(", ");
+    console.log(
+      "[REMARKETING] nodo remarketing_global NO en flujo | nodos:",
+      flujoData.nodos.length,
+      "| tipos/ids:",
+      tipos.slice(0, 200)
+    );
+    return null;
+  }
+
+  const config = parseRemarketingFromNodo(found);
+
+  console.log("[REMARKETING] nodo encontrado", {
+    id: found.id,
+    tipo: found.tipo || found.type,
+    activo: config.activo,
+    pasos: config.steps?.length,
+  });
+
   return {
     ...found,
     id: found.id || "remarketing_global_fixed",
-    config: parseRemarketingFromNodo(found),
+    config,
   };
 }
 
 module.exports = {
   crearConfigPorDefecto,
+  mergeConfigInput,
   normalizarConfig,
   toRuntimeConfig,
   normalizarPaso,
+  obtenerPasosActivosValidos,
   parseRemarketingFromNodo,
   esNodoRemarketingGlobal,
   buscarNodoRemarketingEnFlujo,
+  leerConfigDesdeNodoGuardado,
   delayToSeconds,
 };
