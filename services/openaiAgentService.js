@@ -10,21 +10,8 @@ const MAX_CHAT_HISTORY = 5;
 const MAX_LAST_REPLIES = 3;
 const OPENAI_TIMEOUT_MS = 6000;
 
-const TONOS_VALIDOS = new Set([
-  "vendedor_amable",
-  "vendedor_premium",
-  "cercano",
-  "profesional",
-  "divertido",
-]);
-
-const TONO_ETIQUETAS = {
-  vendedor_amable: "vendedor amable y cercano",
-  vendedor_premium: "vendedor premium, elegante y confiable",
-  cercano: "muy cercano, como un amigo que vende por WhatsApp",
-  profesional: "profesional pero cálido",
-  divertido: "divertido y ligero, sin exagerar",
-};
+const PROMPT_SISTEMA_FIJO =
+  "Eres un asesor humano de WhatsApp. Responde corto, natural, con máximo 1 emoji de carita. No uses puntos suspensivos. No inventes datos.";
 
 const CARITAS_PERMITIDOS = ["🙂", "😊", "😌", "🤔", "😅", "😍", "🥹", "😉", "😎", "🙌", "😇"];
 
@@ -51,22 +38,34 @@ function crearConfigOpenAIPorDefecto() {
     scoreMinimo: 40,
     temperature: 0.7,
     model: "gpt-4o-mini",
-    tone: "vendedor_amable",
-    promptExtra: "",
-    productData: {
-      name: "",
-      description: "",
-      price: "",
-      includes: "",
-      bonuses: "",
-      guarantee: "",
-      access: "",
-      paymentMethods: "",
-      faq: "",
-    },
+    openaiPrompt: "",
     caminos: [],
     routes: [],
   };
+}
+
+function productDataATexto(pd) {
+  const p = pd || {};
+  const lineas = [];
+  if (p.name) lineas.push(`Producto: ${p.name}`);
+  if (p.description) lineas.push(`Descripción: ${p.description}`);
+  if (p.price) lineas.push(`Precio: ${p.price}`);
+  if (p.includes) lineas.push(`Incluye: ${p.includes}`);
+  if (p.bonuses) lineas.push(`Bonos: ${p.bonuses}`);
+  if (p.guarantee) lineas.push(`Garantía: ${p.guarantee}`);
+  if (p.access) lineas.push(`Acceso/entrega: ${p.access}`);
+  if (p.paymentMethods) lineas.push(`Métodos de pago: ${p.paymentMethods}`);
+  if (p.faq) lineas.push(`FAQ: ${p.faq}`);
+  return lineas.join("\n");
+}
+
+function resolverOpenaiPrompt(cfg) {
+  let prompt = String(cfg?.openaiPrompt || "").trim();
+  if (prompt) return prompt;
+  prompt = productDataATexto(cfg?.productData);
+  if (prompt) return prompt;
+  if (cfg?.promptExtra) return String(cfg.promptExtra).trim();
+  return "";
 }
 
 function normalizarProductData(raw) {
@@ -84,12 +83,38 @@ function normalizarProductData(raw) {
   };
 }
 
+function extraerProductDataDesdePrompt(texto) {
+  const t = String(texto || "");
+  const pd = normalizarProductData({});
+  const mp = t.match(/precio[:\s]*([^\n]+)/i);
+  if (mp) pd.price = mp[1].trim();
+  const mi = t.match(/incluye[:\s]*([^\n]+)/i);
+  if (mi) pd.includes = mi[1].trim();
+  const mb = t.match(/bonos?[:\s]*([^\n]+)/i);
+  if (mb) pd.bonuses = mb[1].trim();
+  const mm = t.match(/m[eé]todos? de pago[:\s]*([^\n]+)/i);
+  if (mm) pd.paymentMethods = mm[1].trim();
+  else if (/qr/i.test(t) && /dep[oó]sito|transferencia/i.test(t)) {
+    pd.paymentMethods = "QR y depósito bancario";
+  } else if (/qr/i.test(t)) pd.paymentMethods = "QR";
+  const mn = t.match(/producto[:\s]*([^\n]+)/i);
+  if (mn) pd.name = mn[1].trim();
+  return pd;
+}
+
+function productDataEfectivo(config) {
+  const pd = normalizarProductData(config?.productData);
+  const tieneDatos = Object.values(pd).some((v) => v);
+  if (tieneDatos) return pd;
+  return extraerProductDataDesdePrompt(resolverOpenaiPrompt(config));
+}
+
 function normalizarConfigOpenAI(cfg) {
   const base = { ...crearConfigOpenAIPorDefecto(), ...(cfg || {}) };
   const router = normalizarConfigRouter(base);
-  const tone = String(base.tone || "vendedor_amable").toLowerCase().trim();
   const temp = parseFloat(base.temperature);
   const model = String(base.model || process.env.OPENAI_MODEL || "gpt-4o-mini").trim();
+  const openaiPrompt = resolverOpenaiPrompt(base);
 
   return {
     version: 1,
@@ -97,8 +122,7 @@ function normalizarConfigOpenAI(cfg) {
     scoreMinimo: router.scoreMinimo,
     temperature: Number.isFinite(temp) ? Math.min(1, Math.max(0, temp)) : 0.7,
     model: model || "gpt-4o-mini",
-    tone: TONOS_VALIDOS.has(tone) ? tone : "vendedor_amable",
-    promptExtra: String(base.promptExtra || "").trim(),
+    openaiPrompt,
     productData: normalizarProductData(base.productData),
     caminos: router.caminos,
     routes: router.caminos,
@@ -424,8 +448,9 @@ function textoProductoCompleto(p) {
   return [p.description, p.includes, p.bonuses, p.faq].join(" ").toLowerCase();
 }
 
-function contenidoEnProducto(m, p) {
-  const corpus = textoProductoCompleto(p);
+function contenidoEnProducto(m, p, config) {
+  const datos = p || productDataEfectivo(config || {});
+  const corpus = textoProductoCompleto(datos) + " " + resolverOpenaiPrompt(config || {});
   const keys = [
     "animal",
     "animales",
@@ -454,12 +479,12 @@ function resumenIncluye(p) {
 }
 
 function construirReplyLocal(consultaIntent, config, mensaje, usadas) {
-  const p = config.productData || {};
+  const p = productDataEfectivo(config);
   const m = normMsg(mensaje);
   const intentFino = refinarIntent(consultaIntent, m);
 
   if (intentFino === "contenido_producto") {
-    const pool = contenidoEnProducto(m, p) ? VARIACIONES.contenido_si : VARIACIONES.contenido_no;
+    const pool = contenidoEnProducto(m, p, config) ? VARIACIONES.contenido_si : VARIACIONES.contenido_no;
     return limpiarReply(elegirVariacion(pool, usadas, m));
   }
 
@@ -534,47 +559,35 @@ function aplicarAntiRepeticion(reply, config, mensaje, chatHistory, lastReplies)
   return r;
 }
 
-function bloqueProducto(pd) {
-  const lineas = [];
-  if (pd.name) lineas.push(`Nombre: ${pd.name}`);
-  if (pd.description) lineas.push(`Descripción: ${pd.description}`);
-  if (pd.price) lineas.push(`Precio: ${pd.price}`);
-  if (pd.includes) lineas.push(`Incluye: ${pd.includes}`);
-  if (pd.bonuses) lineas.push(`Bonos: ${pd.bonuses}`);
-  if (pd.guarantee) lineas.push(`Garantía: ${pd.guarantee}`);
-  if (pd.access) lineas.push(`Acceso/entrega: ${pd.access}`);
-  if (pd.paymentMethods) lineas.push(`Métodos de pago: ${pd.paymentMethods}`);
-  if (pd.faq) lineas.push(`FAQ: ${pd.faq}`);
-  return lineas.join("\n");
-}
-
-function construirSystemPrompt(config, lastReplies) {
-  const pd = config.productData || {};
-  const tono = TONO_ETIQUETAS[config.tone] || TONO_ETIQUETAS.vendedor_amable;
-  const antiRep =
-    lastReplies.length > 0
-      ? `\nNo repitas estas frases:\n- ${lastReplies.join("\n- ")}`
-      : "";
-
-  let prompt =
-    "Eres un vendedor humano por WhatsApp.\n" +
-    `Estilo: ${tono}.\n` +
-    "Producto:\n" +
-    (bloqueProducto(pd) || "(configura datos del producto)") +
-    "\n\nReglas:\n" +
-    "- 1-3 líneas, natural, sin sonar robot.\n" +
-    "- Máximo 1 emoji: 🙂😊😌🤔😅😍🥹😉😎🙌😇\n" +
-    "- Sin ... ni etc. No inventes datos.\n" +
-    "- No repitas frases ni 'te entiendo' en todo.\n" +
-    "- No digas '¿en qué más te ayudo?'.\n" +
-    "- Responde solo la intención del mensaje." +
-    antiRep;
-
-  if (config.promptExtra) {
-    prompt += `\n\nExtra:\n${config.promptExtra}`;
+function construirMensajesOpenAI(config, mensajeLead, chatHistory, lastReplies, reescribir) {
+  const openaiPrompt = resolverOpenaiPrompt(config);
+  let system = PROMPT_SISTEMA_FIJO;
+  if (lastReplies.length) {
+    system += `\nNo repitas estas respuestas recientes: ${lastReplies.join(" | ")}`;
+  }
+  if (reescribir) {
+    system += "\nReformula con otras palabras. No repitas la frase anterior.";
   }
 
-  return prompt;
+  const messages = [{ role: "system", content: system }];
+
+  if (openaiPrompt) {
+    messages.push({
+      role: "user",
+      content: `Instrucciones y datos del producto:\n${openaiPrompt}`,
+    });
+  }
+
+  const hist = historialParaOpenAI(chatHistory);
+  const ultimo = hist[hist.length - 1];
+  const texto = String(mensajeLead || "").trim();
+
+  messages.push(...hist);
+  if (!ultimo || ultimo.role !== "user" || ultimo.content !== texto) {
+    if (texto) messages.push({ role: "user", content: texto });
+  }
+
+  return messages;
 }
 
 function historialParaOpenAI(chatHistory) {
@@ -607,18 +620,7 @@ async function llamarOpenAI(config, mensajeLead, chatHistory, lastReplies, reesc
   if (!client) return null;
 
   const model = config.model || process.env.OPENAI_MODEL || "gpt-4o-mini";
-  let system = construirSystemPrompt(config, lastReplies);
-  if (reescribir) {
-    system += "\n\nReformula con otras palabras. No repitas la frase anterior.";
-  }
-
-  const hist = historialParaOpenAI(chatHistory);
-  const ultimo = hist[hist.length - 1];
-  const texto = String(mensajeLead || "").trim();
-  const messages = [{ role: "system", content: system }, ...hist];
-  if (!ultimo || ultimo.role !== "user" || ultimo.content !== texto) {
-    if (texto) messages.push({ role: "user", content: texto });
-  }
+  const messages = construirMensajesOpenAI(config, mensajeLead, chatHistory, lastReplies, reescribir);
 
   const completion = await client.chat.completions.create({
     model,

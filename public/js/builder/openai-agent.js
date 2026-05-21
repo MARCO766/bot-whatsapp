@@ -8,20 +8,15 @@ window.MacBotOpenAIAgent = (function () {
   let configActiva = crearConfigPorDefecto();
   let renderVisualTimer = null;
 
-  const TONOS = [
-    "vendedor_amable",
-    "vendedor_premium",
-    "cercano",
-    "profesional",
-    "divertido",
-  ];
-  const TONO_LABELS = {
-    vendedor_amable: "Vendedor amable",
-    vendedor_premium: "Vendedor premium",
-    cercano: "Cercano",
-    profesional: "Profesional",
-    divertido: "Divertido",
-  };
+  const PROMPT_PLACEHOLDER =
+    "Ejemplo:\n" +
+    "Eres un vendedor amable de WhatsApp.\n" +
+    "Producto: 4000 plantillas de papercraft.\n" +
+    "Precio: 29 Bs.\n" +
+    "Incluye: 4000 plantillas + 6 bonos.\n" +
+    "Bonos: abecedario 3D, lámparas origami, Goku, Vegeta y Kid Buu.\n" +
+    "Métodos de pago: QR y depósito bancario.\n" +
+    "Responde corto, humano y sin inventar datos.";
 
   const OPENAI_ICON_SVG =
     '<svg class="openai-agent-icon-svg" viewBox="0 0 24 24" width="36" height="36" aria-hidden="true">' +
@@ -41,6 +36,21 @@ window.MacBotOpenAIAgent = (function () {
     return "route_" + Math.random().toString(36).slice(2, 8);
   }
 
+  function productDataATexto(pd) {
+    const p = pd || {};
+    const lineas = [];
+    if (p.name) lineas.push("Producto: " + p.name);
+    if (p.description) lineas.push("Descripción: " + p.description);
+    if (p.price) lineas.push("Precio: " + p.price);
+    if (p.includes) lineas.push("Incluye: " + p.includes);
+    if (p.bonuses) lineas.push("Bonos: " + p.bonuses);
+    if (p.guarantee) lineas.push("Garantía: " + p.guarantee);
+    if (p.access) lineas.push("Acceso/entrega: " + p.access);
+    if (p.paymentMethods) lineas.push("Métodos de pago: " + p.paymentMethods);
+    if (p.faq) lineas.push("FAQ: " + p.faq);
+    return lineas.join("\n");
+  }
+
   function crearConfigPorDefecto() {
     return {
       version: 1,
@@ -48,19 +58,7 @@ window.MacBotOpenAIAgent = (function () {
       scoreMinimo: 40,
       temperature: 0.7,
       model: "gpt-4o-mini",
-      tone: "vendedor_amable",
-      promptExtra: "",
-      productData: {
-        name: "",
-        description: "",
-        price: "",
-        includes: "",
-        bonuses: "",
-        guarantee: "",
-        access: "",
-        paymentMethods: "",
-        faq: "",
-      },
+      openaiPrompt: "",
       caminos: [],
       routes: [],
     };
@@ -119,9 +117,12 @@ window.MacBotOpenAIAgent = (function () {
   function sanitizeOpenAIData(local) {
     const src = local && typeof local === "object" ? local : {};
     const routes = normalizarCaminos(obtenerRoutes(src), true);
-    const pd = src.productData || {};
-    const tone = String(src.tone || "vendedor_amable").toLowerCase();
     const temp = parseFloat(src.temperature);
+    let openaiPrompt = String(src.openaiPrompt || "").trim();
+    if (!openaiPrompt) {
+      openaiPrompt = productDataATexto(src.productData || {});
+      if (!openaiPrompt && src.promptExtra) openaiPrompt = String(src.promptExtra).trim();
+    }
 
     return {
       version: 1,
@@ -132,19 +133,7 @@ window.MacBotOpenAIAgent = (function () {
       ),
       temperature: Number.isFinite(temp) ? Math.min(1, Math.max(0, temp)) : 0.7,
       model: String(src.model || "gpt-4o-mini").trim() || "gpt-4o-mini",
-      tone: TONOS.indexOf(tone) >= 0 ? tone : "vendedor_amable",
-      promptExtra: String(src.promptExtra || "").trim(),
-      productData: {
-        name: String(pd.name || "").trim(),
-        description: String(pd.description || "").trim(),
-        price: String(pd.price || "").trim(),
-        includes: String(pd.includes || "").trim(),
-        bonuses: String(pd.bonuses || "").trim(),
-        guarantee: String(pd.guarantee || "").trim(),
-        access: String(pd.access || "").trim(),
-        paymentMethods: String(pd.paymentMethods || "").trim(),
-        faq: String(pd.faq || "").trim(),
-      },
+      openaiPrompt: openaiPrompt,
       caminos: routes,
       routes: routes,
     };
@@ -322,23 +311,6 @@ window.MacBotOpenAIAgent = (function () {
     configActiva = cfg;
   }
 
-  function syncProductoDesdeDom() {
-    const g = function (id) {
-      return document.getElementById(id)?.value.trim() || "";
-    };
-    configActiva.productData = {
-      name: g("openaiAgentProductName"),
-      description: g("openaiAgentProductDesc"),
-      price: g("openaiAgentProductPrice"),
-      includes: g("openaiAgentProductIncludes"),
-      bonuses: g("openaiAgentProductBonuses"),
-      guarantee: g("openaiAgentProductGuarantee"),
-      access: g("openaiAgentProductAccess"),
-      paymentMethods: g("openaiAgentProductPayment"),
-      faq: g("openaiAgentProductFaq"),
-    };
-  }
-
   function syncCaminosDesdeDom() {
     const rows = document.querySelectorAll(".openai-agent-ruta-row");
     const caminos = [];
@@ -383,11 +355,8 @@ window.MacBotOpenAIAgent = (function () {
       : 0.7;
     configActiva.model =
       document.getElementById("openaiAgentModel")?.value.trim() || "gpt-4o-mini";
-    configActiva.tone =
-      document.getElementById("openaiAgentTone")?.value || "vendedor_amable";
-    configActiva.promptExtra =
-      document.getElementById("openaiAgentPromptExtra")?.value.trim() || "";
-    syncProductoDesdeDom();
+    configActiva.openaiPrompt =
+      document.getElementById("openaiAgentPrompt")?.value.trim() || "";
     syncCaminosDesdeDom();
     asegurarArraysCaminos(configActiva);
     return configActiva;
@@ -474,26 +443,11 @@ window.MacBotOpenAIAgent = (function () {
     if (nodoActivo) renderVisualNodo(nodoActivo, configActiva);
   }
 
-  function toneOptions(selected) {
-    return TONOS.map(function (t) {
-      return (
-        '<option value="' +
-        t +
-        '"' +
-        (t === selected ? " selected" : "") +
-        ">" +
-        (TONO_LABELS[t] || t) +
-        "</option>"
-      );
-    }).join("");
-  }
-
   function renderPanel(nodo) {
     if (!nodo) return;
     nodoActivo = nodo;
     configActiva = leerConfigDeNodo(nodo);
     asegurarArraysCaminos(configActiva);
-    const pd = configActiva.productData || {};
     const contenido = document.getElementById("panelNodoContenido");
     if (!contenido) return;
 
@@ -504,48 +458,20 @@ window.MacBotOpenAIAgent = (function () {
       '<div class="panel-campo"><label>Nombre del nodo</label><input id="openaiAgentNombreNodo" value="' +
       esc(configActiva.nombreNodo) +
       '"></div>' +
-      '<div class="panel-campo"><label>Temperatura (0–1)</label><input id="openaiAgentTemperature" type="number" min="0" max="1" step="0.1" value="' +
-      (configActiva.temperature ?? 0.7) +
-      '"></div>' +
       '<div class="panel-campo"><label>Modelo</label><input id="openaiAgentModel" value="' +
       esc(configActiva.model || "gpt-4o-mini") +
+      '"></div>' +
+      '<div class="panel-campo"><label>Temperatura (0–1)</label><input id="openaiAgentTemperature" type="number" min="0" max="1" step="0.1" value="' +
+      (configActiva.temperature ?? 0.7) +
       '"></div>' +
       '<div class="panel-campo"><label>Score mínimo caminos</label><input id="openaiAgentScoreMinimo" type="number" min="0" max="100" value="' +
       configActiva.scoreMinimo +
       '"></div>' +
-      "<h5>Producto</h5>" +
-      '<div class="panel-campo"><label>Nombre producto</label><input id="openaiAgentProductName" value="' +
-      esc(pd.name) +
-      '"></div>' +
-      '<div class="panel-campo"><label>Descripción breve</label><textarea id="openaiAgentProductDesc" class="ia-textarea" rows="2">' +
-      esc(pd.description) +
-      "</textarea></div>" +
-      '<div class="panel-campo"><label>Precio</label><input id="openaiAgentProductPrice" value="' +
-      esc(pd.price) +
-      '"></div>' +
-      '<div class="panel-campo"><label>Qué incluye</label><textarea id="openaiAgentProductIncludes" class="ia-textarea" rows="2">' +
-      esc(pd.includes) +
-      "</textarea></div>" +
-      '<div class="panel-campo"><label>Bonos</label><textarea id="openaiAgentProductBonuses" class="ia-textarea" rows="2">' +
-      esc(pd.bonuses) +
-      "</textarea></div>" +
-      '<div class="panel-campo"><label>Garantía</label><input id="openaiAgentProductGuarantee" value="' +
-      esc(pd.guarantee) +
-      '"></div>' +
-      '<div class="panel-campo"><label>Acceso / entrega</label><input id="openaiAgentProductAccess" value="' +
-      esc(pd.access) +
-      '"></div>' +
-      '<div class="panel-campo"><label>Métodos de pago</label><textarea id="openaiAgentProductPayment" class="ia-textarea" rows="2">' +
-      esc(pd.paymentMethods) +
-      "</textarea></div>" +
-      '<div class="panel-campo"><label>FAQ extra</label><textarea id="openaiAgentProductFaq" class="ia-textarea" rows="3">' +
-      esc(pd.faq) +
-      "</textarea></div>" +
-      '<div class="panel-campo"><label>Tono conversación</label><select id="openaiAgentTone" class="node-select">' +
-      toneOptions(configActiva.tone) +
-      "</select></div>" +
-      '<div class="panel-campo"><label>Prompt extra (opcional)</label><textarea id="openaiAgentPromptExtra" class="ia-textarea" rows="3">' +
-      esc(configActiva.promptExtra) +
+      '<div class="panel-campo"><label>Instrucciones y datos del producto</label>' +
+      '<textarea id="openaiAgentPrompt" class="ia-textarea openai-agent-prompt-area" rows="14" placeholder="' +
+      esc(PROMPT_PLACEHOLDER) +
+      '">' +
+      esc(configActiva.openaiPrompt || "") +
       "</textarea></div>" +
       "<h5>Caminos</h5>" +
       '<div id="openaiAgentCaminosLista"></div>' +
@@ -565,19 +491,9 @@ window.MacBotOpenAIAgent = (function () {
     [
       "openaiAgentNombreNodo",
       "openaiAgentScoreMinimo",
-      "openaiAgentProductName",
-      "openaiAgentProductDesc",
-      "openaiAgentProductPrice",
-      "openaiAgentProductIncludes",
-      "openaiAgentProductBonuses",
-      "openaiAgentProductGuarantee",
-      "openaiAgentProductAccess",
-      "openaiAgentProductPayment",
-      "openaiAgentProductFaq",
       "openaiAgentTemperature",
       "openaiAgentModel",
-      "openaiAgentTone",
-      "openaiAgentPromptExtra",
+      "openaiAgentPrompt",
     ].forEach(function (id) {
       document.getElementById(id)?.addEventListener("input", onFormChange);
       document.getElementById(id)?.addEventListener("change", onFormChange);

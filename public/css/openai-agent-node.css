@@ -123,3 +123,11 @@
   color: #67e8f9;
   font-size: 13px;
 }
+
+.openai-agent-prompt-area {
+  min-height: 220px;
+  width: 100%;
+  font-size: 13px;
+  line-height: 1.45;
+  resize: vertical;
+}
