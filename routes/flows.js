@@ -256,11 +256,13 @@ router.post("/inbox/responder", protegerPanel, upload.single("archivo"), async (
         return finishInbox(req, res, numero);
       }
 
+      const usuarioIdManual = String(req.session.usuario.id).trim();
       await enviarTextoWhatsApp(
         numero,
         respuesta,
         {
-          usuarioId: req.session.usuario.id
+          usuarioId: usuarioIdManual,
+          _inboxTrace: "manual",
         }
       );
 

@@ -670,19 +670,31 @@ async function generarReply(config, mensajeLead, chatHistory, lastReplies) {
  */
 async function enviarOpenAIConPipelineManual(numero, reply, usuarioId) {
   const texto = String(reply || "").trim();
-  console.log("🤖 OPENAI reply:", texto);
+  const numeroCanon = String(numero || "").trim();
+  const uid =
+    usuarioId != null && usuarioId !== "" ? String(usuarioId).trim() : null;
 
-  if (!texto || !numero) return null;
-  if (!usuarioId) {
+  console.log("🤖 OPENAI reply:", texto);
+  console.log("🤖 OPENAI pipeline ids:", {
+    numero: numeroCanon,
+    usuarioId: uid,
+    tipoUsuarioId: typeof usuarioId,
+  });
+
+  if (!texto || !numeroCanon) return null;
+  if (!uid) {
     console.error("⚠️ OpenAI sin usuarioId — no puede usar pipeline manual de bandeja");
     return null;
   }
 
-  console.log("💾 OPENAI usando pipeline manual de inbox");
+  console.log("💾 OPENAI usando pipeline manual de inbox (mismo enviarTextoWhatsApp)");
 
   let row = null;
   try {
-    row = await enviarTextoWhatsApp(numero, texto, { usuarioId });
+    row = await enviarTextoWhatsApp(numeroCanon, texto, {
+      usuarioId: uid,
+      _inboxTrace: "openai",
+    });
   } catch (err) {
     console.error(
       "⚠️ OpenAI envió WhatsApp pero no pudo pintar bandeja:",
@@ -704,7 +716,7 @@ async function enviarOpenAIConPipelineManual(numero, reply, usuarioId) {
   if (SUPABASE_URL && SUPABASE_KEY) {
     try {
       await axios.patch(
-        `${SUPABASE_URL}/rest/v1/conversaciones?cliente_numero=eq.${numero}&usuario_id=eq.${usuarioId}`,
+        `${SUPABASE_URL}/rest/v1/conversaciones?cliente_numero=eq.${numeroCanon}&usuario_id=eq.${uid}`,
         {
           ultimo_mensaje: texto,
           ultimo_mensaje_en: new Date().toISOString(),
@@ -828,7 +840,9 @@ async function ejecutarNodoOpenAIAgent(nodo, contexto, opts = {}) {
     console.log("🧠 OPENAI respuesta:", reply);
 
     if (reply && numero) {
-      await enviarOpenAIConPipelineManual(numero, reply, usuarioId);
+      const uidEnvio =
+        contexto?.usuarioId ?? opts?.usuarioId ?? usuarioId ?? null;
+      await enviarOpenAIConPipelineManual(numero, reply, uidEnvio);
       contexto.ultimaRespuestaIA = reply;
       chatHistory = appendChatHistory(chatHistory, "assistant", reply);
       pushLastReply(usuarioId, numero, reply);
@@ -859,7 +873,9 @@ async function ejecutarNodoOpenAIAgent(nodo, contexto, opts = {}) {
       reply = limpiarReply(reply);
       if (reply && numero) {
         console.log("🧠 OPENAI respuesta:", reply, "(fallback)");
-        await enviarOpenAIConPipelineManual(numero, reply, usuarioId);
+        const uidEnvioFb =
+          contexto?.usuarioId ?? opts?.usuarioId ?? usuarioId ?? null;
+        await enviarOpenAIConPipelineManual(numero, reply, uidEnvioFb);
       }
     } catch (fbErr) {
       console.error("❌ OPENAI fallback envío:", fbErr.message || fbErr);

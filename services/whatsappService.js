@@ -16,6 +16,31 @@ function supabaseHeaders(extra = {}) {
   };
 }
 
+function camposDiagnosticoInbox(payload, trace) {
+  return {
+    trace,
+    usuario_id: payload?.usuario_id ?? null,
+    numero: payload?.cliente_numero ?? payload?.numero ?? null,
+    telefono: payload?.telefono ?? null,
+    phone: payload?.phone ?? null,
+    conversation_id: payload?.conversation_id ?? null,
+    contacto_id: payload?.contacto_id ?? null,
+    body: payload?.body ?? null,
+    mensaje: payload?.mensaje ?? null,
+    texto: payload?.texto ?? payload?.contenido ?? null,
+    tipo: payload?.tipo ?? null,
+    direction: payload?.direction ?? null,
+    direccion: payload?.direccion ?? null,
+    from_me: payload?.from_me ?? null,
+    role: payload?.role ?? null,
+    estado: payload?.estado ?? null,
+    estado_envio: payload?.estado_envio ?? null,
+    created_at: payload?.created_at ?? null,
+    creado_en: payload?.creado_en ?? null,
+    whatsapp_message_id: payload?.whatsapp_message_id ?? null,
+  };
+}
+
 async function actualizarConversacionSaliente(usuarioId, numero, texto) {
   if (!usuarioId || !numero || !SUPABASE_URL || !SUPABASE_KEY) return;
 
@@ -60,25 +85,22 @@ async function actualizarConversacionSaliente(usuarioId, numero, texto) {
 }
 
 async function enviarTextoWhatsApp(numero, texto, opciones = {}) {
-  const debugOpenAI = !!opciones._debugOpenAI;
+  const inboxTrace =
+    opciones._inboxTrace || (opciones._debugOpenAI ? "openai" : null);
+  const usuarioId = opciones.usuarioId ?? null;
 
   try {
-    if (debugOpenAI) {
-      console.log("📤 OPENAI enviando WhatsApp (Meta API)", { numero, usuarioId: opciones.usuarioId });
-    }
-
     let tokenEnviar = TOKEN;
     let phoneIdEnviar = PHONE_ID;
 
-    if (opciones.usuarioId) {
-
+    if (usuarioId) {
       const responseConexion = await axios.get(
-        `${SUPABASE_URL}/rest/v1/conexiones_whatsapp?usuario_id=eq.${opciones.usuarioId}&activo=eq.true&select=*`,
+        `${SUPABASE_URL}/rest/v1/conexiones_whatsapp?usuario_id=eq.${usuarioId}&activo=eq.true&select=*`,
         {
           headers: {
             apikey: SUPABASE_KEY,
-            Authorization: `Bearer ${SUPABASE_KEY}`
-          }
+            Authorization: `Bearer ${SUPABASE_KEY}`,
+          },
         }
       );
 
@@ -91,41 +113,52 @@ async function enviarTextoWhatsApp(numero, texto, opciones = {}) {
     }
 
     const respuestaMeta = await axios.post(
-  `https://graph.facebook.com/v19.0/${phoneIdEnviar}/messages`,
+      `https://graph.facebook.com/v19.0/${phoneIdEnviar}/messages`,
       {
         messaging_product: "whatsapp",
         to: numero,
         text: {
-          body: texto
-        }
+          body: texto,
+        },
       },
       {
         headers: {
           Authorization: `Bearer ${tokenEnviar}`,
-          "Content-Type": "application/json"
-        }
+          "Content-Type": "application/json",
+        },
       }
     );
-const whatsappMessageId =
-  respuestaMeta.data?.messages?.[0]?.id || null;
+    const whatsappMessageId =
+      respuestaMeta.data?.messages?.[0]?.id || null;
 
-    if (debugOpenAI) {
-      console.log("✅ OPENAI enviado (Meta OK)", { whatsappMessageId });
-      console.log("💾 OPENAI guardando inbox (mensajes + conversaciones)");
+    const insertPayload = {
+      cliente_numero: numero,
+      usuario_id: usuarioId || null,
+      direccion: "saliente",
+      tipo: "texto",
+      contenido: texto,
+      imagen_url: null,
+      whatsapp_message_id: whatsappMessageId,
+      estado_envio: "sent",
+    };
+
+    if (inboxTrace === "manual") {
+      console.log("? MANUAL INSERT PAYLOAD:", insertPayload);
+      console.log("? MANUAL INSERT CAMPOS:", camposDiagnosticoInbox(insertPayload, "manual"));
+    } else if (inboxTrace === "openai") {
+      console.log("?? OPENAI INSERT PAYLOAD:", insertPayload);
+      console.log("?? OPENAI INSERT CAMPOS:", camposDiagnosticoInbox(insertPayload, "openai"));
+    }
+
+    if (!usuarioId && inboxTrace) {
+      console.warn(
+        `[INBOX] ${inboxTrace.toUpperCase()} sin usuarioId ? INSERT sin due?o y sin socket`
+      );
     }
 
     const insertRes = await axios.post(
       `${SUPABASE_URL}/rest/v1/mensajes`,
-      {
-        cliente_numero: numero,
-        usuario_id: opciones.usuarioId || null,
-        direccion: "saliente",
-        tipo: "texto",
-        contenido: texto,
-        imagen_url: null,
-        whatsapp_message_id: whatsappMessageId,
-        estado_envio: "sent",
-      },
+      insertPayload,
       {
         headers: {
           apikey: SUPABASE_KEY,
@@ -137,13 +170,13 @@ const whatsappMessageId =
     );
 
     const row = insertRes.data?.[0];
-    if (opciones.usuarioId) {
-      await actualizarConversacionSaliente(opciones.usuarioId, numero, texto);
+    if (usuarioId) {
+      await actualizarConversacionSaliente(usuarioId, numero, texto);
 
       const payloadMensaje = {
         id: row?.id,
         cliente_numero: numero,
-        usuario_id: opciones.usuarioId,
+        usuario_id: usuarioId,
         direccion: "saliente",
         tipo: "texto",
         contenido: texto,
@@ -153,37 +186,48 @@ const whatsappMessageId =
         creado_en: row?.creado_en || new Date().toISOString(),
       };
 
-      if (debugOpenAI) {
-        console.log("📡 OPENAI socket emit", {
-          evento: "nuevo_mensaje",
-          usuarioId: opciones.usuarioId,
-          mensajeId: payloadMensaje.id,
-        });
-      }
-
-      rt.nuevoMensaje(null, opciones.usuarioId, payloadMensaje);
-      rt.conversacionActualizada(null, opciones.usuarioId, {
+      const socketRoom = `user_${usuarioId}`;
+      const convPayload = {
         cliente_numero: numero,
         ultimo_mensaje: texto,
         ultimo_mensaje_en: payloadMensaje.creado_en,
         direccion: "saliente",
-      });
+      };
 
-      if (debugOpenAI) {
-        console.log("💾 OPENAI guardado inbox OK", { mensajeId: row?.id });
+      if (inboxTrace === "manual") {
+        console.log("? MANUAL SOCKET EVENT:", "nuevo_mensaje", socketRoom, payloadMensaje);
+        console.log(
+          "? MANUAL SOCKET EVENT:",
+          "conversacion_actualizada",
+          socketRoom,
+          convPayload
+        );
+      } else if (inboxTrace === "openai") {
+        console.log("?? OPENAI SOCKET EVENT:", "nuevo_mensaje", socketRoom, payloadMensaje);
+        console.log(
+          "?? OPENAI SOCKET EVENT:",
+          "conversacion_actualizada",
+          socketRoom,
+          convPayload
+        );
       }
+
+      rt.nuevoMensaje(null, usuarioId, payloadMensaje);
+      rt.conversacionActualizada(null, usuarioId, convPayload);
     }
 
     return row;
   } catch (error) {
-    if (debugOpenAI) {
-      console.error("❌ OPENAI_AGENT ERROR", error.response?.data || error.message || error);
+    const detalle = error.response?.data || error.message || error;
+    if (inboxTrace === "manual") {
+      console.error("? MANUAL enviarTextoWhatsApp:", detalle);
+    } else if (inboxTrace === "openai") {
+      console.error("? OPENAI enviarTextoWhatsApp:", detalle);
     }
-    console.log("ERROR ENVIANDO WHATSAPP:", error.response?.data || error.message);
+    console.log("ERROR ENVIANDO WHATSAPP:", detalle);
     return null;
   }
 }
-
 
 function normalizarNumeroWhatsApp(numero) {
   return String(numero || "").replace(/\D/g, "");
@@ -278,7 +322,7 @@ async function obtenerContentTypeRemoto(url) {
 }
 
 async function rehostImagenJpegPublica(urlOrigen, opciones = {}) {
-  console.log("🔄 Convirtiendo imagen a JPEG público para Meta:", urlOrigen);
+  console.log("???? Convirtiendo imagen a JPEG p?blico para Meta:", urlOrigen);
 
   const res = await axios.get(urlOrigen, {
     responseType: "arraybuffer",
@@ -305,7 +349,7 @@ async function rehostImagenJpegPublica(urlOrigen, opciones = {}) {
   });
 
   const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/archivos/${ruta}`;
-  console.log("✅ URL JPEG pública para Meta:", publicUrl);
+  console.log("??? URL JPEG p?blica para Meta:", publicUrl);
   return publicUrl;
 }
 
@@ -314,7 +358,7 @@ async function resolverLinkImagenWhatsApp(mediaUrl, opciones = {}) {
 
   if (!esUrlPublicaHttps(url)) {
     throw new Error(
-      "La URL de imagen debe ser HTTPS pública (sin token firmado). Usa /storage/v1/object/public/..."
+      "La URL de imagen debe ser HTTPS p?blica (sin token firmado). Usa /storage/v1/object/public/..."
     );
   }
 
@@ -324,13 +368,13 @@ async function resolverLinkImagenWhatsApp(mediaUrl, opciones = {}) {
     (contentType && !mimeCompatibleWhatsApp(contentType));
 
   if (necesitaConversion) {
-    console.log("🖼️ Imagen WEBP/incompatible — convirtiendo antes de Meta");
+    console.log("????? Imagen WEBP/incompatible ??? convirtiendo antes de Meta");
     return rehostImagenJpegPublica(url, opciones);
   }
 
   const accesible = await verificarUrlAccesible(url);
   if (!accesible) {
-    console.warn("⚠️ Meta no podría leer la URL — rehost JPEG:", url);
+    console.warn("???? Meta no podr?a leer la URL ??? rehost JPEG:", url);
     return rehostImagenJpegPublica(url, opciones);
   }
 
@@ -387,12 +431,12 @@ async function enviarMediaWhatsApp(numero, tipo, mediaUrl, caption = "", opcione
   const numeroDestino = normalizarNumeroWhatsApp(numero);
 
   if (!numeroDestino) {
-    console.error("❌ NÚMERO DESTINO INVÁLIDO:", numero);
+    console.error("?? N??MERO DESTINO INV?LIDO:", numero);
     return false;
   }
 
   if (!["image", "video", "audio", "document"].includes(tipoApi)) {
-    console.error("❌ TIPO MEDIA NO SOPORTADO:", tipo);
+    console.error("?? TIPO MEDIA NO SOPORTADO:", tipo);
     return false;
   }
 
@@ -400,24 +444,24 @@ async function enviarMediaWhatsApp(numero, tipo, mediaUrl, caption = "", opcione
 
   try {
     if (tipoApi === "image") {
-      console.log("🖼️ ENVIANDO IMAGEN A META:", {
+      console.log("????? ENVIANDO IMAGEN A META:", {
         numero: numeroDestino,
         mediaUrl: urlOriginal,
         caption: caption || "",
       });
 
       if (!urlOriginal) {
-        console.error("❌ IMAGEN SIN URL");
+        console.error("?? IMAGEN SIN URL");
         return false;
       }
 
       urlEnvio = await resolverLinkImagenWhatsApp(urlOriginal, opciones);
 
       if (urlEnvio !== urlOriginal) {
-        console.log("🖼️ URL FINAL PARA META (JPEG):", urlEnvio);
+        console.log("????? URL FINAL PARA META (JPEG):", urlEnvio);
       }
     } else {
-      console.log("📤 ENVIANDO MEDIA A META:", {
+      console.log("???? ENVIANDO MEDIA A META:", {
         numero: numeroDestino,
         tipo: tipoApi,
         mediaUrl: urlOriginal,
@@ -425,7 +469,7 @@ async function enviarMediaWhatsApp(numero, tipo, mediaUrl, caption = "", opcione
       });
 
       if (!urlOriginal || !esUrlPublicaHttps(urlOriginal)) {
-        console.error("❌ MEDIA URL INVÁLIDA:", urlOriginal);
+        console.error("?? MEDIA URL INV?LIDA:", urlOriginal);
         return false;
       }
       urlEnvio = urlOriginal;
@@ -434,7 +478,7 @@ async function enviarMediaWhatsApp(numero, tipo, mediaUrl, caption = "", opcione
     const { tokenEnviar, phoneIdEnviar } = await resolverCredencialesWhatsApp(opciones);
 
     if (!tokenEnviar || !phoneIdEnviar) {
-      console.error("❌ FALTAN CREDENCIALES WHATSAPP (token o phone_id)");
+      console.error("?? FALTAN CREDENCIALES WHATSAPP (token o phone_id)");
       return false;
     }
 
@@ -447,7 +491,7 @@ async function enviarMediaWhatsApp(numero, tipo, mediaUrl, caption = "", opcione
     );
 
     if (!payload) {
-      console.error("❌ NO SE PUDO CONSTRUIR PAYLOAD MEDIA:", tipoApi);
+      console.error("?? NO SE PUDO CONSTRUIR PAYLOAD MEDIA:", tipoApi);
       return false;
     }
 
@@ -463,16 +507,16 @@ async function enviarMediaWhatsApp(numero, tipo, mediaUrl, caption = "", opcione
     );
 
     if (tipoApi === "image") {
-      console.log("✅ RESPUESTA META IMAGEN:", respuestaMeta.data);
+      console.log("??? RESPUESTA META IMAGEN:", respuestaMeta.data);
     } else {
-      console.log("✅ RESPUESTA META MEDIA:", respuestaMeta.data);
+      console.log("??? RESPUESTA META MEDIA:", respuestaMeta.data);
     }
 
     if (respuestaMeta.data?.error) {
       if (tipoApi === "image") {
-        console.error("❌ ERROR META IMAGEN:", respuestaMeta.data.error);
+        console.error("?? ERROR META IMAGEN:", respuestaMeta.data.error);
       } else {
-        console.error("❌ ERROR META MEDIA:", respuestaMeta.data.error);
+        console.error("?? ERROR META MEDIA:", respuestaMeta.data.error);
       }
       return false;
     }
@@ -480,11 +524,11 @@ async function enviarMediaWhatsApp(numero, tipo, mediaUrl, caption = "", opcione
     const whatsappMessageId = respuestaMeta.data?.messages?.[0]?.id || null;
 
     if (!whatsappMessageId) {
-      console.error("❌ META NO DEVOLVIÓ message_id — NO se guarda en bandeja:", respuestaMeta.data);
+      console.error("?? META NO DEVOLVI?? message_id ??? NO se guarda en bandeja:", respuestaMeta.data);
       return false;
     }
 
-    console.log("✅ message_id Meta:", whatsappMessageId);
+    console.log("??? message_id Meta:", whatsappMessageId);
 
     const insertRes = await axios.post(
       `${SUPABASE_URL}/rest/v1/mensajes`,
@@ -527,9 +571,9 @@ async function enviarMediaWhatsApp(numero, tipo, mediaUrl, caption = "", opcione
     return row;
   } catch (error) {
     if (tipoApi === "image") {
-      console.error("❌ ERROR META IMAGEN:", error.response?.data || error.message);
+      console.error("?? ERROR META IMAGEN:", error.response?.data || error.message);
     } else {
-      console.error("❌ ERROR META MEDIA:", error.response?.data || error.message);
+      console.error("?? ERROR META MEDIA:", error.response?.data || error.message);
     }
     return false;
   }
