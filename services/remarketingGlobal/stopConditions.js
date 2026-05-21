@@ -1,10 +1,10 @@
 const {
   clienteRespondioDespues,
   tieneEtiqueta,
-  leadTieneCompraExplicita,
   obtenerEtiquetasCliente,
   cancelarCampana,
 } = require("./remarketingRepository");
+const { verificarCompraWorkerRemarketing } = require("./verificarCompraWorker");
 const { ESTADOS_REMARKETING } = require("./constants");
 const { logAntesDeCancelarRemarketing } = require("./cancelacionDebug");
 
@@ -16,40 +16,24 @@ async function evaluarParadaAntesDeEnviar(item) {
   const etiquetas = config.etiquetas || {};
   const numero = item.cliente_numero;
 
-  const etiquetasCliente = await obtenerEtiquetasCliente(
-    numero,
-    item.usuario_id
-  );
-
   if (cond.detener_si_compra) {
-    const compraRes = await leadTieneCompraExplicita(numero, item.usuario_id, {
-      checkpointAt: item.checkpoint_at,
+    const compraRes = await verificarCompraWorkerRemarketing({
+      cliente_numero: numero,
+      usuario_id: item.usuario_id,
+      flujo_id: item.flujo_id,
+      config,
     });
 
-    console.log("[RM CANCEL DEBUG] archivo=", ARCHIVO);
-    console.log("[RM CANCEL DEBUG] funcion= evaluarParadaAntesDeEnviar > detener_si_compra");
-    console.log("[RM CANCEL DEBUG] evaluando detener_si_compra");
-    console.log("[RM CANCEL DEBUG] cliente=", numero);
-    console.log("[RM CANCEL DEBUG] flujo=", item.flujo_id);
-    console.log("[RM CANCEL DEBUG] checkpoint_at=", item.checkpoint_at);
-    console.log("[RM CANCEL DEBUG] etiquetas=", etiquetasCliente);
-    console.log("[RM CANCEL DEBUG] compraDetectada=", compraRes.compra);
-    console.log("[RM CANCEL DEBUG] row=", compraRes.fila || null);
-    console.log("[RM CANCEL DEBUG] detalle compra=", compraRes.razon);
-
-    if (compraRes.compra) {
+    if (compraRes.compraDetectada === true) {
       const motivo = "Lead compró";
 
       logAntesDeCancelarRemarketing(ARCHIVO, "evaluarParadaAntesDeEnviar", motivo, {
         cliente_numero: numero,
         flujo_id: item.flujo_id,
         row: item,
-        etiquetas: etiquetasCliente,
+        etiquetas: compraRes.etiquetas,
         compraDetectada: true,
-        detalle:
-          compraRes.razon +
-          " | conversion_id=" +
-          (compraRes.fila?.id || "?"),
+        detalle: compraRes.razon,
       });
 
       await cancelarCampana(
@@ -59,7 +43,7 @@ async function evaluarParadaAntesDeEnviar(item) {
         {
           cliente_numero: numero,
           flujo_id: item.flujo_id,
-          etiquetas: etiquetasCliente,
+          etiquetas: compraRes.etiquetas,
           compraDetectada: true,
           detalle: compraRes.razon,
           fila_conversion: compraRes.fila,
@@ -73,18 +57,21 @@ async function evaluarParadaAntesDeEnviar(item) {
     cond.detener_etiqueta_nombre || etiquetas.pagado || "PAGADO";
 
   if (cond.detener_si_etiqueta_pagado && tagPagado) {
+    const etiquetasCliente = await obtenerEtiquetasCliente(
+      numero,
+      item.usuario_id
+    );
     const pagado = await tieneEtiqueta(numero, item.usuario_id, tagPagado);
 
-    console.log("[RM CANCEL DEBUG] archivo=", ARCHIVO);
-    console.log("[RM CANCEL DEBUG] evaluando etiqueta PAGADO");
-    console.log("[RM CANCEL DEBUG] cliente=", numero);
-    console.log("[RM CANCEL DEBUG] flujo=", item.flujo_id);
-    console.log("[RM CANCEL DEBUG] etiquetas=", etiquetasCliente);
-    console.log("[RM CANCEL DEBUG] compraDetectada=", false);
-    console.log("[RM CANCEL DEBUG] etiqueta_buscada=", tagPagado);
-    console.log("[RM CANCEL DEBUG] etiqueta_encontrada=", pagado);
+    console.log("[RM WORKER COMPRA DEBUG] cliente=", numero);
+    console.log("[RM WORKER COMPRA DEBUG] etiquetas=", etiquetasCliente);
+    console.log("[RM WORKER COMPRA DEBUG] conversiones=", []);
+    console.log("[RM WORKER COMPRA DEBUG] compraDetectada=", !!pagado);
+    console.log(
+      "[RM WORKER COMPRA DEBUG] cancelandoPorCompra=" + (pagado ? "SI" : "NO")
+    );
 
-    if (pagado) {
+    if (pagado === true) {
       const motivo = "Etiqueta " + tagPagado;
 
       logAntesDeCancelarRemarketing(ARCHIVO, "evaluarParadaAntesDeEnviar", motivo, {
@@ -118,11 +105,6 @@ async function evaluarParadaAntesDeEnviar(item) {
       item.checkpoint_at
     );
     if (respondio) {
-      console.log(
-        "[RM CANCEL DEBUG] archivo=",
-        ARCHIVO,
-        "| lead respondió (no cancela campaña completa aquí)"
-      );
       return { detener: true, motivo: "respondio", soloEstePaso: true };
     }
   }
