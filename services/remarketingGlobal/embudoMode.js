@@ -159,6 +159,53 @@ function limpiarModosEmbudoLead(usuarioId, numero) {
   }
 }
 
+/**
+ * Solo resetbot: memoria + historial CRM + estado_embudo nuevo.
+ */
+async function resetearEmbudoLeadParaResetbot(usuarioId, numero) {
+  console.log("[RESETBOT] limpiando remarketing del lead");
+
+  limpiarModosEmbudoLead(usuarioId, numero);
+
+  if (!SUPABASE_URL || !SUPABASE_KEY || !usuarioId || !numero) {
+    console.log("[RESETBOT] modo embudo reseteado (solo memoria)");
+    return;
+  }
+
+  try {
+    await axios.delete(
+      `${SUPABASE_URL}/rest/v1/crm_historial_cliente?usuario_id=eq.${usuarioId}` +
+        `&cliente_numero=eq.${encodeURIComponent(numero)}` +
+        `&tipo=eq.remarketing_embudo`,
+      { headers: headers() }
+    );
+    console.log("[RESETBOT] estado remarketing limpiado");
+  } catch (err) {
+    console.log(
+      "[RESETBOT] historial remarketing_embudo:",
+      err.response?.data || err.message
+    );
+  }
+
+  try {
+    await axios.patch(
+      `${SUPABASE_URL}/rest/v1/clientes?numero=eq.${encodeURIComponent(numero)}&usuario_id=eq.${usuarioId}`,
+      {
+        estado_embudo: "nuevo",
+        ultima_actividad: new Date().toISOString(),
+      },
+      { headers: headers({ Prefer: "return=minimal" }) }
+    );
+  } catch (err) {
+    console.log(
+      "[RESETBOT] estado_embudo cliente:",
+      err.response?.data || err.message
+    );
+  }
+
+  console.log("[RESETBOT] modo embudo reseteado");
+}
+
 async function leadEstaComprado(usuarioId, numero, flujoId, config) {
   const modo = await getModoEmbudo(usuarioId, numero, flujoId);
   if (modo.estado === ESTADO_EMBUDO.COMPRADO) {
@@ -338,4 +385,5 @@ module.exports = {
   debeBloquearFlujoNormal,
   reprogramarRemarketingSiModoActivo,
   obtenerModoRemarketingActivoParaLead,
+  resetearEmbudoLeadParaResetbot,
 };

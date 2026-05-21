@@ -140,6 +140,43 @@ async function obtenerFlujoIdRemarketingPendiente(numero, usuarioId) {
   }
 }
 
+/**
+ * Solo resetbot: cierra filas remarketing del lead en estados activos de prueba.
+ */
+async function resetRemarketingLeadPorResetbot(numero, usuarioId) {
+  if (!numero || !SUPABASE_URL || !SUPABASE_KEY) return;
+
+  const ahora = nowUtc();
+  const estadosIn =
+    "pendiente,enviado,cancelado,cancelado_por_respuesta";
+
+  let url =
+    `${SUPABASE_URL}/rest/v1/remarketing_global_programados?cliente_numero=eq.${encodeURIComponent(numero)}` +
+    `&estado=in.(${estadosIn})`;
+
+  if (usuarioId) {
+    url += `&usuario_id=eq.${usuarioId}`;
+  }
+
+  try {
+    await axios.patch(
+      url,
+      {
+        estado: ESTADOS_REMARKETING.CANCELADO,
+        cancelado_en: ahora,
+        actualizado_en: ahora,
+        error_detalle: "resetbot",
+      },
+      { headers: headers({ Prefer: "return=minimal" }) }
+    );
+  } catch (err) {
+    console.log(
+      "[RESETBOT] remarketing programados:",
+      err.response?.data || err.message
+    );
+  }
+}
+
 async function cancelarPendientesCliente(numero, usuarioId, estado, motivo, flujoId) {
   const { logAntesDeCancelarRemarketing } = require("./cancelacionDebug");
   logAntesDeCancelarRemarketing(
@@ -366,6 +403,7 @@ module.exports = {
   obtenerFlujoIdRemarketingPendiente,
   actualizarEstado,
   cancelarCampana,
+  resetRemarketingLeadPorResetbot,
   cancelarPendientesCliente,
   clienteRespondioDespues,
   ultimoMensajeEntranteEn,

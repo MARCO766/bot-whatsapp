@@ -11,7 +11,7 @@ const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
 
 const MENSAJE_CONFIRMACION =
-  '✅ Flujo reiniciado. Escribe "hola" para empezar nuevamente.';
+  '✅ Reset completo. Escribe "hola" para empezar desde cero.';
 
 function supabaseHeaders(extra = {}) {
   return {
@@ -55,21 +55,35 @@ async function cancelarSeguimientosPendientesLead(numero, usuarioId) {
   }
 }
 
-async function limpiarHistorialFlujoLead(numero, usuarioId) {
+async function limpiarHistorialAutomatizacionLead(numero, usuarioId) {
   if (!SUPABASE_URL || !SUPABASE_KEY || !numero || !usuarioId) return;
+
+  const base = `cliente_numero=eq.${encodeURIComponent(numero)}&usuario_id=eq.${encodeURIComponent(usuarioId)}`;
 
   try {
     await axios.delete(
-      `${SUPABASE_URL}/rest/v1/crm_historial_cliente?cliente_numero=eq.${encodeURIComponent(numero)}&usuario_id=eq.${encodeURIComponent(usuarioId)}&tipo=eq.flujo`,
+      `${SUPABASE_URL}/rest/v1/crm_historial_cliente?${base}&tipo=eq.flujo`,
       { headers: supabaseHeaders() }
     );
   } catch (err) {
     console.log("[RESETBOT] historial flujo:", err.response?.data || err.message);
   }
+
+  try {
+    await axios.delete(
+      `${SUPABASE_URL}/rest/v1/crm_historial_cliente?${base}&tipo=eq.remarketing_embudo`,
+      { headers: supabaseHeaders() }
+    );
+  } catch (err) {
+    console.log(
+      "[RESETBOT] historial remarketing:",
+      err.response?.data || err.message
+    );
+  }
 }
 
 /**
- * Limpia solo estado de automatización (memoria IA + seguimientos + historial flujo).
+ * Limpia automatización completa (flujo + remarketing + sesiones) para pruebas.
  */
 async function resetearFlujoLead(numero, usuarioId) {
   const num = String(numero || "").trim();
@@ -81,28 +95,21 @@ async function resetearFlujoLead(numero, usuarioId) {
   limpiarSesionIAPendiente(uid, num);
 
   try {
-    const { limpiarModosEmbudoLead } = require("./remarketingGlobal/embudoMode");
-    limpiarModosEmbudoLead(uid, num);
-  } catch (_) {
-    /* ignore */
+    const { resetearEmbudoLeadParaResetbot } = require("./remarketingGlobal/embudoMode");
+    await resetearEmbudoLeadParaResetbot(uid, num);
+  } catch (err) {
+    console.log("[RESETBOT] embudo:", err.message);
+  }
+
+  try {
+    const { resetRemarketingLeadPorResetbot } = require("./remarketingGlobal/remarketingRepository");
+    await resetRemarketingLeadPorResetbot(num, uid);
+  } catch (err) {
+    console.log("[RESETBOT] remarketing programados:", err.message);
   }
 
   await cancelarSeguimientosPendientesLead(num, uid);
-  await limpiarHistorialFlujoLead(num, uid);
-
-  try {
-    const { cancelarPendientesCliente } = require("./remarketingGlobal/remarketingRepository");
-    const { ESTADOS_REMARKETING } = require("./remarketingGlobal/constants");
-    await cancelarPendientesCliente(
-      num,
-      uid,
-      ESTADOS_REMARKETING.CANCELADO,
-      "resetbot",
-      null
-    );
-  } catch (err) {
-    console.log("[RESETBOT] remarketing:", err.message);
-  }
+  await limpiarHistorialAutomatizacionLead(num, uid);
 
   try {
     await enviarTextoWhatsApp(num, MENSAJE_CONFIRMACION, {
@@ -113,7 +120,7 @@ async function resetearFlujoLead(numero, usuarioId) {
     console.log("[RESETBOT] WhatsApp confirmación:", err.message || err);
   }
 
-  console.log("[RESETBOT] Automatización reiniciada | lead:", num, "| usuario:", uid);
+  console.log("[RESETBOT] reset completo OK | lead:", num, "| usuario:", uid);
   return { ok: true };
 }
 
