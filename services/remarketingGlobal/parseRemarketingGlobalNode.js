@@ -212,6 +212,44 @@ function obtenerPasosActivosValidos(steps) {
     .filter(Boolean);
 }
 
+/** Primer paso programable (R1): acepta delay aunque el texto venga vacío en guardado. */
+function obtenerPrimerPasoParaProgramar(steps) {
+  const validos = obtenerPasosActivosValidos(steps);
+  if (validos.length) return validos[0];
+
+  const lista = steps || [];
+  for (let i = 0; i < lista.length; i++) {
+    const paso = lista[i];
+    if (!paso || paso.activo === false) continue;
+
+    const valor = paso.delay != null ? paso.delay : paso.tiempo;
+    const unidad = paso.unidad || "minutos";
+    const segundos = delayToSeconds(valor, unidad);
+    if (segundos <= 0) continue;
+
+    const texto =
+      (paso.texto || "").trim() ||
+      "¿Sigues interesado? 😊";
+    const url = (paso.media_url || paso.url || "").trim();
+    const tipo = String(paso.tipo || "texto").toLowerCase();
+
+    return {
+      id: paso.id || "r" + (i + 1),
+      nombre: paso.nombre || "R" + (i + 1),
+      delay: { valor: parseInt(valor, 10) || 1, unidad: normalizarUnidad(unidad) },
+      segundos,
+      mensaje: {
+        tipo: TIPOS.includes(tipo) ? tipo : "texto",
+        texto: tipo === "texto" ? texto : texto || url,
+        url,
+        caption: (paso.caption || "").trim(),
+      },
+    };
+  }
+
+  return null;
+}
+
 function leerJsonDeHtml(html) {
   if (!html) return null;
 
@@ -306,6 +344,7 @@ module.exports = {
   toRuntimeConfig,
   normalizarPaso,
   obtenerPasosActivosValidos,
+  obtenerPrimerPasoParaProgramar,
   parseRemarketingFromNodo,
   esNodoRemarketingGlobal,
   buscarNodoRemarketingEnFlujo,

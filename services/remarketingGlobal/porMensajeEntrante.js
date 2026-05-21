@@ -1,12 +1,14 @@
 const crypto = require("crypto");
 const {
   buscarNodoRemarketingEnFlujo,
-  obtenerPasosActivosValidos,
+  obtenerPrimerPasoParaProgramar,
+  parseRemarketingFromNodo,
   normalizarUnidad,
 } = require("./parseRemarketingGlobalNode");
 const {
   insertarProgramados,
   cancelarPendientesCliente,
+  obtenerFlujoIdRemarketingPendiente,
 } = require("./remarketingRepository");
 const { ESTADOS_REMARKETING } = require("./constants");
 const { nowUtc, toTimestamptzUtc } = require("./timestamps");
@@ -52,6 +54,20 @@ function buildRow({
   };
 }
 
+function resolverNodoRemarketing(flujo_datos, nodoRemarketing) {
+  if (nodoRemarketing) {
+    const config =
+      nodoRemarketing.config ||
+      parseRemarketingFromNodo(nodoRemarketing);
+    return {
+      ...nodoRemarketing,
+      id: nodoRemarketing.id || "remarketing_global_fixed",
+      config,
+    };
+  }
+  return buscarNodoRemarketingEnFlujo(flujo_datos);
+}
+
 /**
  * Remarketing scoped por flujo_id del lead (nunca global por solo número).
  */
@@ -61,59 +77,76 @@ async function manejarRemarketingGlobalPorMensajeEntrante({
   flujo_id,
   flujo_datos,
   flujo_id_anterior,
+  nodoRemarketing,
 }) {
   console.log("[RM DEBUG] ENTRÓ A manejarRemarketingGlobalPorMensajeEntrante");
-  console.log("[RM DEBUG] mensaje entrante => reiniciando remarketing");
 
   if (!cliente_numero || !usuario_id || !flujo_id) {
     console.log("[RM DEBUG] omitido: falta cliente, usuario o flujo_id");
     return null;
   }
 
-  if (!flujo_datos?.nodos?.length) {
+  if (!flujo_datos?.nodos?.length && !nodoRemarketing) {
     console.log("[RM DEBUG] omitido: flujo sin nodos | flujo_id=" + flujo_id);
     return null;
   }
 
-  console.log("[RM DEBUG] buscando remarketing SOLO en flujo actual");
-
-  const nodo = buscarNodoRemarketingEnFlujo(flujo_datos);
-  const encontrado = !!(nodo && nodo.config?.activo !== false);
-
-  console.log(
-    "[RM DEBUG] remarketing encontrado en flujo actual=" + (encontrado ? "SI" : "NO")
-  );
-
+  const nodo = resolverNodoRemarketing(flujo_datos, nodoRemarketing);
   if (!nodo) {
+    console.log("[RM DEBUG] remarketing encontrado en flujo actual=NO");
     return null;
   }
 
   const config = nodo.config;
-  if (!config?.activo) {
+  const activo = config?.activo !== false;
+
+  console.log(
+    "[RM DEBUG] remarketing encontrado en flujo actual=" + (activo ? "SI" : "NO")
+  );
+
+  if (!activo) {
     console.log("[RM DEBUG] remarketing en flujo pero activo=false");
     return null;
   }
 
-  const pasos = obtenerPasosActivosValidos(config.steps);
-  if (!pasos.length) {
-    console.log("[RM DEBUG] sin pasos validos en este flujo");
+  const r1 = obtenerPrimerPasoParaProgramar(config.steps);
+  if (!r1) {
+    console.log(
+      "[RM DEBUG] sin pasos validos para R1 | steps en config:",
+      (config.steps || []).length
+    );
     return null;
   }
 
-  const r1 = pasos[0];
+  console.log("[REMARKETING] programando R1");
   console.log("[RM DEBUG] R1 encontrado delay=" + delayLabel(r1));
 
-  if (flujo_id_anterior && flujo_id_anterior !== flujo_id) {
+  let flujoAnterior = flujo_id_anterior;
+  if (!flujoAnterior) {
+    try {
+      const pendiente = await obtenerFlujoIdRemarketingPendiente(
+        cliente_numero,
+        usuario_id
+      );
+      if (pendiente && pendiente !== flujo_id) {
+        flujoAnterior = pendiente;
+      }
+    } catch (_) {
+      /* ignore */
+    }
+  }
+
+  if (flujoAnterior && flujoAnterior !== flujo_id) {
     try {
       await cancelarPendientesCliente(
         cliente_numero,
         usuario_id,
         ESTADOS_REMARKETING.CANCELADO_POR_RESPUESTA,
         "Lead cambió de flujo",
-        flujo_id_anterior
+        flujoAnterior
       );
       console.log(
-        "[RM DEBUG] cancelados pendientes flujo anterior=" + flujo_id_anterior
+        "[RM DEBUG] cancelados pendientes flujo anterior=" + flujoAnterior
       );
     } catch (err) {
       console.log(
@@ -163,6 +196,7 @@ async function manejarRemarketingGlobalPorMensajeEntrante({
   try {
     const insertados = await insertarProgramados([row]);
     const mins = Math.round(r1.segundos / 60);
+    console.log("[RM DEBUG] R1 programado");
     console.log(
       "[RM DEBUG] R1 programado flujo_id=" +
         flujo_id +
@@ -184,6 +218,36 @@ async function manejarRemarketingGlobalPorMensajeEntrante({
   }
 }
 
+/**
+ * Llamar justo al detectar nodo remarketing_global activo en el flujo en ejecución.
+ */
+async function programarRemarketingAlDetectarNodo({
+  usuario_id,
+  cliente_numero,
+  flujo_id,
+  flujo_datos,
+  nodoRemarketing,
+  flujo_id_anterior,
+}) {
+  const nodo = nodoRemarketing || buscarNodoRemarketingEnFlujo(flujo_datos);
+  if (!nodo || nodo.config?.activo === false) {
+    return null;
+  }
+
+  console.log(
+    "[RM DEBUG] nodo remarketing_global detectado en flujo, programando R1"
+  );
+
+  return manejarRemarketingGlobalPorMensajeEntrante({
+    usuario_id,
+    cliente_numero,
+    flujo_id,
+    flujo_datos,
+    nodoRemarketing: nodo,
+    flujo_id_anterior,
+  });
+}
+
 async function programarSiguientePasoTrasEnvio(item) {
   if (!item?.flujo_id || !item?.usuario_id || !item?.cliente_numero) {
     console.log("[RM DEBUG] omitido siguiente paso: sin flujo_id en item");
@@ -191,6 +255,7 @@ async function programarSiguientePasoTrasEnvio(item) {
   }
 
   const config = item.config_snapshot || {};
+  const { obtenerPasosActivosValidos } = require("./parseRemarketingGlobalNode");
   const pasos = obtenerPasosActivosValidos(config.steps);
   const nextIndex = (item.paso_index || 0) + 1;
 
@@ -226,5 +291,6 @@ async function programarSiguientePasoTrasEnvio(item) {
 
 module.exports = {
   manejarRemarketingGlobalPorMensajeEntrante,
+  programarRemarketingAlDetectarNodo,
   programarSiguientePasoTrasEnvio,
 };
