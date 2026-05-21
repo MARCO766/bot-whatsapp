@@ -393,6 +393,12 @@
   border-color: rgba(57, 255, 20, 0.45);
 }
 
+.cnt-quick-btn.active {
+  background: rgba(56, 189, 248, 0.22);
+  border-color: rgba(251, 191, 36, 0.55);
+  color: #fef3c7;
+}
+
 .cnt-panel-preview {
   border-radius: 14px;
   border: 1px solid rgba(56, 189, 248, 0.25);
@@ -496,6 +502,16 @@
 .cnt-block-move {
   background: rgba(56, 189, 248, 0.15);
   color: #67e8f9;
+}
+
+.cnt-block-edit {
+  background: rgba(251, 191, 36, 0.18);
+  color: #fcd34d;
+}
+
+.cnt-block-row--editing {
+  border-color: rgba(251, 191, 36, 0.45);
+  background: rgba(251, 191, 36, 0.08);
 }
 
 .cnt-block-row button[data-action="del"] {

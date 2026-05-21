@@ -22,6 +22,18 @@ window.MacBotContenido = (function () {
   let nodoActivo = null;
   let variantesActivas = [[]];
   let variantePanelIndex = 0;
+  let isEditingBlock = false;
+  let editingBlockIndex = -1;
+
+  const BTN_AGREGAR_POR_TIPO = {
+    texto: "Agregar texto",
+    tiempo: "Agregar pausa",
+    imagen: "Subir imagen",
+    audio: "Subir audio",
+    video: "Subir video",
+    doc: "Agregar documento",
+  };
+  const BTN_GUARDAR_CAMBIOS = "Guardar cambios";
 
   function esc(str) {
     return String(str || "")
@@ -472,6 +484,136 @@ window.MacBotContenido = (function () {
     return variantesActivas[variantePanelIndex];
   }
 
+  function botonAgregarPorTipo(tipo) {
+    const map = {
+      texto: "cntAddTexto",
+      tiempo: "cntAddTiempo",
+      imagen: "cntSubirImagen",
+      audio: "cntSubirAudio",
+      video: "cntSubirVideo",
+      doc: "cntAddDoc",
+    };
+    const id = map[tipo];
+    return id ? document.getElementById(id) : null;
+  }
+
+  function restaurarBotonesAgregar() {
+    Object.keys(BTN_AGREGAR_POR_TIPO).forEach(function (tipo) {
+      const btn = botonAgregarPorTipo(tipo);
+      if (btn) btn.textContent = BTN_AGREGAR_POR_TIPO[tipo];
+    });
+  }
+
+  function aplicarBotonModoEdicion(tipo) {
+    restaurarBotonesAgregar();
+    const btn = botonAgregarPorTipo(tipo);
+    if (btn) btn.textContent = BTN_GUARDAR_CAMBIOS;
+  }
+
+  function limpiarCamposEditor() {
+    const texto = document.getElementById("cntPanelTexto");
+    const tiempo = document.getElementById("cntPanelTiempo");
+    const descImg = document.getElementById("cntPanelDescImg");
+    const descVid = document.getElementById("cntPanelDescVid");
+    const docUrl = document.getElementById("cntPanelDocUrl");
+    const fileImg = document.getElementById("cntPanelImagen");
+    const fileAud = document.getElementById("cntPanelAudio");
+    const fileVid = document.getElementById("cntPanelVideo");
+    const done = document.getElementById("cntImgUploadDone");
+
+    if (texto) texto.value = "";
+    if (tiempo) tiempo.value = "";
+    if (descImg) descImg.value = "";
+    if (descVid) descVid.value = "";
+    if (docUrl) docUrl.value = "";
+    if (fileImg) fileImg.value = "";
+    if (fileAud) fileAud.value = "";
+    if (fileVid) fileVid.value = "";
+    if (done) done.style.display = "none";
+    ocultarProgresoImagen();
+  }
+
+  function mostrarCampoTipoEnPanel(tipo) {
+    const fields = {
+      texto: "cntFieldTexto",
+      tiempo: "cntFieldTiempo",
+      imagen: "cntFieldImagen",
+      audio: "cntFieldAudio",
+      video: "cntFieldVideo",
+      doc: "cntFieldDoc",
+    };
+
+    Object.keys(fields).forEach(function (k) {
+      const el = document.getElementById(fields[k]);
+      if (el) el.style.display = k === tipo ? "block" : "none";
+    });
+
+    document.querySelectorAll(".cnt-quick-btn").forEach(function (btn) {
+      btn.classList.toggle("active", btn.dataset.tipo === tipo);
+    });
+  }
+
+  function cancelarEdicionBloque() {
+    isEditingBlock = false;
+    editingBlockIndex = -1;
+    restaurarBotonesAgregar();
+    limpiarCamposEditor();
+    renderPanelBloques();
+  }
+
+  function cargarBloqueEnEditor(item) {
+    if (!item || !item.tipo) return;
+
+    mostrarCampoTipoEnPanel(item.tipo);
+    limpiarCamposEditor();
+
+    if (item.tipo === "texto") {
+      const el = document.getElementById("cntPanelTexto");
+      if (el) el.value = item.valor || "";
+    } else if (item.tipo === "tiempo") {
+      const el = document.getElementById("cntPanelTiempo");
+      if (el) el.value = item.valor || "";
+    } else if (item.tipo === "imagen") {
+      const desc = document.getElementById("cntPanelDescImg");
+      if (desc) desc.value = item.descripcion || "";
+      if (item.valor) {
+        mostrarPreviewImagenLista(item.valor);
+      }
+    } else if (item.tipo === "video") {
+      const desc = document.getElementById("cntPanelDescVid");
+      if (desc) desc.value = item.descripcion || "";
+    } else if (item.tipo === "doc") {
+      const el = document.getElementById("cntPanelDocUrl");
+      if (el) el.value = item.valor || "";
+    }
+
+    aplicarBotonModoEdicion(item.tipo);
+  }
+
+  function entrarEdicionBloque(index) {
+    const variante = varianteActualPanel();
+    const item = variante[index];
+    if (!item || !item.tipo) return;
+
+    const editables = ["texto", "tiempo", "imagen", "audio", "video", "doc"];
+    if (editables.indexOf(item.tipo) < 0) return;
+
+    if (isEditingBlock && editingBlockIndex === index) return;
+
+    isEditingBlock = true;
+    editingBlockIndex = index;
+    cargarBloqueEnEditor(item);
+    renderPanelBloques();
+  }
+
+  function finalizarEdicionBloque(item) {
+    if (!isEditingBlock || editingBlockIndex < 0) return false;
+    varianteActualPanel()[editingBlockIndex] = item;
+    cancelarEdicionBloque();
+    onPanelChange();
+    return true;
+  }
+
   function renderPanelPreview() {
     const box = document.getElementById("cntPanelPreview");
     if (!box) return;
@@ -503,8 +645,15 @@ window.MacBotContenido = (function () {
         else if (item.tipo === "boton") resumen = truncar(item.valor || item.texto, 30);
         else resumen = truncar(item.descripcion || item.valor || "", 36);
 
+        const editables = ["texto", "tiempo", "imagen", "audio", "video", "doc"];
+        const puedeEditar = editables.indexOf(item.tipo) >= 0;
+        const editando =
+          isEditingBlock && editingBlockIndex === index;
+
         return (
-          '<div class="cnt-block-row">' +
+          '<div class="cnt-block-row' +
+          (editando ? " cnt-block-row--editing" : "") +
+          '">' +
           "<span>" +
           iconoTipo(item.tipo) +
           " " +
@@ -518,6 +667,11 @@ window.MacBotContenido = (function () {
           '<button type="button" class="cnt-block-move" data-action="down" data-index="' +
           index +
           '" title="Bajar">↓</button>' +
+          (puedeEditar
+            ? '<button type="button" class="cnt-block-edit" data-action="edit" data-index="' +
+              index +
+              '" title="Editar">✏️ Editar</button>'
+            : "") +
           '<button type="button" data-action="del" data-index="' +
           index +
           '">Quitar</button></span></div>'
@@ -531,14 +685,35 @@ window.MacBotContenido = (function () {
         const variante = varianteActualPanel();
         const action = btn.dataset.action;
 
+        if (action === "edit") {
+          entrarEdicionBloque(idx);
+          return;
+        }
+
         if (action === "up" && idx > 0) {
           const item = variante.splice(idx, 1)[0];
           variante.splice(idx - 1, 0, item);
+          if (isEditingBlock) {
+            if (editingBlockIndex === idx) editingBlockIndex = idx - 1;
+            else if (editingBlockIndex === idx - 1) editingBlockIndex = idx;
+          }
         } else if (action === "down" && idx < variante.length - 1) {
           const item = variante.splice(idx, 1)[0];
           variante.splice(idx + 1, 0, item);
+          if (isEditingBlock) {
+            if (editingBlockIndex === idx) editingBlockIndex = idx + 1;
+            else if (editingBlockIndex === idx + 1) editingBlockIndex = idx;
+          }
         } else if (action === "del") {
           variante.splice(idx, 1);
+          if (isEditingBlock) {
+            if (editingBlockIndex === idx) {
+              cancelarEdicionBloque();
+              onPanelChange();
+              return;
+            }
+            if (editingBlockIndex > idx) editingBlockIndex--;
+          }
         }
 
         onPanelChange();
@@ -566,6 +741,7 @@ window.MacBotContenido = (function () {
 
     wrap.querySelectorAll(".cnt-variant-chip").forEach(function (chip) {
       chip.addEventListener("click", function () {
+        if (isEditingBlock) cancelarEdicionBloque();
         variantePanelIndex = parseInt(chip.dataset.index, 10);
         renderVariantChips();
         renderPanelPreview();
@@ -613,7 +789,9 @@ window.MacBotContenido = (function () {
       input?.focus();
       return;
     }
-    varianteActualPanel().push({ tipo: "texto", valor: texto });
+    const item = { tipo: "texto", valor: texto };
+    if (finalizarEdicionBloque(item)) return;
+    varianteActualPanel().push(item);
     if (input) input.value = "";
     onPanelChange();
   }
@@ -625,7 +803,9 @@ window.MacBotContenido = (function () {
       input?.focus();
       return;
     }
-    varianteActualPanel().push({ tipo: "tiempo", valor: String(t) });
+    const item = { tipo: "tiempo", valor: String(t) };
+    if (finalizarEdicionBloque(item)) return;
+    varianteActualPanel().push(item);
     if (input) input.value = "";
     onPanelChange();
   }
@@ -744,6 +924,13 @@ window.MacBotContenido = (function () {
         const desc = document.getElementById("cntPanelDescImg")?.value?.trim();
         if (desc) item.descripcion = desc;
 
+        if (finalizarEdicionBloque(item)) {
+          const fileInput = document.getElementById("cntPanelImagen");
+          if (fileInput) fileInput.value = "";
+          mostrarPreviewImagenLista(data.url);
+          return;
+        }
+
         varianteActualPanel().push(item);
         const fileInput = document.getElementById("cntPanelImagen");
         if (fileInput) fileInput.value = "";
@@ -772,6 +959,25 @@ window.MacBotContenido = (function () {
 
     xhr.open("POST", "/subir-imagen-nodo-flujo");
     xhr.send(formData);
+  }
+
+  function guardarImagenDesdePanel() {
+    if (isEditingBlock && editingBlockIndex >= 0) {
+      const fileInput = document.getElementById("cntPanelImagen");
+      const file = fileInput?.files?.[0];
+      if (file) {
+        subirImagenNodoFlujo(file);
+        return;
+      }
+      const bloque = varianteActualPanel()[editingBlockIndex];
+      if (!bloque || bloque.tipo !== "imagen" || !bloque.valor) return;
+      const item = { tipo: "imagen", valor: bloque.valor };
+      const desc = document.getElementById("cntPanelDescImg")?.value?.trim();
+      if (desc) item.descripcion = desc;
+      finalizarEdicionBloque(item);
+      return;
+    }
+    iniciarSubidaImagenDesdePanel();
   }
 
   function iniciarSubidaImagenDesdePanel() {
@@ -812,6 +1018,11 @@ window.MacBotContenido = (function () {
           item.descripcion = document.getElementById(descId)?.value?.trim() || "";
         }
 
+        if (finalizarEdicionBloque(item)) {
+          if (fileInput) fileInput.value = "";
+          return;
+        }
+
         varianteActualPanel().push(item);
         if (fileInput) fileInput.value = "";
         onPanelChange();
@@ -821,10 +1032,37 @@ window.MacBotContenido = (function () {
       });
   }
 
+  function guardarMediaSinArchivo(tipo) {
+    if (!isEditingBlock || editingBlockIndex < 0) return false;
+    const bloque = varianteActualPanel()[editingBlockIndex];
+    if (!bloque || bloque.tipo !== tipo || !bloque.valor) return false;
+
+    const item = { tipo: tipo, valor: bloque.valor };
+    if (tipo === "video") {
+      const desc = document.getElementById("cntPanelDescVid")?.value?.trim();
+      if (desc) item.descripcion = desc;
+    }
+    finalizarEdicionBloque(item);
+    return true;
+  }
+
+  function guardarAudioDesdePanel() {
+    if (guardarMediaSinArchivo("audio")) return;
+    subirArchivoPanel("cntPanelAudio", "audio", false);
+  }
+
+  function guardarVideoDesdePanel() {
+    const file = document.getElementById("cntPanelVideo")?.files?.[0];
+    if (isEditingBlock && !file && guardarMediaSinArchivo("video")) return;
+    subirArchivoPanel("cntPanelVideo", "video", true);
+  }
+
   function agregarDocDesdePanel() {
     const url = document.getElementById("cntPanelDocUrl")?.value?.trim();
     if (!url) return;
-    varianteActualPanel().push({ tipo: "doc", valor: url });
+    const item = { tipo: "doc", valor: url };
+    if (finalizarEdicionBloque(item)) return;
+    varianteActualPanel().push(item);
     document.getElementById("cntPanelDocUrl").value = "";
     onPanelChange();
   }
@@ -845,6 +1083,8 @@ window.MacBotContenido = (function () {
     variantesActivas = leerVariantesDeNodo(nodo);
     if (!variantesActivas.length) variantesActivas = [[]];
     variantePanelIndex = 0;
+    isEditingBlock = false;
+    editingBlockIndex = -1;
 
     const contenido = document.getElementById("panelNodoContenido");
     if (!contenido) return;
@@ -925,10 +1165,8 @@ window.MacBotContenido = (function () {
 
     contenido.querySelectorAll(".cnt-quick-btn").forEach(function (btn) {
       btn.addEventListener("click", function () {
-        Object.keys(fields).forEach(function (k) {
-          const el = document.getElementById(fields[k]);
-          if (el) el.style.display = k === btn.dataset.tipo ? "block" : "none";
-        });
+        if (isEditingBlock) cancelarEdicionBloque();
+        mostrarCampoTipoEnPanel(btn.dataset.tipo);
       });
     });
 
@@ -940,17 +1178,13 @@ window.MacBotContenido = (function () {
 
     document.getElementById("cntAddTexto")?.addEventListener("click", agregarTextoDesdePanel);
     document.getElementById("cntAddTiempo")?.addEventListener("click", agregarTiempoDesdePanel);
-    document.getElementById("cntSubirImagen")?.addEventListener("click", iniciarSubidaImagenDesdePanel);
+    document.getElementById("cntSubirImagen")?.addEventListener("click", guardarImagenDesdePanel);
     document.getElementById("cntPanelImagen")?.addEventListener("change", function () {
       const f = this.files?.[0];
       if (f) subirImagenNodoFlujo(f);
     });
-    document.getElementById("cntSubirAudio")?.addEventListener("click", function () {
-      subirArchivoPanel("cntPanelAudio", "audio", false);
-    });
-    document.getElementById("cntSubirVideo")?.addEventListener("click", function () {
-      subirArchivoPanel("cntPanelVideo", "video", true);
-    });
+    document.getElementById("cntSubirAudio")?.addEventListener("click", guardarAudioDesdePanel);
+    document.getElementById("cntSubirVideo")?.addEventListener("click", guardarVideoDesdePanel);
     document.getElementById("cntAddDoc")?.addEventListener("click", agregarDocDesdePanel);
     document.getElementById("cntGuardarPanel")?.addEventListener("click", guardarDesdePanel);
 
@@ -970,6 +1204,8 @@ window.MacBotContenido = (function () {
     nodoActivo = null;
     variantesActivas = [[]];
     variantePanelIndex = 0;
+    isEditingBlock = false;
+    editingBlockIndex = -1;
   }
 
   function getNodoActivo() {
