@@ -80,6 +80,13 @@ async function resetearFlujoLead(numero, usuarioId) {
 
   limpiarSesionIAPendiente(uid, num);
 
+  try {
+    const { limpiarModosEmbudoLead } = require("./remarketingGlobal/embudoMode");
+    limpiarModosEmbudoLead(uid, num);
+  } catch (_) {
+    /* ignore */
+  }
+
   await cancelarSeguimientosPendientesLead(num, uid);
   await limpiarHistorialFlujoLead(num, uid);
 

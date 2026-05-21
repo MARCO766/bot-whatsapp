@@ -149,6 +149,19 @@ async function procesarRemarketingItem(item) {
     await enviarMensajeRemarketing(item);
     await actualizarEstado(item.id, ESTADOS_REMARKETING.ENVIADO);
 
+    if ((item.paso_index || 0) === 0 && item.flujo_id) {
+      try {
+        const { activarModoRemarketingTrasR1Enviado } = require("./embudoMode");
+        await activarModoRemarketingTrasR1Enviado({
+          usuario_id: item.usuario_id,
+          cliente_numero: item.cliente_numero,
+          flujo_id: item.flujo_id,
+        });
+      } catch (modeErr) {
+        console.log("[RM MODE] error activando modo remarketing:", modeErr.message);
+      }
+    }
+
     const config = item.config_snapshot || {};
     const etiquetas = config.etiquetas || {};
     const esUltimoPaso =

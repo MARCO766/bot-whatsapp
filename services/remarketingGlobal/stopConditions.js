@@ -27,6 +27,19 @@ async function evaluarParadaAntesDeEnviar(item) {
     if (compraRes.compraDetectada === true) {
       const motivo = "Lead compró";
 
+      try {
+        const { marcarLeadCompradoEnFlujo } = require("./embudoMode");
+        await marcarLeadCompradoEnFlujo({
+          usuario_id: item.usuario_id,
+          cliente_numero: numero,
+          flujo_id: item.flujo_id,
+          config,
+          motivo,
+        });
+      } catch (_) {
+        /* ignore */
+      }
+
       logAntesDeCancelarRemarketing(ARCHIVO, "evaluarParadaAntesDeEnviar", motivo, {
         cliente_numero: numero,
         flujo_id: item.flujo_id,

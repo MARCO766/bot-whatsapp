@@ -565,8 +565,26 @@ async function ejecutarFlujo(
         valor,
         moneda,
         origen,
-        metadata: { trigger: "nodo_flujo" },
+        metadata: { trigger: "nodo_flujo", compra: true },
       });
+
+      try {
+        const { marcarLeadCompradoEnFlujo } = require("./remarketingGlobal/embudoMode");
+        const nodoRm = flujoData?.nodos?.find(
+          (n) =>
+            n.tipo === "remarketing_global" ||
+            n.id === "remarketing_global_fixed"
+        );
+        await marcarLeadCompradoEnFlujo({
+          usuario_id: usuarioId,
+          cliente_numero: numero,
+          flujo_id: flujoId,
+          config: nodoRm?.config,
+          motivo: "Nodo conversión — compra real",
+        });
+      } catch (rmBuyErr) {
+        console.log("[RM MODE] post-conversion:", rmBuyErr.message);
+      }
 
       await continuarASiguientes(nodoId, visitados, "conversion");
       return;
@@ -1037,6 +1055,24 @@ async function procesarMensajeEntrante(numero, texto, usuarioId, messageId) {
     return true;
   }
 
+  try {
+    const {
+      debeBloquearFlujoNormal,
+      reprogramarRemarketingSiModoActivo,
+    } = require("./remarketingGlobal/embudoMode");
+    const bloqueo = await debeBloquearFlujoNormal(usuarioId, numero);
+    if (bloqueo.bloquear) {
+      console.log(
+        "[RM MODE] lead en remarketing_activo → no ejecutar flujo normal | flujo=" +
+          bloqueo.flujo_id
+      );
+      await reprogramarRemarketingSiModoActivo(usuarioId, numero);
+      return true;
+    }
+  } catch (rmModeErr) {
+    console.log("[RM MODE] error chequeo modo:", rmModeErr.message);
+  }
+
   const reanudado = await reanudarFlujoIAPendiente(numero, texto, usuarioId);
   if (reanudado) {
     console.log("[FLUJO] reanudado IA/OpenAI pendiente OK");
@@ -1229,6 +1265,29 @@ async function buscarYEjecutarActivador(numero, textoCliente, usuarioId = null, 
   }
 
   console.log("✅ FLUJO ENCONTRADO:", flujo.nombre || "—", "| id:", flujo.id);
+
+  try {
+    const {
+      leadEstaComprado,
+      marcarLeadCompradoEnFlujo,
+      setModoEmbudo,
+      ESTADO_EMBUDO,
+    } = require("./remarketingGlobal/embudoMode");
+    const compra = await leadEstaComprado(usuarioId, numero, flujo.id, null);
+    if (compra.comprado) {
+      console.log("[RM MODE] lead comprado → no ejecutar flujo normal");
+      await marcarLeadCompradoEnFlujo({
+        usuario_id: usuarioId,
+        cliente_numero: numero,
+        flujo_id: flujo.id,
+        motivo: "Lead ya compró en este flujo",
+      });
+      return true;
+    }
+    await setModoEmbudo(usuarioId, numero, flujo.id, ESTADO_EMBUDO.FLUJO_ACTIVO);
+  } catch (rmErr) {
+    console.log("[RM MODE] pre-activador:", rmErr.message);
+  }
 
   await ejecutarFlujo(numero, flujoDatos, usuarioId, flujo.id, {
     ultimoMensaje: textoCliente,

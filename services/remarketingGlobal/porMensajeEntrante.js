@@ -116,6 +116,17 @@ async function manejarRemarketingGlobalPorMensajeEntrante({
     return null;
   }
 
+  const { puedeProgramarRemarketing } = require("./embudoMode");
+  const puede = await puedeProgramarRemarketing({
+    usuario_id,
+    cliente_numero,
+    flujo_id,
+    config,
+  });
+  if (!puede.ok) {
+    return null;
+  }
+
   const r1 = obtenerPrimerPasoParaProgramar(config.steps);
   if (!r1) {
     console.log(
