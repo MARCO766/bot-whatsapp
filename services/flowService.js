@@ -597,8 +597,12 @@ async function ejecutarFlujo(
           { resume: resumeIA, usuarioId, nodoId }
         );
       } catch (error) {
-        console.error("❌ OPENAI_AGENT ERROR", error);
-        throw error;
+        console.error("❌ OPENAI_AGENT ERROR", error.message || error);
+        flowContext = {
+          ...(flowContext || {}),
+          openaiAgentPausar: true,
+          iaPausar: true,
+        };
       }
 
       if (flowContext.openaiAgentPausar && !resumeIA) {

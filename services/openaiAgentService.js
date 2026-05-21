@@ -3,8 +3,13 @@
  * No modifica Agente Rápido ni Agente IA Pro.
  */
 
-const { enviarTextoWhatsApp } = require("./whatsappService");
+const axios = require("axios");
 const { analizarRutaLocal, normalizarConfigRouter } = require("./iaLocalRouter");
+
+const TOKEN = process.env.TOKEN;
+const PHONE_ID = process.env.PHONE_ID;
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
 
 const MAX_CHAT_HISTORY = 5;
 const MAX_LAST_REPLIES = 3;
@@ -645,32 +650,83 @@ async function generarReply(config, mensajeLead, chatHistory, lastReplies) {
 
   if (tieneOpenAIKey()) {
     try {
-      console.log("🤖 OPENAI_AGENT request API");
       let reply = await llamarOpenAIConTimeout(config, mensajeLead, chatHistory, lastReplies, false);
       reply = limpiarReply(reply);
       if (reply) {
-        reply = aplicarAntiRepeticion(reply, config, mensajeLead, chatHistory, lastReplies);
-        console.log("🤖 OPENAI_AGENT openai_response", reply);
-        return reply;
+        return aplicarAntiRepeticion(reply, config, mensajeLead, chatHistory, lastReplies);
       }
     } catch (err) {
       console.log("[OpenAI Agent]", err.message === "OPENAI_TIMEOUT" ? "timeout 6s" : err.message);
     }
-  } else {
-    console.log("🤖 OPENAI_AGENT sin API key → fallback_local");
   }
 
   let local = generarReplyLocalInteligente(config, mensajeLead, chatHistory, lastReplies);
   local = aplicarAntiRepeticion(local, config, mensajeLead, chatHistory, lastReplies);
-  console.log("🤖 OPENAI_AGENT fallback_local", local);
   return local;
+}
+
+async function resolverCredencialesOpenAI(usuarioId) {
+  let tokenEnviar = TOKEN;
+  let phoneIdEnviar = PHONE_ID;
+
+  if (usuarioId && SUPABASE_URL && SUPABASE_KEY) {
+    try {
+      const res = await axios.get(
+        `${SUPABASE_URL}/rest/v1/conexiones_whatsapp?usuario_id=eq.${usuarioId}&activo=eq.true&select=token,phone_id`,
+        {
+          headers: {
+            apikey: SUPABASE_KEY,
+            Authorization: `Bearer ${SUPABASE_KEY}`,
+          },
+        }
+      );
+      const conexion = res.data?.[0];
+      if (conexion?.token) tokenEnviar = conexion.token;
+      if (conexion?.phone_id) phoneIdEnviar = conexion.phone_id;
+    } catch (err) {
+      console.log("[OpenAI Agent] credenciales por defecto:", err.message);
+    }
+  }
+
+  return { tokenEnviar, phoneIdEnviar };
+}
+
+/** Solo Meta API — sin insert Supabase ni socket (no toca pipeline global). */
+async function enviarWhatsAppSoloLead(numero, texto, usuarioId) {
+  const mensaje = String(texto || "").trim();
+  if (!mensaje || !numero) return false;
+
+  const { tokenEnviar, phoneIdEnviar } = await resolverCredencialesOpenAI(usuarioId);
+
+  try {
+    const resp = await axios.post(
+      `https://graph.facebook.com/v19.0/${phoneIdEnviar}/messages`,
+      {
+        messaging_product: "whatsapp",
+        to: numero,
+        text: { body: mensaje },
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${tokenEnviar}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+    const wamid = resp.data?.messages?.[0]?.id || null;
+    console.log("📤 OPENAI enviado al lead", wamid || "");
+    return Boolean(wamid);
+  } catch (err) {
+    console.error("[OpenAI Agent] error envío WhatsApp:", err.response?.data || err.message);
+    return false;
+  }
 }
 
 async function resolverAnalisisOpenAI(config, mensajeLead, chatHistory, memoria, lastReplies) {
   const analisis = analizarRutaLocal(config, mensajeLead, memoria);
 
   if (analisis.matched && analisis.routeId) {
-    console.log("➡️ OPENAI_AGENT route_detected", analisis.routeId);
+    console.log("➡️ OPENAI ruta detectada", analisis.routeId);
     return {
       ok: true,
       action: "route",
@@ -708,11 +764,9 @@ async function ejecutarNodoOpenAIAgent(nodo, contexto, opts = {}) {
       ""
   ).trim();
 
-  console.log("🚀 OPENAI_AGENT iniciado", {
+  console.log("🤖 OPENAI_AGENT iniciado", {
     nodoId,
     numero,
-    usuarioId,
-    mensajeLead,
     resume: !!opts.resume,
   });
 
@@ -720,7 +774,6 @@ async function ejecutarNodoOpenAIAgent(nodo, contexto, opts = {}) {
     const config = parseOpenAIAgentFromNodo(nodo);
 
     if (!opts.resume) {
-      console.log("⏸️ OPENAI_AGENT pausa (espera mensaje del lead)", { nodoId, numero });
       return {
         ...contexto,
         openaiAgentPausar: true,
@@ -730,11 +783,7 @@ async function ejecutarNodoOpenAIAgent(nodo, contexto, opts = {}) {
       };
     }
 
-    console.log("🤖 OPENAI_AGENT preparando respuesta", {
-      nodoId,
-      mensajeLead,
-      tieneApiKey: tieneOpenAIKey(),
-    });
+    console.log("💬 OPENAI pregunta:", mensajeLead);
 
     let chatHistory = trimChatHistory(contexto.chat_history);
     if (mensajeLead) {
@@ -756,7 +805,6 @@ async function ejecutarNodoOpenAIAgent(nodo, contexto, opts = {}) {
     contexto.score = resultado.score ?? "";
 
     if (resultado.action === "route" && resultado.routeId) {
-      console.log("➡️ OPENAI_AGENT route (sin texto)", resultado.routeId);
       return {
         ...contexto,
         openaiAgentPausar: false,
@@ -772,15 +820,13 @@ async function ejecutarNodoOpenAIAgent(nodo, contexto, opts = {}) {
     }
 
     let reply = limpiarReply(String(resultado.reply || "").trim());
-    console.log("🧠 OPENAI response:", reply);
+    console.log("🧠 OPENAI respuesta:", reply);
 
     if (reply && numero) {
-      await enviarTextoWhatsApp(numero, reply, { usuarioId });
+      await enviarWhatsAppSoloLead(numero, reply, usuarioId);
       contexto.ultimaRespuestaIA = reply;
       chatHistory = appendChatHistory(chatHistory, "assistant", reply);
       pushLastReply(usuarioId, numero, reply);
-    } else {
-      console.log("⚠️ OPENAI_AGENT sin reply o sin numero", { reply: !!reply, numero });
     }
 
     return {
@@ -794,8 +840,33 @@ async function ejecutarNodoOpenAIAgent(nodo, contexto, opts = {}) {
       score: resultado.score,
     };
   } catch (error) {
-    console.error("❌ OPENAI_AGENT ERROR", error);
-    throw error;
+    console.error("❌ OPENAI_AGENT ERROR", error.message || error);
+
+    let reply = "";
+    try {
+      const config = parseOpenAIAgentFromNodo(nodo);
+      reply = generarReplyLocalInteligente(
+        config,
+        mensajeLead,
+        trimChatHistory(contexto.chat_history),
+        getLastReplies(usuarioId, numero)
+      );
+      reply = limpiarReply(reply);
+      if (reply && numero) {
+        console.log("🧠 OPENAI respuesta:", reply, "(fallback)");
+        await enviarWhatsAppSoloLead(numero, reply, usuarioId);
+      }
+    } catch (fbErr) {
+      console.error("❌ OPENAI fallback envío:", fbErr.message || fbErr);
+    }
+
+    return {
+      ...contexto,
+      openaiAgentPausar: true,
+      iaPausar: true,
+      openaiAgentEjecutada: true,
+      chat_history: contexto.chat_history || [],
+    };
   }
 }
 
