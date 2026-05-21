@@ -260,53 +260,146 @@ def _es_incluye_completo(texto: str) -> bool:
     )
 
 
-def clasificar_consulta_intent(texto: str) -> str:
-    """Clasifica la pregunta del lead (solo consulta, no ruta de pago)."""
+def _es_confianza(texto: str) -> bool:
+    return any(
+        k in texto
+        for k in [
+            "estafa",
+            "fraude",
+            "engano",
+            "desconfianza",
+            "desconfio",
+            "miedo",
+            "confiable",
+            "no confio",
+            "duda en pagar",
+            "duda al pagar",
+            "desconfiar",
+            "no es estafa",
+            "es seguro",
+            "seguro pagar",
+            "confianza en pagar",
+            "miedo a pagar",
+        ]
+    )
+
+
+def _es_metodos_pago(texto: str) -> bool:
     if any(
         k in texto
-        for k in ["estafa", "fraude", "engano", "confianza", "seguro", "legitimo", "real es", "no es estafa"]
+        for k in [
+            "como se paga",
+            "como pago",
+            "formas de pago",
+            "forma de pago",
+            "medios de pago",
+            "medio de pago",
+            "metodo de pago",
+            "metodos de pago",
+            "puedo pagar",
+            "como pagar",
+            "como puedo pagar",
+        ]
     ):
-        return "estafa"
+        return True
+    if "quiero" in texto and ("qr" in texto or "deposito" in texto):
+        return False
+    return (
+        texto.strip() in ("pago", "pagos", "pagar")
+        or (" pago" in f" {texto}" and "precio" not in texto and "bono" not in texto)
+    )
+
+
+def _es_bonos_lista(texto: str) -> bool:
+    return any(
+        k in texto
+        for k in [
+            "cuales son los bonos",
+            "cuales son los bono",
+            "que bonos trae",
+            "que bonos incluye",
+            "lista de bonos",
+            "cuales bonos",
+            "nombres de los bonos",
+            "que bonos son",
+            "cuales bono",
+        ]
+    )
+
+
+def _es_bonos_confirmacion(texto: str) -> bool:
+    if _es_bonos_lista(texto):
+        return False
+    return any(
+        k in texto
+        for k in [
+            "bonos llegan",
+            "llegan igual",
+            "vienen los bonos",
+            "bonos incluidos",
+            "incluye bonos",
+            "incluyen bonos",
+            "que bonos llega",
+            "viene con bonos",
+            "trae bonos",
+            "bonos vienen",
+        ]
+    ) or (
+        "bono" in texto
+        and any(k in texto for k in ["llegan", "vienen", "igual", "incluido", "incluye", "viene"])
+    )
+
+
+def clasificar_consulta_intent(texto: str) -> str:
+    """Clasifica la pregunta del lead (solo consulta, no ruta de pago)."""
+    if _es_confianza(texto):
+        return "confianza"
 
     if any(k in texto for k in PERSONAJES_PALABRAS) or any(
         k in texto for k in PERSONAJES_DBZ
     ):
         return "personajes"
 
-    if "bono" in texto and not _es_incluye_completo(texto):
-        return "bonos"
+    if _es_bonos_lista(texto):
+        return "bonos_lista"
+
+    if _es_bonos_confirmacion(texto):
+        return "bonos_confirmacion"
+
+    if _es_metodos_pago(texto):
+        return "metodos_pago"
 
     if any(
         k in texto
-        for k in ["hijo", "hija", "niño", "nina", "edad", "peque", "chico", "chica", "sirve para"]
+        for k in ["hijo", "hija", "niño", "nina", "edad", "peque", "chico", "chica", "sirve para", "para niños"]
     ):
         return "ninos"
 
     if any(
         k in texto
-        for k in ["acceso", "accedo", "entrega", "descarga", "ingreso", "como recibo", "como es el acceso"]
+        for k in [
+            "acceso",
+            "accedo",
+            "entrega",
+            "descarga",
+            "descargar",
+            "ingreso",
+            "como recibo",
+            "como es el acceso",
+            "como llega",
+            "cuando llega",
+        ]
     ):
         return "acceso"
 
-    if any(k in texto for k in ["precio", "cuesta", "sale", "valor", "cuanto", "costo"]):
+    if any(
+        k in texto
+        for k in ["precio", "cuesta", "sale", "valor", "cuanto vale", "cuanto cuesta", "costo"]
+    ) or texto.strip() in ("precio", "costo", "valor"):
         return "precio"
 
     if any(k in texto for k in ["garantia", "devolucion", "reembolso"]):
         return "garantia"
-
-    if any(
-        k in texto
-        for k in [
-            "pago",
-            "pagar",
-            "metodo",
-            "transferencia",
-            "deposito",
-            "como pago",
-            "forma de pago",
-        ]
-    ):
-        return "pago"
 
     if _es_incluye_completo(texto) or (
         "incluye" in texto and any(k in texto for k in ["todo", "pack", "completo"])
@@ -347,14 +440,74 @@ def _personajes_detectados(texto: str, product: ProductDataIn) -> list[str]:
     return nombres
 
 
-def _pregunta_suave_opcional(intent: str, texto: str) -> str:
-    if intent in ("estafa", "bonos", "acceso", "precio", "personajes"):
-        return ""
-    if intent == "incluye":
-        return ""
-    if any(w in texto for w in ["gracias", "ok", "listo", "dale"]):
-        return ""
-    return ""
+EMOJIS_POOL = ["😊", "✨", "👍", "🎁", "✂️", "✅", ""]
+
+EMOJI_POR_INTENT: dict[str, str] = {
+    "metodos_pago": "✅",
+    "bonos_confirmacion": "🎁",
+    "bonos_lista": "🎁",
+    "personajes": "✂️",
+    "confianza": "",
+    "precio": "",
+    "acceso": "",
+    "ninos": "✨",
+    "incluye": "🎁",
+    "garantia": "",
+    "saludo": "👍",
+    "general": "",
+}
+
+
+def _emoji_para(intent: str, texto: str) -> str:
+    if intent in EMOJI_POR_INTENT:
+        return EMOJI_POR_INTENT[intent]
+    idx = sum(ord(c) for c in (texto + intent)) % len(EMOJIS_POOL)
+    return EMOJIS_POOL[idx]
+
+
+def _con_emoji(msg: str, intent: str, texto: str) -> str:
+    emoji = _emoji_para(intent, texto)
+    if not emoji or emoji in msg:
+        return msg.strip()
+    return f"{msg.rstrip('.')}. {emoji}".replace("..", ".").strip()
+
+
+def _metodos_pago_literal(product: ProductDataIn) -> str:
+    raw = _campo_producto(product, "paymentMethods").lower()
+    partes: list[str] = []
+    if "qr" in raw:
+        partes.append("QR")
+    if "deposito" in raw or "depósito" in raw or "banco" in raw:
+        partes.append("depósito bancario")
+    if "transferencia" in raw:
+        partes.append("transferencia")
+    if "tigo" in raw:
+        partes.append("Tigo Money")
+    if len(partes) >= 2:
+        return f"{partes[0]} o {partes[1]}"
+    if partes:
+        return partes[0]
+    return "QR o depósito bancario"
+
+
+def _bonos_lista_texto(product: ProductDataIn) -> str:
+    bon = _campo_producto(product, "bonuses")
+    if bon:
+        limpio = bon.replace("\n", ", ").strip().rstrip(".")
+        if len(limpio) <= 180:
+            pref = "Trae 6 bonos: " if "6" in limpio[:20] or "seis" in limpio[:20] else "Trae bonos: "
+            return pref + limpio
+        return "Trae 6 bonos: " + _recortar(limpio, 150)
+    inc = _campo_producto(product, "includes").lower()
+    if "bono" in inc:
+        return (
+            "Trae 6 bonos incluidos según el pack "
+            "(guías, abecedario 3D, lámparas origami y personajes gigantes)."
+        )
+    return (
+        "Trae 6 bonos: guía para empezar, abecedario 3D, curso de lámparas origami "
+        "y personajes gigantes como Goku, Vegeta y Kid Buu."
+    )
 
 
 def _resumen_precio_incluye(includes: str, bonuses: str) -> str:
@@ -394,9 +547,9 @@ def _naturalizar_metodos_pago(metodos: str) -> str:
 
 def _fallback_corto(fallback: str) -> str:
     fb = (fallback or "").strip()
-    if fb and len(fb) < 120 and "pack digital ideal" not in fb.lower():
+    if fb and len(fb) < 100 and "pack digital ideal" not in fb.lower():
         return fb
-    return "Te ayudo 😊 ¿quieres saber precio, qué incluye o cómo recibirlo?"
+    return "No entendí bien. ¿Quieres saber precio, formas de pago o qué incluye?"
 
 
 def generar_reply_por_intent(
@@ -406,51 +559,59 @@ def generar_reply_por_intent(
     texto: str,
     fallback: str,
 ) -> str:
+    del tone
     fb = _fallback_corto(fallback)
-    extra = _pregunta_suave_opcional(consulta_intent, texto)
+
+    if consulta_intent == "confianza":
+        return (
+            "Te entiendo, es normal tener dudas. Es un producto digital y apenas "
+            "confirmas el pago te enviamos el acceso; también te guiamos si necesitas ayuda."
+        )
 
     if consulta_intent == "personajes":
         chars = _personajes_detectados(texto, product)
         if chars:
             lista = ", ".join(chars[:-1]) + " y " + chars[-1] if len(chars) > 1 else chars[0]
-            msg = (
-                f"Sí 😊 trae personajes como {lista} para armar en papel. "
-                "Están muy buenos para niños fans de Dragon Ball ✂️"
-            )
+            msg = f"Sí, incluye personajes gigantes como {lista} para armar en papel."
         else:
-            msg = (
-                "Sí 😊 trae varios personajes en papel para imprimir y armar. "
-                "¿Buscas alguno en particular?"
-            )
-        return msg
+            msg = "Sí, trae personajes en papel para imprimir y armar (Dragon Ball y más)."
+        return _con_emoji(msg, consulta_intent, texto)
 
-    if consulta_intent == "bonos":
-        bon = _campo_producto(product, "bonuses")
-        if bon and len(bon) < 100:
-            msg = f"Sí 😊 {bon.rstrip('.')}. Vienen incluidos sin costo extra con el acceso."
+    if consulta_intent == "bonos_lista":
+        return _bonos_lista_texto(product)
+
+    if consulta_intent == "bonos_confirmacion":
+        msg = (
+            "Sí, los bonos vienen incluidos sin costo extra. "
+            "Llegan junto con el acceso al pack."
+        )
+        return _con_emoji(msg, consulta_intent, texto)
+
+    if consulta_intent == "metodos_pago":
+        met = _metodos_pago_literal(product)
+        if "formas de pago" in texto or texto.strip() in ("pago", "pagos"):
+            msg = f"Tenemos pago por {met}. ¿Cuál prefieres usar?"
         else:
-            msg = (
-                "Sí 😊 los bonos vienen incluidos sin costo extra. "
-                "Apenas recibes el acceso, también puedes descargarlos."
-            )
-        return msg
+            msg = f"Puedes pagar por {met}. Eliges el método que te quede más cómodo."
+        return _con_emoji(msg, consulta_intent, texto)
 
     if consulta_intent == "ninos":
-        return (
-            "Sí 😊 es ideal para niños porque los mantiene entretenidos "
-            "y estimula su creatividad con actividades de papel."
+        msg = (
+            "Sí, es ideal para niños: los mantiene entretenidos y "
+            "estimula su creatividad con actividades de papel."
         )
+        return _con_emoji(msg, consulta_intent, texto)
 
     if consulta_intent == "acceso":
         acc = _campo_producto(product, "access")
-        if acc and len(acc) < 100:
-            msg = f"Es digital e inmediato 😊 {_recortar(acc, 100)}"
+        if acc and len(acc) < 90:
+            msg = f"Es digital e inmediato. {_recortar(acc, 85)}"
         else:
             msg = (
-                "Es digital e inmediato 😊 Apenas confirmas el pago te enviamos "
-                "el acceso para descargarlo desde tu celular o computadora."
+                "Es digital e inmediato. Apenas confirmas el pago te enviamos "
+                "el acceso para descargar desde celular o computadora."
             )
-        return msg
+        return _con_emoji(msg, consulta_intent, texto)
 
     if consulta_intent == "precio":
         precio = _campo_producto(product, "price")
@@ -460,43 +621,34 @@ def generar_reply_por_intent(
             _campo_producto(product, "includes"),
             _campo_producto(product, "bonuses"),
         )
-        msg = f"Está en {precio} 😊"
+        msg = f"Está en {precio}"
         if resumen:
-            msg += f" {resumen}"
+            msg += f" e {resumen.replace('Incluye ', 'incluye ', 1)}"
+        else:
+            msg += "."
         return msg
-
-    if consulta_intent == "estafa":
-        return (
-            "Te entiendo 😊 Es normal desconfiar. "
-            "Es un producto digital y te enviamos el acceso apenas confirmas el pago."
-        )
 
     if consulta_intent == "garantia":
         g = _campo_producto(product, "guarantee")
         if g:
-            return f"Tranquilo 😊 {_recortar(g, 120)}"
-        return fb
-
-    if consulta_intent == "pago":
-        met = _naturalizar_metodos_pago(_campo_producto(product, "paymentMethods"))
-        if met:
-            return f"Sí 😊 {met.capitalize()}."
+            return f"Tranquilo, {_recortar(g, 110)}."
         return fb
 
     if consulta_intent == "incluye":
         inc = _campo_producto(product, "includes")
         bon = _campo_producto(product, "bonuses")
         if inc:
-            cuerpo = _recortar(inc, 160)
+            cuerpo = _recortar(inc, 140)
             if bon:
-                cuerpo += f" y {_recortar(bon, 60)}"
-            return f"Incluye {cuerpo} 🎁"
+                cuerpo += f" y {_recortar(bon, 50)}"
+            return _con_emoji(f"Incluye {cuerpo}", consulta_intent, texto)
         return fb
 
     if consulta_intent == "saludo":
-        return (
-            "Hola 😊 qué gusto que escribas. "
-            "¿Te cuento precio, qué incluye o cómo recibirlo?"
+        return _con_emoji(
+            "Hola, qué gusto. ¿Te cuento precio, formas de pago o qué incluye?",
+            consulta_intent,
+            texto,
         )
 
     faq = _campo_producto(product, "faq")
@@ -504,9 +656,9 @@ def generar_reply_por_intent(
         for linea in faq.split("\n"):
             ln = normalize_text(linea)
             if ln and any(p in texto for p in ln.split()[:4] if len(p) > 3):
-                return f"Sí 😊 {_recortar(linea.strip(), 120)}"
+                return _recortar(linea.strip(), 120)
 
-    return fb if not extra else f"{fb} {extra}"
+    return fb
 
 
 def generar_reply_producto(
@@ -516,12 +668,12 @@ def generar_reply_producto(
     fallback: str,
     chat_history: list[ChatTurnIn],
 ) -> str:
-    del chat_history, tone  # contexto vía clasificación; tono sutil en plantillas
+    del chat_history, tone
     texto = corregir_texto(normalize_text(message))
     consulta_intent = clasificar_consulta_intent(texto)
-    print("🧠 IA PRO intención consulta:", consulta_intent)
+    print("🧠 IA PRO intención detectada:", consulta_intent)
     reply = generar_reply_por_intent(consulta_intent, product, tone, texto, fallback)
-    print("💬 IA PRO reply corto:", reply)
+    print("💬 IA PRO respuesta final:", reply)
     return reply
 
 
