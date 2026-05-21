@@ -4,6 +4,7 @@
  */
 
 const axios = require("axios");
+const rt = require("./realtimeService");
 const { analizarRutaLocal, normalizarConfigRouter } = require("./iaLocalRouter");
 
 const TOKEN = process.env.TOKEN;
@@ -691,7 +692,133 @@ async function resolverCredencialesOpenAI(usuarioId) {
   return { tokenEnviar, phoneIdEnviar };
 }
 
-/** Solo Meta API — sin insert Supabase ni socket (no toca pipeline global). */
+function supabaseHeadersOpenAI(extra = {}) {
+  return {
+    apikey: SUPABASE_KEY,
+    Authorization: `Bearer ${SUPABASE_KEY}`,
+    ...extra,
+  };
+}
+
+async function actualizarConversacionOpenAI(usuario_id, numero, texto) {
+  const headers = supabaseHeadersOpenAI({ "Content-Type": "application/json" });
+  const ahora = new Date().toISOString();
+
+  const res = await axios.get(
+    `${SUPABASE_URL}/rest/v1/conversaciones?cliente_numero=eq.${numero}&usuario_id=eq.${usuario_id}&select=*`,
+    { headers }
+  );
+  const conv = res.data?.[0];
+
+  if (conv) {
+    await axios.patch(
+      `${SUPABASE_URL}/rest/v1/conversaciones?cliente_numero=eq.${numero}&usuario_id=eq.${usuario_id}`,
+      {
+        ultimo_mensaje: texto,
+        ultimo_mensaje_en: ahora,
+        estado: "abierta",
+      },
+      { headers }
+    );
+    return;
+  }
+
+  await axios.post(
+    `${SUPABASE_URL}/rest/v1/conversaciones`,
+    {
+      cliente_numero: numero,
+      usuario_id: usuario_id,
+      ultimo_mensaje: texto,
+      ultimo_mensaje_en: ahora,
+      estado: "abierta",
+      unread_count: 0,
+    },
+    { headers }
+  );
+}
+
+/**
+ * Espejo inbox solo OpenAI — mismo INSERT que bandeja manual / enviarTextoWhatsApp.
+ * No reemplaza funciones globales.
+ */
+async function guardarMensajeOpenAIEnInbox({ usuario_id, numero, texto, wamid }) {
+  if (!usuario_id || !numero || !texto || !wamid) {
+    throw new Error("guardarMensajeOpenAIEnInbox: faltan usuario_id, numero, texto o wamid");
+  }
+  if (!SUPABASE_URL || !SUPABASE_KEY) {
+    throw new Error("guardarMensajeOpenAIEnInbox: Supabase no configurado");
+  }
+
+  console.log("💾 OPENAI guardando SOLO su mensaje en inbox");
+
+  const insertRes = await axios.post(
+    `${SUPABASE_URL}/rest/v1/mensajes`,
+    {
+      cliente_numero: numero,
+      usuario_id: usuario_id,
+      direccion: "saliente",
+      tipo: "texto",
+      contenido: texto,
+      imagen_url: null,
+      whatsapp_message_id: wamid,
+      estado_envio: "sent",
+    },
+    {
+      headers: {
+        ...supabaseHeadersOpenAI(),
+        "Content-Type": "application/json",
+        Prefer: "return=representation",
+      },
+    }
+  );
+
+  const row = insertRes.data?.[0] || null;
+  await actualizarConversacionOpenAI(usuario_id, numero, texto);
+
+  const payloadMensaje = {
+    id: row?.id,
+    cliente_numero: numero,
+    usuario_id: usuario_id,
+    direccion: "saliente",
+    tipo: "texto",
+    contenido: texto,
+    imagen_url: null,
+    whatsapp_message_id: wamid,
+    estado_envio: "sent",
+    creado_en: row?.creado_en || new Date().toISOString(),
+  };
+
+  console.log("📡 OPENAI emitiendo socket propio");
+  rt.nuevoMensaje(null, usuario_id, payloadMensaje);
+  rt.conversacionActualizada(null, usuario_id, {
+    cliente_numero: numero,
+    ultimo_mensaje: texto,
+    ultimo_mensaje_en: payloadMensaje.creado_en,
+    direccion: "saliente",
+  });
+
+  console.log("✅ OPENAI visible en bandeja");
+  return payloadMensaje;
+}
+
+async function espejarOpenAIEnInbox(numero, texto, usuarioId, wamid) {
+  if (!usuarioId || !wamid) return;
+  try {
+    await guardarMensajeOpenAIEnInbox({
+      usuario_id: usuarioId,
+      numero,
+      texto,
+      wamid,
+    });
+  } catch (err) {
+    console.error(
+      "⚠️ OpenAI no pudo pintar inbox, pero WhatsApp ya fue enviado:",
+      err.response?.data || err.message || err
+    );
+  }
+}
+
+/** Solo Meta API — sin tocar pipeline global de enviarTextoWhatsApp. */
 async function enviarWhatsAppSoloLead(numero, texto, usuarioId) {
   const mensaje = String(texto || "").trim();
   if (!mensaje || !numero) return false;
@@ -715,11 +842,20 @@ async function enviarWhatsAppSoloLead(numero, texto, usuarioId) {
     );
     const wamid = resp.data?.messages?.[0]?.id || null;
     console.log("📤 OPENAI enviado al lead", wamid || "");
-    return Boolean(wamid);
+    return wamid;
   } catch (err) {
     console.error("[OpenAI Agent] error envío WhatsApp:", err.response?.data || err.message);
-    return false;
+    return null;
   }
+}
+
+async function enviarOpenAIAlLead(numero, texto, usuarioId) {
+  const reply = String(texto || "").trim();
+  const wamid = await enviarWhatsAppSoloLead(numero, reply, usuarioId);
+  if (wamid) {
+    await espejarOpenAIEnInbox(numero, reply, usuarioId, wamid);
+  }
+  return wamid;
 }
 
 async function resolverAnalisisOpenAI(config, mensajeLead, chatHistory, memoria, lastReplies) {
@@ -823,7 +959,7 @@ async function ejecutarNodoOpenAIAgent(nodo, contexto, opts = {}) {
     console.log("🧠 OPENAI respuesta:", reply);
 
     if (reply && numero) {
-      await enviarWhatsAppSoloLead(numero, reply, usuarioId);
+      await enviarOpenAIAlLead(numero, reply, usuarioId);
       contexto.ultimaRespuestaIA = reply;
       chatHistory = appendChatHistory(chatHistory, "assistant", reply);
       pushLastReply(usuarioId, numero, reply);
@@ -854,7 +990,7 @@ async function ejecutarNodoOpenAIAgent(nodo, contexto, opts = {}) {
       reply = limpiarReply(reply);
       if (reply && numero) {
         console.log("🧠 OPENAI respuesta:", reply, "(fallback)");
-        await enviarWhatsAppSoloLead(numero, reply, usuarioId);
+        await enviarOpenAIAlLead(numero, reply, usuarioId);
       }
     } catch (fbErr) {
       console.error("❌ OPENAI fallback envío:", fbErr.message || fbErr);
