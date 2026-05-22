@@ -55,7 +55,13 @@ async function actualizarConversacionSaliente(usuarioId, numero, texto) {
       { headers }
     );
   } catch (err) {
-    console.log("[WhatsApp] conversacion saliente:", err.response?.data || err.message);
+    console.log("[WhatsApp] conversacion saliente (SUPABASE):", {
+      code: err.response?.data?.code,
+      message: err.response?.data?.message || err.message,
+      details: err.response?.data,
+      url: err.config?.url,
+      bodyEnviado: err.config?.data,
+    });
   }
 }
 
@@ -87,6 +93,31 @@ async function resolverCredencialesEnvio(opciones = {}) {
 /**
  * Mismo guardado + socket que bandeja manual (POST /inbox/responder texto).
  */
+function normalizarBodyMensajeSupabase({ usuarioId, numero, texto, wamid, tipo }) {
+  const tipoDb = tipo === "text" ? "texto" : tipo || "texto";
+  let contenido = texto;
+  if (contenido != null && typeof contenido !== "string") {
+    try {
+      contenido = JSON.stringify(contenido);
+    } catch {
+      contenido = String(contenido);
+    }
+  }
+  contenido = String(contenido ?? "");
+
+  return {
+    cliente_numero: String(numero || "").trim(),
+    usuario_id:
+      usuarioId != null && usuarioId !== "" ? String(usuarioId).trim() : null,
+    direccion: "saliente",
+    tipo: tipoDb,
+    contenido,
+    imagen_url: null,
+    whatsapp_message_id: wamid != null && wamid !== "" ? String(wamid) : null,
+    estado_envio: "sent",
+  };
+}
+
 async function registrarMensajeSalienteEnInbox({
   usuarioId,
   numero,
@@ -94,18 +125,25 @@ async function registrarMensajeSalienteEnInbox({
   wamid,
   tipo = "texto",
 }) {
-  const tipoDb = tipo === "text" ? "texto" : tipo || "texto";
+  const insertPayload = normalizarBodyMensajeSupabase({
+    usuarioId,
+    numero,
+    texto,
+    wamid,
+    tipo,
+  });
 
-  const insertPayload = {
-    cliente_numero: numero,
-    usuario_id: usuarioId || null,
-    direccion: "saliente",
-    tipo: tipoDb,
-    contenido: texto,
-    imagen_url: null,
-    whatsapp_message_id: wamid || null,
-    estado_envio: "sent",
-  };
+  let bodyJson = "";
+  try {
+    bodyJson = JSON.stringify(insertPayload);
+  } catch (serialErr) {
+    console.log("[SEND DEBUG] payload supabase NO serializable:", insertPayload);
+    console.log("[SEND DEBUG] error JSON:", serialErr.message);
+    throw serialErr;
+  }
+
+  console.log("[SEND DEBUG] payload supabase:", insertPayload);
+  console.log("[SEND DEBUG] body JSON length:", bodyJson.length);
 
   const insertRes = await axios.post(
     `${SUPABASE_URL}/rest/v1/mensajes`,
@@ -150,18 +188,23 @@ async function registrarMensajeSalienteEnInbox({
 }
 
 async function enviarTextoWhatsApp(numero, texto, opciones = {}) {
+  const textoEnvio =
+    texto != null && typeof texto !== "string" ? String(texto) : String(texto ?? "");
+  const payloadWhatsapp = {
+    messaging_product: "whatsapp",
+    to: numero,
+    text: { body: textoEnvio },
+  };
+
   try {
     const { tokenEnviar, phoneIdEnviar } = await resolverCredencialesEnvio(opciones);
 
+    console.log("[SEND DEBUG] respuesta openai:", textoEnvio.slice(0, 200));
+    console.log("[SEND DEBUG] payload whatsapp:", payloadWhatsapp);
+
     const respuestaMeta = await axios.post(
       `https://graph.facebook.com/v19.0/${phoneIdEnviar}/messages`,
-      {
-        messaging_product: "whatsapp",
-        to: numero,
-        text: {
-          body: texto,
-        },
-      },
+      payloadWhatsapp,
       {
         headers: {
           Authorization: `Bearer ${tokenEnviar}`,
@@ -179,25 +222,48 @@ async function enviarTextoWhatsApp(numero, texto, opciones = {}) {
     const wamid = meta?.messages?.[0]?.id || null;
     const usuarioId = opciones.usuarioId ?? null;
 
-    if (usuarioId) {
+    try {
+      if (usuarioId) {
+        return await registrarMensajeSalienteEnInbox({
+          usuarioId,
+          numero,
+          texto: textoEnvio,
+          wamid,
+          tipo: "texto",
+        });
+      }
+
       return await registrarMensajeSalienteEnInbox({
-        usuarioId,
+        usuarioId: null,
         numero,
-        texto,
+        texto: textoEnvio,
         wamid,
         tipo: "texto",
       });
+    } catch (supabaseErr) {
+      console.log("ERROR ENVIANDO WHATSAPP (SUPABASE mensajes):", {
+        code: supabaseErr.response?.data?.code,
+        message: supabaseErr.response?.data?.message,
+        details: supabaseErr.response?.data,
+        url: supabaseErr.config?.url,
+        bodyEnviado: supabaseErr.config?.data,
+      });
+      throw supabaseErr;
     }
-
-    return await registrarMensajeSalienteEnInbox({
-      usuarioId: null,
-      numero,
-      texto,
-      wamid,
-      tipo: "texto",
-    });
   } catch (error) {
-    console.log("ERROR ENVIANDO WHATSAPP:", error.response?.data || error.message);
+    const esSupabase =
+      String(error.config?.url || "").includes(SUPABASE_URL) ||
+      error.response?.data?.code === "PGRST102";
+    console.log(
+      esSupabase ? "ERROR ENVIANDO WHATSAPP (SUPABASE):" : "ERROR ENVIANDO WHATSAPP (META):",
+      {
+        code: error.response?.data?.code,
+        message: error.response?.data?.message || error.message,
+        details: error.response?.data,
+        url: error.config?.url,
+        bodyEnviado: error.config?.data,
+      }
+    );
     return null;
   }
 }

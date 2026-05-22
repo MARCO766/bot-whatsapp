@@ -831,12 +831,19 @@ async function generarReply(config, mensajeLead, chatHistory, lastReplies) {
 
 /** Mismo pipeline que IA Pro: envío Meta + guardado en bandeja en un solo paso. */
 async function enviarOpenAIConPipelineManual(numero, reply, usuarioId) {
-  const texto = String(reply || "").trim();
+  const texto =
+    reply != null && typeof reply !== "string" ? String(reply) : String(reply || "").trim();
   const numeroCanon = String(numero || "").trim();
   const uid =
     usuarioId != null && usuarioId !== "" ? String(usuarioId).trim() : null;
 
-  if (!texto || !numeroCanon) return null;
+  console.log("[SEND DEBUG] respuesta openai:", texto.slice(0, 300));
+  console.log("[SEND DEBUG] enviarOpenAI — numero:", numeroCanon, "| usuarioId:", uid);
+
+  if (!texto || !numeroCanon) {
+    console.log("[SEND DEBUG] omitido: texto o numero vacío");
+    return null;
+  }
 
   if (!uid) {
     console.error("⚠️ OpenAI sin usuarioId — envío sin bandeja");
