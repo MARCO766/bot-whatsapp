@@ -1,6 +1,10 @@
 const axios = require("axios");
 const rt = require("./realtimeService");
 const { prepararImagenParaWhatsApp, mimeCompatibleWhatsApp } = require("./imageWhatsAppService");
+const {
+  sanitizarUnicodeRoto,
+  logEmojiDebug,
+} = require("./textoSeguro");
 
 const TOKEN = process.env.TOKEN;
 const PHONE_ID = process.env.PHONE_ID;
@@ -16,40 +20,12 @@ function supabaseHeaders(extra = {}) {
   };
 }
 
-/**
- * UTF-8 válido para PostgREST: quita sustitutos sueltos (ej. \ude0a sin \ud83d).
- * Mantiene emojis completos; no elimina emojis válidos.
- */
+/** UTF-8 válido para PostgREST: solo repara sustitutos rotos; conserva emojis. */
 function sanitizarContenidoMensajeSupabase(contenido) {
-  let s = typeof contenido === "string" ? contenido : String(contenido ?? "");
-  try {
-    s = s.normalize("NFC");
-  } catch (_) {
-    /* ignore */
-  }
-
-  let out = "";
-  for (let i = 0; i < s.length; i++) {
-    const c = s.charCodeAt(i);
-    if (c >= 0xd800 && c <= 0xdbff) {
-      if (i + 1 < s.length) {
-        const c2 = s.charCodeAt(i + 1);
-        if (c2 >= 0xdc00 && c2 <= 0xdfff) {
-          out += s[i] + s[i + 1];
-          i++;
-          continue;
-        }
-      }
-      continue;
-    }
-    if (c >= 0xdc00 && c <= 0xdfff) {
-      continue;
-    }
-    if (c === 0) continue;
-    out += s[i];
-  }
-
-  console.log("[SUPABASE DEBUG] contenido limpio:", out);
+  const raw = typeof contenido === "string" ? contenido : String(contenido ?? "");
+  logEmojiDebug("antes guardar supabase (entrada)", raw);
+  const out = sanitizarUnicodeRoto(raw);
+  logEmojiDebug("antes guardar supabase (seguro)", out);
   return out;
 }
 
@@ -248,7 +224,7 @@ async function enviarTextoWhatsApp(numero, texto, opciones = {}) {
   try {
     const { tokenEnviar, phoneIdEnviar } = await resolverCredencialesEnvio(opciones);
 
-    console.log("[SEND DEBUG] respuesta openai:", textoEnvio.slice(0, 200));
+    logEmojiDebug("antes enviar whatsapp", textoEnvio);
     console.log("[SEND DEBUG] payload whatsapp:", payloadWhatsapp);
 
     const respuestaMeta = await axios.post(

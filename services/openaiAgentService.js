@@ -6,6 +6,10 @@
 const axios = require("axios");
 const { enviarTextoWhatsApp } = require("./whatsappService");
 const { analizarRutaLocal, normalizarConfigRouter } = require("./iaLocalRouter");
+const {
+  sanitizarUnicodeRoto,
+  logEmojiDebug,
+} = require("./textoSeguro");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
@@ -23,37 +27,6 @@ const PROMPT_SISTEMA_FIJO =
   "Eres un asesor humano de WhatsApp. Responde corto, natural, con máximo 1 emoji de carita. No uses puntos suspensivos. No inventes datos.";
 
 const CARITAS_PERMITIDOS = ["🙂", "😊", "😌", "🤔", "😅", "😍", "🥹", "😉", "😎", "🙌", "😇"];
-
-/** Solo emojis decorativos de marketing; no quitar caritas ni emojis válidos de GPT. */
-const EMOJI_DECORATIVOS_PROHIBIDOS = /[🎁✨💥🚀🔥✂️📦⭐🌟💎🎯📲💯]|❗❗/g;
-
-function sanitizarUnicodeRoto(texto) {
-  let s = typeof texto === "string" ? texto : String(texto ?? "");
-  try {
-    s = s.normalize("NFC");
-  } catch (_) {
-    /* ignore */
-  }
-  let out = "";
-  for (let i = 0; i < s.length; i++) {
-    const c = s.charCodeAt(i);
-    if (c >= 0xd800 && c <= 0xdbff) {
-      if (i + 1 < s.length) {
-        const c2 = s.charCodeAt(i + 1);
-        if (c2 >= 0xdc00 && c2 <= 0xdfff) {
-          out += s[i] + s[i + 1];
-          i++;
-          continue;
-        }
-      }
-      continue;
-    }
-    if (c >= 0xdc00 && c <= 0xdfff) continue;
-    if (c === 0) continue;
-    out += s[i];
-  }
-  return out;
-}
 
 const lastRepliesPorChat = new Map();
 
@@ -281,7 +254,8 @@ function elegirVariacion(pool, usadas, texto) {
   return disponibles[idx];
 }
 
-function limpiarReply(reply) {
+function limpiarReply(reply, opts = {}) {
+  const preservarEmojis = opts.preservarEmojis !== false;
   let s = sanitizarUnicodeRoto(String(reply || ""))
     .replace(/\.{2,}/g, "")
     .replace(/\betc\.?\b/gi, "")
@@ -290,15 +264,17 @@ function limpiarReply(reply) {
     .replace(/\s+/g, " ")
     .trim();
 
-  s = s.replace(EMOJI_DECORATIVOS_PROHIBIDOS, "");
-
-  const encontrados = CARITAS_PERMITIDOS.filter((e) => s.includes(e));
-  if (encontrados.length > 1) {
-    let first = true;
-    for (const e of CARITAS_PERMITIDOS) {
-      if (s.includes(e)) {
-        if (first) first = false;
-        else s = s.split(e).join("");
+  if (!preservarEmojis) {
+    const EMOJI_DECORATIVOS = /[🎁✨💥🚀🔥✂️📦⭐🌟💎🎯📲💯]|❗❗/g;
+    s = s.replace(EMOJI_DECORATIVOS, "");
+    const encontrados = CARITAS_PERMITIDOS.filter((e) => s.includes(e));
+    if (encontrados.length > 1) {
+      let first = true;
+      for (const e of CARITAS_PERMITIDOS) {
+        if (s.includes(e)) {
+          if (first) first = false;
+          else s = s.split(e).join("");
+        }
       }
     }
   }
@@ -625,7 +601,7 @@ function reformularLigeramente(reply, config, mensaje, usadas, opts = {}) {
     const prefijos = ["Mira, ", "Bueno, ", "Claro, "];
     const idx = reply.length % prefijos.length;
     let r = prefijos[idx] + reply.replace(/^(Mira, |Bueno, |Claro, )/, "");
-    return limpiarReply(r);
+    return limpiarReply(r, { preservarEmojis: true });
   }
 
   const prefijos = ["Mira, ", "Bueno, ", "Claro, "];
@@ -635,7 +611,8 @@ function reformularLigeramente(reply, config, mensaje, usadas, opts = {}) {
 }
 
 function aplicarAntiRepeticion(reply, config, mensaje, chatHistory, lastReplies, opts = {}) {
-  let r = limpiarReply(reply);
+  const limpiarOpts = opts.fromOpenAI ? { preservarEmojis: true } : {};
+  let r = limpiarReply(reply, limpiarOpts);
   if (!r) return MSG_IA_NO_DISPONIBLE;
 
   const usadas = historialUsadas(chatHistory, lastReplies);
@@ -819,8 +796,11 @@ async function generarReply(config, mensajeLead, chatHistory, lastReplies) {
     );
 
     console.log("[OPENAI DEBUG] respuesta raw:", respuestaOpenAI);
+    logEmojiDebug("respuesta openai original", respuestaOpenAI);
 
-    const reply = limpiarReply(respuestaOpenAI);
+    const reply = limpiarReply(respuestaOpenAI, { preservarEmojis: true });
+    logEmojiDebug("despues limpiarReply", reply);
+
     if (reply) {
       const final = aplicarAntiRepeticion(
         reply,
@@ -830,6 +810,7 @@ async function generarReply(config, mensajeLead, chatHistory, lastReplies) {
         lastReplies,
         { fromOpenAI: true }
       );
+      logEmojiDebug("despues antiRepeticion (final)", final);
       logEstadoOpenAI({
         tieneKey: true,
         errorExacto: "(ninguno)",
@@ -861,7 +842,7 @@ async function enviarOpenAIConPipelineManual(numero, reply, usuarioId) {
   const uid =
     usuarioId != null && usuarioId !== "" ? String(usuarioId).trim() : null;
 
-  console.log("[SEND DEBUG] respuesta openai:", texto.slice(0, 300));
+  logEmojiDebug("antes enviar whatsapp (openai pipeline)", texto);
   console.log("[SEND DEBUG] enviarOpenAI — numero:", numeroCanon, "| usuarioId:", uid);
 
   if (!texto || !numeroCanon) {
@@ -996,6 +977,7 @@ async function ejecutarNodoOpenAIAgent(nodo, contexto, opts = {}) {
     console.log("🧠 OPENAI respuesta:", reply);
 
     if (reply && numero) {
+      logEmojiDebug("antes enviar (ejecutarNodoOpenAI)", reply);
       const uidEnvio =
         contexto?.usuarioId ?? opts?.usuarioId ?? usuarioId ?? null;
       await enviarOpenAIConPipelineManual(numero, reply, uidEnvio);
