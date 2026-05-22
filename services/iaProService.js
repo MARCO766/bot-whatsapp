@@ -631,6 +631,9 @@ async function ejecutarNodoIAPro(nodo, contexto, opts = {}) {
   contexto.ultimo_mensaje = mensajeLead;
 
   if (resultado.action === "route" && resultado.routeId) {
+    console.log("[IA PATH DEBUG] mensaje:", mensajeLead);
+    console.log("[IA PATH DEBUG] camino detectado:", resultado.routeId);
+    console.log("[IA PATH DEBUG] score:", resultado.score);
     console.log("➡️ IA PRO sale por ruta:", resultado.routeId);
     return {
       ...contexto,

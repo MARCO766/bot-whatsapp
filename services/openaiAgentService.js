@@ -24,8 +24,36 @@ const PROMPT_SISTEMA_FIJO =
 
 const CARITAS_PERMITIDOS = ["🙂", "😊", "😌", "🤔", "😅", "😍", "🥹", "😉", "😎", "🙌", "😇"];
 
-const EMOJI_PROHIBIDOS =
-  /[🎁✨💥🚀🔥❗✂️📦⭐🌟💎🎯📲💬👍👏🤩😄💯]|❗❗/g;
+/** Solo emojis decorativos de marketing; no quitar caritas ni emojis válidos de GPT. */
+const EMOJI_DECORATIVOS_PROHIBIDOS = /[🎁✨💥🚀🔥✂️📦⭐🌟💎🎯📲💯]|❗❗/g;
+
+function sanitizarUnicodeRoto(texto) {
+  let s = typeof texto === "string" ? texto : String(texto ?? "");
+  try {
+    s = s.normalize("NFC");
+  } catch (_) {
+    /* ignore */
+  }
+  let out = "";
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    if (c >= 0xd800 && c <= 0xdbff) {
+      if (i + 1 < s.length) {
+        const c2 = s.charCodeAt(i + 1);
+        if (c2 >= 0xdc00 && c2 <= 0xdfff) {
+          out += s[i] + s[i + 1];
+          i++;
+          continue;
+        }
+      }
+      continue;
+    }
+    if (c >= 0xdc00 && c <= 0xdfff) continue;
+    if (c === 0) continue;
+    out += s[i];
+  }
+  return out;
+}
 
 const lastRepliesPorChat = new Map();
 
@@ -254,7 +282,7 @@ function elegirVariacion(pool, usadas, texto) {
 }
 
 function limpiarReply(reply) {
-  let s = String(reply || "")
+  let s = sanitizarUnicodeRoto(String(reply || ""))
     .replace(/\.{2,}/g, "")
     .replace(/\betc\.?\b/gi, "")
     .replace(/\sy más\b/gi, "")
@@ -262,7 +290,7 @@ function limpiarReply(reply) {
     .replace(/\s+/g, " ")
     .trim();
 
-  s = s.replace(EMOJI_PROHIBIDOS, "");
+  s = s.replace(EMOJI_DECORATIVOS_PROHIBIDOS, "");
 
   const encontrados = CARITAS_PERMITIDOS.filter((e) => s.includes(e));
   if (encontrados.length > 1) {
@@ -273,10 +301,6 @@ function limpiarReply(reply) {
         else s = s.split(e).join("");
       }
     }
-  }
-
-  if (!CARITAS_PERMITIDOS.some((e) => s.includes(e)) && encontrados.length === 0) {
-    return s.trim();
   }
 
   return s.trim();
@@ -861,6 +885,9 @@ async function resolverAnalisisOpenAI(config, mensajeLead, chatHistory, memoria,
   const analisis = analizarRutaLocal(config, mensajeLead, memoria);
 
   if (analisis.matched && analisis.routeId) {
+    console.log("[IA PATH DEBUG] mensaje:", mensajeLead);
+    console.log("[IA PATH DEBUG] camino detectado:", analisis.routeId);
+    console.log("[IA PATH DEBUG] score:", analisis.score);
     console.log("➡️ OPENAI ruta detectada", analisis.routeId);
     return {
       ok: true,

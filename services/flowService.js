@@ -458,6 +458,7 @@ async function ejecutarFlujo(
 
     if (etiqueta === "ia" || etiqueta === "ia_pro") {
       logConexionesSalientes(nodoId, etiqueta === "ia_pro" ? "IA Pro" : "IA");
+      console.log("[IA PATH DEBUG] nodo destino:", ids.join(", "));
       console.log("➡️ SIGUIENTE NODO IA:", ids.join(", "));
     }
 

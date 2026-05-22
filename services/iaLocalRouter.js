@@ -32,11 +32,13 @@ const SINONIMOS_CAMINO_AUTO = {
   qr: [
     "qr",
     "codigo qr",
+    "codigo",
     "quiero qr",
     "mandame qr",
     "manda qr",
     "pagar qr",
     "pago qr",
+    "qr pago",
     "escanear qr",
     "cuadrito",
     "cuadro",
@@ -46,16 +48,25 @@ const SINONIMOS_CAMINO_AUTO = {
     "depositar",
     "quiero deposito",
     "hacer deposito",
+    "deposito bancario",
+    "por deposito",
+    "por transferencia",
     "numero de cuenta",
     "cuenta bancaria",
     "datos bancarios",
     "banco",
+    "bancario",
+    "transferencia",
+    "transferir",
   ],
   transferencia: [
     "transferencia",
     "transferir",
     "quiero transferir",
+    "por transferencia",
     "numero de cuenta",
+    "banco",
+    "bancario",
   ],
   pago: ["pago", "pagar", "quiero pagar", "como pago", "formas de pago", "metodo de pago"],
 };
@@ -83,11 +94,58 @@ function escapeRegExp(str) {
   return String(str).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+const KEYWORDS_FAMILIA_DEPOSITO = [
+  "deposito",
+  "transferencia",
+  "banco",
+  "bancario",
+  "cuenta",
+];
+const KEYWORDS_FAMILIA_QR = ["qr", "codigo", "escanear"];
+
+function familiaCamino(route) {
+  const blob = `${normalizeText(route.nombre || route.text || route.name || "")} ${normalizeText(route.id || "")}`;
+  if (/deposito|banco|transferencia|cuenta|bancario/.test(blob)) return "deposito";
+  if (/qr|codigo|escanear/.test(blob)) return "qr";
+  if (/tigo|wallet|billetera/.test(blob)) return "tigo";
+  return "other";
+}
+
+function detectarFamiliaPagoMensaje(texto) {
+  if (!texto) return null;
+
+  const tieneDeposito = KEYWORDS_FAMILIA_DEPOSITO.some((k) => {
+    if (k === "cuenta") {
+      return /\b(cuenta|cuenta bancaria|numero de cuenta)\b/.test(texto);
+    }
+    return textoContieneFrase(texto, k) || texto.includes(k);
+  });
+
+  const tieneQr =
+    textoContieneFrase(texto, "qr") ||
+    texto.includes("qr") ||
+    /\bcodigo qr\b/.test(texto) ||
+    /\bqr pago\b/.test(texto) ||
+    (/\bcodigo\b/.test(texto) && !tieneDeposito);
+
+  if (tieneDeposito) return "deposito";
+  if (tieneQr) return "qr";
+  return null;
+}
+
 function sinonimosAutomaticosCamino(route) {
   const extras = [];
   const nombre = normalizeText(route.nombre || route.text || route.name || "");
   const id = normalizeText(route.id || "");
   const blob = `${nombre} ${id}`;
+  const fam = familiaCamino(route);
+
+  if (fam === "deposito" || /deposito|banco|transferencia|cuenta|bancario/.test(blob)) {
+    extras.push(...SINONIMOS_CAMINO_AUTO.deposito, ...SINONIMOS_CAMINO_AUTO.transferencia);
+  }
+  if (fam === "qr" || /qr|codigo/.test(blob)) {
+    extras.push(...SINONIMOS_CAMINO_AUTO.qr);
+  }
 
   Object.keys(SINONIMOS_CAMINO_AUTO).forEach((clave) => {
     if (blob.includes(clave)) {
@@ -142,42 +200,58 @@ function scoreFraseEnTexto(texto, frase) {
   return 0;
 }
 
-function scoreContexto(texto, memoria) {
+function scoreContexto(texto, memoria, route) {
   let bonus = 0;
   const pregunta = normalizeText(memoria?.ultimaPregunta || memoria?.ultimoMensajeBot || "");
   if (!pregunta) return 0;
 
+  const famRuta = familiaCamino(route);
   const esPago =
     CONTEXT_HINTS.metodo_pago.some((h) => pregunta.includes(h)) ||
     pregunta.includes("metodo") ||
     pregunta.includes("pago");
 
   if (esPago) {
-    if (CONTEXT_HINTS.banco.some((h) => texto.includes(h))) bonus += 20;
-    if (CONTEXT_HINTS.qr.some((h) => texto.includes(h))) bonus += 20;
-    if (CONTEXT_HINTS.tigo.some((h) => texto.includes(h))) bonus += 20;
-    if (texto.includes("banco") && pregunta.includes("banco")) bonus += 15;
+    if (CONTEXT_HINTS.banco.some((h) => texto.includes(h)) && famRuta === "deposito") {
+      bonus += 20;
+    }
+    if (CONTEXT_HINTS.qr.some((h) => texto.includes(h)) && famRuta === "qr") {
+      bonus += 20;
+    }
+    if (CONTEXT_HINTS.tigo.some((h) => texto.includes(h)) && famRuta === "tigo") {
+      bonus += 20;
+    }
+    if (texto.includes("banco") && pregunta.includes("banco") && famRuta === "deposito") {
+      bonus += 15;
+    }
   }
 
   return bonus;
 }
 
-function scoreRuta(texto, route, memoria) {
+function scoreRuta(texto, route, memoria, familiaMsg) {
   if (route.enabled === false) return 0;
 
   let score = 0;
   const frases = tokensDeRuta(route);
+  const famRuta = familiaCamino(route);
 
   frases.forEach((frase) => {
     score += scoreFraseEnTexto(texto, frase);
   });
 
-  score += scoreContexto(texto, memoria);
+  score += scoreContexto(texto, memoria, route);
+
+  if (familiaMsg) {
+    if (famRuta === familiaMsg) score += 40;
+    else if (famRuta === "qr" && familiaMsg === "deposito") score -= 30;
+    else if (famRuta === "deposito" && familiaMsg === "qr") score -= 30;
+  }
 
   const prioridad = Math.min(100, Math.max(0, parseInt(route.priority, 10) || 0));
   score += Math.round(prioridad * 0.1);
 
-  return Math.min(100, score);
+  return Math.min(100, Math.max(0, score));
 }
 
 function normalizarConfigRouter(cfg) {
@@ -227,20 +301,39 @@ function analizarRutaLocal(config, mensaje, memoria = {}) {
 
   console.log("🧹 TEXTO NORMALIZADO:", normalizado);
   console.log("🪄 TEXTO CORREGIDO:", corregido);
-  console.log("🧠 CAMINOS:", cfg.caminos);
+  const familiaMsg = detectarFamiliaPagoMensaje(corregido);
+
+  console.log("[IA PATH DEBUG] mensaje:", raw);
+  console.log("[IA PATH DEBUG] caminos disponibles:", cfg.caminos.map((c) => ({
+    id: c.id,
+    nombre: c.nombre,
+    familia: familiaCamino(c),
+  })));
+  console.log("[IA PATH DEBUG] familia pago detectada:", familiaMsg || "(ninguna)");
 
   const ranking = cfg.caminos
     .map((route) => ({
       id: route.id,
       nombre: route.nombre,
-      score: scoreRuta(corregido, route, memoria),
+      familia: familiaCamino(route),
+      score: scoreRuta(corregido, route, memoria, familiaMsg),
       priority: route.priority,
     }))
-    .sort((a, b) => b.score - a.score || b.priority - a.priority);
+    .sort((a, b) => {
+      if (familiaMsg) {
+        const aMatch = a.familia === familiaMsg ? 1 : 0;
+        const bMatch = b.familia === familiaMsg ? 1 : 0;
+        if (bMatch !== aMatch) return bMatch - aMatch;
+      }
+      return b.score - a.score || b.priority - a.priority;
+    });
 
   console.log("🎯 SCORE:", ranking);
 
   const winner = ranking[0] && ranking[0].score >= cfg.scoreMinimo ? ranking[0] : null;
+
+  console.log("[IA PATH DEBUG] camino detectado:", winner?.id || null, "|", winner?.nombre || null);
+  console.log("[IA PATH DEBUG] score:", winner?.score ?? ranking[0]?.score ?? 0);
 
   console.log("[IA PATH MATCH]", {
     mensaje: raw,
