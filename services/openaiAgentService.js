@@ -17,8 +17,7 @@ const OPENAI_TIMEOUT_MS = 6000;
 /** Desactivado temporalmente: no usar plantillas saludo/general como fallback. */
 const FALLBACK_SALUDO_GENERAL_ACTIVO = false;
 
-const MSG_IA_NO_DISPONIBLE =
-  "⚠️ IA no disponible: revisar OPENAI_API_KEY o timeout";
+const MSG_IA_NO_DISPONIBLE = "⚠️ OPENAI FALLÓ";
 
 const PROMPT_SISTEMA_FIJO =
   "Eres un asesor humano de WhatsApp. Responde corto, natural, con máximo 1 emoji de carita. No uses puntos suspensivos. No inventes datos.";
@@ -489,6 +488,15 @@ function resumenIncluye(p) {
 }
 
 function construirReplyLocal(consultaIntent, config, mensaje, usadas) {
+  console.log(
+    "[OPENAI DEBUG] construirReplyLocal BLOQUEADO — intent:",
+    consultaIntent,
+    "mensaje:",
+    mensaje
+  );
+  return MSG_IA_NO_DISPONIBLE;
+
+  /* FALLBACK LOCAL DESACTIVADO PARA DEBUG
   const p = productDataEfectivo(config);
   const m = normMsg(mensaje);
   const intentFino = refinarIntent(consultaIntent, m);
@@ -550,6 +558,7 @@ function construirReplyLocal(consultaIntent, config, mensaje, usadas) {
 
   if (!FALLBACK_SALUDO_GENERAL_ACTIVO) return null;
   return limpiarReply(elegirVariacion(VARIACIONES.general, usadas, m));
+  */
 }
 
 function logEstadoOpenAI({ fuente, errorExacto, tieneKey }) {
@@ -574,9 +583,17 @@ function respuestaErrorOpenAI(errorExacto, promptBase, respuestaOpenAI) {
 }
 
 function generarReplyLocalInteligente(config, mensajeLead, chatHistory, lastReplies) {
+  console.log(
+    "[OPENAI DEBUG] generarReplyLocalInteligente BLOQUEADO — NO debería llamarse",
+    new Error().stack
+  );
+  return MSG_IA_NO_DISPONIBLE;
+
+  /* FALLBACK LOCAL DESACTIVADO PARA DEBUG
   const usadas = historialUsadas(chatHistory, lastReplies);
   const intent = clasificarConsultaIntent(mensajeLead);
   return construirReplyLocal(intent, config, mensajeLead, usadas);
+  */
 }
 
 function reformularLigeramente(reply, config, mensaje, usadas, opts = {}) {
@@ -586,10 +603,6 @@ function reformularLigeramente(reply, config, mensaje, usadas, opts = {}) {
     let r = prefijos[idx] + reply.replace(/^(Mira, |Bueno, |Claro, )/, "");
     return limpiarReply(r);
   }
-
-  const extra = [...usadas, reply];
-  const alt = generarReplyLocalInteligente(config, mensaje, [], extra);
-  if (alt && firmaReply(alt) !== firmaReply(reply)) return alt;
 
   const prefijos = ["Mira, ", "Bueno, ", "Claro, "];
   const idx = reply.length % prefijos.length;
@@ -666,25 +679,47 @@ function getOpenAIClient() {
 
 async function llamarOpenAI(config, mensajeLead, chatHistory, lastReplies, reescribir) {
   const client = getOpenAIClient();
-  if (!client) return null;
+  if (!client) {
+    console.log("[OPENAI DEBUG] getOpenAIClient() = null (sin API key)");
+    return null;
+  }
 
   const model = config.model || process.env.OPENAI_MODEL || "gpt-4o-mini";
   const messages = construirMensajesOpenAI(config, mensajeLead, chatHistory, lastReplies, reescribir);
+  const promptFinal = JSON.stringify({ model, temperature: config.temperature ?? 0.7, messages });
 
-  const completion = await client.chat.completions.create({
-    model,
-    temperature: config.temperature ?? 0.7,
-    max_tokens: 200,
-    messages,
-  });
+  console.log("[OPENAI DEBUG] API KEY EXISTE:", !!process.env.OPENAI_API_KEY);
+  console.log("[OPENAI DEBUG] modelo:", model);
+  console.log("[OPENAI DEBUG] timeout ms:", OPENAI_TIMEOUT_MS);
+  console.log("[OPENAI DEBUG] mensaje:", mensajeLead);
+  console.log("[OPENAI DEBUG] prompt:", promptFinal);
 
-  return completion.choices?.[0]?.message?.content?.trim() || "";
+  try {
+    const completion = await client.chat.completions.create({
+      model,
+      temperature: config.temperature ?? 0.7,
+      max_tokens: 200,
+      messages,
+    });
+
+    console.log("[OPENAI DEBUG] respuesta raw:", completion);
+
+    const texto = completion.choices?.[0]?.message?.content?.trim() || "";
+    console.log("[OPENAI DEBUG] texto extraído:", texto || "(vacío)");
+    return texto;
+  } catch (error) {
+    console.log("[OPENAI ERROR]", error);
+    throw error;
+  }
 }
 
 function llamarOpenAIConTimeout(config, mensajeLead, chatHistory, lastReplies, reescribir) {
   const trabajo = llamarOpenAI(config, mensajeLead, chatHistory, lastReplies, reescribir);
   const timeout = new Promise((_, reject) => {
-    setTimeout(() => reject(new Error("OPENAI_TIMEOUT")), OPENAI_TIMEOUT_MS);
+    setTimeout(() => {
+      console.log("[OPENAI ERROR] OPENAI_TIMEOUT después de", OPENAI_TIMEOUT_MS, "ms");
+      reject(new Error("OPENAI_TIMEOUT"));
+    }, OPENAI_TIMEOUT_MS);
   });
   return Promise.race([trabajo, timeout]);
 }
@@ -706,10 +741,14 @@ function formatoErrorOpenAI(err) {
 async function generarReply(config, mensajeLead, chatHistory, lastReplies) {
   const promptBase = resolverOpenaiPrompt(config);
   const tieneKey = tieneOpenAIKey();
+  const model = config.model || process.env.OPENAI_MODEL || "gpt-4o-mini";
 
-  console.log("[OpenAI Agent] existe OPENAI_API_KEY:", tieneKey);
+  console.log("[OPENAI DEBUG] generarReply() inicio");
+  console.log("[OPENAI DEBUG] API KEY EXISTE:", !!process.env.OPENAI_API_KEY);
+  console.log("[OPENAI DEBUG] modelo:", model);
 
   if (!tieneKey) {
+    console.log("[OPENAI ERROR] OPENAI_API_KEY vacía o no definida");
     return respuestaErrorOpenAI("OPENAI_API_KEY no configurada", promptBase, null);
   }
 
@@ -727,8 +766,13 @@ async function generarReply(config, mensajeLead, chatHistory, lastReplies) {
     promptFinal = JSON.stringify({
       system: PROMPT_SISTEMA_FIJO,
       openaiPrompt: promptBase,
+      model,
       messages,
     });
+
+    console.log("[OPENAI DEBUG] API KEY EXISTE:", !!process.env.OPENAI_API_KEY);
+    console.log("[OPENAI DEBUG] mensaje:", mensajeLead);
+    console.log("[OPENAI DEBUG] prompt:", promptFinal);
 
     respuestaOpenAI = await llamarOpenAIConTimeout(
       config,
@@ -737,7 +781,10 @@ async function generarReply(config, mensajeLead, chatHistory, lastReplies) {
       lastReplies,
       false
     );
-    let reply = limpiarReply(respuestaOpenAI);
+
+    console.log("[OPENAI DEBUG] respuesta raw:", respuestaOpenAI);
+
+    const reply = limpiarReply(respuestaOpenAI);
     if (reply) {
       const final = aplicarAntiRepeticion(
         reply,
@@ -752,6 +799,7 @@ async function generarReply(config, mensajeLead, chatHistory, lastReplies) {
         errorExacto: "(ninguno)",
         fuente: "openai",
       });
+      console.log("[OPENAI DEBUG] fuente final: openai | reply:", final);
       return {
         reply: final,
         source: "openai",
@@ -761,8 +809,10 @@ async function generarReply(config, mensajeLead, chatHistory, lastReplies) {
       };
     }
 
+    console.log("[OPENAI ERROR] respuesta vacía después de limpiarReply");
     return respuestaErrorOpenAI("respuesta vacía de OpenAI", promptFinal, respuestaOpenAI);
   } catch (err) {
+    console.log("[OPENAI ERROR]", err);
     return respuestaErrorOpenAI(formatoErrorOpenAI(err), promptFinal, respuestaOpenAI);
   }
 }
