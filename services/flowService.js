@@ -996,6 +996,12 @@ function mensajeEntranteYaProcesado(messageId) {
 }
 
 async function procesarMensajeEntrante(numero, texto, usuarioId, messageId) {
+  console.log("[FLOW SERVICE ENTRANTE]", {
+    numero,
+    usuarioId,
+    texto: String(texto || "").slice(0, 80),
+    messageId: messageId || null,
+  });
   console.log("[FLUJO] procesarMensajeEntrante", {
     numero,
     usuarioId,

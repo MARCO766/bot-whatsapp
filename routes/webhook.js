@@ -50,6 +50,10 @@ router.get('/webhook', (req, res) => {
 // 📩 RECIBIR MENSAJES
 router.post('/webhook', async (req, res) => {
   try {
+    console.log("[WEBHOOK ENTRANTE]", {
+      tieneBody: !!req.body,
+      entryCount: req.body?.entry?.length ?? 0,
+    });
     const entry = req.body.entry?.[0];
     const changes = entry?.changes?.[0];
     const value = changes?.value;

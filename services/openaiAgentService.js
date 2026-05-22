@@ -739,6 +739,11 @@ function formatoErrorOpenAI(err) {
 }
 
 async function generarReply(config, mensajeLead, chatHistory, lastReplies) {
+  console.log("[OPENAI SERVICE ENTRANTE]", {
+    mensaje: String(mensajeLead || "").slice(0, 80),
+    tieneKey: !!String(process.env.OPENAI_API_KEY || "").trim(),
+    model: config?.model || process.env.OPENAI_MODEL || "gpt-4o-mini",
+  });
   const promptBase = resolverOpenaiPrompt(config);
   const tieneKey = tieneOpenAIKey();
   const model = config.model || process.env.OPENAI_MODEL || "gpt-4o-mini";
