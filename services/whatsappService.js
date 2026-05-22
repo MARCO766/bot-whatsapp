@@ -16,9 +16,47 @@ function supabaseHeaders(extra = {}) {
   };
 }
 
+/**
+ * UTF-8 válido para PostgREST: quita sustitutos sueltos (ej. \ude0a sin \ud83d).
+ * Mantiene emojis completos; no elimina emojis válidos.
+ */
+function sanitizarContenidoMensajeSupabase(contenido) {
+  let s = typeof contenido === "string" ? contenido : String(contenido ?? "");
+  try {
+    s = s.normalize("NFC");
+  } catch (_) {
+    /* ignore */
+  }
+
+  let out = "";
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    if (c >= 0xd800 && c <= 0xdbff) {
+      if (i + 1 < s.length) {
+        const c2 = s.charCodeAt(i + 1);
+        if (c2 >= 0xdc00 && c2 <= 0xdfff) {
+          out += s[i] + s[i + 1];
+          i++;
+          continue;
+        }
+      }
+      continue;
+    }
+    if (c >= 0xdc00 && c <= 0xdfff) {
+      continue;
+    }
+    if (c === 0) continue;
+    out += s[i];
+  }
+
+  console.log("[SUPABASE DEBUG] contenido limpio:", out);
+  return out;
+}
+
 async function actualizarConversacionSaliente(usuarioId, numero, texto) {
   if (!usuarioId || !numero || !SUPABASE_URL || !SUPABASE_KEY) return;
 
+  const ultimoMensaje = sanitizarContenidoMensajeSupabase(texto);
   const headers = supabaseHeaders({ "Content-Type": "application/json" });
   const ahora = new Date().toISOString();
 
@@ -33,7 +71,7 @@ async function actualizarConversacionSaliente(usuarioId, numero, texto) {
       await axios.patch(
         `${SUPABASE_URL}/rest/v1/conversaciones?cliente_numero=eq.${numero}&usuario_id=eq.${usuarioId}`,
         {
-          ultimo_mensaje: texto,
+          ultimo_mensaje: ultimoMensaje,
           ultimo_mensaje_en: ahora,
           estado: "abierta",
         },
@@ -47,7 +85,7 @@ async function actualizarConversacionSaliente(usuarioId, numero, texto) {
       {
         cliente_numero: numero,
         usuario_id: usuarioId,
-        ultimo_mensaje: texto,
+        ultimo_mensaje: ultimoMensaje,
         ultimo_mensaje_en: ahora,
         estado: "abierta",
         unread_count: 0,
@@ -93,7 +131,14 @@ async function resolverCredencialesEnvio(opciones = {}) {
 /**
  * Mismo guardado + socket que bandeja manual (POST /inbox/responder texto).
  */
-function normalizarBodyMensajeSupabase({ usuarioId, numero, texto, wamid, tipo }) {
+function normalizarBodyMensajeSupabase({
+  usuarioId,
+  numero,
+  texto,
+  wamid,
+  tipo,
+  imagen_url = null,
+}) {
   const tipoDb = tipo === "text" ? "texto" : tipo || "texto";
   let contenido = texto;
   if (contenido != null && typeof contenido !== "string") {
@@ -103,7 +148,7 @@ function normalizarBodyMensajeSupabase({ usuarioId, numero, texto, wamid, tipo }
       contenido = String(contenido);
     }
   }
-  contenido = String(contenido ?? "");
+  const contenidoSeguro = sanitizarContenidoMensajeSupabase(String(contenido ?? ""));
 
   return {
     cliente_numero: String(numero || "").trim(),
@@ -111,8 +156,8 @@ function normalizarBodyMensajeSupabase({ usuarioId, numero, texto, wamid, tipo }
       usuarioId != null && usuarioId !== "" ? String(usuarioId).trim() : null,
     direccion: "saliente",
     tipo: tipoDb,
-    contenido,
-    imagen_url: null,
+    contenido: contenidoSeguro,
+    imagen_url: imagen_url ?? null,
     whatsapp_message_id: wamid != null && wamid !== "" ? String(wamid) : null,
     estado_envio: "sent",
   };
@@ -161,16 +206,20 @@ async function registrarMensajeSalienteEnInbox({
   const row = insertRes.data?.[0];
   if (!usuarioId) return row;
 
-  await actualizarConversacionSaliente(usuarioId, numero, texto);
+  await actualizarConversacionSaliente(
+    usuarioId,
+    numero,
+    insertPayload.contenido
+  );
 
   const payloadMensaje = {
     id: row?.id,
     cliente_numero: numero,
     usuario_id: usuarioId,
     direccion: "saliente",
-    tipo: tipoDb,
-    contenido: texto,
-    imagen_url: null,
+    tipo: insertPayload.tipo,
+    contenido: insertPayload.contenido,
+    imagen_url: insertPayload.imagen_url,
     whatsapp_message_id: wamid || null,
     estado_envio: "sent",
     creado_en: row?.creado_en || new Date().toISOString(),
@@ -179,7 +228,7 @@ async function registrarMensajeSalienteEnInbox({
   rt.nuevoMensaje(null, usuarioId, payloadMensaje);
   rt.conversacionActualizada(null, usuarioId, {
     cliente_numero: numero,
-    ultimo_mensaje: texto,
+    ultimo_mensaje: insertPayload.contenido,
     ultimo_mensaje_en: payloadMensaje.creado_en,
     direccion: "saliente",
   });
@@ -569,18 +618,18 @@ async function enviarMediaWhatsApp(numero, tipo, mediaUrl, caption = "", opcione
 
     console.log("??? message_id Meta:", whatsappMessageId);
 
+    const insertPayload = normalizarBodyMensajeSupabase({
+      usuarioId: opciones.usuarioId,
+      numero: numeroDestino,
+      texto: caption || urlOriginal,
+      wamid: whatsappMessageId,
+      tipo: tipoApi,
+      imagen_url: urlEnvio,
+    });
+
     const insertRes = await axios.post(
       `${SUPABASE_URL}/rest/v1/mensajes`,
-      {
-        cliente_numero: numeroDestino,
-        usuario_id: opciones.usuarioId || null,
-        direccion: "saliente",
-        tipo: tipoApi,
-        contenido: caption || urlOriginal,
-        imagen_url: urlEnvio,
-        whatsapp_message_id: whatsappMessageId,
-        estado_envio: "sent",
-      },
+      insertPayload,
       {
         headers: {
           apikey: SUPABASE_KEY,
@@ -599,7 +648,7 @@ async function enviarMediaWhatsApp(numero, tipo, mediaUrl, caption = "", opcione
         usuario_id: opciones.usuarioId,
         direccion: "saliente",
         tipo: tipoApi,
-        contenido: caption || urlOriginal,
+        contenido: insertPayload.contenido,
         imagen_url: urlEnvio,
         whatsapp_message_id: whatsappMessageId,
         estado_envio: "sent",
@@ -684,18 +733,17 @@ async function enviarBotonesWhatsApp(numero, texto, botones, opciones = {}) {
 
     const whatsappMessageId = respuestaMeta.data?.messages?.[0]?.id || null;
 
+    const insertPayload = normalizarBodyMensajeSupabase({
+      usuarioId: opciones.usuarioId,
+      numero,
+      texto,
+      wamid: whatsappMessageId,
+      tipo: "interactive",
+    });
+
     const insertRes = await axios.post(
       `${SUPABASE_URL}/rest/v1/mensajes`,
-      {
-        cliente_numero: numero,
-        usuario_id: opciones.usuarioId || null,
-        direccion: "saliente",
-        tipo: "interactive",
-        contenido: texto,
-        imagen_url: null,
-        whatsapp_message_id: whatsappMessageId,
-        estado_envio: "sent",
-      },
+      insertPayload,
       {
         headers: {
           apikey: SUPABASE_KEY,
@@ -714,7 +762,7 @@ async function enviarBotonesWhatsApp(numero, texto, botones, opciones = {}) {
         usuario_id: opciones.usuarioId,
         direccion: "saliente",
         tipo: "interactive",
-        contenido: texto,
+        contenido: insertPayload.contenido,
         whatsapp_message_id: whatsappMessageId,
         estado_envio: "sent",
         creado_en: row?.creado_en || new Date().toISOString(),
