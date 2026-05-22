@@ -19,10 +19,32 @@ window.MacBotOpenAIAgent = (function () {
     "Responde corto, humano y sin inventar datos.";
 
   const OPENAI_ICON_SVG =
-    '<svg class="openai-agent-icon-svg" viewBox="0 0 24 24" width="36" height="36" aria-hidden="true">' +
-    '<path fill="#67e8f9" d="M12 3l1.8 5.5H20l-4.6 3.3 1.8 5.5L12 14l-5.2 3.3 1.8-5.5L4 8.5h6.2z"/>' +
-    '<circle cx="12" cy="12" r="9" fill="none" stroke="#a5f3fc" stroke-width="1.2"/>' +
+    '<svg class="openai-agent-icon-svg" viewBox="0 0 32 32" width="38" height="38" aria-hidden="true">' +
+    '<defs><linearGradient id="oaiIconGrad" x1="0%" y1="0%" x2="100%" y2="100%">' +
+    '<stop offset="0%" stop-color="#67e8f9"/><stop offset="55%" stop-color="#a78bfa"/>' +
+    '<stop offset="100%" stop-color="#818cf8"/></linearGradient></defs>' +
+    '<circle cx="16" cy="16" r="14" fill="none" stroke="url(#oaiIconGrad)" stroke-width="1.4" opacity="0.85"/>' +
+    '<path fill="url(#oaiIconGrad)" d="M16 6c3.2 0 5.8 2.1 6.8 5.1-2.4.4-4.2 2.4-4.5 4.8 2.6-.3 4.8 1.5 5.4 3.9-2.9 1.2-6.3-.2-7.7-2.8 1.4 3.6 5.2 5.6 9 4.8-1.1 3.5-4.5 5.8-8.2 5.2 1.2-1.8 1.9-4 1.7-6.3-2.5 2.1-6.2 2.4-9 .8 2.2-3.4 6.2-5.3 10.5-4.5C20.4 8.2 18.5 6 16 6z"/>' +
     "</svg>";
+
+  const ROUTE_ICON_SVG = {
+    qr:
+      '<svg class="openai-agent-route-icon-svg" viewBox="0 0 16 16" aria-hidden="true">' +
+      '<rect x="2" y="2" width="5" height="5" rx="1" fill="currentColor"/>' +
+      '<rect x="9" y="2" width="5" height="5" rx="1" fill="currentColor" opacity="0.55"/>' +
+      '<rect x="2" y="9" width="5" height="5" rx="1" fill="currentColor" opacity="0.55"/>' +
+      '<rect x="10" y="10" width="2" height="2" fill="currentColor"/>' +
+      '<rect x="12" y="12" width="2" height="2" fill="currentColor"/></svg>',
+    deposito:
+      '<svg class="openai-agent-route-icon-svg" viewBox="0 0 16 16" aria-hidden="true">' +
+      '<path fill="currentColor" d="M2 6h12v7H2V6zm1-3h10l1 3H2l1-3zm2 8h2v2H5v-2zm4 0h2v2H9v-2z"/></svg>',
+    garantia:
+      '<svg class="openai-agent-route-icon-svg" viewBox="0 0 16 16" aria-hidden="true">' +
+      '<path fill="currentColor" d="M8 1.5L3 4v4.2c0 3.1 2.1 5.9 5 6.3 2.9-.4 5-3.2 5-6.3V4L8 1.5zm3.2 5.5L7.3 11 4.8 8.5l1-1 1.5 1.5 3.4-3.4 1.5 1.4z"/></svg>',
+    default:
+      '<svg class="openai-agent-route-icon-svg" viewBox="0 0 16 16" aria-hidden="true">' +
+      '<circle cx="8" cy="8" r="3" fill="currentColor"/></svg>',
+  };
 
   function esc(str) {
     return String(str || "")
@@ -168,18 +190,37 @@ window.MacBotOpenAIAgent = (function () {
     return t || "Camino sin nombre";
   }
 
+  function tipoIconoCamino(route) {
+    const t = textoCamino(route).toLowerCase();
+    if (/\bqr\b|codigo\s*qr|pago\s*qr/.test(t) || t.includes("qr")) return "qr";
+    if (/deposito|depósito|banco|transferencia/.test(t)) return "deposito";
+    if (/garantia|garantía|devolucion|devolución|reembolso/.test(t)) return "garantia";
+    return "default";
+  }
+
+  function ensureBadgeEnCirculo(circle) {
+    if (!circle || circle.querySelector(".openai-agent-status-badge")) return;
+    const badge = document.createElement("span");
+    badge.className = "openai-agent-status-badge";
+    badge.textContent = "IA ACTIVA";
+    circle.insertBefore(badge, circle.firstChild);
+  }
+
   function ensureEstructuraCircular(nodo) {
     nodo.querySelector(".openai-agent-node-left")?.remove();
 
     let shell = nodo.querySelector(".openai-agent-node-shell");
     if (shell) {
       const circle = shell.querySelector(".openai-agent-circle");
-      if (circle && !circle.querySelector(".openai-agent-icon-wrap")) {
-        const iconWrap = document.createElement(TAG_DIV);
-        iconWrap.className = "openai-agent-icon-wrap";
-        iconWrap.innerHTML = OPENAI_ICON_SVG;
-        const title = circle.querySelector(".openai-agent-title");
-        circle.insertBefore(iconWrap, title || null);
+      if (circle) {
+        ensureBadgeEnCirculo(circle);
+        if (!circle.querySelector(".openai-agent-icon-wrap")) {
+          const iconWrap = document.createElement(TAG_DIV);
+          iconWrap.className = "openai-agent-icon-wrap";
+          iconWrap.innerHTML = OPENAI_ICON_SVG;
+          const title = circle.querySelector(".openai-agent-title");
+          circle.insertBefore(iconWrap, title || null);
+        }
       }
       return;
     }
@@ -197,6 +238,7 @@ window.MacBotOpenAIAgent = (function () {
 
     const circle = document.createElement(TAG_DIV);
     circle.className = "openai-agent-circle";
+    ensureBadgeEnCirculo(circle);
     if (portIn) circle.appendChild(portIn);
     if (actions) circle.appendChild(actions);
 
@@ -223,6 +265,7 @@ window.MacBotOpenAIAgent = (function () {
   function renderVisualNodo(nodo, config) {
     const activos = caminosParaVisual(config);
     ensureEstructuraCircular(nodo);
+    ensureBadgeEnCirculo(nodo.querySelector(".openai-agent-circle"));
 
     nodo.querySelector(".openai-agent-routes-branch")?.remove();
     nodo.querySelectorAll(".port.out").forEach(function (p) {
@@ -238,13 +281,14 @@ window.MacBotOpenAIAgent = (function () {
 
     if (!activos.length) {
       body.innerHTML =
+        '<p class="openai-agent-subtitle openai-agent-subtitle--muted">OpenAI responde o enruta por caminos</p>' +
         '<p class="openai-agent-desc-pill openai-agent-desc-pill--empty">Doble click para configurar</p>';
       return;
     }
 
     nodo.classList.add("openai-agent-node--with-routes");
     body.innerHTML =
-      '<p class="openai-agent-desc-pill">OpenAI o avanza por camino</p>';
+      '<p class="openai-agent-subtitle">OpenAI responde o enruta por caminos</p>';
 
     const shell = nodo.querySelector(".openai-agent-node-shell");
     const branch = document.createElement(TAG_DIV);
@@ -260,13 +304,17 @@ window.MacBotOpenAIAgent = (function () {
 
     activos.forEach(function (route) {
       const label = labelCaminoVisual(route);
+      const iconTipo = tipoIconoCamino(route);
       const li = document.createElement("li");
-      li.className = "openai-agent-route-pill";
+      li.className =
+        "openai-agent-route-pill openai-agent-route-pill--" + iconTipo;
       li.dataset.routeId = route.id;
 
-      const dot = document.createElement("span");
-      dot.className = "openai-agent-route-dot";
-      li.appendChild(dot);
+      const iconWrap = document.createElement("span");
+      iconWrap.className =
+        "openai-agent-route-icon openai-agent-route-icon--" + iconTipo;
+      iconWrap.innerHTML = ROUTE_ICON_SVG[iconTipo] || ROUTE_ICON_SVG.default;
+      li.appendChild(iconWrap);
 
       const name = document.createElement("span");
       name.className = "openai-agent-route-name";
@@ -635,10 +683,13 @@ window.MacBotOpenAIAgent = (function () {
       '<button type="button" class="delete-node" onclick="event.stopPropagation(); borrarNodo(\'' +
       id +
       '\')">×</button></div>' +
+      '<span class="openai-agent-status-badge">IA ACTIVA</span>' +
       '<div class="openai-agent-icon-wrap">' +
       OPENAI_ICON_SVG +
       '</div><h3 class="openai-agent-title">Agente OpenAI</h3></div>' +
-      '<div class="openai-agent-body"><p class="openai-agent-desc-pill openai-agent-desc-pill--empty">Doble click para configurar</p></div></div></div>' +
+      '<div class="openai-agent-body">' +
+      '<p class="openai-agent-subtitle openai-agent-subtitle--muted">OpenAI responde o enruta por caminos</p>' +
+      '<p class="openai-agent-desc-pill openai-agent-desc-pill--empty">Doble click para configurar</p></div></div></div>' +
       '<textarea class="openai-agent-data" style="display:none;">' +
       json +
       "</textarea>";

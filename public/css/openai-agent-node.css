@@ -7,6 +7,10 @@
   box-shadow: 0 0 18px rgba(34, 211, 238, 0.45);
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   Canvas — Nodo Agente OpenAI (MacBot ultra premium)
+   ═══════════════════════════════════════════════════════════════ */
+
 .node.openai-agent-node {
   width: auto;
   min-width: auto;
@@ -17,98 +21,416 @@
   overflow: visible;
 }
 
+.node.openai-agent-node:hover {
+  transform: none;
+  border: none;
+  box-shadow: none;
+}
+
+.node.openai-agent-node::before {
+  display: none;
+}
+
 .node.openai-agent-node .openai-agent-node-shell {
   display: flex;
   flex-direction: row;
   align-items: center;
+  gap: 0;
+  position: relative;
 }
 
 .node.openai-agent-node .openai-agent-core-column {
   display: flex;
   flex-direction: column;
   align-items: center;
+  flex-shrink: 0;
 }
 
 .node.openai-agent-node .openai-agent-circle {
   position: relative;
-  width: 112px;
-  height: 112px;
+  width: 118px;
+  height: 118px;
   border-radius: 50%;
-  background: linear-gradient(145deg, #1e1b4b 0%, #312e81 55%, #4338ca 100%);
-  border: 3px solid rgba(255, 255, 255, 0.35);
-  box-shadow: 0 0 28px rgba(34, 211, 238, 0.55), 0 8px 24px rgba(0, 0, 0, 0.45);
+  background:
+    linear-gradient(155deg, rgba(103, 232, 249, 0.12) 0%, transparent 42%),
+    linear-gradient(145deg, #0f0a1f 0%, #1e1b4b 38%, #312e81 62%, #4338ca 100%);
+  border: 2px solid rgba(103, 232, 249, 0.55);
+  box-shadow:
+    0 0 0 1px rgba(167, 139, 250, 0.25),
+    0 0 32px rgba(34, 211, 238, 0.45),
+    0 0 48px rgba(99, 102, 241, 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 10px 28px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 10px 12px;
+  gap: 2px;
+  padding: 18px 12px 10px;
   box-sizing: border-box;
+  transition:
+    box-shadow 0.28s ease,
+    border-color 0.28s ease,
+    transform 0.22s ease;
+}
+
+.node.openai-agent-node .openai-agent-circle::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 1px solid rgba(167, 139, 250, 0.35);
+  opacity: 0.65;
+  pointer-events: none;
+  animation: oaiNodeRing 3.5s ease-in-out infinite;
+}
+
+@keyframes oaiNodeRing {
+  0%,
+  100% {
+    opacity: 0.4;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.85;
+    transform: scale(1.02);
+  }
+}
+
+.node.openai-agent-node .openai-agent-status-badge {
+  position: absolute;
+  top: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #a5f3fc;
+  background: linear-gradient(
+    135deg,
+    rgba(15, 23, 42, 0.92) 0%,
+    rgba(30, 27, 75, 0.88) 100%
+  );
+  border: 1px solid rgba(34, 211, 238, 0.55);
+  box-shadow:
+    0 0 14px rgba(34, 211, 238, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  white-space: nowrap;
+}
+
+.node.openai-agent-node .openai-agent-status-badge::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  margin-right: 5px;
+  border-radius: 50%;
+  background: #22d3ee;
+  box-shadow: 0 0 8px #22d3ee;
+  animation: oaiBadgePulse 2s ease-in-out infinite;
+}
+
+@keyframes oaiBadgePulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(0.85);
+  }
+}
+
+.node.openai-agent-node .openai-agent-icon-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+  filter: drop-shadow(0 0 10px rgba(103, 232, 249, 0.55));
+}
+
+.node.openai-agent-node .openai-agent-icon-svg {
+  display: block;
+  width: 36px;
+  height: 36px;
 }
 
 .node.openai-agent-node .openai-agent-title {
   margin: 0;
   font-size: 11px;
   font-weight: 800;
-  color: #fff;
+  letter-spacing: 0.02em;
+  color: #f8fafc;
   text-align: center;
-  line-height: 1.15;
-  max-width: 88px;
+  line-height: 1.2;
+  max-width: 92px;
+  text-shadow: 0 0 12px rgba(103, 232, 249, 0.35);
+}
+
+.node.openai-agent-node .openai-agent-body {
+  padding: 0;
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+
+.node.openai-agent-node .openai-agent-subtitle {
+  margin: 0;
+  max-width: 172px;
+  font-size: 9px;
+  font-weight: 500;
+  line-height: 1.35;
+  text-align: center;
+  color: #94a3b8;
+}
+
+.node.openai-agent-node .openai-agent-subtitle--muted {
+  color: #64748b;
 }
 
 .node.openai-agent-node .openai-agent-desc-pill {
-  margin: 8px 0 0;
+  margin: 0;
   padding: 6px 12px;
   border-radius: 999px;
-  background: #4338ca;
-  border: 1px solid rgba(255, 255, 255, 0.4);
-  color: #fff;
+  background: linear-gradient(
+    135deg,
+    rgba(67, 56, 202, 0.95) 0%,
+    rgba(79, 70, 229, 0.85) 100%
+  );
+  border: 1px solid rgba(103, 232, 249, 0.35);
+  color: #e0f2fe;
   font-size: 10px;
+  font-weight: 600;
   text-align: center;
+  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.25);
+}
+
+.node.openai-agent-node .openai-agent-desc-pill--empty {
+  background: rgba(15, 23, 42, 0.88);
+  border-color: rgba(103, 232, 249, 0.28);
+  color: #94a3b8;
+  font-weight: 500;
+  font-style: italic;
+  box-shadow: none;
+}
+
+.node.openai-agent-node .node-actions {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  z-index: 5;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.node.openai-agent-node:hover .node-actions,
+.node.openai-agent-node.selected .node-actions {
+  opacity: 1;
+}
+
+.node.openai-agent-node .node-actions button {
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  padding: 0;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  cursor: pointer;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.node.openai-agent-node .node-actions .edit-node {
+  background: linear-gradient(
+    145deg,
+    rgba(34, 211, 238, 0.35),
+    rgba(99, 102, 241, 0.45)
+  );
+  color: #e0f2fe;
+  border-color: rgba(103, 232, 249, 0.45);
+}
+
+.node.openai-agent-node .node-actions .delete-node {
+  background: linear-gradient(
+    145deg,
+    rgba(127, 29, 29, 0.75),
+    rgba(69, 10, 10, 0.85)
+  );
+  color: #fecaca;
+  border-color: rgba(248, 113, 113, 0.4);
+}
+
+.node.openai-agent-node .node-actions button:hover {
+  transform: scale(1.08);
+  box-shadow: 0 0 12px rgba(34, 211, 238, 0.35);
+}
+
+.node.openai-agent-node .node-actions .delete-node:hover {
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.4);
+}
+
+.node.openai-agent-node.openai-agent-node--with-routes .openai-agent-node-shell {
+  min-width: 300px;
 }
 
 .node.openai-agent-node .openai-agent-routes-branch {
   display: flex;
-  align-items: center;
-  margin-left: 8px;
+  flex-direction: row;
+  align-items: stretch;
+  flex: 1;
+  min-width: 0;
+  margin: 0 0 0 6px;
+  align-self: center;
 }
 
 .node.openai-agent-node .openai-agent-routes-stem {
-  width: 24px;
+  position: relative;
+  width: 28px;
+  flex-shrink: 0;
+  align-self: stretch;
+}
+
+.node.openai-agent-node .openai-agent-routes-stem::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 14px;
   height: 2px;
-  background: rgba(103, 232, 249, 0.7);
+  background: linear-gradient(90deg, #22d3ee, #818cf8);
+  box-shadow: 0 0 8px rgba(34, 211, 238, 0.55);
+  transform: translateY(-50%);
+}
+
+.node.openai-agent-node .openai-agent-routes-stem::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 14px;
+  bottom: 14px;
+  width: 2px;
+  background: linear-gradient(180deg, #22d3ee, #6366f1, #a78bfa);
+  box-shadow: 0 0 8px rgba(99, 102, 241, 0.45);
+  border-radius: 2px;
 }
 
 .node.openai-agent-node .openai-agent-routes-list {
   list-style: none;
   margin: 0;
-  padding: 0;
+  padding: 4px 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  justify-content: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
 }
 
 .node.openai-agent-node .openai-agent-route-pill {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 12px 6px 10px;
-  border-radius: 999px;
-  background: rgba(30, 27, 75, 0.85);
-  border: 1px solid rgba(255, 255, 255, 0.25);
+  min-height: 36px;
+  padding: 5px 6px 5px 10px;
+  border-radius: 12px;
+  background: linear-gradient(
+    145deg,
+    rgba(15, 23, 42, 0.88) 0%,
+    rgba(30, 27, 75, 0.82) 55%,
+    rgba(49, 46, 129, 0.75) 100%
+  );
+  border: 1px solid rgba(103, 232, 249, 0.28);
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   position: relative;
+  min-width: 128px;
+  transition:
+    transform 0.2s ease,
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
-.node.openai-agent-node .openai-agent-route-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #67e8f9;
+.node.openai-agent-node .openai-agent-route-pill::before {
+  content: "";
+  position: absolute;
+  left: -14px;
+  top: 50%;
+  width: 14px;
+  height: 2px;
+  background: linear-gradient(90deg, #22d3ee, #818cf8);
+  transform: translateY(-50%);
+  opacity: 0.85;
+}
+
+.node.openai-agent-node .openai-agent-route-pill:hover {
+  transform: translateX(2px);
+  border-color: rgba(167, 139, 250, 0.55);
+  box-shadow:
+    0 6px 22px rgba(99, 102, 241, 0.28),
+    0 0 18px rgba(34, 211, 238, 0.15);
+}
+
+.node.openai-agent-node .openai-agent-route-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  color: #67e8f9;
+  background: rgba(34, 211, 238, 0.1);
+  border: 1px solid rgba(103, 232, 249, 0.25);
+}
+
+.node.openai-agent-node .openai-agent-route-pill--deposito .openai-agent-route-icon {
+  color: #a5b4fc;
+  background: rgba(99, 102, 241, 0.15);
+  border-color: rgba(129, 140, 248, 0.35);
+}
+
+.node.openai-agent-node .openai-agent-route-pill--garantia .openai-agent-route-icon {
+  color: #c4b5fd;
+  background: rgba(139, 92, 246, 0.15);
+  border-color: rgba(167, 139, 250, 0.35);
+}
+
+.node.openai-agent-node .openai-agent-route-icon-svg {
+  width: 14px;
+  height: 14px;
+  display: block;
 }
 
 .node.openai-agent-node .openai-agent-route-name {
-  font-size: 11px;
-  color: #fff;
+  flex: 1;
+  font-size: 12px;
   font-weight: 600;
+  color: #e2e8f0;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
 }
 
 .node.openai-agent-node .openai-agent-port-route.port.out {
@@ -116,6 +438,94 @@
   right: -8px;
   top: 50%;
   transform: translateY(-50%);
+  flex-shrink: 0;
+  z-index: 2;
+}
+
+.node.openai-agent-node .port.in {
+  position: absolute;
+  left: -7px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 14px;
+  height: 14px;
+  z-index: 3;
+}
+
+.node.openai-agent-node.selected .openai-agent-circle,
+.node.openai-agent-node.panel-active .openai-agent-circle {
+  border-color: rgba(103, 232, 249, 0.9);
+  box-shadow:
+    0 0 0 3px rgba(34, 211, 238, 0.35),
+    0 0 40px rgba(34, 211, 238, 0.55),
+    0 0 56px rgba(139, 92, 246, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.15),
+    0 12px 32px rgba(0, 0, 0, 0.55);
+  animation: oaiNodeSelectedPulse 2.2s ease-in-out infinite;
+}
+
+@keyframes oaiNodeSelectedPulse {
+  0%,
+  100% {
+    filter: brightness(1);
+  }
+  50% {
+    filter: brightness(1.06);
+  }
+}
+
+.node.openai-agent-node:hover .openai-agent-circle {
+  box-shadow:
+    0 0 0 1px rgba(167, 139, 250, 0.4),
+    0 0 38px rgba(34, 211, 238, 0.55),
+    0 0 52px rgba(99, 102, 241, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 12px 30px rgba(0, 0, 0, 0.48);
+}
+
+/* Handles — glow cian/morado (misma lógica de posición) */
+#builderArea .node.openai-agent-node .port.in {
+  width: 20px !important;
+  height: 20px !important;
+  left: -13px !important;
+  background: linear-gradient(135deg, #22d3ee, #6366f1) !important;
+  border: 2px solid rgba(255, 255, 255, 0.4) !important;
+  box-shadow:
+    0 0 12px rgba(34, 211, 238, 0.85),
+    0 0 24px rgba(99, 102, 241, 0.45) !important;
+}
+
+#builderArea .node.openai-agent-node .openai-agent-port-route.port.out {
+  width: 20px !important;
+  height: 20px !important;
+  right: -10px !important;
+  background: linear-gradient(135deg, #a78bfa, #6366f1) !important;
+  border: 2px solid rgba(255, 255, 255, 0.38) !important;
+  box-shadow:
+    0 0 12px rgba(167, 139, 250, 0.8),
+    0 0 22px rgba(99, 102, 241, 0.45) !important;
+}
+
+#builderArea .node.openai-agent-node .port.in:hover,
+#builderArea .node.openai-agent-node .openai-agent-port-route.port.out:hover {
+  transform: translateY(-50%) scale(1.08) !important;
+  animation: oaiPortGlow 1.4s ease-in-out infinite;
+}
+
+@keyframes oaiPortGlow {
+  0%,
+  100% {
+    filter: brightness(1);
+  }
+  50% {
+    filter: brightness(1.15);
+  }
+}
+
+#builderArea .node.openai-agent-node.selected .openai-agent-circle,
+#builderArea .node.openai-agent-node.panel-active .openai-agent-circle {
+  outline: 2px solid rgba(103, 232, 249, 0.85);
+  outline-offset: 4px;
 }
 
 .openai-agent-panel h5 {
