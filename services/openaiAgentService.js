@@ -12,7 +12,7 @@ const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
 
 const MAX_CHAT_HISTORY = 5;
 const MAX_LAST_REPLIES = 3;
-const OPENAI_TIMEOUT_MS = 6000;
+const OPENAI_TIMEOUT_MS = 20000;
 
 /** Desactivado temporalmente: no usar plantillas saludo/general como fallback. */
 const FALLBACK_SALUDO_GENERAL_ACTIVO = false;
@@ -694,6 +694,9 @@ async function llamarOpenAI(config, mensajeLead, chatHistory, lastReplies, reesc
   console.log("[OPENAI DEBUG] mensaje:", mensajeLead);
   console.log("[OPENAI DEBUG] prompt:", promptFinal);
 
+  const t0 = Date.now();
+  console.log("[OPENAI REQUEST START]");
+
   try {
     const completion = await client.chat.completions.create({
       model,
@@ -702,12 +705,16 @@ async function llamarOpenAI(config, mensajeLead, chatHistory, lastReplies, reesc
       messages,
     });
 
+    const tiempoMs = Date.now() - t0;
+    console.log("[OPENAI REQUEST END]", tiempoMs);
+
     console.log("[OPENAI DEBUG] respuesta raw:", completion);
 
     const texto = completion.choices?.[0]?.message?.content?.trim() || "";
     console.log("[OPENAI DEBUG] texto extraído:", texto || "(vacío)");
     return texto;
   } catch (error) {
+    console.log("[OPENAI REQUEST END]", Date.now() - t0, "(error)");
     console.log("[OPENAI ERROR]", error);
     throw error;
   }
@@ -726,7 +733,7 @@ function llamarOpenAIConTimeout(config, mensajeLead, chatHistory, lastReplies, r
 
 function formatoErrorOpenAI(err) {
   if (!err) return "error desconocido";
-  if (err.message === "OPENAI_TIMEOUT") return "OPENAI_TIMEOUT (6s)";
+  if (err.message === "OPENAI_TIMEOUT") return `OPENAI_TIMEOUT (${OPENAI_TIMEOUT_MS / 1000}s)`;
   const data = err.response?.data;
   if (data) {
     try {
