@@ -26,6 +26,12 @@ const {
   resetearFlujoLead,
 } = require("./resetFlujoLeadService");
 const { esTipoIA, resolverTipoRaw } = require("./seguimiento/detectarTipoNodo");
+const { obtenerConfigRemarketingGlobal } = require("./remarketing24h/parseRemarketingGlobalNode");
+const {
+  iniciarRemarketing24h,
+  resetearRemarketing24h,
+  cancelarRemarketing24h,
+} = require("./remarketing24h/remarketing24hService");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
@@ -367,6 +373,21 @@ async function ejecutarFlujo(
 
   await enriquecerContextoFlujo(flowContext, numero, usuarioId);
 
+  const rm24h = obtenerConfigRemarketingGlobal(flujoData);
+  if (rm24h?.config) {
+    try {
+      await iniciarRemarketing24h({
+        usuario_id: usuarioId,
+        cliente_numero: numero,
+        flujo_id: String(flujoId || ""),
+        flujo_nombre: opts.flujoNombre || null,
+        config: rm24h.config,
+      });
+    } catch (err) {
+      console.log("[RM24H] error al iniciar:", err.response?.data || err.message);
+    }
+  }
+
   console.log(
     "[FLUJO] Inicio ejecución | nodos:",
     nodos.length,
@@ -512,6 +533,12 @@ async function ejecutarFlujo(
       return;
     }
 
+    if (tipoNodo === "remarketing_global") {
+      console.log("[RM24H] nodo cerebro omitido en ejecución (no avanza lead):", nodoId);
+      await continuarASiguientes(nodoId, visitados, "remarketing_global");
+      return;
+    }
+
     if (tipoNodo === "conversion") {
       const { valor, moneda, origen } = parseConversionFromNodo(nodo);
       await registrarConversion({
@@ -524,6 +551,24 @@ async function ejecutarFlujo(
         origen,
         metadata: { trigger: "nodo_flujo" },
       });
+
+      if (flujoId && usuarioId) {
+        try {
+          await cancelarRemarketing24h({
+            usuario_id: usuarioId,
+            cliente_numero: numero,
+            flujo_id: String(flujoId),
+            motivo: "conversion",
+          });
+        } catch (err) {
+          console.log(
+            "[RM24H] conversión detectada pendiente de conexión:",
+            err.response?.data || err.message
+          );
+        }
+      } else {
+        console.log("[RM24H] conversión detectada pendiente de conexión (sin flujoId)");
+      }
 
       await continuarASiguientes(nodoId, visitados, "conversion");
       return;
@@ -1015,6 +1060,17 @@ async function procesarMensajeEntrante(numero, texto, usuarioId, messageId) {
     return true;
   }
 
+  if (usuarioId && numero) {
+    try {
+      await resetearRemarketing24h({
+        usuario_id: usuarioId,
+        cliente_numero: numero,
+      });
+    } catch (err) {
+      console.log("[RM24H] error al resetear por respuesta:", err.response?.data || err.message);
+    }
+  }
+
   if (esComandoResetFlujo(texto)) {
     await resetearFlujoLead(numero, usuarioId);
     return true;
@@ -1215,6 +1271,7 @@ async function buscarYEjecutarActivador(numero, textoCliente, usuarioId = null, 
 
   await ejecutarFlujo(numero, flujoDatos, usuarioId, flujo.id, {
     ultimoMensaje: textoCliente,
+    flujoNombre: flujo.nombre || null,
   });
   await registrarUsoActivador(activador);
 

@@ -975,3 +975,152 @@ body:has(#builderArea) {
     min-height: 52vh;
   }
 }
+
+/* Remarketing Global 24h — cerebro del flujo */
+#builderArea .node.remarketing-global-node,
+#builderArea .node.node-remarketing-global {
+  --rm24h-accent: #ff6b35;
+  --rm24h-accent-2: #ffb347;
+  --rm24h-glow: rgba(255, 107, 53, 0.35);
+  min-width: 240px;
+  border: 1px solid color-mix(in srgb, var(--rm24h-accent) 65%, transparent) !important;
+  background: linear-gradient(
+    155deg,
+    rgba(28, 12, 8, 0.97),
+    rgba(12, 14, 22, 0.98)
+  ) !important;
+  box-shadow:
+    0 16px 40px rgba(0, 0, 0, 0.5),
+    0 0 28px var(--rm24h-glow) !important;
+}
+
+#builderArea .node.remarketing-global-node::before,
+#builderArea .node.node-remarketing-global::before {
+  width: 4px;
+  background: linear-gradient(to bottom, var(--rm24h-accent), var(--rm24h-accent-2));
+  box-shadow: 0 0 12px var(--rm24h-glow);
+}
+
+#builderArea .rm24h-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px 8px;
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--rm24h-accent-2);
+  border-bottom: 1px solid color-mix(in srgb, var(--rm24h-accent) 22%, transparent);
+}
+
+#builderArea .rm24h-chip {
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--rm24h-accent) 25%, transparent);
+  color: #fff;
+}
+
+#builderArea .rm24h-body {
+  padding: 10px 12px 14px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+#builderArea .rm24h-badge-on {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #1a0a04;
+  background: linear-gradient(90deg, var(--rm24h-accent), var(--rm24h-accent-2));
+  padding: 2px 8px;
+  border-radius: 4px;
+  margin-bottom: 6px;
+}
+
+#builderArea .rm24h-meta,
+#builderArea .rm24h-preview,
+#builderArea .rm24h-empty {
+  margin: 4px 0 0;
+  line-height: 1.4;
+}
+
+#builderArea .node.remarketing-global-node.selected,
+#builderArea .node.node-remarketing-global.selected {
+  outline: 2px solid var(--rm24h-accent) !important;
+  outline-offset: 3px;
+}
+
+.menu-nodo-btn-rm24h {
+  border-color: color-mix(in srgb, #ff6b35 40%, transparent) !important;
+}
+
+.panel-nodo--rm24h .rm24h-panel-hero {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 12px;
+  margin-bottom: 16px;
+  border-radius: 10px;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 107, 53, 0.12),
+    rgba(255, 179, 71, 0.06)
+  );
+  border: 1px solid rgba(255, 107, 53, 0.25);
+}
+
+.panel-nodo--rm24h .rm24h-panel-icon {
+  font-size: 28px;
+  line-height: 1;
+}
+
+.panel-nodo--rm24h .rm24h-panel-hero h3 {
+  margin: 0 0 4px;
+  font-size: 15px;
+  color: #ffb347;
+}
+
+.panel-nodo--rm24h .rm24h-panel-hero p {
+  margin: 0;
+  font-size: 12px;
+  opacity: 0.75;
+}
+
+.panel-nodo--rm24h .rm24h-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.panel-nodo--rm24h .rm24h-field {
+  margin-bottom: 14px;
+}
+
+.panel-nodo--rm24h .rm24h-field label {
+  display: block;
+  font-size: 12px;
+  margin-bottom: 6px;
+  opacity: 0.85;
+}
+
+.panel-nodo--rm24h .rm24h-field input[type="number"],
+.panel-nodo--rm24h .rm24h-field textarea {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.panel-nodo--rm24h .rm24h-hint {
+  margin: 4px 0 0;
+  font-size: 11px;
+  opacity: 0.55;
+}
+
+.panel-nodo--rm24h .rm24h-field--locked {
+  opacity: 0.7;
+}

@@ -97,6 +97,15 @@ function detectarTipoNodo(nodo) {
   }
 
   if (
+    nodo.dataset?.tipo === "remarketing_global" ||
+    className.includes("remarketing-global-node") ||
+    className.includes("node-remarketing-global") ||
+    html.includes("remarketing-global-data")
+  ) {
+    return "remarketing_global";
+  }
+
+  if (
     html.includes("contenido-variantes-data") ||
     className.includes("content-node") ||
     className.includes("blue") ||

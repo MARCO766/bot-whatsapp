@@ -47,6 +47,7 @@ ${builder ? '<link rel="stylesheet" href="/css/seguimiento.css"><link rel="style
     <button type="button" class="menu-nodo-btn menu-nodo-btn-ia-pro" onclick="agregarNodoIAPro()">🤖 Agente IA Pro</button>
     <button type="button" class="menu-nodo-btn menu-nodo-btn-openai-agent" onclick="agregarNodoOpenAIAgent()">🤖 Agente OpenAI</button>
     <button type="button" class="menu-nodo-btn menu-nodo-btn-seguimiento" onclick="agregarNodo('seguimiento')">🔔 Seguimiento</button>
+    <button type="button" class="menu-nodo-btn menu-nodo-btn-rm24h" onclick="agregarNodoRemarketingGlobal()">🔥 Remarketing 24h</button>
     <button type="button" class="menu-nodo-btn menu-nodo-btn-espera" onclick="agregarNodo('espera')">⏳ Espera</button>
     <button type="button" class="menu-nodo-btn menu-nodo-btn-etiqueta" onclick="agregarNodo('etiqueta')">🏷️ Etiqueta</button>
     <button type="button" class="menu-nodo-btn menu-nodo-btn-conversion" onclick="agregarNodo('conversion')">💰 Conversión</button>
@@ -717,6 +718,7 @@ ${tab === "flujos" && builder ? `
 })();
 </script>
 ${builder ? `
+<script src="/js/builder/remarketing-global.js"></script>
 <script src="/js/builder/seguimiento.js"></script>
 <script src="/js/builder/contenido.js"></script>
 <script src="/js/builder/ia.js"></script>

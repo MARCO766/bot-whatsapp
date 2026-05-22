@@ -209,6 +209,16 @@ function cargarFlujoGuardado(){
     });
   }
 
+  document.querySelectorAll(".remarketing-global-node").forEach((nodo) => {
+    try {
+      if(window.MacBotRemarketingGlobal){
+        window.MacBotRemarketingGlobal.refrescarNodoCargado(nodo);
+      }
+    } catch (e) {
+      console.warn("RM24H: error al refrescar nodo cargado", e);
+    }
+  });
+
   document.querySelectorAll(".follow-node").forEach((nodo) => {
     try {
       if(window.MacBotSeguimiento){
@@ -285,6 +295,12 @@ function agregarNodo(tipo){
 
   if(!canvas){
     alert("No existe canvasFlujo");
+    return;
+  }
+
+  if(tipo === "remarketing_global" && window.MacBotRemarketingGlobal && window.MacBotRemarketingGlobal.crearNodoEnCanvas){
+    registrarHistorialBuilder();
+    window.MacBotRemarketingGlobal.crearNodoEnCanvas();
     return;
   }
 
@@ -1684,6 +1700,10 @@ function abrirPanelNodo(nodo){
     if(window.MacBotIA && window.MacBotIA.clearPanelActivo){
       window.MacBotIA.clearPanelActivo();
     }
+
+    if(window.MacBotRemarketingGlobal && window.MacBotRemarketingGlobal.clearPanelActivo){
+      window.MacBotRemarketingGlobal.clearPanelActivo();
+    }
   }
 
   nodoSeleccionadoPanel = nodo;
@@ -1697,6 +1717,11 @@ function abrirPanelNodo(nodo){
   panel.classList.add("activo");
   panel.setAttribute("aria-hidden", "false");
   marcarNodoSeleccionado(nodo);
+
+  if(window.MacBotRemarketingGlobal && window.MacBotRemarketingGlobal.esNodoRemarketingGlobal(nodo)){
+    window.MacBotRemarketingGlobal.renderPanel(nodo);
+    return;
+  }
 
   if(window.MacBotSeguimiento && window.MacBotSeguimiento.esNodoSeguimiento(nodo)){
     window.MacBotSeguimiento.renderPanel(nodo);
@@ -1932,6 +1957,9 @@ function sincronizarPanelAntesDeSnapshot(){
   if(window.MacBotIA && window.MacBotIA.flushPanelToNode){
     window.MacBotIA.flushPanelToNode();
   }
+  if(window.MacBotRemarketingGlobal && window.MacBotRemarketingGlobal.flushPanelToNode){
+    window.MacBotRemarketingGlobal.flushPanelToNode();
+  }
 }
 
 function capturarSnapshotBuilder(){
@@ -2014,6 +2042,20 @@ function restaurarSnapshotBuilder(snapshot){
         }
       } catch (err) {
         console.warn("Seguimiento: error al restaurar nodo", err.message);
+      }
+    }
+
+    if(
+      (item.className && item.className.includes("remarketing-global-node")) ||
+      item.tipo === "remarketing_global" ||
+      (item.html && item.html.includes("remarketing-global-data"))
+    ){
+      try{
+        if(window.MacBotRemarketingGlobal){
+          window.MacBotRemarketingGlobal.refrescarNodoCargado(nodo);
+        }
+      } catch (err) {
+        console.warn("RM24H: error al restaurar nodo", err.message);
       }
     }
 
