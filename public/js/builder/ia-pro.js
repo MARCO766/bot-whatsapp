@@ -11,9 +11,30 @@ window.MacBotIAPro = (function () {
   const TONOS = ["amable", "vendedor", "premium", "tecnico", "agresivo"];
 
   const IA_PRO_ICON_SVG =
-    '<svg class="ia-pro-icon-svg" viewBox="0 0 24 24" width="36" height="36" aria-hidden="true">' +
-    '<path fill="#ffffff" d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1H2a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1a7 7 0 0 1 7-7h1V5.73c-.6-.34-1-.99-1-1.73a2 2 0 0 1 2-2M7.5 13A2.5 2.5 0 0 0 5 15.5 2.5 2.5 0 0 0 7.5 18a2.5 2.5 0 0 0 2.5-2.5A2.5 2.5 0 0 0 7.5 13m9 0a2.5 2.5 0 0 0-2.5 2.5 2.5 2.5 0 0 0 2.5 2.5 2.5 2.5 0 0 0 2.5-2.5 2.5 2.5 0 0 0-2.5-2.5"/>' +
-    "</svg>";
+    '<svg class="ia-pro-icon-svg" viewBox="0 0 32 32" width="38" height="38" aria-hidden="true">' +
+    '<defs><linearGradient id="iaproIconGrad" x1="0%" y1="0%" x2="100%" y2="100%">' +
+    '<stop offset="0%" stop-color="#c4b5fd"/><stop offset="50%" stop-color="#a78bfa"/>' +
+    '<stop offset="100%" stop-color="#67e8f9"/></linearGradient></defs>' +
+    '<circle cx="16" cy="16" r="14" fill="none" stroke="url(#iaproIconGrad)" stroke-width="1.4" opacity="0.9"/>' +
+    '<path fill="url(#iaproIconGrad)" d="M16 8c2.8 0 5 2.2 5 5v1h1.5a3.5 3.5 0 0 1 3.5 3.5V20a2 2 0 0 1-2 2h-1v1.5a2.5 2.5 0 0 1-5 0V22h-1a2 2 0 0 1-2-2v-2.5A3.5 3.5 0 0 1 9.5 14H11v-1c0-2.8 2.2-5 5-5zm-3.5 9a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zm7 0a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3z"/></svg>';
+
+  const ROUTE_ICON_SVG = {
+    qr:
+      '<svg class="ia-pro-route-icon-svg" viewBox="0 0 16 16" aria-hidden="true">' +
+      '<rect x="2" y="2" width="5" height="5" rx="1" fill="currentColor"/>' +
+      '<rect x="9" y="2" width="5" height="5" rx="1" fill="currentColor" opacity="0.55"/>' +
+      '<rect x="2" y="9" width="5" height="5" rx="1" fill="currentColor" opacity="0.55"/>' +
+      '<rect x="10" y="10" width="2" height="2" fill="currentColor"/></svg>',
+    deposito:
+      '<svg class="ia-pro-route-icon-svg" viewBox="0 0 16 16" aria-hidden="true">' +
+      '<path fill="currentColor" d="M2 6h12v7H2V6zm1-3h10l1 3H2l1-3zm2 8h2v2H5v-2zm4 0h2v2H9v-2z"/></svg>',
+    garantia:
+      '<svg class="ia-pro-route-icon-svg" viewBox="0 0 16 16" aria-hidden="true">' +
+      '<path fill="currentColor" d="M8 1.5L3 4v4.2c0 3.1 2.1 5.9 5 6.3 2.9-.4 5-3.2 5-6.3V4L8 1.5zm3.2 5.5L7.3 11 4.8 8.5l1-1 1.5 1.5 3.4-3.4 1.5 1.4z"/></svg>',
+    default:
+      '<svg class="ia-pro-route-icon-svg" viewBox="0 0 16 16" aria-hidden="true">' +
+      '<circle cx="8" cy="8" r="3" fill="currentColor"/></svg>',
+  };
 
   function esc(str) {
     return String(str || "")
@@ -165,18 +186,37 @@ window.MacBotIAPro = (function () {
     return t || "Camino sin nombre";
   }
 
+  function tipoIconoCamino(route) {
+    const t = textoCamino(route).toLowerCase();
+    if (/\bqr\b|codigo\s*qr|pago\s*qr/.test(t) || t.includes("qr")) return "qr";
+    if (/deposito|depósito|banco|transferencia/.test(t)) return "deposito";
+    if (/garantia|garantía|devolucion|devolución|reembolso/.test(t)) return "garantia";
+    return "default";
+  }
+
+  function ensureBadgeEnCirculo(circle) {
+    if (!circle || circle.querySelector(".ia-pro-status-badge")) return;
+    const badge = document.createElement("span");
+    badge.className = "ia-pro-status-badge";
+    badge.textContent = "IA PRO";
+    circle.insertBefore(badge, circle.firstChild);
+  }
+
   function ensureEstructuraCircular(nodo) {
     nodo.querySelector(".ia-pro-node-left")?.remove();
 
     let shell = nodo.querySelector(".ia-pro-node-shell");
     if (shell) {
       const circle = shell.querySelector(".ia-pro-circle");
-      if (circle && !circle.querySelector(".ia-pro-icon-wrap")) {
-        const iconWrap = document.createElement(TAG_DIV);
-        iconWrap.className = "ia-pro-icon-wrap";
-        iconWrap.innerHTML = IA_PRO_ICON_SVG;
-        const title = circle.querySelector(".ia-pro-title");
-        circle.insertBefore(iconWrap, title || null);
+      if (circle) {
+        ensureBadgeEnCirculo(circle);
+        if (!circle.querySelector(".ia-pro-icon-wrap")) {
+          const iconWrap = document.createElement(TAG_DIV);
+          iconWrap.className = "ia-pro-icon-wrap";
+          iconWrap.innerHTML = IA_PRO_ICON_SVG;
+          const title = circle.querySelector(".ia-pro-title");
+          circle.insertBefore(iconWrap, title || null);
+        }
       }
       return;
     }
@@ -194,6 +234,7 @@ window.MacBotIAPro = (function () {
 
     const circle = document.createElement(TAG_DIV);
     circle.className = "ia-pro-circle";
+    ensureBadgeEnCirculo(circle);
     if (portIn) circle.appendChild(portIn);
     if (actions) circle.appendChild(actions);
 
@@ -220,6 +261,7 @@ window.MacBotIAPro = (function () {
   function renderVisualNodo(nodo, config) {
     const activos = caminosParaVisual(config);
     ensureEstructuraCircular(nodo);
+    ensureBadgeEnCirculo(nodo.querySelector(".ia-pro-circle"));
 
     nodo.querySelector(".ia-pro-routes-branch")?.remove();
     nodo.querySelectorAll(".port.out").forEach(function (p) {
@@ -235,13 +277,14 @@ window.MacBotIAPro = (function () {
 
     if (!activos.length) {
       body.innerHTML =
+        '<p class="ia-pro-subtitle ia-pro-subtitle--muted">Conversación + rutas inteligentes</p>' +
         '<p class="ia-pro-desc-pill ia-pro-desc-pill--empty">Doble click para configurar</p>';
       return;
     }
 
     nodo.classList.add("ia-pro-node--with-routes");
     body.innerHTML =
-      '<p class="ia-pro-desc-pill">Conversa o avanza por un camino</p>';
+      '<p class="ia-pro-subtitle">Conversación + rutas inteligentes</p>';
 
     const shell = nodo.querySelector(".ia-pro-node-shell");
     const branch = document.createElement(TAG_DIV);
@@ -257,13 +300,15 @@ window.MacBotIAPro = (function () {
 
     activos.forEach(function (route) {
       const label = labelCaminoVisual(route);
+      const iconTipo = tipoIconoCamino(route);
       const li = document.createElement("li");
-      li.className = "ia-pro-route-pill";
+      li.className = "ia-pro-route-pill ia-pro-route-pill--" + iconTipo;
       li.dataset.routeId = route.id;
 
-      const dot = document.createElement("span");
-      dot.className = "ia-pro-route-dot";
-      li.appendChild(dot);
+      const iconWrap = document.createElement("span");
+      iconWrap.className = "ia-pro-route-icon ia-pro-route-icon--" + iconTipo;
+      iconWrap.innerHTML = ROUTE_ICON_SVG[iconTipo] || ROUTE_ICON_SVG.default;
+      li.appendChild(iconWrap);
 
       const name = document.createElement("span");
       name.className = "ia-pro-route-name";
@@ -383,7 +428,10 @@ window.MacBotIAPro = (function () {
     const routes = obtenerRoutes(configActiva);
     if (!routes.length) {
       wrap.innerHTML =
-        '<p class="ia-pro-caminos-vacio">No hay caminos. Agrega uno.</p>';
+        '<div class="iapro-routes-empty">' +
+        '<p class="ia-pro-caminos-vacio iapro-routes-empty__title">No hay caminos todavía</p>' +
+        '<p class="iapro-routes-empty__desc">Agrega rutas para que la IA avance según intención del lead</p>' +
+        "</div>";
       return;
     }
     wrap.innerHTML = routes
@@ -391,30 +439,42 @@ window.MacBotIAPro = (function () {
         const syns = Array.isArray(route.synonyms)
           ? route.synonyms.join(", ")
           : "";
+        const label = textoCamino(route) || "Sin nombre";
         return (
-          '<div class="ia-pro-ruta-row" data-route-id="' +
+          '<div class="ia-pro-ruta-row iapro-route-card" data-route-id="' +
           esc(route.id) +
           '">' +
-          '<div class="ia-pro-ruta-head"><span>Ruta ' +
+          '<div class="ia-pro-ruta-head iapro-route-card__head">' +
+          '<div class="iapro-route-card__title">' +
+          '<span class="iapro-route-badge">Ruta ' +
           (index + 1) +
-          '</span><label><input type="checkbox" class="ia-pro-ruta-enabled"' +
+          "</span>" +
+          '<span class="iapro-route-name-preview">' +
+          esc(label) +
+          "</span></div>" +
+          '<div class="iapro-route-card__toolbar">' +
+          '<label class="iapro-toggle"><input type="checkbox" class="ia-pro-ruta-enabled"' +
           (route.enabled !== false ? " checked" : "") +
-          '> Activo</label><button type="button" class="ia-pro-ruta-del">Eliminar</button></div>' +
-          '<div class="panel-campo"><label>Texto del camino</label><input class="ia-pro-ruta-texto" value="' +
+          '><span class="iapro-toggle__track" aria-hidden="true"></span><span class="iapro-toggle__label">Activo</span></label>' +
+          '<button type="button" class="ia-pro-ruta-del iapro-btn iapro-btn--danger iapro-btn--sm">Eliminar</button>' +
+          "</div></div>" +
+          '<div class="iapro-route-card__body">' +
+          '<div class="panel-campo iapro-field"><label>Texto del camino</label><input class="ia-pro-ruta-texto iapro-input" placeholder="Ej: precio, pago, garantía" value="' +
           esc(textoCamino(route)) +
           '"></div>' +
-          '<div class="panel-campo"><label>Sinónimos (coma)</label><textarea class="ia-pro-ruta-sinonimos ia-textarea" rows="2">' +
+          '<div class="panel-campo iapro-field"><label>Sinónimos (coma)</label><textarea class="ia-pro-ruta-sinonimos ia-textarea iapro-input iapro-textarea" rows="2" placeholder="barato, cuánto cuesta, valor">' +
           esc(syns) +
           "</textarea></div>" +
-          '<div class="panel-campo"><label>Prioridad</label><input type="number" class="ia-pro-ruta-prioridad" min="0" max="100" value="' +
+          '<div class="iapro-field-row">' +
+          '<div class="panel-campo iapro-field iapro-field--half"><label>Prioridad</label><input type="number" class="ia-pro-ruta-prioridad iapro-input" min="0" max="100" value="' +
           (route.priority || 50) +
           '"></div>' +
-          '<div class="panel-campo"><label>Media ID / URL</label><input class="ia-pro-ruta-media" value="' +
+          '<div class="panel-campo iapro-field iapro-field--half"><label>Media ID / URL</label><input class="ia-pro-ruta-media iapro-input" placeholder="ID o URL de imagen/video" value="' +
           esc(route.mediaId || "") +
-          '"></div>' +
-          '<p class="ia-handle-hint">Handle: <code>' +
+          '"></div></div>' +
+          '<p class="ia-handle-hint iapro-handle-hint">Handle conexión: <code>' +
           esc(route.id) +
-          "</code></p></div>"
+          "</code></p></div></div>"
         );
       })
       .join("");
@@ -481,58 +541,82 @@ window.MacBotIAPro = (function () {
     const contenido = document.getElementById("panelNodoContenido");
     if (!contenido) return;
 
+    const panelShell = document.getElementById("panelNodo");
+    if (panelShell) {
+      panelShell.classList.add("panel-nodo--ia-pro");
+    }
+
     contenido.innerHTML =
-      '<div class="ia-pro-panel">' +
-      "<h4>🤖 Agente IA Pro</h4>" +
-      '<p class="ia-panel-desc">Conversa con datos del producto o enruta por caminos.</p>' +
-      '<div class="panel-campo"><label>Nombre del nodo</label><input id="iaProNombreNodo" value="' +
+      '<div class="ia-pro-panel iapro-panel-root">' +
+      '<header class="iapro-panel-hero">' +
+      '<div class="iapro-panel-hero__top">' +
+      '<div class="iapro-panel-hero__titles">' +
+      '<h4 class="iapro-panel-hero__title">Agente IA Pro</h4>' +
+      '<span class="iapro-panel-hero__badge">IA activa</span>' +
+      "</div></div>" +
+      '<p class="ia-panel-desc iapro-panel-hero__desc">Conversación con datos del producto o enruta por caminos inteligentes.</p>' +
+      "</header>" +
+      '<div class="iapro-panel-scroll">' +
+      '<section class="iapro-card iapro-card--general">' +
+      '<h5 class="iapro-card__title">Configuración general</h5>' +
+      '<div class="panel-campo iapro-field"><label>Nombre del nodo</label><input id="iaProNombreNodo" class="iapro-input" placeholder="Agente IA Pro" value="' +
       esc(configActiva.nombreNodo) +
       '"></div>' +
-      '<div class="panel-campo"><label>Score mínimo</label><input id="iaProScoreMinimo" type="number" min="0" max="100" value="' +
+      '<div class="panel-campo iapro-field"><label>Score mínimo caminos</label><input id="iaProScoreMinimo" class="iapro-input" type="number" min="0" max="100" value="' +
       configActiva.scoreMinimo +
-      '"></div>' +
-      "<h5>Producto</h5>" +
-      '<div class="panel-campo"><label>Nombre producto</label><input id="iaProProductName" value="' +
+      '"></div></section>' +
+      '<section class="iapro-card iapro-card--product">' +
+      '<h5 class="iapro-card__title">Datos del producto</h5>' +
+      '<p class="iapro-card__hint">La IA usa estos datos para responder sin inventar información.</p>' +
+      '<div class="iapro-product-grid">' +
+      '<div class="panel-campo iapro-field"><label>Nombre producto</label><input id="iaProProductName" class="iapro-input" placeholder="Ej: Pack 4000 plantillas papercraft" value="' +
       esc(pd.name) +
       '"></div>' +
-      '<div class="panel-campo"><label>Descripción breve</label><textarea id="iaProProductDesc" class="ia-textarea" rows="2">' +
+      '<div class="panel-campo iapro-field"><label>Descripción breve</label><textarea id="iaProProductDesc" class="ia-textarea iapro-input iapro-textarea" rows="2" placeholder="Resumen en 1-2 líneas para la IA">' +
       esc(pd.description) +
       "</textarea></div>" +
-      '<div class="panel-campo"><label>Precio</label><input id="iaProProductPrice" value="' +
+      '<div class="panel-campo iapro-field"><label>Precio</label><input id="iaProProductPrice" class="iapro-input" placeholder="Ej: 29 Bs / $9 USD" value="' +
       esc(pd.price) +
       '"></div>' +
-      '<div class="panel-campo"><label>Qué incluye</label><textarea id="iaProProductIncludes" class="ia-textarea" rows="2">' +
+      '<div class="panel-campo iapro-field"><label>Qué incluye</label><textarea id="iaProProductIncludes" class="ia-textarea iapro-input iapro-textarea" rows="2" placeholder="Lista lo que recibe el cliente">' +
       esc(pd.includes) +
       "</textarea></div>" +
-      '<div class="panel-campo"><label>Bonos</label><textarea id="iaProProductBonuses" class="ia-textarea" rows="2">' +
+      '<div class="panel-campo iapro-field"><label>Bonos</label><textarea id="iaProProductBonuses" class="ia-textarea iapro-input iapro-textarea" rows="2" placeholder="Bonos extra incluidos">' +
       esc(pd.bonuses) +
       "</textarea></div>" +
-      '<div class="panel-campo"><label>Garantía</label><input id="iaProProductGuarantee" value="' +
+      '<div class="panel-campo iapro-field"><label>Garantía</label><input id="iaProProductGuarantee" class="iapro-input" placeholder="Ej: 7 días de garantía" value="' +
       esc(pd.guarantee) +
       '"></div>' +
-      '<div class="panel-campo"><label>Acceso / entrega</label><input id="iaProProductAccess" value="' +
+      '<div class="panel-campo iapro-field"><label>Acceso / entrega</label><input id="iaProProductAccess" class="iapro-input" placeholder="Ej: enlace por WhatsApp al instante" value="' +
       esc(pd.access) +
       '"></div>' +
-      '<div class="panel-campo"><label>Métodos de pago</label><textarea id="iaProProductPayment" class="ia-textarea" rows="2">' +
+      '<div class="panel-campo iapro-field"><label>Métodos de pago</label><textarea id="iaProProductPayment" class="ia-textarea iapro-input iapro-textarea" rows="2" placeholder="QR, depósito, Yape, etc.">' +
       esc(pd.paymentMethods) +
       "</textarea></div>" +
-      '<div class="panel-campo"><label>FAQ extra</label><textarea id="iaProProductFaq" class="ia-textarea" rows="3">' +
+      '<div class="panel-campo iapro-field"><label>FAQ extra</label><textarea id="iaProProductFaq" class="ia-textarea iapro-input iapro-textarea" rows="3" placeholder="Preguntas frecuentes adicionales">' +
       esc(pd.faq) +
-      "</textarea></div>" +
-      '<div class="panel-campo"><label>Tono conversación</label><select id="iaProTone" class="node-select">' +
+      "</textarea></div></div></section>" +
+      '<section class="iapro-card iapro-card--conversation">' +
+      '<h5 class="iapro-card__title">Conversación IA</h5>' +
+      '<div class="panel-campo iapro-field"><label>Tono conversación</label><select id="iaProTone" class="node-select iapro-input iapro-select">' +
       toneOptions(configActiva.tone) +
       "</select></div>" +
-      '<label class="ia-toggle"><input type="checkbox" id="iaProEnabledConversation"' +
+      '<label class="ia-toggle iapro-toggle iapro-toggle--conversation"><input type="checkbox" id="iaProEnabledConversation"' +
       (configActiva.enabledConversation ? " checked" : "") +
-      "> Activar conversación IA</label>" +
-      '<div class="panel-campo"><label>Mensaje fallback</label><textarea id="iaProMensajeFallback" class="ia-textarea" rows="2">' +
+      '><span class="iapro-toggle__track" aria-hidden="true"></span><span class="iapro-toggle__label">Activar conversación IA</span></label>' +
+      '<div class="panel-campo iapro-field"><label>Mensaje fallback</label><textarea id="iaProMensajeFallback" class="ia-textarea iapro-input iapro-textarea" rows="3" placeholder="Mensaje si la IA no entiende al lead">' +
       esc(configActiva.mensajeFallback) +
-      "</textarea></div>" +
-      "<h5>Caminos</h5>" +
-      '<div id="iaProCaminosLista"></div>' +
-      '<button type="button" class="panel-btn" id="iaProAgregarCamino">+ Agregar camino</button>' +
-      '<button type="button" class="panel-btn" id="iaProGuardarPanel">Guardar nodo IA Pro</button>' +
-      "</div>";
+      "</textarea></div></section>" +
+      '<section class="iapro-card iapro-card--routes">' +
+      '<h5 class="iapro-card__title">Caminos inteligentes</h5>' +
+      '<p class="iapro-card__hint">Cada salida detecta intención por texto y sinónimos.</p>' +
+      '<div id="iaProCaminosLista" class="iapro-routes-list"></div>' +
+      '<button type="button" class="panel-btn iapro-btn iapro-btn--add" id="iaProAgregarCamino">+ Agregar camino</button>' +
+      "</section>" +
+      '<section class="iapro-card iapro-card--actions">' +
+      '<h5 class="iapro-card__title">Acciones</h5>' +
+      '<button type="button" class="panel-btn iapro-btn iapro-btn--save" id="iaProGuardarPanel">Guardar nodo IA Pro</button>' +
+      "</section></div></div>";
 
     renderCaminosEditor();
     document.getElementById("iaProAgregarCamino")?.addEventListener("click", function (ev) {
@@ -609,6 +693,7 @@ window.MacBotIAPro = (function () {
     renderVisualTimer = null;
     nodoActivo = null;
     configActiva = crearConfigPorDefecto();
+    document.getElementById("panelNodo")?.classList.remove("panel-nodo--ia-pro");
   }
 
   function getNodoActivo() {
@@ -664,10 +749,13 @@ window.MacBotIAPro = (function () {
       '<button type="button" class="delete-node" onclick="event.stopPropagation(); borrarNodo(\'' +
       id +
       '\')">×</button></div>' +
+      '<span class="ia-pro-status-badge">IA PRO</span>' +
       '<div class="ia-pro-icon-wrap">' +
       IA_PRO_ICON_SVG +
       '</div><h3 class="ia-pro-title">Agente IA Pro</h3></div>' +
-      '<div class="ia-pro-body"><p class="ia-pro-desc-pill ia-pro-desc-pill--empty">Doble click para configurar</p></div></div></div>' +
+      '<div class="ia-pro-body">' +
+      '<p class="ia-pro-subtitle ia-pro-subtitle--muted">Conversación + rutas inteligentes</p>' +
+      '<p class="ia-pro-desc-pill ia-pro-desc-pill--empty">Doble click para configurar</p></div></div></div>' +
       '<textarea class="ia-pro-data" style="display:none;">' +
       json +
       "</textarea>";
