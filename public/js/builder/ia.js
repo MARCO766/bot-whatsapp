@@ -204,9 +204,23 @@ window.MacBotIA = (function () {
   }
 
   const IA_ICON_SVG =
-    '<svg class="ia-icon-svg" viewBox="0 0 24 24" width="36" height="36" aria-hidden="true">' +
-    '<path fill="#ffffff" d="M22.28 9.82a5.98 5.98 0 0 0-.52-4.91 6.05 6.05 0 0 0-6.51-2.9A6.07 6.07 0 0 0 4.98 4.18a5.98 5.98 0 0 0-4.91.52 6.05 6.05 0 0 0-2.9 6.51 5.97 5.97 0 0 0 .52 4.91 6.05 6.05 0 0 0 2.9 6.51 5.98 5.98 0 0 0 4.91.52 6.05 6.05 0 0 0 6.51-2.9 5.98 5.98 0 0 0 .52-4.91 6.05 6.05 0 0 0-2.9-6.51zM12 6.5l1.45 2.79 3.11-.45-2.25 2.19.53 3.11-2.79-1.45-2.79 1.45-.53-3.11-2.25-2.19 3.11.45L12 6.5z"/>' +
-    "</svg>";
+    '<svg class="ia-icon-svg" viewBox="0 0 32 32" width="38" height="38" aria-hidden="true">' +
+    '<defs><linearGradient id="iaIconGradFast" x1="0%" y1="0%" x2="100%" y2="100%">' +
+    '<stop offset="0%" stop-color="#6ee7b7"/><stop offset="45%" stop-color="#22d3ee"/>' +
+    '<stop offset="100%" stop-color="#34d399"/></linearGradient></defs>' +
+    '<circle cx="16" cy="16" r="13" fill="none" stroke="url(#iaIconGradFast)" stroke-width="1.3" opacity="0.9"/>' +
+    '<path fill="url(#iaIconGradFast)" d="M18.5 6.2l-1.6 8.1 5.8 2.5-8.4 11.2v-5.8l-5.8-2.5 8.4-11.2h-5z"/></svg>';
+
+  function ensureBadgeEnCirculoIA(circle) {
+    if (!circle) return;
+    let badge = circle.querySelector(".ia-speed-badge");
+    if (!badge) {
+      badge = document.createElement(TAG_DIV);
+      badge.className = "ia-speed-badge";
+      badge.textContent = "RÁPIDO";
+      circle.insertBefore(badge, circle.firstChild);
+    }
+  }
 
   function ensureEstructuraCircularIA(nodo) {
     nodo.querySelector(".ia-node-left")?.remove();
@@ -216,6 +230,7 @@ window.MacBotIA = (function () {
     if (shell) {
       const circle = shell.querySelector(".ia-circle");
       if (circle) {
+        ensureBadgeEnCirculoIA(circle);
         const portIn = nodo.querySelector(".port.in");
         const actions = nodo.querySelector(".node-actions");
         if (portIn && portIn.parentElement !== circle) circle.insertBefore(portIn, circle.firstChild);
@@ -250,6 +265,7 @@ window.MacBotIA = (function () {
 
     const circle = document.createElement(TAG_DIV);
     circle.className = "ia-circle";
+    ensureBadgeEnCirculoIA(circle);
     if (portIn) circle.appendChild(portIn);
     if (actions) circle.appendChild(actions);
 
@@ -285,6 +301,7 @@ window.MacBotIA = (function () {
     console.log("🎨 Renderizando salidas IA:", activos);
 
     ensureEstructuraCircularIA(nodo);
+    ensureBadgeEnCirculoIA(nodo.querySelector(".ia-circle"));
 
     nodo.querySelector(".ia-routes-branch")?.remove();
     nodo.querySelector(".ia-ports-out")?.remove();
@@ -303,12 +320,14 @@ window.MacBotIA = (function () {
 
     if (!activos.length) {
       body.innerHTML =
+        '<p class="ia-subtitle ia-subtitle--muted">Detección rápida + rutas</p>' +
         '<p class="ia-desc-pill ia-desc-pill--empty">Doble click para configurar</p>';
       return;
     }
 
     nodo.classList.add("ia-node--with-routes");
     body.innerHTML =
+      '<p class="ia-subtitle">Detección rápida + rutas</p>' +
       '<p class="ia-desc-pill">IA responde consultas o avanza por un camino</p>';
 
     const shell = nodo.querySelector(".ia-node-shell");
@@ -503,7 +522,10 @@ window.MacBotIA = (function () {
 
     if (!routes.length) {
       wrap.innerHTML =
-        '<p class="ia-caminos-vacio">No hay caminos todavía. Agrega uno.</p>';
+        '<div class="ia-caminos-vacio-wrap">' +
+        '<p class="ia-caminos-vacio">No hay caminos todavía</p>' +
+        '<span class="ia-caminos-vacio-hint">Agrega un camino para enrutar por intención</span>' +
+        "</div>";
       return;
     }
 
@@ -527,20 +549,20 @@ window.MacBotIA = (function () {
           '<button type="button" class="ia-ruta-del" data-action="del">Eliminar</button>' +
           "</div>" +
           '<div class="panel-campo"><label>Texto del camino</label>' +
-          '<input class="ia-ruta-texto" placeholder="Ej: qr" value="' +
+          '<input class="ia-ruta-texto ia-input" placeholder="Ej: qr" value="' +
           esc(textoCamino(route)) +
           '"></div>' +
           '<div class="panel-campo"><label>Sinónimos (coma)</label>' +
-          '<textarea class="ia-ruta-sinonimos ia-textarea" rows="2">' +
+          '<textarea class="ia-ruta-sinonimos ia-textarea ia-input" rows="2">' +
           esc(syns) +
           "</textarea></div>" +
           '<div class="ia-ruta-meta">' +
           '<div class="panel-campo"><label>Prioridad</label>' +
-          '<input type="number" class="ia-ruta-prioridad" min="0" max="100" value="' +
+          '<input type="number" class="ia-ruta-prioridad ia-input" min="0" max="100" value="' +
           (route.priority || 50) +
           '"></div>' +
           '<div class="panel-campo"><label>Media ID / URL</label>' +
-          '<input class="ia-ruta-media" placeholder="Sin medio" value="' +
+          '<input class="ia-ruta-media ia-input" placeholder="Sin medio" value="' +
           esc(route.mediaId || "") +
           '"><small class="ia-media-hint">' +
           mediaLabel +
@@ -673,49 +695,67 @@ window.MacBotIA = (function () {
     const contenido = document.getElementById("panelNodoContenido");
     if (!contenido) return;
 
+    const panelShell = document.getElementById("panelNodo");
+    if (panelShell) {
+      panelShell.classList.add("panel-nodo--ia");
+    }
+
     contenido.innerHTML =
-      '<div class="ia-panel">' +
-      "<h4>⚡ Agente Rápido</h4>" +
-      '<p class="ia-panel-desc">Router silencioso: no responde ni avanza hasta que el lead escriba.</p>' +
-      '<section class="ia-panel-seccion"><h5>1. Config compartida</h5>' +
-      '<div class="panel-campo"><label>Nombre del nodo</label>' +
-      '<input id="iaNombreNodo" value="' +
+      '<div class="ia-panel ia-panel-premium">' +
+      '<header class="ia-panel-hero">' +
+      '<div class="ia-panel-hero__top">' +
+      '<div class="ia-panel-hero__titles">' +
+      '<h4 class="ia-panel-hero__title">Agente Rápido</h4>' +
+      '<span class="ia-panel-hero__badge">Activo</span>' +
+      "</div></div>" +
+      '<p class="ia-panel-desc ia-panel-hero__desc">Router silencioso: no responde ni avanza hasta que el lead escriba.</p>' +
+      "</header>" +
+      '<div class="ia-panel-scroll">' +
+      '<section class="ia-card ia-card--general">' +
+      '<h5 class="ia-card__title">Configuración general</h5>' +
+      '<p class="ia-card__hint">Modo silencioso: pausa el flujo y espera al lead.</p>' +
+      '<div class="panel-campo ia-field"><label>Nombre del nodo</label>' +
+      '<input id="iaNombreNodo" class="ia-input" value="' +
       esc(configActiva.nombreNodo) +
       '"></div>' +
-      '<div class="panel-campo"><label>Score mínimo (threshold)</label>' +
-      '<input id="iaScoreMinimo" type="number" min="0" max="100" value="' +
+      '<div class="panel-campo ia-field"><label>Score mínimo (threshold)</label>' +
+      '<input id="iaScoreMinimo" class="ia-input" type="number" min="0" max="100" value="' +
       configActiva.scoreMinimo +
       '"></div></section>' +
-      '<section class="ia-panel-seccion"><h5>2. Biblioteca media</h5>' +
-      '<p class="ia-panel-desc">Asigna mediaId por camino (URL o id guardado).</p></section>' +
-      '<section class="ia-panel-seccion"><h5>3. Config del nodo</h5>' +
-      '<p class="ia-panel-desc">Modo silencioso: pausa el flujo y espera al lead.</p></section>' +
-      '<section class="ia-panel-seccion"><h5>4. Caminos de ruteo</h5>' +
+      '<section class="ia-card ia-card--media">' +
+      '<h5 class="ia-card__title">Biblioteca media</h5>' +
+      '<p class="ia-card__hint">Asigna mediaId por camino (URL o id guardado).</p></section>' +
+      '<section class="ia-card ia-card--routes">' +
+      '<h5 class="ia-card__title">Caminos de ruteo</h5>' +
+      '<p class="ia-card__hint">Cada salida detecta intención por texto y sinónimos.</p>' +
       '<div id="iaCaminosLista" class="ia-caminos-lista"></div>' +
       '<button type="button" class="panel-btn ia-btn-add-ruta" id="iaAgregarCamino">+ Agregar camino</button></section>' +
-      '<section class="ia-panel-seccion"><h5>5. Comportamiento</h5>' +
-      '<label class="ia-toggle"><input type="checkbox" id="iaResponderFallback"' +
+      '<section class="ia-card ia-card--behavior">' +
+      '<h5 class="ia-card__title">Comportamiento</h5>' +
+      '<label class="ia-toggle ia-toggle-premium"><input type="checkbox" id="iaResponderFallback"' +
       (configActiva.comportamiento.responderSiNoCoincide ? " checked" : "") +
-      "> Responder si no coincide</label>" +
-      '<div class="panel-campo"><label>Mensaje fallback</label>' +
-      '<textarea id="iaMensajeFallback" class="ia-textarea" rows="3">' +
+      '><span class="ia-toggle__track" aria-hidden="true"></span><span class="ia-toggle__label">Responder si no coincide</span></label>' +
+      '<div class="panel-campo ia-field"><label>Mensaje fallback</label>' +
+      '<textarea id="iaMensajeFallback" class="ia-textarea ia-input" rows="3">' +
       esc(configActiva.comportamiento.mensajeFallback) +
       "</textarea></div>" +
-      '<label class="ia-toggle"><input type="checkbox" id="iaActivarFlujos"' +
+      '<label class="ia-toggle ia-toggle-premium"><input type="checkbox" id="iaActivarFlujos"' +
       (configActiva.comportamiento.activarOtrosFlujos ? " checked" : "") +
-      "> Activar otros flujos (antes del fallback)</label>" +
-      '<label class="ia-toggle"><input type="checkbox" id="iaResponderAudio"' +
+      '><span class="ia-toggle__track" aria-hidden="true"></span><span class="ia-toggle__label">Activar otros flujos (antes del fallback)</span></label>' +
+      '<label class="ia-toggle ia-toggle-premium"><input type="checkbox" id="iaResponderAudio"' +
       (configActiva.comportamiento.responderConAudio ? " checked" : "") +
-      "> Responder con audio (usa transcripción si existe)</label></section>" +
-      '<div class="ia-prueba-block">' +
-      "<label>Prueba interna</label>" +
-      '<input id="iaContextoPrueba" placeholder="Contexto: última pregunta del bot" />' +
-      '<input id="iaMensajePrueba" placeholder="Ej: quiero pagar por qr" />' +
+      '><span class="ia-toggle__track" aria-hidden="true"></span><span class="ia-toggle__label">Responder con audio (usa transcripción si existe)</span></label></section>' +
+      '<section class="ia-card ia-card--test ia-prueba-block">' +
+      '<h5 class="ia-card__title">Prueba interna</h5>' +
+      '<div class="panel-campo ia-field"><label>Contexto</label>' +
+      '<input id="iaContextoPrueba" class="ia-input" placeholder="Contexto: última pregunta del bot" /></div>' +
+      '<div class="panel-campo ia-field"><label>Mensaje de prueba</label>' +
+      '<input id="iaMensajePrueba" class="ia-input" placeholder="Ej: quiero pagar por qr" /></div>' +
       '<button type="button" class="panel-btn ia-btn-prueba" id="iaBtnPrueba">Probar detección</button>' +
-      '<div id="iaResultadoPrueba" class="ia-resultado-prueba"></div></div>' +
+      '<div id="iaResultadoPrueba" class="ia-resultado-prueba"></div></section>' +
       '<p class="ia-vars-hint">Variables: {{intent}} {{score}} {{route}} {{ultimo_mensaje}}</p>' +
-      '<button type="button" class="panel-btn" id="iaGuardarPanel">Guardar nodo IA</button>' +
-      "</div>";
+      '<button type="button" class="panel-btn ia-btn-save" id="iaGuardarPanel">Guardar nodo IA</button>' +
+      "</div></div>";
 
     renderCaminosEditor();
 
@@ -827,6 +867,7 @@ window.MacBotIA = (function () {
     }
     nodoActivo = null;
     configActiva = crearConfigPorDefecto();
+    document.getElementById("panelNodo")?.classList.remove("panel-nodo--ia");
     unlockCanvasBuilder();
   }
 
