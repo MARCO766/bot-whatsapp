@@ -4,10 +4,7 @@
  */
 
 const axios = require("axios");
-const {
-  enviarTextoWhatsApp,
-  registrarMensajeSalienteEnInbox,
-} = require("./whatsappService");
+const { enviarTextoWhatsApp } = require("./whatsappService");
 const { analizarRutaLocal, normalizarConfigRouter } = require("./iaLocalRouter");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -667,7 +664,7 @@ async function generarReply(config, mensajeLead, chatHistory, lastReplies) {
   return local;
 }
 
-/** Mismo guardado/socket que POST /inbox/responder (texto manual). */
+/** Mismo pipeline que IA Pro: envío Meta + guardado en bandeja en un solo paso. */
 async function enviarOpenAIConPipelineManual(numero, reply, usuarioId) {
   const texto = String(reply || "").trim();
   const numeroCanon = String(numero || "").trim();
@@ -675,27 +672,17 @@ async function enviarOpenAIConPipelineManual(numero, reply, usuarioId) {
     usuarioId != null && usuarioId !== "" ? String(usuarioId).trim() : null;
 
   if (!texto || !numeroCanon) return null;
+
   if (!uid) {
-    console.error("⚠️ OpenAI sin usuarioId — no puede pintar bandeja");
-    return null;
+    console.error("⚠️ OpenAI sin usuarioId — envío sin bandeja");
+    const meta = await enviarTextoWhatsApp(numeroCanon, texto, {
+      _soloEnvioMeta: true,
+    });
+    return meta?.messages?.[0]?.id || null;
   }
 
-  const meta = await enviarTextoWhatsApp(numeroCanon, texto, {
-    usuarioId: uid,
-    _soloEnvioMeta: true,
-  });
-  if (!meta) return null;
-
-  const wamid = meta?.messages?.[0]?.id || null;
-  await registrarMensajeSalienteEnInbox({
-    usuarioId: uid,
-    numero: numeroCanon,
-    texto,
-    wamid,
-    tipo: "text",
-  });
-
-  return wamid;
+  const row = await enviarTextoWhatsApp(numeroCanon, texto, { usuarioId: uid });
+  return row?.whatsapp_message_id || null;
 }
 
 async function resolverAnalisisOpenAI(config, mensajeLead, chatHistory, memoria, lastReplies) {
