@@ -5,7 +5,10 @@
 
 const axios = require("axios");
 const { enviarTextoWhatsApp } = require("./whatsappService");
-const { analizarRutaLocal, normalizarConfigRouter } = require("./iaLocalRouter");
+const {
+  analizarCaminosOpenAI,
+  normalizarCaminosOpenAI,
+} = require("./openaiCaminoMatcher");
 const {
   sanitizarUnicodeRoto,
   logEmojiDebug,
@@ -121,7 +124,7 @@ function productDataEfectivo(config) {
 
 function normalizarConfigOpenAI(cfg) {
   const base = { ...crearConfigOpenAIPorDefecto(), ...(cfg || {}) };
-  const router = normalizarConfigRouter(base);
+  const router = normalizarCaminosOpenAI(base);
   const temp = parseFloat(base.temperature);
   const model = String(base.model || process.env.OPENAI_MODEL || "gpt-4o-mini").trim();
   const openaiPrompt = resolverOpenaiPrompt(base);
@@ -863,13 +866,10 @@ async function enviarOpenAIConPipelineManual(numero, reply, usuarioId) {
 }
 
 async function resolverAnalisisOpenAI(config, mensajeLead, chatHistory, memoria, lastReplies) {
-  const analisis = analizarRutaLocal(config, mensajeLead, memoria);
+  const analisis = analizarCaminosOpenAI(config, mensajeLead);
 
   if (analisis.matched && analisis.routeId) {
-    console.log("[IA PATH DEBUG] mensaje:", mensajeLead);
-    console.log("[IA PATH DEBUG] camino detectado:", analisis.routeId);
-    console.log("[IA PATH DEBUG] score:", analisis.score);
-    console.log("➡️ OPENAI ruta detectada", analisis.routeId);
+    console.log("➡️ OPENAI ruta detectada (dinámica):", analisis.routeId);
     return {
       ok: true,
       action: "route",
@@ -877,8 +877,13 @@ async function resolverAnalisisOpenAI(config, mensajeLead, chatHistory, memoria,
       score: analisis.score,
       routeId: analisis.routeId,
       reply: "",
-      source: "openai-router",
+      source: "openai-camino-dinamico",
+      openaiPathRanking: analisis.ranking,
     };
+  }
+
+  if (analisis.empate) {
+    console.log("[OPENAI PATH DEBUG] empate entre caminos — sigue conversación GPT");
   }
 
   const generado = await generarReply(config, mensajeLead, chatHistory, lastReplies);
@@ -950,6 +955,11 @@ async function ejecutarNodoOpenAIAgent(nodo, contexto, opts = {}) {
     contexto.score = resultado.score ?? "";
 
     if (resultado.action === "route" && resultado.routeId) {
+      console.log(
+        "[OPENAI PATH DEBUG] activando camino — handle:",
+        resultado.routeId,
+        "| sin respuesta GPT"
+      );
       return {
         ...contexto,
         openaiAgentPausar: false,
@@ -957,6 +967,7 @@ async function ejecutarNodoOpenAIAgent(nodo, contexto, opts = {}) {
         openaiAgentRouteId: resultado.routeId,
         iaRouteId: resultado.routeId,
         route: resultado.routeId,
+        openaiAgentReply: false,
         openaiAgentEjecutada: true,
         chat_history: chatHistory,
         intent: resultado.intent,
