@@ -27,6 +27,39 @@ const CONTEXT_HINTS = {
   tigo: ["tigo", "billetera", "wallet"],
 };
 
+/** Sinónimos extra por tipo de camino (pago / QR / depósito). */
+const SINONIMOS_CAMINO_AUTO = {
+  qr: [
+    "qr",
+    "codigo qr",
+    "quiero qr",
+    "mandame qr",
+    "manda qr",
+    "pagar qr",
+    "pago qr",
+    "escanear qr",
+    "cuadrito",
+    "cuadro",
+  ],
+  deposito: [
+    "deposito",
+    "depositar",
+    "quiero deposito",
+    "hacer deposito",
+    "numero de cuenta",
+    "cuenta bancaria",
+    "datos bancarios",
+    "banco",
+  ],
+  transferencia: [
+    "transferencia",
+    "transferir",
+    "quiero transferir",
+    "numero de cuenta",
+  ],
+  pago: ["pago", "pagar", "quiero pagar", "como pago", "formas de pago", "metodo de pago"],
+};
+
 function normalizeText(text) {
   return String(text || "")
     .toLowerCase()
@@ -46,6 +79,25 @@ function corregirTexto(textoNorm) {
     .join(" ");
 }
 
+function escapeRegExp(str) {
+  return String(str).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function sinonimosAutomaticosCamino(route) {
+  const extras = [];
+  const nombre = normalizeText(route.nombre || route.text || route.name || "");
+  const id = normalizeText(route.id || "");
+  const blob = `${nombre} ${id}`;
+
+  Object.keys(SINONIMOS_CAMINO_AUTO).forEach((clave) => {
+    if (blob.includes(clave)) {
+      extras.push(...SINONIMOS_CAMINO_AUTO[clave]);
+    }
+  });
+
+  return extras;
+}
+
 function tokensDeRuta(route) {
   const lista = [];
   const nombre = normalizeText(route.nombre || route.text || route.name || "");
@@ -55,21 +107,37 @@ function tokensDeRuta(route) {
     const t = normalizeText(s);
     if (t) lista.push(t);
   });
+  sinonimosAutomaticosCamino(route).forEach((s) => {
+    const t = normalizeText(s);
+    if (t) lista.push(t);
+  });
   return [...new Set(lista)];
+}
+
+function textoContieneFrase(texto, frase) {
+  if (!frase || !texto) return false;
+  if (texto === frase) return true;
+  if (frase.includes(" ")) return texto.includes(frase);
+  const re = new RegExp(`(^|\\s)${escapeRegExp(frase)}(\\s|$)`);
+  return re.test(texto);
 }
 
 function scoreFraseEnTexto(texto, frase) {
   if (!frase || !texto) return 0;
   if (texto === frase) return 50;
+  if (textoContieneFrase(texto, frase)) {
+    if (frase.includes(" ")) return 45;
+    return 42;
+  }
   if (texto.includes(frase)) {
-    if (frase.includes(" ")) return 40;
-    return 30;
+    if (frase.includes(" ")) return 38;
+    return 35;
   }
   const palabras = frase.split(" ").filter(Boolean);
   if (palabras.length > 1) {
-    const hits = palabras.filter((p) => texto.includes(p)).length;
-    if (hits === palabras.length) return 25;
-    if (hits > 0) return Math.round((hits / palabras.length) * 18);
+    const hits = palabras.filter((p) => textoContieneFrase(texto, p) || texto.includes(p)).length;
+    if (hits === palabras.length) return 32;
+    if (hits > 0) return Math.round((hits / palabras.length) * 22);
   }
   return 0;
 }
@@ -173,6 +241,17 @@ function analizarRutaLocal(config, mensaje, memoria = {}) {
   console.log("🎯 SCORE:", ranking);
 
   const winner = ranking[0] && ranking[0].score >= cfg.scoreMinimo ? ranking[0] : null;
+
+  console.log("[IA PATH MATCH]", {
+    mensaje: raw,
+    textoCorregido: corregido,
+    caminoDetectado: winner?.id || null,
+    nombreCamino: winner?.nombre || null,
+    score: winner?.score ?? ranking[0]?.score ?? 0,
+    scoreMinimo: cfg.scoreMinimo,
+    matched: !!winner,
+    ranking: ranking.slice(0, 5),
+  });
 
   if (winner) {
     console.log("🏆 GANADOR:", winner);

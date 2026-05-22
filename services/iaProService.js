@@ -499,9 +499,34 @@ function generarReplyFallbackLocal(config, mensaje, chatHistory, lastReplies) {
   return generarReplyPorIntent(consultaIntent, config, mensaje, chatHistory || [], lastReplies);
 }
 
-async function resolverAnalisisPro(config, mensajeLead, chatHistory, lastReplies) {
+async function resolverAnalisisPro(
+  config,
+  mensajeLead,
+  chatHistory,
+  lastReplies,
+  memoria = {}
+) {
   const routes = buildRoutesFromConfig(config);
   const threshold = config.scoreMinimo || 40;
+
+  const analisis = analizarRutaLocal(config, mensajeLead, memoria);
+  if (analisis.matched && analisis.routeId) {
+    console.log("[IA PATH MATCH]", {
+      mensaje: mensajeLead,
+      caminoDetectado: analisis.routeId,
+      score: analisis.score,
+      fuente: "js-router-priority",
+    });
+    return {
+      ok: true,
+      action: "route",
+      intent: analisis.intent,
+      score: analisis.score,
+      routeId: analisis.routeId,
+      reply: "",
+      source: "js-router",
+    };
+  }
 
   if (usePythonAi() && routes.length) {
     try {
@@ -516,23 +541,19 @@ async function resolverAnalisisPro(config, mensajeLead, chatHistory, lastReplies
         fallbackMessage: config.mensajeFallback,
         enabledConversation: config.enabledConversation,
       });
-      return mapPythonProToResult(py);
+      const pyResult = mapPythonProToResult(py);
+      if (pyResult.action === "route" && pyResult.routeId) {
+        console.log("[IA PATH MATCH]", {
+          mensaje: mensajeLead,
+          caminoDetectado: pyResult.routeId,
+          score: pyResult.score,
+          fuente: "python-pro",
+        });
+      }
+      return pyResult;
     } catch (err) {
       console.log("🐍 Python Pro falló, fallback JS:", err.message);
     }
-  }
-
-  const analisis = analizarRutaLocal(config, mensajeLead, {});
-  if (analisis.matched && analisis.routeId) {
-    return {
-      ok: true,
-      action: "route",
-      intent: analisis.intent,
-      score: analisis.score,
-      routeId: analisis.routeId,
-      reply: "",
-      source: "js-router",
-    };
   }
 
   if (!config.enabledConversation) {
@@ -589,7 +610,21 @@ async function ejecutarNodoIAPro(nodo, contexto, opts = {}) {
   }
 
   const lastReplies = getLastReplies(usuarioId, numero);
-  const resultado = await resolverAnalisisPro(config, mensajeLead, chatHistory, lastReplies);
+  const memoria = {
+    ultimaPregunta:
+      contexto.ultimaSalidaBot ||
+      contexto.ultimaRespuestaIA ||
+      contexto.ultimo_mensaje_bot ||
+      "",
+    ultimoMensajeBot: contexto.ultimaRespuestaIA || "",
+  };
+  const resultado = await resolverAnalisisPro(
+    config,
+    mensajeLead,
+    chatHistory,
+    lastReplies,
+    memoria
+  );
 
   contexto.intent = resultado.intent || "";
   contexto.score = resultado.score ?? "";
