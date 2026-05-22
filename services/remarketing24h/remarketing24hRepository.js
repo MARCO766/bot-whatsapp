@@ -77,11 +77,52 @@ async function marcarPendienteDisparo(id) {
   });
 }
 
+async function listarPendientesDisparo(limite = 40) {
+  const response = await axios.get(
+    `${SUPABASE_URL}/rest/v1/remarketing_global_24h?estado=eq.${ESTADOS_RM24H.PENDIENTE_DISPARO}` +
+      `&activo=eq.true&order=expira_en.asc&limit=${limite}&select=*`,
+    { headers: headers() }
+  );
+  return response.data || [];
+}
+
+/** Reserva atómica pendiente_disparo → procesando (evita duplicados). */
+async function reservarParaEnvio(id) {
+  const response = await axios.patch(
+    `${SUPABASE_URL}/rest/v1/remarketing_global_24h?id=eq.${id}&estado=eq.${ESTADOS_RM24H.PENDIENTE_DISPARO}`,
+    {
+      estado: ESTADOS_RM24H.PROCESANDO,
+      actualizado_en: nowUtc(),
+    },
+    { headers: headers({ Prefer: "return=representation" }) }
+  );
+  return (response.data || [])[0] || null;
+}
+
+async function listarReinicioPorCliente(usuario_id, cliente_numero) {
+  const estados = [
+    ESTADOS_RM24H.ACTIVO,
+    ESTADOS_RM24H.PENDIENTE_DISPARO,
+    ESTADOS_RM24H.PROCESANDO,
+  ].join(",");
+
+  const response = await axios.get(
+    `${SUPABASE_URL}/rest/v1/remarketing_global_24h?usuario_id=eq.${usuario_id}` +
+      `&cliente_numero=eq.${encodeURIComponent(cliente_numero)}` +
+      `&estado=in.(${estados})&activo=eq.true&select=*`,
+    { headers: headers() }
+  );
+  return response.data || [];
+}
+
 module.exports = {
   buscarAbierto,
   insertar,
   actualizarPorId,
   listarActivosPorCliente,
+  listarReinicioPorCliente,
   listarVencidos,
   marcarPendienteDisparo,
+  listarPendientesDisparo,
+  reservarParaEnvio,
 };

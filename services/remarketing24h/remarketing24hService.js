@@ -2,8 +2,10 @@ const {
   ESTADOS_RM24H,
   MS_INACTIVIDAD,
   HORAS_INACTIVIDAD,
+  ESTADOS_REINICIO_RESPUESTA,
 } = require("./constants");
 const repo = require("./remarketing24hRepository");
+const { procesarPendientesDisparo } = require("./executeRemarketing24h");
 const { nowUtc } = require("../seguimiento/timestamps");
 
 function calcularExpiraEn() {
@@ -100,11 +102,11 @@ async function resetearRemarketing24h({
     });
     if (una) filas = [una];
   } else {
-    filas = await repo.listarActivosPorCliente(usuario_id, cliente_numero);
+    filas = await repo.listarReinicioPorCliente(usuario_id, cliente_numero);
   }
 
   for (const fila of filas) {
-    if (fila.estado !== ESTADOS_RM24H.ACTIVO) continue;
+    if (!ESTADOS_REINICIO_RESPUESTA.includes(fila.estado)) continue;
 
     const resets = (Number(fila.contador_resets) || 0) + 1;
     const actualizado = await repo.actualizarPorId(fila.id, {
@@ -182,9 +184,9 @@ async function listarVencidos() {
   return repo.listarVencidos();
 }
 
-async function procesarVencidosFase1() {
+async function marcarVencidosComoPendienteDisparo() {
   const vencidos = await listarVencidos();
-  const resultado = [];
+  const marcados = [];
 
   for (const fila of vencidos) {
     await repo.marcarPendienteDisparo(fila.id);
@@ -206,10 +208,22 @@ async function procesarVencidosFase1() {
       estado_nuevo: ESTADOS_RM24H.PENDIENTE_DISPARO,
     });
 
-    resultado.push(fila);
+    marcados.push(fila);
   }
 
-  return resultado;
+  return marcados;
+}
+
+/** Ciclo worker Fase 2: vencer contadores → enviar pendiente_disparo */
+async function procesarRemarketing24hWorker() {
+  const vencidos = await marcarVencidosComoPendienteDisparo();
+  const disparos = await procesarPendientesDisparo();
+
+  return {
+    vencidos: vencidos.length,
+    pendientesProcesados: disparos.procesados,
+    enviados: disparos.enviados,
+  };
 }
 
 module.exports = {
@@ -217,6 +231,7 @@ module.exports = {
   resetearRemarketing24h,
   cancelarRemarketing24h,
   listarVencidos,
-  procesarVencidosFase1,
+  marcarVencidosComoPendienteDisparo,
+  procesarRemarketing24hWorker,
   HORAS_INACTIVIDAD,
 };

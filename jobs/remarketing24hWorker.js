@@ -1,4 +1,4 @@
-const { procesarVencidosFase1 } = require("../services/remarketing24h/remarketing24hService");
+const { procesarRemarketing24hWorker } = require("../services/remarketing24h/remarketing24hService");
 
 let workerIniciado = false;
 let procesando = false;
@@ -18,9 +18,9 @@ function startRemarketing24hWorker() {
     procesando = true;
 
     try {
-      const vencidos = await procesarVencidosFase1();
-      if (vencidos.length > 0) {
-        console.log("🔥 Worker RM24H:", vencidos.length, "contador(es) vencido(s)");
+      const resultado = await procesarRemarketing24hWorker();
+      if (resultado.vencidos > 0 || resultado.enviados > 0) {
+        console.log("🔥 Worker RM24H:", resultado);
       }
     } catch (error) {
       console.log(
@@ -32,7 +32,7 @@ function startRemarketing24hWorker() {
     }
   }, intervaloMs);
 
-  console.log("🔥 Worker Remarketing Global 24h activo cada", intervaloMs, "ms (Fase 1: solo logs)");
+  console.log("🔥 Worker Remarketing Global 24h activo cada", intervaloMs, "ms (Fase 2: envío WA)");
 }
 
 module.exports = {

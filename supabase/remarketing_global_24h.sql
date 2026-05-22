@@ -26,13 +26,24 @@ create table if not exists public.remarketing_global_24h (
   disparado_en timestamptz null,
   cancelado_en timestamptz null,
   motivo_cancelacion text null,
+  intentos int not null default 0,
+  ultimo_disparo_en timestamptz null,
   constraint remarketing_global_24h_estado_check check (
-    estado in ('activo', 'pendiente_disparo', 'disparado', 'cancelado', 'convertido')
+    estado in (
+      'activo',
+      'pendiente_disparo',
+      'procesando',
+      'disparado',
+      'cancelado',
+      'convertido',
+      'expirado_ventana',
+      'cerrado_sin_respuesta'
+    )
   )
 );
 
 comment on table public.remarketing_global_24h is
-  'Contador global de remarketing por lead/flujo (ventana 23h, Fase 1 sin envío WA).';
+  'Contador global de remarketing por lead/flujo (ventana 23h WhatsApp Cloud API).';
 
 create index if not exists idx_rm24h_usuario_id
   on public.remarketing_global_24h (usuario_id);
@@ -52,7 +63,11 @@ create index if not exists idx_rm24h_expira_en
 -- Un solo contador activo/pendiente por usuario + cliente + flujo
 create unique index if not exists idx_rm24h_unique_activo_pendiente
   on public.remarketing_global_24h (usuario_id, cliente_numero, flujo_id)
-  where estado in ('activo', 'pendiente_disparo');
+  where estado in ('activo', 'pendiente_disparo', 'procesando');
+
+create index if not exists idx_rm24h_pendiente_disparo
+  on public.remarketing_global_24h (estado, activo)
+  where estado = 'pendiente_disparo' and activo = true;
 
 create index if not exists idx_rm24h_vencidos
   on public.remarketing_global_24h (estado, activo, expira_en)
