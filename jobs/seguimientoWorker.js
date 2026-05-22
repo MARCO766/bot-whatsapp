@@ -4,7 +4,11 @@ let workerIniciado = false;
 let procesando = false;
 
 function startSeguimientoWorker(app) {
-  if (workerIniciado) return;
+  if (global.__macbotSeguimientoWorkerIniciado || workerIniciado) {
+    console.log("⏱️ Worker de seguimientos ya activo — no se duplica");
+    return;
+  }
+  global.__macbotSeguimientoWorkerIniciado = true;
   workerIniciado = true;
 
   const intervaloMs = parseInt(process.env.SEGUIMIENTO_POLL_MS || "15000", 10);

@@ -8,6 +8,11 @@ const {
   actualizarEstado,
   cancelarCampana,
   clienteRespondioDespues,
+  buildClaveDedupPaso,
+  existePasoEnviadoOProcesando,
+  esUnicoProcesandoEnClave,
+  cancelarPendientesDuplicadosClave,
+  reservarPasoParaEnvio,
 } = require("./seguimientoRepository");
 const { ESTADOS_SEGUIMIENTO } = require("./constants");
 const rt = require("../realtimeService");
@@ -94,6 +99,82 @@ async function enviarMensajeSeguimiento(item) {
   throw new Error("Tipo de mensaje no soportado: " + tipo);
 }
 
+async function intentarReservarYEnviarPaso(item, io) {
+  const clave = buildClaveDedupPaso(item);
+  console.log("[SEGUIMIENTO DEBUG] paso candidato:", {
+    id: item.id,
+    clave,
+    paso_index: item.paso_index,
+    cliente: item.cliente_numero,
+  });
+
+  const duplicado = await existePasoEnviadoOProcesando(item, item.id);
+  if (duplicado) {
+    console.log("[SEGUIMIENTO DEBUG] ya enviado, saltando:", {
+      id: item.id,
+      clave,
+      existente_id: duplicado.id,
+      existente_estado: duplicado.estado,
+    });
+
+    if (duplicado.estado === ESTADOS_SEGUIMIENTO.ENVIADO) {
+      await actualizarEstado(item.id, ESTADOS_SEGUIMIENTO.CANCELADO, {
+        error_detalle: "Duplicado: paso ya enviado (clave lógica)",
+      });
+    }
+
+    return { ok: false, motivo: "duplicado" };
+  }
+
+  const reservado = await reservarPasoParaEnvio(item.id);
+  if (!reservado) {
+    console.log("[SEGUIMIENTO DEBUG] ya enviado, saltando:", {
+      id: item.id,
+      clave,
+      motivo: "no se pudo reservar (otro worker o estado distinto de pendiente)",
+    });
+    return { ok: false, motivo: "no_reservado" };
+  }
+
+  console.log("[SEGUIMIENTO DEBUG] marcado procesando:", {
+    id: reservado.id,
+    clave,
+  });
+
+  await cancelarPendientesDuplicadosClave(reservado, reservado.id);
+
+  if (!(await esUnicoProcesandoEnClave(reservado))) {
+    console.log("[SEGUIMIENTO DEBUG] ya enviado, saltando:", {
+      id: reservado.id,
+      clave,
+      motivo: "otra fila en procesando con la misma clave lógica",
+    });
+    await actualizarEstado(reservado.id, ESTADOS_SEGUIMIENTO.CANCELADO, {
+      error_detalle: "Duplicado: otro paso en procesando (carrera)",
+    });
+    return { ok: false, motivo: "carrera_procesando" };
+  }
+
+  try {
+    await enviarMensajeSeguimiento(reservado);
+    await actualizarEstado(reservado.id, ESTADOS_SEGUIMIENTO.ENVIADO);
+    emitirEstadoSeguimiento(io, reservado, ESTADOS_SEGUIMIENTO.ENVIADO);
+    console.log("[SEGUIMIENTO DEBUG] enviado OK:", {
+      id: reservado.id,
+      clave,
+      paso_index: reservado.paso_index,
+    });
+    return { ok: true };
+  } catch (error) {
+    const detalle = error.message || "Error enviando seguimiento";
+    await actualizarEstado(reservado.id, ESTADOS_SEGUIMIENTO.CANCELADO, {
+      error_detalle: detalle,
+    });
+    emitirEstadoSeguimiento(io, reservado, ESTADOS_SEGUIMIENTO.CANCELADO);
+    return { ok: false, motivo: detalle };
+  }
+}
+
 async function procesarSeguimientoItem(item, io) {
   if (item.solo_si_no_respondio) {
     const respondio = await clienteRespondioDespues(
@@ -120,19 +201,7 @@ async function procesarSeguimientoItem(item, io) {
     }
   }
 
-  try {
-    await enviarMensajeSeguimiento(item);
-    await actualizarEstado(item.id, ESTADOS_SEGUIMIENTO.ENVIADO);
-    emitirEstadoSeguimiento(io, item, ESTADOS_SEGUIMIENTO.ENVIADO);
-    return { ok: true };
-  } catch (error) {
-    const detalle = error.message || "Error enviando seguimiento";
-    await actualizarEstado(item.id, ESTADOS_SEGUIMIENTO.CANCELADO, {
-      error_detalle: detalle,
-    });
-    emitirEstadoSeguimiento(io, item, ESTADOS_SEGUIMIENTO.CANCELADO);
-    return { ok: false, motivo: detalle };
-  }
+  return intentarReservarYEnviarPaso(item, io);
 }
 
 async function procesarSeguimientosVencidos(io) {

@@ -15,6 +15,7 @@
 do $$ begin
   create type public.seguimiento_estado as enum (
     'pendiente',
+    'procesando',
     'enviado',
     'cancelado',
     'respondido'
@@ -84,7 +85,7 @@ create table if not exists public.seguimientos_programados (
   -- Restricciones
   constraint seguimientos_paso_index_nonneg check (paso_index >= 0),
   constraint seguimientos_estado_valido check (
-    estado in ('pendiente', 'enviado', 'cancelado', 'respondido')
+    estado in ('pendiente', 'procesando', 'enviado', 'cancelado', 'respondido')
   ),
   constraint seguimientos_mensaje_tipo_valido check (
     mensaje_tipo in ('texto', 'imagen', 'audio', 'pdf')
@@ -110,7 +111,7 @@ comment on column public.seguimientos_programados.mensaje_payload is
   'JSON: { tipo, texto, url, caption } según mensaje_tipo.';
 
 comment on column public.seguimientos_programados.estado is
-  'pendiente | enviado | cancelado | respondido';
+  'pendiente | procesando | enviado | cancelado | respondido';
 
 -- -----------------------------------------------------------------------------
 -- 3) Relaciones (foreign keys) — opcionales si las tablas padre existen

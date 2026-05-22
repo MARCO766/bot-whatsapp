@@ -1,5 +1,6 @@
 const ESTADOS_SEGUIMIENTO = {
   PENDIENTE: "pendiente",
+  PROCESANDO: "procesando",
   ENVIADO: "enviado",
   CANCELADO: "cancelado",
   RESPONDIDO: "respondido",

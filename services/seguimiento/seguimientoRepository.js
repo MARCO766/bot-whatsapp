@@ -40,6 +40,96 @@ async function insertarProgramados(rows) {
   }
 }
 
+function buildClaveDedupPaso(item) {
+  return [
+    item.usuario_id || "",
+    item.cliente_numero || "",
+    item.flujo_id || "",
+    item.nodo_id || "",
+    String(item.paso_index ?? ""),
+  ].join("|");
+}
+
+function filtroEqCampo(campo, valor) {
+  if (valor === null || valor === undefined || valor === "") {
+    return `${campo}=is.null`;
+  }
+  return `${campo}=eq.${encodeURIComponent(valor)}`;
+}
+
+async function existePasoEnviadoOProcesando(item, excludeId = null) {
+  const estados = [
+    ESTADOS_SEGUIMIENTO.ENVIADO,
+    ESTADOS_SEGUIMIENTO.PROCESANDO,
+  ].join(",");
+
+  let url =
+    `${SUPABASE_URL}/rest/v1/seguimientos_programados?estado=in.(${estados})` +
+    `&${filtroEqCampo("usuario_id", item.usuario_id)}` +
+    `&cliente_numero=eq.${encodeURIComponent(item.cliente_numero)}` +
+    `&${filtroEqCampo("flujo_id", item.flujo_id)}` +
+    `&nodo_id=eq.${encodeURIComponent(item.nodo_id)}` +
+    `&paso_index=eq.${item.paso_index}` +
+    "&select=id,estado&limit=1";
+
+  if (excludeId) {
+    url += `&id=neq.${excludeId}`;
+  }
+
+  const response = await axios.get(url, { headers: headers() });
+  return (response.data || [])[0] || null;
+}
+
+function filtrosClavePaso(item) {
+  return (
+    `${filtroEqCampo("usuario_id", item.usuario_id)}` +
+    `&cliente_numero=eq.${encodeURIComponent(item.cliente_numero)}` +
+    `&${filtroEqCampo("flujo_id", item.flujo_id)}` +
+    `&nodo_id=eq.${encodeURIComponent(item.nodo_id)}` +
+    `&paso_index=eq.${item.paso_index}`
+  );
+}
+
+/** Tras reservar: solo una fila en "procesando" por clave debe enviar (evita carrera entre 2 pendientes). */
+async function esUnicoProcesandoEnClave(item) {
+  const response = await axios.get(
+    `${SUPABASE_URL}/rest/v1/seguimientos_programados?estado=eq.${ESTADOS_SEGUIMIENTO.PROCESANDO}&${filtrosClavePaso(item)}&select=id&order=id.asc&limit=1`,
+    { headers: headers() }
+  );
+  const primero = (response.data || [])[0];
+  return primero?.id === item.id;
+}
+
+async function cancelarPendientesDuplicadosClave(item, exceptId) {
+  const url =
+    `${SUPABASE_URL}/rest/v1/seguimientos_programados?estado=eq.${ESTADOS_SEGUIMIENTO.PENDIENTE}&${filtrosClavePaso(item)}&id=neq.${exceptId}`;
+
+  await axios.patch(
+    url,
+    {
+      estado: ESTADOS_SEGUIMIENTO.CANCELADO,
+      cancelado_en: nowUtc(),
+      actualizado_en: nowUtc(),
+      error_detalle: "Duplicado: paso ya reservado para envío",
+    },
+    { headers: headers({ Prefer: "return=minimal" }) }
+  );
+}
+
+/** Reserva atómica pendiente → procesando. Devuelve la fila solo si el PATCH afectó 1 registro. */
+async function reservarPasoParaEnvio(id) {
+  const response = await axios.patch(
+    `${SUPABASE_URL}/rest/v1/seguimientos_programados?id=eq.${id}&estado=eq.${ESTADOS_SEGUIMIENTO.PENDIENTE}`,
+    {
+      estado: ESTADOS_SEGUIMIENTO.PROCESANDO,
+      actualizado_en: nowUtc(),
+    },
+    { headers: headers({ Prefer: "return=representation" }) }
+  );
+
+  return (response.data || [])[0] || null;
+}
+
 async function obtenerPendientesVencidos(limite = 40) {
   const ahoraEncoded = encodeTimestampFilter(new Date());
 
@@ -81,7 +171,7 @@ async function cancelarCampana(campanaId, estado, motivo) {
     estado === ESTADOS_SEGUIMIENTO.RESPONDIDO ? "respondido_en" : "cancelado_en";
 
   await axios.patch(
-    `${SUPABASE_URL}/rest/v1/seguimientos_programados?campana_id=eq.${campanaId}&estado=eq.${ESTADOS_SEGUIMIENTO.PENDIENTE}`,
+    `${SUPABASE_URL}/rest/v1/seguimientos_programados?campana_id=eq.${campanaId}&estado=in.(${ESTADOS_SEGUIMIENTO.PENDIENTE},${ESTADOS_SEGUIMIENTO.PROCESANDO})`,
     {
       estado,
       actualizado_en: ahora,
@@ -98,7 +188,7 @@ async function cancelarPendientesCliente(numero, usuarioId, estado, motivo) {
     estado === ESTADOS_SEGUIMIENTO.RESPONDIDO ? "respondido_en" : "cancelado_en";
 
   let url =
-    `${SUPABASE_URL}/rest/v1/seguimientos_programados?cliente_numero=eq.${numero}&estado=eq.${ESTADOS_SEGUIMIENTO.PENDIENTE}&detener_si_responde=eq.true`;
+    `${SUPABASE_URL}/rest/v1/seguimientos_programados?cliente_numero=eq.${numero}&estado=in.(${ESTADOS_SEGUIMIENTO.PENDIENTE},${ESTADOS_SEGUIMIENTO.PROCESANDO})&detener_si_responde=eq.true`;
 
   if (usuarioId) {
     url += `&usuario_id=eq.${usuarioId}`;
@@ -152,6 +242,11 @@ async function listarPorNodo(flujoId, nodoId, usuarioId, limite = 30) {
 
 module.exports = {
   insertarProgramados,
+  buildClaveDedupPaso,
+  existePasoEnviadoOProcesando,
+  esUnicoProcesandoEnClave,
+  cancelarPendientesDuplicadosClave,
+  reservarPasoParaEnvio,
   obtenerPendientesVencidos,
   actualizarEstado,
   cancelarCampana,
