@@ -368,7 +368,7 @@ window.MacBotOpenAIAgent = (function () {
     const routes = obtenerRoutes(configActiva);
     if (!routes.length) {
       wrap.innerHTML =
-        '<p class="openai-agent-caminos-vacio">No hay caminos. Agrega uno.</p>';
+        '<p class="openai-agent-caminos-vacio oai-routes-empty">No hay caminos. Agrega uno.</p>';
       return;
     }
     wrap.innerHTML = routes
@@ -376,30 +376,42 @@ window.MacBotOpenAIAgent = (function () {
         const syns = Array.isArray(route.synonyms)
           ? route.synonyms.join(", ")
           : "";
+        const label = textoCamino(route) || "Sin nombre";
         return (
-          '<div class="openai-agent-ruta-row" data-route-id="' +
+          '<div class="openai-agent-ruta-row oai-route-card" data-route-id="' +
           esc(route.id) +
           '">' +
-          '<div class="openai-agent-ruta-head"><span>Ruta ' +
+          '<div class="openai-agent-ruta-head oai-route-card__head">' +
+          '<div class="oai-route-card__title">' +
+          '<span class="oai-route-badge">Ruta ' +
           (index + 1) +
-          '</span><label><input type="checkbox" class="openai-agent-ruta-enabled"' +
+          "</span>" +
+          '<span class="oai-route-name-preview">' +
+          esc(label) +
+          "</span></div>" +
+          '<div class="oai-route-card__toolbar">' +
+          '<label class="oai-toggle"><input type="checkbox" class="openai-agent-ruta-enabled"' +
           (route.enabled !== false ? " checked" : "") +
-          '> Activo</label><button type="button" class="openai-agent-ruta-del">Eliminar</button></div>' +
-          '<div class="panel-campo"><label>Texto del camino</label><input class="openai-agent-ruta-texto" value="' +
+          '><span class="oai-toggle__track" aria-hidden="true"></span><span class="oai-toggle__label">Activo</span></label>' +
+          '<button type="button" class="openai-agent-ruta-del oai-btn oai-btn--danger oai-btn--sm">Eliminar</button>' +
+          "</div></div>" +
+          '<div class="oai-route-card__body">' +
+          '<div class="panel-campo oai-field"><label>Texto del camino</label><input class="openai-agent-ruta-texto oai-input" value="' +
           esc(textoCamino(route)) +
           '"></div>' +
-          '<div class="panel-campo"><label>Sinónimos (coma)</label><textarea class="openai-agent-ruta-sinonimos ia-textarea" rows="2">' +
+          '<div class="panel-campo oai-field"><label>Sinónimos (coma)</label><textarea class="openai-agent-ruta-sinonimos ia-textarea oai-input oai-textarea" rows="2">' +
           esc(syns) +
           "</textarea></div>" +
-          '<div class="panel-campo"><label>Prioridad</label><input type="number" class="openai-agent-ruta-prioridad" min="0" max="100" value="' +
+          '<div class="oai-field-row">' +
+          '<div class="panel-campo oai-field oai-field--half"><label>Prioridad</label><input type="number" class="openai-agent-ruta-prioridad oai-input" min="0" max="100" value="' +
           (route.priority || 50) +
           '"></div>' +
-          '<div class="panel-campo"><label>Media ID / URL</label><input class="openai-agent-ruta-media" value="' +
+          '<div class="panel-campo oai-field oai-field--half"><label>Media ID / URL</label><input class="openai-agent-ruta-media oai-input" value="' +
           esc(route.mediaId || "") +
-          '"></div>' +
-          '<p class="ia-handle-hint">Handle: <code>' +
+          '"></div></div>' +
+          '<p class="ia-handle-hint oai-handle-hint">Handle conexión: <code>' +
           esc(route.id) +
-          "</code></p></div>"
+          "</code></p></div></div>"
         );
       })
       .join("");
@@ -451,33 +463,55 @@ window.MacBotOpenAIAgent = (function () {
     const contenido = document.getElementById("panelNodoContenido");
     if (!contenido) return;
 
+    const panelShell = document.getElementById("panelNodo");
+    if (panelShell) {
+      panelShell.classList.add("panel-nodo--openai-agent");
+    }
+
     contenido.innerHTML =
-      '<div class="openai-agent-panel">' +
-      "<h4>🤖 Agente OpenAI</h4>" +
-      '<p class="ia-panel-desc">OpenAI responde al lead o enruta por caminos sin texto.</p>' +
-      '<div class="panel-campo"><label>Nombre del nodo</label><input id="openaiAgentNombreNodo" value="' +
+      '<div class="openai-agent-panel oai-panel-root">' +
+      '<header class="oai-panel-hero">' +
+      '<div class="oai-panel-hero__top">' +
+      '<div class="oai-panel-hero__titles">' +
+      '<h4 class="oai-panel-hero__title">Agente OpenAI</h4>' +
+      '<span class="oai-panel-hero__badge">IA activa</span>' +
+      "</div></div>" +
+      '<p class="ia-panel-desc oai-panel-hero__desc">OpenAI responde al lead o enruta por caminos sin texto extra.</p>' +
+      "</header>" +
+      '<div class="oai-panel-scroll">' +
+      '<section class="oai-card oai-card--model">' +
+      '<h5 class="oai-card__title">Configuración del modelo</h5>' +
+      '<div class="panel-campo oai-field"><label>Nombre del nodo</label><input id="openaiAgentNombreNodo" class="oai-input" value="' +
       esc(configActiva.nombreNodo) +
       '"></div>' +
-      '<div class="panel-campo"><label>Modelo</label><input id="openaiAgentModel" value="' +
+      '<div class="oai-field-row">' +
+      '<div class="panel-campo oai-field oai-field--grow"><label>Modelo</label><input id="openaiAgentModel" class="oai-input" value="' +
       esc(configActiva.model || "gpt-4o-mini") +
       '"></div>' +
-      '<div class="panel-campo"><label>Temperatura (0–1)</label><input id="openaiAgentTemperature" type="number" min="0" max="1" step="0.1" value="' +
+      '<div class="panel-campo oai-field oai-field--sm"><label>Temperatura</label><input id="openaiAgentTemperature" class="oai-input" type="number" min="0" max="1" step="0.1" value="' +
       (configActiva.temperature ?? 0.7) +
-      '"></div>' +
-      '<div class="panel-campo"><label>Score mínimo caminos</label><input id="openaiAgentScoreMinimo" type="number" min="0" max="100" value="' +
+      '"></div></div>' +
+      '<div class="panel-campo oai-field"><label>Score mínimo caminos</label><input id="openaiAgentScoreMinimo" class="oai-input" type="number" min="0" max="100" value="' +
       configActiva.scoreMinimo +
-      '"></div>' +
-      '<div class="panel-campo"><label>Instrucciones y datos del producto</label>' +
-      '<textarea id="openaiAgentPrompt" class="ia-textarea openai-agent-prompt-area" rows="14" placeholder="' +
+      '"></div></section>' +
+      '<section class="oai-card oai-card--prompt">' +
+      '<h5 class="oai-card__title">Prompt del producto</h5>' +
+      '<div class="panel-campo oai-field oai-field--prompt"><label>Instrucciones y datos del producto</label>' +
+      '<textarea id="openaiAgentPrompt" class="ia-textarea openai-agent-prompt-area oai-input oai-textarea oai-textarea--prompt" rows="12" placeholder="' +
       esc(PROMPT_PLACEHOLDER) +
       '">' +
       esc(configActiva.openaiPrompt || "") +
-      "</textarea></div>" +
-      "<h5>Caminos</h5>" +
-      '<div id="openaiAgentCaminosLista"></div>' +
-      '<button type="button" class="panel-btn" id="openaiAgentAgregarCamino">+ Agregar camino</button>' +
-      '<button type="button" class="panel-btn" id="openaiAgentGuardarPanel">Guardar Agente OpenAI</button>' +
-      "</div>";
+      "</textarea></div></section>" +
+      '<section class="oai-card oai-card--routes">' +
+      '<h5 class="oai-card__title">Caminos inteligentes</h5>' +
+      '<p class="oai-card__hint">Cada salida usa sinónimos para detectar intención del lead.</p>' +
+      '<div id="openaiAgentCaminosLista" class="oai-routes-list"></div>' +
+      '<button type="button" class="panel-btn oai-btn oai-btn--add" id="openaiAgentAgregarCamino">+ Agregar camino</button>' +
+      "</section>" +
+      '<section class="oai-card oai-card--actions">' +
+      '<h5 class="oai-card__title">Acciones</h5>' +
+      '<button type="button" class="panel-btn oai-btn oai-btn--save" id="openaiAgentGuardarPanel">Guardar Agente OpenAI</button>' +
+      "</section></div></div>";
 
     renderCaminosEditor();
     document.getElementById("openaiAgentAgregarCamino")?.addEventListener("click", function (ev) {
@@ -545,6 +579,7 @@ window.MacBotOpenAIAgent = (function () {
     renderVisualTimer = null;
     nodoActivo = null;
     configActiva = crearConfigPorDefecto();
+    document.getElementById("panelNodo")?.classList.remove("panel-nodo--openai-agent");
   }
 
   function getNodoActivo() {

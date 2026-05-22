@@ -131,3 +131,535 @@
   line-height: 1.45;
   resize: vertical;
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   Panel derecho — Agente OpenAI (SaaS dark premium)
+   ═══════════════════════════════════════════════════════════════ */
+
+.panel-nodo.panel-nodo--openai-agent {
+  width: 380px;
+  max-width: 42vw;
+  padding: 0;
+  overflow: hidden;
+  flex-direction: column;
+  background: linear-gradient(165deg, #0c0f1a 0%, #0a0d14 45%, #0f1220 100%);
+  border: 1px solid rgba(103, 232, 249, 0.14);
+  box-shadow:
+    0 0 40px rgba(99, 102, 241, 0.12),
+    0 20px 50px rgba(0, 0, 0, 0.55);
+}
+
+.panel-nodo.panel-nodo--openai-agent.activo {
+  display: flex;
+  animation: oaiPanelIn 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes oaiPanelIn {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.panel-nodo--openai-agent .panel-nodo-header {
+  flex-shrink: 0;
+  margin: 0;
+  padding: 12px 14px 8px;
+  border-bottom: 1px solid rgba(103, 232, 249, 0.1);
+  background: rgba(15, 23, 42, 0.6);
+}
+
+.panel-nodo--openai-agent .panel-nodo-header h3 {
+  display: none;
+}
+
+.panel-nodo--openai-agent .panel-close {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid rgba(248, 113, 113, 0.35);
+  background: linear-gradient(145deg, rgba(127, 29, 29, 0.5), rgba(69, 10, 10, 0.65));
+  color: #fecaca;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.panel-nodo--openai-agent .panel-close:hover {
+  transform: scale(1.05);
+  border-color: rgba(248, 113, 113, 0.65);
+  box-shadow: 0 0 16px rgba(239, 68, 68, 0.35);
+}
+
+.panel-nodo--openai-agent .panel-nodo-body {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0;
+}
+
+.openai-agent-panel.oai-panel-root {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.oai-panel-hero {
+  flex-shrink: 0;
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid rgba(139, 92, 246, 0.15);
+  background: linear-gradient(
+    180deg,
+    rgba(30, 27, 75, 0.55) 0%,
+    rgba(15, 23, 42, 0.2) 100%
+  );
+}
+
+.oai-panel-hero__top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.oai-panel-hero__titles {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.oai-panel-hero__title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  background: linear-gradient(90deg, #67e8f9 0%, #a78bfa 55%, #c4b5fd 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.oai-panel-hero__badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #a5f3fc;
+  background: rgba(34, 211, 238, 0.12);
+  border: 1px solid rgba(34, 211, 238, 0.45);
+  box-shadow: 0 0 12px rgba(34, 211, 238, 0.2);
+}
+
+.oai-panel-hero__desc {
+  margin: 10px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #94a3b8;
+}
+
+.oai-panel-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 12px 14px 18px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(103, 232, 249, 0.45) rgba(15, 23, 42, 0.5);
+}
+
+.oai-panel-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+
+.oai-panel-scroll::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.6);
+  border-radius: 8px;
+  margin: 4px 0;
+}
+
+.oai-panel-scroll::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #22d3ee, #6366f1);
+  border-radius: 8px;
+  border: 2px solid rgba(15, 23, 42, 0.6);
+}
+
+.oai-card {
+  margin-bottom: 14px;
+  padding: 14px 14px 12px;
+  border-radius: 14px;
+  background: linear-gradient(
+    145deg,
+    rgba(30, 27, 75, 0.35) 0%,
+    rgba(15, 23, 42, 0.75) 100%
+  );
+  border: 1px solid rgba(99, 102, 241, 0.22);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.oai-card:hover {
+  border-color: rgba(103, 232, 249, 0.28);
+  box-shadow: 0 6px 24px rgba(99, 102, 241, 0.12);
+}
+
+.oai-card__title {
+  margin: 0 0 12px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #c4b5fd;
+}
+
+.oai-card__hint {
+  margin: -6px 0 12px;
+  font-size: 11px;
+  color: #64748b;
+  line-height: 1.45;
+}
+
+.openai-agent-panel .panel-campo,
+.openai-agent-panel .oai-field {
+  margin-bottom: 12px;
+}
+
+.openai-agent-panel .panel-campo:last-child,
+.openai-agent-panel .oai-field:last-child {
+  margin-bottom: 0;
+}
+
+.openai-agent-panel .panel-campo label,
+.openai-agent-panel .oai-field label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: #94a3b8;
+}
+
+.openai-agent-panel .oai-input,
+.openai-agent-panel .oai-textarea,
+.openai-agent-panel input.oai-input,
+.openai-agent-panel textarea.oai-input {
+  width: 100%;
+  box-sizing: border-box;
+  background: rgba(8, 12, 22, 0.85);
+  color: #e2e8f0;
+  border: 1px solid rgba(51, 65, 85, 0.9);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 13px;
+  outline: none;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    background 0.2s ease;
+}
+
+.openai-agent-panel .oai-input:hover,
+.openai-agent-panel .oai-textarea:hover {
+  border-color: rgba(99, 102, 241, 0.45);
+}
+
+.openai-agent-panel .oai-input:focus,
+.openai-agent-panel .oai-textarea:focus {
+  border-color: rgba(103, 232, 249, 0.65);
+  background: rgba(12, 18, 32, 0.95);
+  box-shadow:
+    0 0 0 3px rgba(99, 102, 241, 0.2),
+    0 0 20px rgba(34, 211, 238, 0.15);
+}
+
+.oai-textarea--prompt,
+.openai-agent-prompt-area {
+  min-height: 200px;
+  max-height: 320px;
+  line-height: 1.55;
+  font-size: 12px;
+  resize: vertical;
+}
+
+.oai-field-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.oai-field--grow {
+  flex: 1;
+  min-width: 0;
+}
+
+.oai-field--sm {
+  width: 96px;
+  flex-shrink: 0;
+}
+
+.oai-field--half {
+  flex: 1;
+  min-width: 0;
+}
+
+.oai-routes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.oai-routes-empty,
+.openai-agent-caminos-vacio {
+  margin: 0 0 12px;
+  padding: 16px;
+  text-align: center;
+  font-size: 12px;
+  color: #94a3b8;
+  border-radius: 12px;
+  border: 1px dashed rgba(103, 232, 249, 0.25);
+  background: rgba(15, 23, 42, 0.4);
+}
+
+.oai-route-card {
+  border-radius: 14px;
+  background: linear-gradient(
+    160deg,
+    rgba(49, 46, 129, 0.35) 0%,
+    rgba(15, 23, 42, 0.9) 100%
+  );
+  border: 1px solid rgba(129, 140, 248, 0.28);
+  overflow: hidden;
+  transition:
+    transform 0.18s ease,
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.oai-route-card:hover {
+  transform: translateY(-1px);
+  border-color: rgba(167, 139, 250, 0.45);
+  box-shadow: 0 8px 28px rgba(99, 102, 241, 0.18);
+}
+
+.oai-route-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 12px 12px 10px;
+  border-bottom: 1px solid rgba(99, 102, 241, 0.2);
+  background: rgba(30, 27, 75, 0.35);
+}
+
+.openai-agent-ruta-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.oai-route-card__title {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.oai-route-badge {
+  display: inline-flex;
+  align-self: flex-start;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #e0e7ff;
+  background: linear-gradient(90deg, #4f46e5, #7c3aed);
+  border: 1px solid rgba(167, 139, 250, 0.4);
+}
+
+.oai-route-name-preview {
+  font-size: 12px;
+  font-weight: 600;
+  color: #cbd5e1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 160px;
+}
+
+.oai-route-card__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.oai-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.oai-toggle input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.oai-toggle__track {
+  position: relative;
+  width: 36px;
+  height: 20px;
+  border-radius: 999px;
+  background: rgba(51, 65, 85, 0.9);
+  border: 1px solid rgba(71, 85, 105, 0.9);
+  transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.oai-toggle__track::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #94a3b8;
+  transition: transform 0.2s ease, background 0.2s ease;
+}
+
+.oai-toggle input:checked + .oai-toggle__track {
+  background: linear-gradient(90deg, #0891b2, #6366f1);
+  border-color: rgba(103, 232, 249, 0.5);
+  box-shadow: 0 0 10px rgba(34, 211, 238, 0.25);
+}
+
+.oai-toggle input:checked + .oai-toggle__track::after {
+  transform: translateX(16px);
+  background: #fff;
+}
+
+.oai-toggle__label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #94a3b8;
+  white-space: nowrap;
+}
+
+.oai-route-card__body {
+  padding: 12px;
+}
+
+.oai-handle-hint,
+.openai-agent-panel .ia-handle-hint {
+  margin: 10px 0 0;
+  font-size: 10px;
+  color: #64748b;
+}
+
+.oai-handle-hint code {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.9);
+  border: 1px solid rgba(99, 102, 241, 0.35);
+  color: #a5f3fc;
+}
+
+.openai-agent-panel .oai-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  border: none;
+  border-radius: 12px;
+  padding: 12px 16px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.2s ease,
+    filter 0.2s ease;
+}
+
+.openai-agent-panel .oai-btn:hover {
+  transform: translateY(-1px);
+}
+
+.openai-agent-panel .oai-btn--save {
+  background: linear-gradient(135deg, #22c55e 0%, #16a34a 55%, #15803d 100%);
+  color: #ecfdf5;
+  box-shadow:
+    0 4px 16px rgba(34, 197, 94, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.15);
+}
+
+.openai-agent-panel .oai-btn--save:hover {
+  box-shadow:
+    0 6px 22px rgba(34, 197, 94, 0.45),
+    0 0 24px rgba(34, 197, 94, 0.2);
+}
+
+.openai-agent-panel .oai-btn--add {
+  margin-top: 0;
+  background: linear-gradient(135deg, #6366f1 0%, #7c3aed 50%, #4f46e5 100%);
+  color: #eef2ff;
+  box-shadow: 0 4px 16px rgba(99, 102, 241, 0.35);
+}
+
+.openai-agent-panel .oai-btn--add:hover {
+  box-shadow:
+    0 6px 22px rgba(124, 58, 237, 0.45),
+    0 0 20px rgba(99, 102, 241, 0.25);
+}
+
+.openai-agent-panel .oai-btn--danger {
+  width: auto;
+  padding: 7px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 8px;
+  background: linear-gradient(145deg, rgba(185, 28, 28, 0.85), rgba(127, 29, 29, 0.9));
+  color: #fecaca;
+  border: 1px solid rgba(248, 113, 113, 0.4);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.openai-agent-panel .oai-btn--danger:hover {
+  box-shadow: 0 0 14px rgba(239, 68, 68, 0.35);
+}
+
+.openai-agent-panel .oai-btn--sm {
+  min-height: 32px;
+}
+
+.openai-agent-panel h5:not(.oai-card__title) {
+  margin: 16px 0 8px;
+  color: #67e8f9;
+  font-size: 13px;
+}
