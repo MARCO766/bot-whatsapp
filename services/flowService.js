@@ -981,12 +981,32 @@ async function reanudarFlujoIAPendiente(numero, mensaje, usuarioId) {
   return true;
 }
 
+const mensajesEntrantesProcesados = new Map();
+const DEDUPE_MS = 120000;
+
+function mensajeEntranteYaProcesado(messageId) {
+  if (!messageId) return false;
+  const ahora = Date.now();
+  if (mensajesEntrantesProcesados.has(messageId)) return true;
+  mensajesEntrantesProcesados.set(messageId, ahora);
+  for (const [id, ts] of mensajesEntrantesProcesados) {
+    if (ahora - ts > DEDUPE_MS) mensajesEntrantesProcesados.delete(id);
+  }
+  return false;
+}
+
 async function procesarMensajeEntrante(numero, texto, usuarioId, messageId) {
   console.log("[FLUJO] procesarMensajeEntrante", {
     numero,
     usuarioId,
     texto: String(texto || "").slice(0, 60),
+    messageId: messageId || null,
   });
+
+  if (mensajeEntranteYaProcesado(messageId)) {
+    console.log("[FLUJO] mensaje duplicado ignorado (webhook):", messageId);
+    return true;
+  }
 
   if (esComandoResetFlujo(texto)) {
     await resetearFlujoLead(numero, usuarioId);
