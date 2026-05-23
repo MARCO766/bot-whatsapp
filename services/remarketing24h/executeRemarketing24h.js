@@ -6,6 +6,7 @@ const {
   MAX_INTENTOS,
 } = require("./constants");
 const repo = require("./remarketing24hRepository");
+const { finalizarFlujoLeadTrasRemarketing } = require("../resetFlujoLeadService");
 const { nowUtc } = require("../seguimiento/timestamps");
 
 function ventanaWhatsAppAbierta(fila) {
@@ -70,6 +71,18 @@ async function cerrarTrasEnvio(fila, nuevosIntentos, ahora) {
     cliente: fila.cliente_numero,
     intentos: nuevosIntentos,
   });
+
+  try {
+    await finalizarFlujoLeadTrasRemarketing(
+      fila.cliente_numero,
+      fila.usuario_id
+    );
+  } catch (err) {
+    console.log(
+      "[RM24H] error finalizando flujo tras remarketing:",
+      err.response?.data || err.message
+    );
+  }
 }
 
 async function procesarPendienteDisparo(fila) {

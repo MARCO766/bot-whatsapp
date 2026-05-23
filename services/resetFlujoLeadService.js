@@ -69,6 +69,27 @@ async function limpiarHistorialFlujoLead(numero, usuarioId) {
 }
 
 /**
+ * Tras envío exitoso de RM24H: corta automatización sin mensaje WA ni cancelar seguimientos CRM.
+ */
+async function finalizarFlujoLeadTrasRemarketing(numero, usuarioId) {
+  const num = String(numero || "").trim();
+  const uid =
+    usuarioId != null && usuarioId !== "" ? String(usuarioId).trim() : null;
+
+  if (!num) return { ok: false, motivo: "sin_numero" };
+
+  limpiarSesionIAPendiente(uid, num);
+  await limpiarHistorialFlujoLead(num, uid);
+
+  console.log("[RM24H] flujo finalizado tras remarketing", {
+    lead: num,
+    usuario: uid,
+  });
+
+  return { ok: true };
+}
+
+/**
  * Limpia solo estado de automatización (memoria IA + seguimientos + historial flujo).
  */
 async function resetearFlujoLead(numero, usuarioId) {
@@ -99,5 +120,6 @@ async function resetearFlujoLead(numero, usuarioId) {
 module.exports = {
   esComandoResetFlujo,
   resetearFlujoLead,
+  finalizarFlujoLeadTrasRemarketing,
   MENSAJE_CONFIRMACION,
 };
