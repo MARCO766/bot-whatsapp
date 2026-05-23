@@ -1,4 +1,4 @@
-const { HORAS_INACTIVIDAD } = require("./constants");
+const { HORAS_INACTIVIDAD, clampHorasInactividad } = require("./constants");
 const {
   normalizarItemContenido,
   sincronizarMensajeLegacy,
@@ -87,7 +87,7 @@ function leerConfigDeNodo(nodo) {
   const config = {
     ...base,
     ...raw,
-    horasInactividad: HORAS_INACTIVIDAD,
+    horasInactividad: clampHorasInactividad(raw.horasInactividad ?? HORAS_INACTIVIDAD),
     detenerSiResponde: false,
     reiniciarAlResponder: raw.reiniciarAlResponder !== false,
     detenerEnConversion: raw.detenerEnConversion !== false,

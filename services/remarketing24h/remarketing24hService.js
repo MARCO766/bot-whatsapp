@@ -1,8 +1,10 @@
 const {
   ESTADOS_RM24H,
   MOTIVOS_RM24H,
-  MS_INACTIVIDAD,
   HORAS_INACTIVIDAD,
+  clampHorasInactividad,
+  msInactividadDesdeHoras,
+  horasDesdeConfigOrigen,
   ESTADOS_REINICIO_RESPUESTA,
 } = require("./constants");
 const repo = require("./remarketing24hRepository");
@@ -10,8 +12,9 @@ const { procesarPendientesDisparo } = require("./executeRemarketing24h");
 const { obtenerContenidosRemarketing } = require("./rm24hContenidos");
 const { nowUtc } = require("../seguimiento/timestamps");
 
-function calcularExpiraEn() {
-  return new Date(Date.now() + MS_INACTIVIDAD).toISOString();
+function calcularExpiraEn(horas) {
+  const h = clampHorasInactividad(horas ?? HORAS_INACTIVIDAD);
+  return new Date(Date.now() + msInactividadDesdeHoras(h)).toISOString();
 }
 
 function normalizarUltimoNodo(ultimoNodo) {
@@ -55,7 +58,8 @@ async function iniciarRemarketing24h({
   if (!usuario_id || !cliente_numero || !flujo_id) return null;
 
   const ahora = nowUtc();
-  const expira_en = calcularExpiraEn();
+  const horas = clampHorasInactividad(config?.horasInactividad ?? HORAS_INACTIVIDAD);
+  const expira_en = calcularExpiraEn(horas);
   const contenidos = obtenerContenidosRemarketing(config || {});
   const mensajeTexto = contenidos.find((c) => c.tipo === "texto");
   const mensaje =
@@ -64,6 +68,7 @@ async function iniciarRemarketing24h({
     null;
   const configSnapshot = {
     ...(config || {}),
+    horasInactividad: horas,
     rm24h_contenidos: contenidos,
     mensajeRemarketing: mensaje || config?.mensajeRemarketing || "",
   };
@@ -107,7 +112,7 @@ async function iniciarRemarketing24h({
     cliente: cliente_numero,
     flujo_id,
     expira_en,
-    horas: HORAS_INACTIVIDAD,
+    horas,
   });
 
   return fila;
@@ -122,7 +127,6 @@ async function resetearRemarketing24h({
   if (!usuario_id || !cliente_numero) return [];
 
   const ahora = nowUtc();
-  const expira_en = calcularExpiraEn();
   const extraNodo = normalizarUltimoNodo(ultimoNodo);
   const actualizados = [];
 
@@ -141,6 +145,8 @@ async function resetearRemarketing24h({
   for (const fila of filas) {
     if (!ESTADOS_REINICIO_RESPUESTA.includes(fila.estado)) continue;
 
+    const horas = horasDesdeConfigOrigen(fila);
+    const expira_en = calcularExpiraEn(horas);
     const resets = (Number(fila.contador_resets) || 0) + 1;
     const actualizado = await repo.actualizarPorId(
       fila.id,
@@ -163,6 +169,7 @@ async function resetearRemarketing24h({
       cliente: cliente_numero,
       flujo_id: fila.flujo_id,
       expira_en,
+      horas,
       contador_resets: resets,
     });
   }

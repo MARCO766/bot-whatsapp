@@ -20,9 +20,36 @@ const MOTIVOS_RM24H = {
   MENSAJE_VACIO: "mensaje_vacio",
 };
 
-/** 23 horas — ventana WhatsApp Cloud API (no 24 exactas) */
+/** Máximo / default — ventana WhatsApp Cloud API (no 24 exactas) */
 const HORAS_INACTIVIDAD = 23;
+const HORAS_INACTIVIDAD_MIN = 1;
 const MS_INACTIVIDAD = HORAS_INACTIVIDAD * 60 * 60 * 1000;
+
+function clampHorasInactividad(val) {
+  const n = parseInt(val, 10);
+  if (!Number.isFinite(n)) return HORAS_INACTIVIDAD;
+  if (n < HORAS_INACTIVIDAD_MIN) return HORAS_INACTIVIDAD_MIN;
+  if (n > HORAS_INACTIVIDAD) return HORAS_INACTIVIDAD;
+  return n;
+}
+
+function msInactividadDesdeHoras(horas) {
+  return clampHorasInactividad(horas) * 60 * 60 * 1000;
+}
+
+function horasDesdeConfigOrigen(origen) {
+  if (!origen || typeof origen !== "object") return HORAS_INACTIVIDAD;
+  let snap = origen.config_snapshot ?? origen;
+  if (typeof snap === "string") {
+    try {
+      snap = JSON.parse(snap);
+    } catch {
+      snap = {};
+    }
+  }
+  if (!snap || typeof snap !== "object") return HORAS_INACTIVIDAD;
+  return clampHorasInactividad(snap.horasInactividad ?? HORAS_INACTIVIDAD);
+}
 
 /** Single shot: un solo remarketing por ciclo (sin reprogramar expira_en) */
 const MAX_INTENTOS = 1;
@@ -43,7 +70,11 @@ module.exports = {
   ESTADOS_RM24H,
   MOTIVOS_RM24H,
   HORAS_INACTIVIDAD,
+  HORAS_INACTIVIDAD_MIN,
   MS_INACTIVIDAD,
+  clampHorasInactividad,
+  msInactividadDesdeHoras,
+  horasDesdeConfigOrigen,
   MAX_INTENTOS,
   ESTADOS_ABIERTOS,
   ESTADOS_REINICIO_RESPUESTA,

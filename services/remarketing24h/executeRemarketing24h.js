@@ -5,7 +5,8 @@ const {
 const {
   ESTADOS_RM24H,
   MOTIVOS_RM24H,
-  MS_INACTIVIDAD,
+  msInactividadDesdeHoras,
+  horasDesdeConfigOrigen,
   MAX_INTENTOS,
 } = require("./constants");
 const repo = require("./remarketing24hRepository");
@@ -15,7 +16,8 @@ const { nowUtc } = require("../seguimiento/timestamps");
 function ventanaWhatsAppAbierta(fila) {
   const ultimo = fila.ultimo_mensaje_lead_at;
   if (!ultimo) return false;
-  const finVentana = new Date(ultimo).getTime() + MS_INACTIVIDAD;
+  const horas = horasDesdeConfigOrigen(fila);
+  const finVentana = new Date(ultimo).getTime() + msInactividadDesdeHoras(horas);
   return finVentana > Date.now();
 }
 
