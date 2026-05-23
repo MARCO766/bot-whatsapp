@@ -1,5 +1,6 @@
 const axios = require("axios");
 const { ESTADOS_RM24H, ESTADOS_ABIERTOS } = require("./constants");
+const { coherenciaEstadoRm24h } = require("./estadoCoherencia");
 const { nowUtc, encodeTimestampFilter } = require("../seguimiento/timestamps");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -24,6 +25,25 @@ async function buscarAbierto({ usuario_id, cliente_numero, flujo_id }) {
       `&cliente_numero=eq.${encodeURIComponent(cliente_numero)}` +
       `&flujo_id=eq.${encodeURIComponent(flujo_id)}` +
       `&estado=in.(${estadosAbiertosFilter()})` +
+      `&activo=eq.true` +
+      `&select=*&limit=1`,
+    { headers: headers() }
+  );
+  return (response.data || [])[0] || null;
+}
+
+/** Corrige filas legacy: estado vivo pero activo=false (p. ej. tras conversión parcial). */
+async function buscarInconsistenteActivoApagado({
+  usuario_id,
+  cliente_numero,
+  flujo_id,
+}) {
+  const response = await axios.get(
+    `${SUPABASE_URL}/rest/v1/remarketing_global_24h?usuario_id=eq.${usuario_id}` +
+      `&cliente_numero=eq.${encodeURIComponent(cliente_numero)}` +
+      `&flujo_id=eq.${encodeURIComponent(flujo_id)}` +
+      `&estado=eq.${ESTADOS_RM24H.ACTIVO}` +
+      `&activo=eq.false` +
       `&select=*&limit=1`,
     { headers: headers() }
   );
@@ -31,18 +51,20 @@ async function buscarAbierto({ usuario_id, cliente_numero, flujo_id }) {
 }
 
 async function insertar(row) {
+  const coherente = coherenciaEstadoRm24h(row, row);
   const response = await axios.post(
     `${SUPABASE_URL}/rest/v1/remarketing_global_24h`,
-    row,
+    coherente,
     { headers: headers({ Prefer: "return=representation" }) }
   );
   return (response.data || [])[0] || null;
 }
 
-async function actualizarPorId(id, payload) {
+async function actualizarPorId(id, payload, filaActual = {}) {
+  const coherente = coherenciaEstadoRm24h(payload, filaActual);
   const response = await axios.patch(
     `${SUPABASE_URL}/rest/v1/remarketing_global_24h?id=eq.${id}`,
-    { ...payload, actualizado_en: nowUtc() },
+    { ...coherente, actualizado_en: nowUtc() },
     { headers: headers({ Prefer: "return=representation" }) }
   );
   return (response.data || [])[0] || null;
@@ -70,11 +92,15 @@ async function listarVencidos(limite = 50) {
   return response.data || [];
 }
 
-async function marcarPendienteDisparo(id) {
-  return actualizarPorId(id, {
-    estado: ESTADOS_RM24H.PENDIENTE_DISPARO,
-    activo: true,
-  });
+async function marcarPendienteDisparo(id, filaActual = {}) {
+  return actualizarPorId(
+    id,
+    {
+      estado: ESTADOS_RM24H.PENDIENTE_DISPARO,
+      activo: true,
+    },
+    filaActual
+  );
 }
 
 async function listarPendientesDisparo(limite = 40) {
@@ -87,11 +113,15 @@ async function listarPendientesDisparo(limite = 40) {
 }
 
 /** Reserva atómica pendiente_disparo → procesando (evita duplicados). */
-async function reservarParaEnvio(id) {
+async function reservarParaEnvio(id, filaActual = {}) {
+  const payload = coherenciaEstadoRm24h(
+    { estado: ESTADOS_RM24H.PROCESANDO, activo: true },
+    filaActual
+  );
   const response = await axios.patch(
-    `${SUPABASE_URL}/rest/v1/remarketing_global_24h?id=eq.${id}&estado=eq.${ESTADOS_RM24H.PENDIENTE_DISPARO}`,
+    `${SUPABASE_URL}/rest/v1/remarketing_global_24h?id=eq.${id}&estado=eq.${ESTADOS_RM24H.PENDIENTE_DISPARO}&activo=eq.true`,
     {
-      estado: ESTADOS_RM24H.PROCESANDO,
+      ...payload,
       actualizado_en: nowUtc(),
     },
     { headers: headers({ Prefer: "return=representation" }) }
@@ -155,6 +185,7 @@ async function listarReinicioPorCliente(usuario_id, cliente_numero) {
 
 module.exports = {
   buscarAbierto,
+  buscarInconsistenteActivoApagado,
   insertar,
   actualizarPorId,
   obtenerNombreFlujo,

@@ -1,5 +1,6 @@
 const {
   ESTADOS_RM24H,
+  MOTIVOS_RM24H,
   MS_INACTIVIDAD,
   HORAS_INACTIVIDAD,
   ESTADOS_REINICIO_RESPUESTA,
@@ -80,7 +81,7 @@ async function iniciarRemarketing24h({
 
   let fila;
   if (existente?.id) {
-    fila = await repo.actualizarPorId(existente.id, payload);
+    fila = await repo.actualizarPorId(existente.id, payload, existente);
   } else {
     fila = await repo.insertar({
       ...payload,
@@ -130,14 +131,20 @@ async function resetearRemarketing24h({
     if (!ESTADOS_REINICIO_RESPUESTA.includes(fila.estado)) continue;
 
     const resets = (Number(fila.contador_resets) || 0) + 1;
-    const actualizado = await repo.actualizarPorId(fila.id, {
-      estado: ESTADOS_RM24H.ACTIVO,
-      activo: true,
-      ultimo_mensaje_lead_at: ahora,
-      expira_en,
-      contador_resets: resets,
-      ...extraNodo,
-    });
+    const actualizado = await repo.actualizarPorId(
+      fila.id,
+      {
+        estado: ESTADOS_RM24H.ACTIVO,
+        activo: true,
+        ultimo_mensaje_lead_at: ahora,
+        expira_en,
+        contador_resets: resets,
+        cancelado_en: null,
+        motivo_cancelacion: null,
+        ...extraNodo,
+      },
+      fila
+    );
     actualizados.push(actualizado);
 
     console.log("[RM24H] reseteado por respuesta lead", {
@@ -161,18 +168,27 @@ async function cancelarRemarketing24h({
 }) {
   if (!usuario_id || !cliente_numero || !flujo_id) return null;
 
-  const fila = await repo.buscarAbierto({
+  const flujoIdStr = String(flujo_id);
+  let fila = await repo.buscarAbierto({
     usuario_id,
     cliente_numero,
-    flujo_id: String(flujo_id),
+    flujo_id: flujoIdStr,
   });
+
+  if (!fila?.id) {
+    fila = await repo.buscarInconsistenteActivoApagado({
+      usuario_id,
+      cliente_numero,
+      flujo_id: flujoIdStr,
+    });
+  }
 
   if (!fila?.id) return null;
 
-  const esConversion = motivo === "conversion";
+  const esConversion = motivo === MOTIVOS_RM24H.CONVERSION;
   const estado = esConversion
-    ? ESTADOS_RM24H.CONVERTIDO
-    : ESTADOS_RM24H.CANCELADO;
+    ? ESTADOS_RM24H.CANCELADO_CONVERSION
+    : ESTADOS_RM24H.CANCELADO_RESPUESTA;
 
   const payload = {
     estado,
@@ -202,15 +218,15 @@ async function cancelarRemarketing24h({
     }
   }
 
-  const actualizado = await repo.actualizarPorId(fila.id, payload);
+  const actualizado = await repo.actualizarPorId(fila.id, payload, fila);
 
   if (esConversion) {
-    console.log("[RM24H] cancelado por conversión", {
+    console.log("[RM24H] cancelado conversion", {
       usuario_id,
       cliente: cliente_numero,
       flujo_id,
       motivo,
-      estado,
+      estado: actualizado?.estado || estado,
       flujo_nombre:
         actualizado?.flujo_nombre || flujoNombreFinal || fila.flujo_nombre || null,
     });
@@ -236,7 +252,7 @@ async function marcarVencidosComoPendienteDisparo() {
   const marcados = [];
 
   for (const fila of vencidos) {
-    await repo.marcarPendienteDisparo(fila.id);
+    await repo.marcarPendienteDisparo(fila.id, fila);
 
     console.log("[RM24H] contador vencido");
     console.log("[RM24H] usuario", fila.usuario_id);

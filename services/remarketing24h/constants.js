@@ -3,10 +3,21 @@ const ESTADOS_RM24H = {
   PENDIENTE_DISPARO: "pendiente_disparo",
   PROCESANDO: "procesando",
   DISPARADO: "disparado",
+  /** Legacy — migrar a CANCELADO_CONVERSION */
   CANCELADO: "cancelado",
   CONVERTIDO: "convertido",
+  CANCELADO_CONVERSION: "cancelado_conversion",
+  CANCELADO_RESPUESTA: "cancelado_respuesta",
   EXPIRADO_VENTANA: "expirado_ventana",
   CERRADO_SIN_RESPUESTA: "cerrado_sin_respuesta",
+};
+
+const MOTIVOS_RM24H = {
+  CONVERSION: "conversion",
+  MAX_INTENTOS_TRAS_ENVIO: "max_intentos_tras_envio",
+  MAX_INTENTOS: "max_intentos",
+  VENTANA_CERRADA: "ventana_whatsapp_cerrada",
+  MENSAJE_VACIO: "mensaje_vacio",
 };
 
 /** 23 horas — ventana WhatsApp Cloud API (no 24 exactas) */
@@ -30,6 +41,7 @@ const ESTADOS_REINICIO_RESPUESTA = [
 
 module.exports = {
   ESTADOS_RM24H,
+  MOTIVOS_RM24H,
   HORAS_INACTIVIDAD,
   MS_INACTIVIDAD,
   MAX_INTENTOS,

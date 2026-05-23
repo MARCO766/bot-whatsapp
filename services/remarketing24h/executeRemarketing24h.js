@@ -1,15 +1,12 @@
 const { enviarTextoWhatsApp } = require("../whatsappService");
 const {
   ESTADOS_RM24H,
+  MOTIVOS_RM24H,
   MS_INACTIVIDAD,
   MAX_INTENTOS,
 } = require("./constants");
 const repo = require("./remarketing24hRepository");
 const { nowUtc } = require("../seguimiento/timestamps");
-
-function calcularExpiraEn() {
-  return new Date(Date.now() + MS_INACTIVIDAD).toISOString();
-}
 
 function ventanaWhatsAppAbierta(fila) {
   const ultimo = fila.ultimo_mensaje_lead_at;
@@ -19,12 +16,16 @@ function ventanaWhatsAppAbierta(fila) {
 }
 
 async function cerrarIntentoMaximo(fila) {
-  await repo.actualizarPorId(fila.id, {
-    estado: ESTADOS_RM24H.CERRADO_SIN_RESPUESTA,
-    activo: false,
-    cancelado_en: nowUtc(),
-    motivo_cancelacion: "max_intentos",
-  });
+  await repo.actualizarPorId(
+    fila.id,
+    {
+      estado: ESTADOS_RM24H.CERRADO_SIN_RESPUESTA,
+      activo: false,
+      cancelado_en: nowUtc(),
+      motivo_cancelacion: MOTIVOS_RM24H.MAX_INTENTOS,
+    },
+    fila
+  );
   console.log("[RM24H] intento maximo", {
     id: fila.id,
     cliente: fila.cliente_numero,
@@ -33,16 +34,41 @@ async function cerrarIntentoMaximo(fila) {
 }
 
 async function marcarExpiradoVentana(fila) {
-  await repo.actualizarPorId(fila.id, {
-    estado: ESTADOS_RM24H.EXPIRADO_VENTANA,
-    activo: false,
-    cancelado_en: nowUtc(),
-    motivo_cancelacion: "ventana_whatsapp_cerrada",
-  });
+  await repo.actualizarPorId(
+    fila.id,
+    {
+      estado: ESTADOS_RM24H.EXPIRADO_VENTANA,
+      activo: false,
+      cancelado_en: nowUtc(),
+      motivo_cancelacion: MOTIVOS_RM24H.VENTANA_CERRADA,
+    },
+    fila
+  );
   console.log("[RM24H] fuera ventana", {
     id: fila.id,
     cliente: fila.cliente_numero,
     ultimo_mensaje_lead_at: fila.ultimo_mensaje_lead_at,
+  });
+}
+
+async function cerrarTrasEnvio(fila, nuevosIntentos, ahora) {
+  await repo.actualizarPorId(
+    fila.id,
+    {
+      estado: ESTADOS_RM24H.CERRADO_SIN_RESPUESTA,
+      activo: false,
+      intentos: nuevosIntentos,
+      ultimo_disparo_en: ahora,
+      disparado_en: ahora,
+      cancelado_en: ahora,
+      motivo_cancelacion: MOTIVOS_RM24H.MAX_INTENTOS_TRAS_ENVIO,
+    },
+    fila
+  );
+  console.log("[RM24H] cerrado tras envio", {
+    id: fila.id,
+    cliente: fila.cliente_numero,
+    intentos: nuevosIntentos,
   });
 }
 
@@ -67,15 +93,21 @@ async function procesarPendienteDisparo(fila) {
 
   const texto = String(fila.mensaje_remarketing || "").trim();
   if (!texto) {
-    await repo.actualizarPorId(fila.id, {
-      estado: ESTADOS_RM24H.PENDIENTE_DISPARO,
-      motivo_cancelacion: "mensaje_vacio",
-    });
+    await repo.actualizarPorId(
+      fila.id,
+      {
+        estado: ESTADOS_RM24H.CERRADO_SIN_RESPUESTA,
+        activo: false,
+        cancelado_en: nowUtc(),
+        motivo_cancelacion: MOTIVOS_RM24H.MENSAJE_VACIO,
+      },
+      fila
+    );
     console.log("[RM24H] mensaje vacío, no se envía:", fila.id);
     return { ok: false, motivo: "mensaje_vacio" };
   }
 
-  const reservado = await repo.reservarParaEnvio(fila.id);
+  const reservado = await repo.reservarParaEnvio(fila.id, fila);
   if (!reservado) {
     console.log("[RM24H] ya reservado por otro worker:", fila.id);
     return { ok: false, motivo: "no_reservado" };
@@ -101,50 +133,23 @@ async function procesarPendienteDisparo(fila) {
     const nuevosIntentos = intentosActuales + 1;
     const ahora = nowUtc();
 
-    if (nuevosIntentos >= MAX_INTENTOS) {
-      await repo.actualizarPorId(reservado.id, {
-        estado: ESTADOS_RM24H.CERRADO_SIN_RESPUESTA,
-        activo: false,
-        intentos: nuevosIntentos,
-        ultimo_disparo_en: ahora,
-        disparado_en: ahora,
-        cancelado_en: ahora,
-        motivo_cancelacion: "max_intentos_tras_envio",
-      });
-      console.log("[RM24H] intento maximo", {
-        id: reservado.id,
-        intentos: nuevosIntentos,
-      });
-      return { ok: true, motivo: "max_intentos_tras_envio" };
-    }
-
-    await repo.actualizarPorId(reservado.id, {
-      estado: ESTADOS_RM24H.ACTIVO,
-      activo: true,
-      intentos: nuevosIntentos,
-      ultimo_disparo_en: ahora,
-      disparado_en: ahora,
-      expira_en: calcularExpiraEn(),
-      motivo_cancelacion: null,
-    });
-
-    console.log("[RM24H] reprogramado", {
-      id: reservado.id,
-      intentos: nuevosIntentos,
-      expira_en: calcularExpiraEn(),
-    });
-
-    return { ok: true };
+    await cerrarTrasEnvio(reservado, nuevosIntentos, ahora);
+    return { ok: true, motivo: MOTIVOS_RM24H.MAX_INTENTOS_TRAS_ENVIO };
   } catch (error) {
     const detalle = error.response?.data || error.message;
     console.log("[RM24H] error envío:", detalle);
 
-    await repo.actualizarPorId(reservado.id, {
-      estado: ESTADOS_RM24H.PENDIENTE_DISPARO,
-      motivo_cancelacion: String(
-        typeof detalle === "object" ? JSON.stringify(detalle) : detalle
-      ).slice(0, 500),
-    });
+    await repo.actualizarPorId(
+      reservado.id,
+      {
+        estado: ESTADOS_RM24H.PENDIENTE_DISPARO,
+        activo: true,
+        motivo_cancelacion: String(
+          typeof detalle === "object" ? JSON.stringify(detalle) : detalle
+        ).slice(0, 500),
+      },
+      reservado
+    );
 
     return { ok: false, motivo: "error_envio" };
   }
