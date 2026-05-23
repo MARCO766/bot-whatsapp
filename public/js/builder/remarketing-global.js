@@ -535,6 +535,7 @@ window.MacBotRemarketingGlobal = (function () {
   function addRm24ContentBlock(tipo) {
     const t = String(tipo || "texto").toLowerCase();
     const tipoNorm = t === "archivo" ? "documento" : t;
+    console.log("[RM24H_ADD_BLOCK]", tipoNorm);
     const lista = leerContenidosDesdePanel();
     lista.push(crearBloqueVacio(tipoNorm));
     configActiva.rm24h_contenidos = lista;
@@ -934,12 +935,19 @@ window.MacBotRemarketingGlobal = (function () {
     const mount = document.getElementById("panelNodoContenido");
     if (!mount) return;
 
-    if (mount.dataset.rm24hContenidosBound === "1") return;
-    mount.dataset.rm24hContenidosBound = "1";
+    if (mount._rm24hOnClick) {
+      mount.removeEventListener("click", mount._rm24hOnClick);
+    }
+    if (mount._rm24hOnChange) {
+      mount.removeEventListener("change", mount._rm24hOnChange);
+    }
+    if (mount._rm24hOnInput) {
+      mount.removeEventListener("input", mount._rm24hOnInput);
+    }
 
-    mount.addEventListener("click", function (ev) {
-      const addBtn = ev.target.closest("[data-add-tipo], .rm24-block-card");
-      if (addBtn && addBtn.getAttribute("data-add-tipo")) {
+    mount._rm24hOnClick = function (ev) {
+      const addBtn = ev.target.closest("[data-add-tipo]");
+      if (addBtn) {
         ev.preventDefault();
         ev.stopPropagation();
         addRm24ContentBlock(addBtn.getAttribute("data-add-tipo"));
@@ -957,6 +965,7 @@ window.MacBotRemarketingGlobal = (function () {
       const moveUpBtn = ev.target.closest("[data-rm24-move-up]");
       if (moveUpBtn && !moveUpBtn.disabled) {
         ev.preventDefault();
+        ev.stopPropagation();
         moveRm24ContentBlock(parseInt(moveUpBtn.getAttribute("data-rm24-move-up"), 10), -1);
         return;
       }
@@ -964,6 +973,7 @@ window.MacBotRemarketingGlobal = (function () {
       const moveDownBtn = ev.target.closest("[data-rm24-move-down]");
       if (moveDownBtn && !moveDownBtn.disabled) {
         ev.preventDefault();
+        ev.stopPropagation();
         moveRm24ContentBlock(parseInt(moveDownBtn.getAttribute("data-rm24-move-down"), 10), 1);
         return;
       }
@@ -971,6 +981,7 @@ window.MacBotRemarketingGlobal = (function () {
       const pickBtn = ev.target.closest("[data-rm24-pick-file]");
       if (pickBtn) {
         ev.preventDefault();
+        ev.stopPropagation();
         const card = pickBtn.closest(".rm24-contenido-item");
         card?.querySelector(".rm24-contenido-file")?.click();
         return;
@@ -979,29 +990,20 @@ window.MacBotRemarketingGlobal = (function () {
       const toggleManual = ev.target.closest("[data-rm24-toggle-manual]");
       if (toggleManual) {
         ev.preventDefault();
+        ev.stopPropagation();
         const card = toggleManual.closest(".rm24-contenido-item");
         card?.querySelector(".rm24-manual-url")?.classList.toggle("rm24-manual-url--open");
       }
-    });
+    };
 
-    mount.addEventListener("change", function (ev) {
+    mount._rm24hOnChange = function (ev) {
       const fileInput = ev.target.closest(".rm24-contenido-file");
       if (fileInput?.files?.[0]) {
         const card = fileInput.closest(".rm24-contenido-item");
         subirArchivoRm24hEnBloque(card, fileInput.files[0]);
         fileInput.value = "";
+        return;
       }
-    });
-
-    mount.addEventListener("input", function (ev) {
-      if (!ev.target.closest("#rm24hContenidosLista")) return;
-      mostrarErrorContenidos("");
-      configActiva.rm24h_contenidos = leerContenidosDesdePanel();
-      sincronizarMensajeRemarketingDesdeContenidos(configActiva);
-      persistirContenidosEnNodo();
-    });
-
-    mount.addEventListener("change", function (ev) {
       if (
         !ev.target.closest(".rm24-contenido-url") &&
         !ev.target.closest(".rm24-contenido-unidad") &&
@@ -1014,7 +1016,19 @@ window.MacBotRemarketingGlobal = (function () {
         renderRm24ContentBlocks();
       }
       persistirContenidosEnNodo();
-    });
+    };
+
+    mount._rm24hOnInput = function (ev) {
+      if (!ev.target.closest("#rm24hContenidosLista")) return;
+      mostrarErrorContenidos("");
+      configActiva.rm24h_contenidos = leerContenidosDesdePanel();
+      sincronizarMensajeRemarketingDesdeContenidos(configActiva);
+      persistirContenidosEnNodo();
+    };
+
+    mount.addEventListener("click", mount._rm24hOnClick);
+    mount.addEventListener("change", mount._rm24hOnChange);
+    mount.addEventListener("input", mount._rm24hOnInput);
   }
 
   function esNodoRemarketingGlobal(nodo) {
@@ -1053,8 +1067,6 @@ window.MacBotRemarketingGlobal = (function () {
     const contenido = document.getElementById("panelNodoContenido");
     const panelShell = document.getElementById("panelNodo");
     if (!contenido) return;
-
-    delete contenido.dataset.rm24hContenidosBound;
 
     if (panelShell) panelShell.classList.add("panel-nodo--rm24h");
 
@@ -1188,7 +1200,6 @@ window.MacBotRemarketingGlobal = (function () {
     nodoActivo = null;
     configActiva = crearConfigVacia();
     document.getElementById("panelNodo")?.classList.remove("panel-nodo--rm24h");
-    delete document.getElementById("panelNodoContenido")?.dataset.rm24hContenidosBound;
   }
 
   function initNodoRecienCreado(nodo) {
