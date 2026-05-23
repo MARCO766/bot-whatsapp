@@ -984,110 +984,109 @@ body:has(#builderArea) {
 #builderArea .node.node-remarketing-global,
 #builderArea .node.rm24-node {
   --rm24-fire: #ff7a18;
-  --rm24-fire-2: #ffb347;
-  --rm24-glow: rgba(255, 122, 24, 0.42);
+  --rm24-fire-2: #e86a10;
+  --rm24-glow: rgba(255, 122, 24, 0.18);
   --rm24-neon: #39ff14;
-  --rm24-bg: rgba(11, 17, 28, 0.72);
+  --rm24-bg: rgba(11, 17, 28, 0.88);
   --rm24-border: rgba(255, 255, 255, 0.08);
-  min-width: 268px;
-  padding-top: 2px;
-  border: 1px solid color-mix(in srgb, var(--rm24-fire) 55%, transparent) !important;
-  border-radius: 14px !important;
+  min-width: 200px;
+  max-width: 220px;
+  padding-top: 0;
+  border: 1px solid color-mix(in srgb, var(--rm24-fire) 32%, transparent) !important;
+  border-radius: 10px !important;
   background:
     linear-gradient(
-      155deg,
-      rgba(255, 122, 24, 0.1) 0%,
-      rgba(11, 17, 28, 0.55) 38%,
-      rgba(17, 24, 39, 0.88) 100%
-    ),
-    var(--rm24-bg) !important;
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+      160deg,
+      rgba(255, 122, 24, 0.05) 0%,
+      rgba(11, 17, 28, 0.92) 42%,
+      rgba(17, 24, 39, 0.96) 100%
+    ) !important;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   box-shadow:
-    0 18px 48px rgba(0, 0, 0, 0.55),
-    0 0 0 1px rgba(255, 122, 24, 0.12) inset,
-    0 0 32px var(--rm24-glow) !important;
+    0 8px 24px rgba(0, 0, 0, 0.45),
+    0 0 0 1px rgba(255, 255, 255, 0.04) inset !important;
   overflow: visible;
 }
 
 #builderArea .node.remarketing-global-node::before,
 #builderArea .node.node-remarketing-global::before,
 #builderArea .node.rm24-node::before {
-  width: 4px;
-  border-radius: 14px 0 0 14px;
+  width: 3px;
+  border-radius: 10px 0 0 10px;
   background: linear-gradient(180deg, var(--rm24-fire), var(--rm24-fire-2));
-  box-shadow: 0 0 16px var(--rm24-glow);
+  box-shadow: none;
 }
 
 #builderArea .rm24-node .port.in {
   background: var(--rm24-fire) !important;
-  border-color: rgba(255, 255, 255, 0.45) !important;
-  box-shadow:
-    0 0 12px rgba(255, 122, 24, 0.85),
-    0 0 24px rgba(255, 122, 24, 0.35) !important;
+  border-color: rgba(255, 255, 255, 0.35) !important;
+  box-shadow: 0 0 6px rgba(255, 122, 24, 0.4) !important;
 }
 
 #builderArea .rm24-node-header,
 #builderArea .rm24h-header {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 14px 10px;
-  border-bottom: 1px solid color-mix(in srgb, var(--rm24-fire) 28%, transparent);
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px 7px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 #builderArea .rm24-node-icon {
-  font-size: 20px;
-  line-height: 1;
-  filter: drop-shadow(0 0 8px rgba(255, 122, 24, 0.65));
+  font-size: 14px;
+  line-height: 1.2;
+  flex-shrink: 0;
+  filter: none;
 }
 
 #builderArea .rm24-node-title-group {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 5px;
   min-width: 0;
   flex: 1;
 }
 
-#builderArea .rm24-node-title {
-  font-weight: 700;
-  font-size: 13px;
-  line-height: 1.25;
-  color: #f9fafb;
-  letter-spacing: -0.01em;
+#builderArea .rm24-node-title-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
+#builderArea .rm24-node-title {
+  font-weight: 600;
+  font-size: 11px;
+  line-height: 1.3;
+  color: #f3f4f6;
+  letter-spacing: -0.02em;
+}
+
+#builderArea .rm24-badge--pill,
 #builderArea .rm24-badge,
 #builderArea .rm24h-chip {
   display: inline-flex;
   align-items: center;
-  font-size: 9px;
-  font-weight: 800;
-  letter-spacing: 0.12em;
+  justify-content: center;
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
-  padding: 3px 8px;
-  border-radius: 999px;
-  color: #fff8f2;
-  background: linear-gradient(
-    135deg,
-    color-mix(in srgb, var(--rm24-fire) 70%, #000),
-    color-mix(in srgb, var(--rm24-fire-2) 55%, #000)
-  );
-  border: 1px solid color-mix(in srgb, var(--rm24-fire) 45%, transparent);
-  box-shadow: 0 0 12px rgba(255, 122, 24, 0.35);
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: #fdba74;
+  background: rgba(255, 122, 24, 0.1);
+  border: 1px solid rgba(255, 122, 24, 0.28);
+  box-shadow: none;
 }
 
 #builderArea .rm24-node-actions {
   position: absolute;
-  top: 8px;
-  right: 8px;
+  top: 5px;
+  right: 5px;
   z-index: 25;
   display: flex;
-  gap: 5px;
+  gap: 3px;
   opacity: 0;
-  transition: opacity 0.2s ease;
+  transition: opacity 0.18s ease;
 }
 
 #builderArea .rm24-node:hover .rm24-node-actions,
@@ -1100,54 +1099,50 @@ body:has(#builderArea) {
   position: static;
   top: auto;
   right: auto;
-  width: 26px;
-  height: 26px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  font-size: 12px;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  font-size: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
   transition:
-    transform 0.15s ease,
-    box-shadow 0.2s ease,
-    border-color 0.2s ease;
+    background 0.15s ease,
+    border-color 0.15s ease,
+    opacity 0.15s ease;
 }
 
 #builderArea .rm24-node-actions .edit-node {
-  background: linear-gradient(
-    145deg,
-    rgba(255, 122, 24, 0.45),
-    rgba(255, 179, 71, 0.25)
-  );
-  color: #fff7ed;
-  border-color: rgba(255, 179, 71, 0.45);
+  background: rgba(255, 255, 255, 0.06);
+  color: #d1d5db;
+  border-color: rgba(255, 255, 255, 0.14);
 }
 
 #builderArea .rm24-node-actions .delete-node {
-  background: linear-gradient(
-    145deg,
-    rgba(127, 29, 29, 0.8),
-    rgba(69, 10, 10, 0.9)
-  );
-  color: #fecaca;
-  border-color: rgba(255, 77, 77, 0.45);
+  background: rgba(255, 77, 77, 0.12);
+  color: #fca5a5;
+  border-color: rgba(255, 77, 77, 0.22);
 }
 
 #builderArea .rm24-node-actions .edit-node:hover {
-  transform: scale(1.08);
-  box-shadow: 0 0 14px rgba(255, 122, 24, 0.45);
+  transform: none;
+  background: rgba(255, 122, 24, 0.18);
+  border-color: rgba(255, 122, 24, 0.35);
+  box-shadow: none;
 }
 
 #builderArea .rm24-node-actions .delete-node:hover {
-  transform: scale(1.08);
-  box-shadow: 0 0 14px rgba(255, 77, 77, 0.5);
+  transform: none;
+  background: rgba(255, 77, 77, 0.22);
+  border-color: rgba(255, 77, 77, 0.38);
+  box-shadow: none;
 }
 
 #builderArea .rm24-node-body,
 #builderArea .rm24h-body {
-  padding: 12px 14px 16px;
-  font-size: 12px;
+  padding: 8px 10px 10px;
+  font-size: 10px;
   color: #9ca3af;
 }
 
@@ -1155,84 +1150,86 @@ body:has(#builderArea) {
 #builderArea .rm24h-badge-on {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.1em;
+  gap: 4px;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #061018;
-  padding: 4px 10px;
-  border-radius: 999px;
-  margin-bottom: 10px;
-  background: linear-gradient(90deg, var(--rm24-neon), #7dff5c);
-  box-shadow:
-    0 0 16px rgba(57, 255, 20, 0.45),
-    0 0 0 1px rgba(255, 255, 255, 0.2) inset;
+  color: #052e12;
+  padding: 2px 7px;
+  border-radius: 4px;
+  margin-bottom: 6px;
+  background: rgba(57, 255, 20, 0.88);
+  box-shadow: none;
 }
 
 #builderArea .rm24-status::before {
   content: "";
-  width: 6px;
-  height: 6px;
+  width: 4px;
+  height: 4px;
   border-radius: 50%;
-  background: #061018;
-  box-shadow: 0 0 6px rgba(6, 16, 24, 0.5);
+  background: #052e12;
+  box-shadow: none;
 }
 
 #builderArea .rm24-summary {
   list-style: none;
-  margin: 0 0 10px;
+  margin: 0 0 6px;
   padding: 0;
   display: grid;
-  gap: 6px;
+  gap: 3px;
+}
+
+#builderArea .rm24-summary--compact li {
+  font-size: 9.5px;
+  line-height: 1.3;
+  color: #d1d5db;
 }
 
 #builderArea .rm24-summary li {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 11px;
-  line-height: 1.35;
-  color: #e5e7eb;
+  gap: 6px;
 }
 
 #builderArea .rm24-summary-dot {
-  width: 5px;
-  height: 5px;
+  width: 3px;
+  height: 3px;
   border-radius: 50%;
   flex-shrink: 0;
-  background: var(--rm24-fire);
-  box-shadow: 0 0 8px rgba(255, 122, 24, 0.75);
+  background: rgba(255, 122, 24, 0.75);
+  box-shadow: none;
 }
 
 #builderArea .rm24-node-msg-preview,
 #builderArea .rm24h-preview {
   margin: 0;
-  padding: 8px 10px;
-  border-radius: 8px;
-  font-size: 11px;
-  line-height: 1.45;
+  padding: 5px 7px;
+  border-radius: 6px;
+  font-size: 9.5px;
+  line-height: 1.35;
   color: #9ca3af;
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.03);
   border: 1px solid var(--rm24-border);
 }
 
 #builderArea .rm24-node-idle,
 #builderArea .rm24h-empty {
   margin: 0;
-  line-height: 1.45;
-  color: #9ca3af;
-  font-style: italic;
+  font-size: 10px;
+  line-height: 1.35;
+  color: #6b7280;
+  font-style: normal;
 }
 
 #builderArea .node.remarketing-global-node.selected,
 #builderArea .node.node-remarketing-global.selected,
 #builderArea .node.rm24-node.selected {
-  outline: 2px solid var(--rm24-fire) !important;
-  outline-offset: 3px;
+  outline: 1px solid color-mix(in srgb, var(--rm24-fire) 55%, transparent) !important;
+  outline-offset: 2px;
   box-shadow:
-    0 18px 48px rgba(0, 0, 0, 0.55),
-    0 0 40px var(--rm24-glow) !important;
+    0 8px 24px rgba(0, 0, 0, 0.5),
+    0 0 16px var(--rm24-glow) !important;
 }
 
 .menu-nodo-btn-rm24h {
@@ -1240,22 +1237,20 @@ body:has(#builderArea) {
 }
 
 .menu-nodo-btn-rm24h:hover:not(:disabled) {
-  background: color-mix(in srgb, #ff7a18 14%, #263042) !important;
-  box-shadow: 0 0 14px rgba(255, 122, 24, 0.28) !important;
+  background: color-mix(in srgb, #ff7a18 10%, #263042) !important;
+  box-shadow: none !important;
 }
 
 /* Panel derecho RM24H */
 .panel-nodo.panel-nodo--rm24h {
-  width: 400px;
-  max-width: 42vw;
+  width: 380px;
+  max-width: 40vw;
   padding: 0;
   overflow: hidden;
   flex-direction: column;
   background: linear-gradient(165deg, #0b111c 0%, #111827 48%, #0b111c 100%);
-  border-left: 1px solid rgba(255, 122, 24, 0.18);
-  box-shadow:
-    0 0 40px rgba(255, 122, 24, 0.1),
-    0 20px 50px rgba(0, 0, 0, 0.55);
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
 }
 
 .panel-nodo.panel-nodo--rm24h.activo {
@@ -1277,38 +1272,34 @@ body:has(#builderArea) {
 .panel-nodo--rm24h .panel-nodo-header {
   flex-shrink: 0;
   margin: 0;
-  padding: 14px 16px;
-  border-bottom: 1px solid rgba(255, 122, 24, 0.14);
-  background: linear-gradient(
-    180deg,
-    rgba(255, 122, 24, 0.14) 0%,
-    rgba(11, 17, 28, 0.92) 100%
-  );
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(17, 24, 39, 0.65);
 }
 
 .panel-nodo--rm24h .panel-nodo-header h3 {
   margin: 0;
-  font-size: 14px;
-  font-weight: 700;
-  color: #f9fafb;
+  font-size: 13px;
+  font-weight: 600;
+  color: #f3f4f6;
   letter-spacing: -0.02em;
 }
 
 .panel-nodo--rm24h .panel-close {
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 77, 77, 0.35);
-  background: linear-gradient(145deg, rgba(127, 29, 29, 0.5), rgba(69, 10, 10, 0.65));
-  color: #fecaca;
-  transition:
-    transform 0.15s ease,
-    box-shadow 0.2s ease;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  color: #9ca3af;
+  transition: background 0.15s ease, color 0.15s ease;
 }
 
 .panel-nodo--rm24h .panel-close:hover {
-  transform: scale(1.05);
-  box-shadow: 0 0 16px rgba(255, 77, 77, 0.35);
+  transform: none;
+  background: rgba(255, 77, 77, 0.14);
+  color: #fecaca;
+  box-shadow: none;
 }
 
 .panel-nodo--rm24h .panel-nodo-body {
@@ -1329,158 +1320,187 @@ body:has(#builderArea) {
 
 .rm24-card--hero {
   display: flex;
-  gap: 12px;
+  gap: 10px;
   align-items: flex-start;
   flex-shrink: 0;
   margin: 0;
-  padding: 16px 18px;
-  border-bottom: 1px solid rgba(255, 122, 24, 0.12);
-  background: linear-gradient(
-    135deg,
-    rgba(255, 122, 24, 0.14) 0%,
-    rgba(17, 24, 39, 0.35) 100%
-  );
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.02);
 }
 
 .rm24-card--hero h4 {
-  margin: 0 0 6px;
-  font-size: 15px;
-  font-weight: 700;
-  color: #f9fafb;
+  margin: 0 0 4px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #f3f4f6;
   letter-spacing: -0.02em;
 }
 
 .rm24-card--hero p {
   margin: 0;
   font-size: 12px;
-  line-height: 1.5;
+  line-height: 1.45;
   color: #9ca3af;
+  font-weight: 400;
 }
 
 .rm24h-panel-icon {
-  font-size: 30px;
+  font-size: 22px;
   line-height: 1;
-  filter: drop-shadow(0 0 10px rgba(255, 122, 24, 0.5));
+  filter: none;
 }
 
 .rm24-config-scroll {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 16px 18px 20px;
+  padding: 14px 16px 18px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 12px;
 }
 
 .rm24-section {
-  margin-bottom: 18px;
-  padding: 14px 14px 12px;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  margin-bottom: 0;
+  padding: 12px 12px 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.07);
 }
 
 .rm24-section--future {
-  opacity: 0.88;
+  opacity: 0.85;
 }
 
 .rm24-section-title {
-  margin: 0 0 12px;
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
+  margin: 0 0 10px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: #ff7a18;
+  color: #6b7280;
 }
 
-.rm24h-toggle,
-.rm24-switch {
+.panel-nodo--rm24h .rm24h-toggle,
+.panel-nodo--rm24h .rm24-switch {
   display: flex;
+  flex-direction: row;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
+  width: 100%;
+  margin: 0;
+  padding: 0;
   cursor: pointer;
   user-select: none;
+  position: relative;
 }
 
-.rm24-switch input {
+.panel-nodo--rm24h .rm24-switch input[type="checkbox"] {
   position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
   opacity: 0;
-  width: 0;
-  height: 0;
   pointer-events: none;
 }
 
-.rm24-switch-track {
+.panel-nodo--rm24h .rm24-switch-track {
   position: relative;
-  flex-shrink: 0;
-  width: 44px;
-  height: 24px;
+  flex: 0 0 36px;
+  width: 36px;
+  height: 20px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   transition:
     background 0.2s ease,
-    border-color 0.2s ease,
-    box-shadow 0.2s ease;
+    border-color 0.2s ease;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
 }
 
-.rm24-switch-track::after {
+.panel-nodo--rm24h .rm24-switch-track::after {
   content: "";
   position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 18px;
-  height: 18px;
+  top: 1px;
+  left: 1px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
   background: #f9fafb;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
-  transition: transform 0.2s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.rm24-switch input:checked + .rm24-switch-track {
-  background: linear-gradient(90deg, #39ff14, #7dff5c);
-  border-color: rgba(57, 255, 20, 0.45);
-  box-shadow: 0 0 14px rgba(57, 255, 20, 0.35);
+.panel-nodo--rm24h .rm24-switch input:checked + .rm24-switch-track {
+  background: #39ff14;
+  border-color: rgba(57, 255, 20, 0.5);
+  box-shadow: none;
 }
 
-.rm24-switch input:checked + .rm24-switch-track::after {
-  transform: translateX(20px);
-  background: #061018;
+.panel-nodo--rm24h .rm24-switch input:checked + .rm24-switch-track::after {
+  transform: translateX(16px);
+  background: #fff;
 }
 
-.rm24-switch--locked {
+.panel-nodo--rm24h .rm24-switch--locked {
   cursor: not-allowed;
-  opacity: 0.75;
+  opacity: 0.72;
 }
 
-.rm24-switch--on .rm24-switch-track {
-  background: linear-gradient(90deg, rgba(57, 255, 20, 0.35), rgba(125, 255, 92, 0.25));
-  border-color: rgba(57, 255, 20, 0.25);
+.panel-nodo--rm24h .rm24-switch--on .rm24-switch-track {
+  background: rgba(57, 255, 20, 0.35);
+  border-color: rgba(57, 255, 20, 0.3);
 }
 
-.rm24-switch--on .rm24-switch-track::after {
-  transform: translateX(20px);
+.panel-nodo--rm24h .rm24-switch--on .rm24-switch-track::after {
+  transform: translateX(16px);
 }
 
-.rm24-switch-label {
+.panel-nodo--rm24h .rm24-switch-label {
+  flex: 1;
+  min-width: 0;
   font-size: 13px;
-  font-weight: 600;
-  color: #f9fafb;
+  font-weight: 500;
+  line-height: 1.35;
+  color: #e5e7eb;
 }
 
-.rm24-field,
+.panel-nodo--rm24h .rm24-rule {
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.panel-nodo--rm24h .rm24-rule:last-child {
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.panel-nodo--rm24h .rm24-rule-hint {
+  margin: 4px 0 0 46px;
+  padding: 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: #6b7280;
+}
+
+.panel-nodo--rm24h .rm24-field,
 .panel-nodo--rm24h .rm24h-field {
   margin-bottom: 0;
 }
 
-.rm24-field label,
-.panel-nodo--rm24h .rm24h-field > label:first-child {
+.panel-nodo--rm24h .rm24-field > label:not(.rm24-switch),
+.panel-nodo--rm24h .rm24h-field > label:not(.rm24-switch) {
   display: block;
   font-size: 12px;
-  font-weight: 600;
-  margin-bottom: 8px;
-  color: #e5e7eb;
+  font-weight: 500;
+  margin-bottom: 6px;
+  color: #d1d5db;
 }
 
 .rm24-field-head {
@@ -1501,87 +1521,84 @@ body:has(#builderArea) {
   white-space: nowrap;
 }
 
-.rm24-input,
-.rm24-textarea,
+.panel-nodo--rm24h .rm24-input,
+.panel-nodo--rm24h .rm24-textarea,
 .panel-nodo--rm24h .rm24h-field input[type="number"],
 .panel-nodo--rm24h .rm24h-field textarea {
   width: 100%;
   box-sizing: border-box;
-  padding: 10px 12px;
-  border-radius: 10px;
+  padding: 9px 11px;
+  border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(0, 0, 0, 0.28);
-  color: #f9fafb;
+  background: rgba(0, 0, 0, 0.22);
+  color: #f3f4f6;
   font-size: 13px;
   line-height: 1.45;
   transition:
-    border-color 0.2s ease,
-    box-shadow 0.2s ease,
-    background 0.2s ease;
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    background 0.18s ease;
 }
 
-.rm24-input--readonly {
-  opacity: 0.72;
+.panel-nodo--rm24h .rm24-input:hover,
+.panel-nodo--rm24h .rm24-textarea:hover {
+  border-color: rgba(255, 255, 255, 0.16);
+  background: rgba(0, 0, 0, 0.28);
+}
+
+.panel-nodo--rm24h .rm24-input--readonly {
+  opacity: 0.65;
   cursor: not-allowed;
 }
 
-.rm24-textarea {
-  min-height: 120px;
+.panel-nodo--rm24h .rm24-input--readonly:hover {
+  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.22);
+}
+
+.panel-nodo--rm24h .rm24-textarea {
+  min-height: 100px;
   resize: vertical;
 }
 
-.rm24-input:focus,
-.rm24-textarea:focus,
+.panel-nodo--rm24h .rm24-input:focus,
+.panel-nodo--rm24h .rm24-textarea:focus,
 .panel-nodo--rm24h .rm24h-field textarea:focus {
   outline: none;
-  border-color: rgba(255, 122, 24, 0.55);
-  box-shadow: 0 0 0 3px rgba(255, 122, 24, 0.12);
-  background: rgba(0, 0, 0, 0.38);
+  border-color: rgba(255, 122, 24, 0.4);
+  box-shadow: 0 0 0 2px rgba(255, 122, 24, 0.1);
+  background: rgba(0, 0, 0, 0.32);
 }
 
-.rm24h-hint {
-  margin: 8px 0 0;
+.panel-nodo--rm24h .rm24h-hint:not(.rm24-rule-hint) {
+  margin: 6px 0 0;
   font-size: 11px;
-  line-height: 1.45;
-  color: #9ca3af;
+  line-height: 1.4;
+  color: #6b7280;
 }
 
-.rm24-field--locked,
-.panel-nodo--rm24h .rm24h-field--locked {
-  opacity: 0.82;
-}
-
-.rm24-config-footer {
+.panel-nodo--rm24h .rm24-config-footer {
   flex-shrink: 0;
-  margin-top: 8px;
-  padding-top: 4px;
+  margin-top: 4px;
+  padding-top: 2px;
 }
 
-.rm24-btn-save,
 .panel-nodo--rm24h .rm24-btn-save {
   width: 100%;
-  padding: 13px 16px;
+  padding: 11px 14px;
   border: none;
-  border-radius: 12px;
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  color: #061018;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #052e12;
   cursor: pointer;
-  background: linear-gradient(135deg, #39ff14 0%, #7dff5c 100%);
-  box-shadow:
-    0 8px 28px rgba(57, 255, 20, 0.28),
-    0 0 0 1px rgba(255, 255, 255, 0.15) inset;
-  transition:
-    transform 0.15s ease,
-    box-shadow 0.2s ease,
-    filter 0.2s ease;
+  background: #39ff14;
+  box-shadow: none;
+  transition: background 0.15s ease, filter 0.15s ease;
 }
 
-.rm24-btn-save:hover {
-  transform: translateY(-1px);
-  filter: brightness(1.05);
-  box-shadow:
-    0 10px 32px rgba(57, 255, 20, 0.42),
-    0 0 24px rgba(57, 255, 20, 0.22);
+.panel-nodo--rm24h .rm24-btn-save:hover {
+  transform: none;
+  filter: brightness(1.06);
+  box-shadow: 0 0 0 1px rgba(57, 255, 20, 0.25);
 }

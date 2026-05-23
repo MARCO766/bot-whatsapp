@@ -91,7 +91,7 @@ window.MacBotRemarketingGlobal = (function () {
 
     body.innerHTML =
       '<div class="rm24-status rm24h-badge-on">ACTIVO</div>' +
-      '<ul class="rm24-summary" aria-label="Resumen del remarketing">' +
+      '<ul class="rm24-summary rm24-summary--compact" aria-label="Resumen del remarketing">' +
       '<li><span class="rm24-summary-dot"></span>23h de inactividad</li>' +
       '<li><span class="rm24-summary-dot"></span>Reinicia si responde</li>' +
       '<li><span class="rm24-summary-dot"></span>1 solo envío</li>' +
@@ -109,11 +109,27 @@ window.MacBotRemarketingGlobal = (function () {
     const chip = nodo.querySelector(".rm24h-chip");
     if (chip) {
       chip.textContent = "RM24H";
-      chip.classList.add("rm24-badge", "rm24-badge--type");
+      chip.classList.add("rm24-badge", "rm24-badge--type", "rm24-badge--pill");
     }
 
     const header = nodo.querySelector(".rm24h-header");
     if (header) header.classList.add("rm24-node-header");
+
+    const titleGroup = nodo.querySelector(".rm24-node-title-group");
+    if (titleGroup && !titleGroup.querySelector(".rm24-node-title-row")) {
+      const titleEl =
+        titleGroup.querySelector(".rm24-node-title") ||
+        titleGroup.querySelector("span:not(.rm24h-chip):not(.rm24-badge)");
+      const chipEl = titleGroup.querySelector(".rm24h-chip, .rm24-badge");
+      if (titleEl && chipEl && titleEl !== chipEl) {
+        const row = document.createElement("div");
+        row.className = "rm24-node-title-row";
+        titleGroup.textContent = "";
+        titleGroup.appendChild(row);
+        row.appendChild(titleEl);
+        row.appendChild(chipEl);
+      }
+    }
 
     const body = nodo.querySelector(".rm24h-body");
     if (body) body.classList.add("rm24-node-body");
@@ -181,7 +197,7 @@ window.MacBotRemarketingGlobal = (function () {
       '<div class="rm24-card rm24-card--hero">' +
       '<span class="rm24h-panel-icon" aria-hidden="true">🔥</span>' +
       "<div>" +
-      "<h4>🔥 Remarketing Global 24h</h4>" +
+      "<h4>Remarketing Global 24h</h4>" +
       "<p>Cerebro global del flujo · no mueve leads entre nodos</p>" +
       "</div></div>" +
       '<div class="rm24-config-scroll">' +
@@ -200,29 +216,26 @@ window.MacBotRemarketingGlobal = (function () {
       "<label for=\"rm24hHoras\">Horas de inactividad</label>" +
       '<input type="number" id="rm24hHoras" class="rm24-input rm24-input--readonly" value="23" disabled readonly>' +
       '<p class="rm24h-hint">23h (ventana WhatsApp Cloud API)</p></div></section>' +
-      '<section class="rm24-section">' +
+      '<section class="rm24-section rm24-section--rules">' +
       '<h5 class="rm24-section-title">Reglas automáticas</h5>' +
-      '<div class="rm24h-field rm24-field rm24h-field--locked rm24-field--locked">' +
-      "<label>Detener si responde</label>" +
+      '<div class="rm24-rule rm24h-field--locked">' +
       '<label class="rm24-switch rm24-switch--locked">' +
       '<input type="checkbox" id="rm24hDetenerSiResponde" disabled>' +
       '<span class="rm24-switch-track" aria-hidden="true"></span>' +
-      '<span class="rm24-switch-label">Desactivado</span></label>' +
-      '<p class="rm24h-hint">NO — responder reinicia el contador</p></div>' +
-      '<div class="rm24h-field rm24-field rm24h-field--locked rm24-field--locked">' +
-      "<label>Reiniciar contador al responder</label>" +
+      '<span class="rm24-switch-label">Detener si responde</span></label>' +
+      '<p class="rm24h-hint rm24-rule-hint">NO — responder reinicia el contador</p></div>' +
+      '<div class="rm24-rule rm24h-field--locked">' +
       '<label class="rm24-switch rm24-switch--locked rm24-switch--on">' +
       '<input type="checkbox" id="rm24hReiniciar" checked disabled>' +
       '<span class="rm24-switch-track" aria-hidden="true"></span>' +
-      '<span class="rm24-switch-label">Activado</span></label>' +
-      '<p class="rm24h-hint">SÍ (fijo en Fase 1)</p></div>' +
-      '<div class="rm24h-field rm24-field rm24h-field--locked rm24-field--locked">' +
-      "<label>Detener al llegar a Conversión</label>" +
+      '<span class="rm24-switch-label">Reiniciar contador al responder</span></label>' +
+      '<p class="rm24h-hint rm24-rule-hint">SÍ (fijo en Fase 1)</p></div>' +
+      '<div class="rm24-rule rm24h-field--locked">' +
       '<label class="rm24-switch rm24-switch--locked rm24-switch--on">' +
       '<input type="checkbox" id="rm24hDetenerConversion" checked disabled>' +
       '<span class="rm24-switch-track" aria-hidden="true"></span>' +
-      '<span class="rm24-switch-label">Activado</span></label>' +
-      '<p class="rm24h-hint">SÍ (fijo en Fase 1)</p></div></section>' +
+      '<span class="rm24-switch-label">Detener al llegar a Conversión</span></label>' +
+      '<p class="rm24h-hint rm24-rule-hint">SÍ (fijo en Fase 1)</p></div></section>' +
       '<section class="rm24-section">' +
       '<h5 class="rm24-section-title">Mensaje</h5>' +
       '<div class="rm24h-field rm24-field">' +
@@ -234,13 +247,12 @@ window.MacBotRemarketingGlobal = (function () {
       "</textarea></div></section>" +
       '<section class="rm24-section rm24-section--future">' +
       '<h5 class="rm24-section-title">Opciones futuras</h5>' +
-      '<div class="rm24h-field rm24-field rm24h-field--locked rm24-field--locked">' +
-      "<label>Modo contextual (futuro)</label>" +
+      '<div class="rm24-rule rm24h-field--locked">' +
       '<label class="rm24-switch rm24-switch--locked">' +
       '<input type="checkbox" id="rm24hModoContextual" disabled>' +
       '<span class="rm24-switch-track" aria-hidden="true"></span>' +
-      '<span class="rm24-switch-label">Desactivado</span></label>' +
-      '<p class="rm24h-hint">Desactivado en Fase 1</p></div></section>' +
+      '<span class="rm24-switch-label">Modo contextual (futuro)</span></label>' +
+      '<p class="rm24h-hint rm24-rule-hint">Desactivado en Fase 1</p></div></section>' +
       '<div class="rm24-config-footer">' +
       '<button type="button" class="panel-btn rm24-btn-save" id="rm24hGuardarPanel">Guardar nodo</button>' +
       "</div></div></div>";
@@ -355,9 +367,10 @@ window.MacBotRemarketingGlobal = (function () {
       '<header class="rm24-node-header rm24h-header">' +
       '<span class="rm24-node-icon" aria-hidden="true">🔥</span>' +
       '<div class="rm24-node-title-group">' +
+      '<div class="rm24-node-title-row">' +
       '<span class="rm24-node-title">Remarketing Global 24h</span>' +
-      '<span class="rm24-badge rm24-badge--type rm24h-chip">RM24H</span>' +
-      "</div></header>" +
+      '<span class="rm24-badge rm24-badge--pill rm24-badge--type rm24h-chip">RM24H</span>' +
+      "</div></div></header>" +
       '<div class="rm24h-body rm24-node-body"><p class="rm24h-empty rm24-node-idle">Inactivo · abre el panel para activar</p></div>' +
       '<textarea class="remarketing-global-data" style="display:none;">' +
       cfg +
