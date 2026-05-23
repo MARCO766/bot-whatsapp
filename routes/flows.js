@@ -28,6 +28,7 @@ const {
   prepararImagenParaWhatsApp,
 } = require("../services/imageWhatsAppService");
 const { optimizarImagenFlujoStorage } = require("../services/flowImageStorageService");
+const { subirArchivoRm24hMedia } = require("../services/rm24hMediaStorage");
 
 const MAX_IMAGEN_NODO_FLUJO = 2 * 1024 * 1024;
 const seguimientoRoutes = require("./seguimiento");
@@ -52,6 +53,43 @@ function finishInbox(req, res, numero) {
 }
 
 router.use(seguimientoRoutes);
+
+/** RM24H — media a bucket rm24h-media (session, service role servidor) */
+router.post(
+  "/subir-rm24h-media",
+  protegerPanel,
+  upload.single("archivo"),
+  async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: "No se recibió archivo" });
+      }
+
+      const tipo = String(req.body?.tipo || "").toLowerCase();
+      if (!["imagen", "video", "audio", "documento"].includes(tipo)) {
+        return res.status(400).json({ error: "Tipo de media inválido" });
+      }
+
+      const resultado = await subirArchivoRm24hMedia(
+        req.file,
+        tipo,
+        req.session?.usuario?.id
+      );
+
+      res.json(resultado);
+    } catch (error) {
+      const status = error.status || 500;
+      console.log(
+        "ERROR SUBIENDO RM24H MEDIA:",
+        error.response?.data || error.message
+      );
+      res.status(status).json({
+        error: error.message || "Error subiendo archivo RM24H",
+      });
+    }
+  }
+);
+
 router.post("/subir-archivo", protegerPanel, upload.single("archivo"), async (req, res) => {
   try {
     if (!req.file) {

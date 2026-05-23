@@ -1728,6 +1728,87 @@ body:has(#builderArea) {
   word-break: break-all;
 }
 
+.panel-nodo--rm24h .rm24-media-upload {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.panel-nodo--rm24h .rm24-media-upload-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.panel-nodo--rm24h .rm24-btn-upload {
+  padding: 6px 12px;
+  border: 1px solid rgba(249, 115, 22, 0.45);
+  border-radius: 8px;
+  background: rgba(249, 115, 22, 0.12);
+  color: #fdba74;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.panel-nodo--rm24h .rm24-btn-upload:hover {
+  background: rgba(249, 115, 22, 0.22);
+}
+
+.panel-nodo--rm24h .rm24-media-upload-hint {
+  font-size: 10px;
+  color: #9ca3af;
+}
+
+.panel-nodo--rm24h .rm24-upload-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.panel-nodo--rm24h .rm24-upload-progress-bar {
+  flex: 1;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.panel-nodo--rm24h .rm24-upload-progress-fill {
+  display: block;
+  height: 100%;
+  width: 0;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #f97316, #fb923c);
+  transition: width 0.15s ease;
+}
+
+.panel-nodo--rm24h .rm24-upload-progress-text {
+  font-size: 10px;
+  color: #d1d5db;
+  min-width: 72px;
+}
+
+.panel-nodo--rm24h .rm24-link-manual {
+  align-self: flex-start;
+  padding: 0;
+  border: none;
+  background: none;
+  color: #93c5fd;
+  font-size: 11px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.panel-nodo--rm24h .rm24-manual-url {
+  display: none;
+}
+
+.panel-nodo--rm24h .rm24-manual-url--open {
+  display: block;
+}
+
 /* RM24H — selector de bloques (grid premium) */
 .panel-nodo--rm24h .rm24-block-picker {
   display: grid;

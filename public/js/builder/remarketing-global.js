@@ -252,6 +252,31 @@ window.MacBotRemarketingGlobal = (function () {
 
   let nodoActivo = null;
   let configActiva = crearConfigVacia();
+  let rm24hSubidaEnCurso = false;
+
+  const RM24H_MEDIA_CLIENT = {
+    imagen: {
+      maxBytes: 2 * 1024 * 1024,
+      accept: "image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp",
+      label: "JPG, PNG o WEBP · máx 2 MB",
+    },
+    video: {
+      maxBytes: 15 * 1024 * 1024,
+      accept: "video/mp4,.mp4",
+      label: "MP4 · máx 15 MB",
+    },
+    audio: {
+      maxBytes: 5 * 1024 * 1024,
+      accept: "audio/mpeg,audio/mp3,audio/ogg,audio/mp4,audio/x-m4a,.mp3,.ogg,.m4a",
+      label: "MP3, OGG o M4A · máx 5 MB",
+    },
+    documento: {
+      maxBytes: 8 * 1024 * 1024,
+      accept:
+        ".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      label: "PDF, DOC o DOCX · máx 8 MB",
+    },
+  };
 
   function esc(str) {
     return String(str || "")
@@ -486,12 +511,22 @@ window.MacBotRemarketingGlobal = (function () {
 
   function addRm24ContentBlock(tipo) {
     const t = String(tipo || "texto").toLowerCase();
+    const tipoNorm = t === "archivo" ? "documento" : t;
     const lista = leerContenidosDesdePanel();
-    lista.push(crearBloqueVacio(t === "archivo" ? "documento" : t));
+    lista.push(crearBloqueVacio(tipoNorm));
     configActiva.rm24h_contenidos = lista;
     renderRm24ContentBlocks();
     mostrarErrorContenidos("");
     persistirContenidosEnNodo();
+    if (RM24H_MEDIA_CLIENT[tipoNorm]) {
+      requestAnimationFrame(function () {
+        const mount = document.getElementById("rm24hContenidosLista");
+        const input = mount?.querySelector(
+          ".rm24-contenido-item:last-child .rm24-contenido-file"
+        );
+        input?.click();
+      });
+    }
   }
 
   function removeRm24ContentBlock(index) {
@@ -519,6 +554,182 @@ window.MacBotRemarketingGlobal = (function () {
     if (typeof window.macbotRecordHistoryDebounced === "function") {
       window.macbotRecordHistoryDebounced();
     }
+  }
+
+  function validarArchivoRm24hCliente(file, tipo) {
+    const reglas = RM24H_MEDIA_CLIENT[tipo];
+    if (!reglas || !file) return "Archivo no válido";
+    if (file.size > reglas.maxBytes) {
+      const mb = Math.round(reglas.maxBytes / (1024 * 1024));
+      return "El archivo supera el máximo de " + mb + " MB";
+    }
+    const name = (file.name || "").toLowerCase();
+    if (tipo === "imagen" && !/\.(jpe?g|png|webp)$/.test(name)) {
+      return "Imagen: solo JPG, PNG o WEBP";
+    }
+    if (tipo === "video" && !/\.mp4$/.test(name)) return "Video: solo MP4";
+    if (tipo === "audio" && !/\.(mp3|ogg|m4a)$/.test(name)) {
+      return "Audio: solo MP3, OGG o M4A";
+    }
+    if (tipo === "documento" && !/\.(pdf|doc|docx)$/.test(name)) {
+      return "Archivo: solo PDF, DOC o DOCX";
+    }
+    return null;
+  }
+
+  function setProgresoSubidaRm24h(card, pct, texto) {
+    if (!card) return;
+    const wrap = card.querySelector(".rm24-upload-progress");
+    const fill = card.querySelector(".rm24-upload-progress-fill");
+    const label = card.querySelector(".rm24-upload-progress-text");
+    if (!wrap) return;
+    wrap.hidden = false;
+    const n = Math.max(0, Math.min(100, Math.round(pct)));
+    if (fill) fill.style.width = n + "%";
+    if (label) label.textContent = texto || n + "%";
+  }
+
+  function ocultarProgresoSubidaRm24h(card) {
+    const wrap = card?.querySelector(".rm24-upload-progress");
+    if (wrap) wrap.hidden = true;
+  }
+
+  function subirArchivoRm24hEnBloque(card, file) {
+    if (!card || !file || rm24hSubidaEnCurso) return;
+    const tipo = card.dataset.tipo;
+    if (!RM24H_MEDIA_CLIENT[tipo]) return;
+
+    const errVal = validarArchivoRm24hCliente(file, tipo);
+    if (errVal) {
+      mostrarErrorContenidos(errVal);
+      return;
+    }
+
+    rm24hSubidaEnCurso = true;
+    mostrarErrorContenidos("");
+    setProgresoSubidaRm24h(card, 0, "Preparando…");
+
+    const formData = new FormData();
+    formData.append("archivo", file);
+    formData.append("tipo", tipo);
+
+    const xhr = new XMLHttpRequest();
+    xhr.upload.addEventListener("progress", function (ev) {
+      if (!ev.lengthComputable) return;
+      const pct = 5 + Math.round((ev.loaded / ev.total) * 90);
+      setProgresoSubidaRm24h(card, pct, "Subiendo…");
+    });
+
+    xhr.addEventListener("load", function () {
+      rm24hSubidaEnCurso = false;
+      let data = {};
+      try {
+        data = JSON.parse(xhr.responseText || "{}");
+      } catch (e) {
+        data = {};
+      }
+
+      if (xhr.status >= 200 && xhr.status < 300 && data.url) {
+        setProgresoSubidaRm24h(card, 100, "Listo");
+        const urlInput = card.querySelector(".rm24-contenido-url");
+        if (urlInput) urlInput.value = data.url;
+        if (tipo === "documento") {
+          const fn = card.querySelector(".rm24-contenido-filename");
+          if (fn && data.filename) fn.value = data.filename;
+        }
+        configActiva.rm24h_contenidos = leerContenidosDesdePanel();
+        renderRm24ContentBlocks();
+        persistirContenidosEnNodo();
+        setTimeout(function () {
+          ocultarProgresoSubidaRm24h(card);
+        }, 600);
+        return;
+      }
+
+      ocultarProgresoSubidaRm24h(card);
+      mostrarErrorContenidos(data.error || "Error al subir el archivo");
+    });
+
+    xhr.addEventListener("error", function () {
+      rm24hSubidaEnCurso = false;
+      ocultarProgresoSubidaRm24h(card);
+      mostrarErrorContenidos("Error de red al subir");
+    });
+
+    xhr.open("POST", "/subir-rm24h-media");
+    xhr.send(formData);
+  }
+
+  function htmlCamposMedia(item, index, tipo) {
+    const reglas = RM24H_MEDIA_CLIENT[tipo];
+    const url = String(item.url || "").trim();
+    const manualOpen = item._manualUrl || (!url && false);
+
+    let html =
+      '<div class="rm24-media-upload">' +
+      '<input type="file" class="rm24-contenido-file" accept="' +
+      esc(reglas.accept) +
+      '" hidden>' +
+      '<div class="rm24-media-upload-actions">' +
+      '<button type="button" class="rm24-btn-upload" data-rm24-pick-file="' +
+      index +
+      '">' +
+      (url ? "Cambiar archivo" : "Subir archivo") +
+      "</button>" +
+      '<span class="rm24-media-upload-hint">' +
+      esc(reglas.label) +
+      "</span></div>" +
+      '<div class="rm24-upload-progress" hidden>' +
+      '<div class="rm24-upload-progress-bar"><span class="rm24-upload-progress-fill"></span></div>' +
+      '<span class="rm24-upload-progress-text">0%</span></div>' +
+      '<button type="button" class="rm24-link-manual" data-rm24-toggle-manual="' +
+      index +
+      '">Pegar URL pública manualmente</button>' +
+      '<div class="rm24-manual-url' +
+      (manualOpen ? " rm24-manual-url--open" : "") +
+      '">' +
+      '<input type="url" class="rm24-input rm24-contenido-url" placeholder="https://... URL pública HTTPS" value="' +
+      esc(url) +
+      '"></div>';
+
+    if (tipo === "imagen" || tipo === "video" || tipo === "documento") {
+      html +=
+        '<input type="text" class="rm24-input rm24-contenido-caption" placeholder="Caption (opcional)" value="' +
+        esc(item.caption) +
+        '">';
+    }
+    if (tipo === "documento") {
+      html +=
+        '<input type="text" class="rm24-input rm24-contenido-filename" placeholder="Nombre archivo (ej. oferta.pdf)" value="' +
+        esc(item.filename || "") +
+        '">';
+    }
+
+    if (url) {
+      html += '<div class="rm24-contenido-preview">';
+      if (tipo === "imagen") {
+        html +=
+          '<img src="' +
+          esc(url) +
+          '" alt="" class="rm24-contenido-preview-img" onerror="this.style.display=\'none\'">';
+      } else if (tipo === "audio") {
+        html +=
+          '<audio class="rm24-contenido-preview-audio" controls preload="none" src="' +
+          esc(url) +
+          '"></audio>';
+      } else if (tipo === "video") {
+        html +=
+          '<video class="rm24-contenido-preview-video" controls preload="metadata" src="' +
+          esc(url) +
+          '"></video>';
+      } else {
+        html += '<span class="rm24-contenido-preview-link">' + esc(url) + "</span>";
+      }
+      html += "</div>";
+    }
+
+    html += "</div>";
+    return html;
   }
 
   function htmlBloqueContenido(item, index) {
@@ -549,47 +760,8 @@ window.MacBotRemarketingGlobal = (function () {
         '<textarea class="rm24-input rm24-textarea rm24-contenido-texto" rows="3" placeholder="Mensaje de texto">' +
         esc(item.texto) +
         "</textarea>";
-    } else {
-      campos =
-        '<input type="url" class="rm24-input rm24-contenido-url" placeholder="https://... URL pública HTTPS" value="' +
-        esc(item.url) +
-        '">';
-      if (tipo === "imagen" || tipo === "video" || tipo === "documento") {
-        campos +=
-          '<input type="text" class="rm24-input rm24-contenido-caption" placeholder="Caption (opcional)" value="' +
-          esc(item.caption) +
-          '">';
-      }
-      if (tipo === "documento") {
-        campos +=
-          '<input type="text" class="rm24-input rm24-contenido-filename" placeholder="Nombre archivo (ej. oferta.pdf)" value="' +
-          esc(item.filename || "archivo.pdf") +
-          '">';
-      }
-      const urlPreview = String(item.url || "").trim();
-      if (urlPreview) {
-        campos += '<div class="rm24-contenido-preview">';
-        if (tipo === "imagen") {
-          campos +=
-            '<img src="' +
-            esc(urlPreview) +
-            '" alt="" class="rm24-contenido-preview-img" onerror="this.style.display=\'none\'">';
-        } else if (tipo === "audio") {
-          campos +=
-            '<audio class="rm24-contenido-preview-audio" controls preload="none" src="' +
-            esc(urlPreview) +
-            '"></audio>';
-        } else if (tipo === "video") {
-          campos +=
-            '<video class="rm24-contenido-preview-video" controls preload="metadata" src="' +
-            esc(urlPreview) +
-            '"></video>';
-        } else {
-          campos +=
-            '<span class="rm24-contenido-preview-link">' + esc(urlPreview) + "</span>";
-        }
-        campos += "</div>";
-      }
+    } else if (RM24H_MEDIA_CLIENT[tipo]) {
+      campos = htmlCamposMedia(item, index, tipo);
     }
 
     return (
@@ -654,6 +826,31 @@ window.MacBotRemarketingGlobal = (function () {
         ev.stopPropagation();
         const idx = parseInt(removeBtn.getAttribute("data-rm24-remove"), 10);
         removeRm24ContentBlock(idx);
+        return;
+      }
+
+      const pickBtn = ev.target.closest("[data-rm24-pick-file]");
+      if (pickBtn) {
+        ev.preventDefault();
+        const card = pickBtn.closest(".rm24-contenido-item");
+        card?.querySelector(".rm24-contenido-file")?.click();
+        return;
+      }
+
+      const toggleManual = ev.target.closest("[data-rm24-toggle-manual]");
+      if (toggleManual) {
+        ev.preventDefault();
+        const card = toggleManual.closest(".rm24-contenido-item");
+        card?.querySelector(".rm24-manual-url")?.classList.toggle("rm24-manual-url--open");
+      }
+    });
+
+    mount.addEventListener("change", function (ev) {
+      const fileInput = ev.target.closest(".rm24-contenido-file");
+      if (fileInput?.files?.[0]) {
+        const card = fileInput.closest(".rm24-contenido-item");
+        subirArchivoRm24hEnBloque(card, fileInput.files[0]);
+        fileInput.value = "";
       }
     });
 
