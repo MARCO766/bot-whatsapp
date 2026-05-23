@@ -41,7 +41,7 @@ window.MacBotRemarketingGlobal = (function () {
         caption: String(item.caption ?? ""),
       };
     }
-    if (tipo === "documento" || tipo === "pdf") {
+    if (tipo === "documento" || tipo === "pdf" || tipo === "archivo") {
       return {
         tipo: "documento",
         url: String(item.url ?? ""),
@@ -49,11 +49,20 @@ window.MacBotRemarketingGlobal = (function () {
         caption: String(item.caption ?? ""),
       };
     }
+    if (tipo === "retraso") {
+      const cantidad = parseInt(item.cantidad, 10);
+      return {
+        tipo: "retraso",
+        cantidad: Number.isFinite(cantidad) && cantidad > 0 ? cantidad : 1,
+        unidad: String(item.unidad || "minutos").toLowerCase(),
+      };
+    }
     return null;
   }
 
   function crearBloqueVacio(tipo) {
-    const t = String(tipo || "texto").toLowerCase();
+    let t = String(tipo || "texto").toLowerCase();
+    if (t === "archivo") t = "documento";
     if (t === "texto") return { tipo: "texto", texto: "" };
     if (t === "imagen") return { tipo: "imagen", url: "", caption: "" };
     if (t === "audio") return { tipo: "audio", url: "" };
@@ -61,7 +70,42 @@ window.MacBotRemarketingGlobal = (function () {
     if (t === "documento") {
       return { tipo: "documento", url: "", filename: "archivo.pdf", caption: "" };
     }
+    if (t === "retraso") {
+      return { tipo: "retraso", cantidad: 1, unidad: "minutos" };
+    }
     return { tipo: "texto", texto: "" };
+  }
+
+  function htmlRm24BlockPicker() {
+    const cards = [
+    { tipo: "texto", icon: "📝", label: "Texto" },
+    { tipo: "imagen", icon: "🖼️", label: "Imagen" },
+    { tipo: "video", icon: "🎬", label: "Video" },
+    { tipo: "documento", icon: "📁", label: "Archivo" },
+    { tipo: "audio", icon: "🎵", label: "Audio" },
+    { tipo: "retraso", icon: "⏱️", label: "Retraso" },
+  ];
+    return (
+      '<div class="rm24-block-picker" id="rm24hBlockPicker" role="group" aria-label="Añadir bloque">' +
+      cards
+        .map(function (c) {
+          return (
+            '<button type="button" class="rm24-block-card" data-add-tipo="' +
+            esc(c.tipo) +
+            '" title="Añadir ' +
+            esc(c.label) +
+            '">' +
+            '<span class="rm24-block-icon" aria-hidden="true">' +
+            c.icon +
+            "</span>" +
+            '<span class="rm24-block-label">' +
+            esc(c.label) +
+            "</span></button>"
+          );
+        })
+        .join("") +
+      "</div>"
+    );
   }
 
   function hydrateRm24ContentBlocksFromNode(nodo) {
@@ -122,6 +166,16 @@ window.MacBotRemarketingGlobal = (function () {
         caption: String(m.caption || "").trim(),
       };
     }
+    if (m.tipo === "retraso") {
+      const cantidad = parseInt(m.cantidad, 10);
+      if (!cantidad || cantidad < 1) return null;
+      const unidad = String(m.unidad || "minutos").toLowerCase();
+      return {
+        tipo: "retraso",
+        cantidad: cantidad,
+        unidad: ["segundos", "minutos", "horas"].includes(unidad) ? unidad : "minutos",
+      };
+    }
     return null;
   }
 
@@ -129,6 +183,15 @@ window.MacBotRemarketingGlobal = (function () {
     if (!item) return "Bloque vacío";
     if (item.tipo === "texto") {
       return item.texto ? null : "El texto no puede estar vacío";
+    }
+    if (item.tipo === "retraso") {
+      const n = parseInt(item.cantidad, 10);
+      if (!n || n < 1) return "Indica una cantidad mayor a 0";
+      const u = String(item.unidad || "");
+      if (!["segundos", "minutos", "horas"].includes(u)) {
+        return "Unidad de retraso no válida";
+      }
+      return null;
     }
     if (!item.url) return "La URL HTTPS es obligatoria";
     if (!/^https:\/\//i.test(item.url)) {
@@ -158,18 +221,20 @@ window.MacBotRemarketingGlobal = (function () {
       imagen: "Imagen",
       audio: "Audio",
       video: "Video",
-      documento: "Documento",
+      documento: "Archivo",
+      retraso: "Retraso",
     };
     return map[tipo] || tipo;
   }
 
   function iconoTipoContenido(tipo) {
     const map = {
-      texto: "💬",
+      texto: "📝",
       imagen: "🖼️",
       audio: "🎵",
       video: "🎬",
-      documento: "📄",
+      documento: "📁",
+      retraso: "⏱️",
     };
     return map[tipo] || "📎";
   }
@@ -267,7 +332,8 @@ window.MacBotRemarketingGlobal = (function () {
       imagen: "Imagen",
       audio: "Audio",
       video: "Video",
-      documento: "Doc",
+      documento: "Archivo",
+      retraso: "Retraso",
     };
     let previewHtml = "";
     const primeroTexto = validos.find(function (c) {
@@ -396,6 +462,16 @@ window.MacBotRemarketingGlobal = (function () {
           filename: filename || "archivo.pdf",
           caption: caption,
         });
+      } else if (tipo === "retraso") {
+        const cantidad = parseInt(
+          card.querySelector(".rm24-contenido-cantidad")?.value,
+          10
+        );
+        lista.push({
+          tipo: "retraso",
+          cantidad: Number.isFinite(cantidad) && cantidad > 0 ? cantidad : 1,
+          unidad: String(card.querySelector(".rm24-contenido-unidad")?.value || "minutos"),
+        });
       }
     });
     return lista;
@@ -409,8 +485,9 @@ window.MacBotRemarketingGlobal = (function () {
   }
 
   function addRm24ContentBlock(tipo) {
+    const t = String(tipo || "texto").toLowerCase();
     const lista = leerContenidosDesdePanel();
-    lista.push(crearBloqueVacio(tipo));
+    lista.push(crearBloqueVacio(t === "archivo" ? "documento" : t));
     configActiva.rm24h_contenidos = lista;
     renderRm24ContentBlocks();
     mostrarErrorContenidos("");
@@ -448,7 +525,26 @@ window.MacBotRemarketingGlobal = (function () {
     const tipo = item.tipo || "texto";
     const orden = index + 1;
     let campos = "";
-    if (tipo === "texto") {
+    if (tipo === "retraso") {
+      const cantidad = item.cantidad ?? 1;
+      const unidad = String(item.unidad || "minutos").toLowerCase();
+      campos =
+        '<div class="rm24-delay-row">' +
+        '<input type="number" class="rm24-input rm24-contenido-cantidad" min="1" step="1" value="' +
+        esc(String(cantidad)) +
+        '" placeholder="Cantidad">' +
+        '<select class="rm24-input rm24-contenido-unidad">' +
+        '<option value="segundos"' +
+        (unidad === "segundos" ? " selected" : "") +
+        ">Segundos</option>" +
+        '<option value="minutos"' +
+        (unidad === "minutos" ? " selected" : "") +
+        ">Minutos</option>" +
+        '<option value="horas"' +
+        (unidad === "horas" ? " selected" : "") +
+        ">Horas</option></select></div>" +
+        '<p class="rm24h-hint">Pausa antes del siguiente bloque (solo guardado; envío en fase posterior).</p>';
+    } else if (tipo === "texto") {
       campos =
         '<textarea class="rm24-input rm24-textarea rm24-contenido-texto" rows="3" placeholder="Mensaje de texto">' +
         esc(item.texto) +
@@ -497,12 +593,12 @@ window.MacBotRemarketingGlobal = (function () {
     }
 
     return (
-      '<div class="rm24-contenido-item" data-tipo="' +
+      '<div class="rm24-content-block rm24-contenido-item" data-tipo="' +
       esc(tipo) +
       '" data-index="' +
       index +
       '">' +
-      '<div class="rm24-contenido-item-head">' +
+      '<div class="rm24-content-block-header rm24-contenido-item-head">' +
       '<span class="rm24-contenido-orden">#' +
       orden +
       "</span>" +
@@ -527,7 +623,7 @@ window.MacBotRemarketingGlobal = (function () {
     const items = getRm24ContenidosActivos();
     if (!items.length) {
       listaEl.innerHTML =
-        '<p class="rm24-contenidos-empty">Sin bloques. Usa los botones de abajo para agregar contenido.</p>';
+        '<p class="rm24-contenidos-empty">Sin bloques. Elige un tipo en el selector de arriba.</p>';
       return;
     }
     listaEl.innerHTML = items
@@ -545,8 +641,8 @@ window.MacBotRemarketingGlobal = (function () {
     mount.dataset.rm24hContenidosBound = "1";
 
     mount.addEventListener("click", function (ev) {
-      const addBtn = ev.target.closest("[data-add-tipo]");
-      if (addBtn) {
+      const addBtn = ev.target.closest("[data-add-tipo], .rm24-block-card");
+      if (addBtn && addBtn.getAttribute("data-add-tipo")) {
         ev.preventDefault();
         ev.stopPropagation();
         addRm24ContentBlock(addBtn.getAttribute("data-add-tipo"));
@@ -570,9 +666,17 @@ window.MacBotRemarketingGlobal = (function () {
     });
 
     mount.addEventListener("change", function (ev) {
-      if (!ev.target.closest(".rm24-contenido-url")) return;
+      if (
+        !ev.target.closest(".rm24-contenido-url") &&
+        !ev.target.closest(".rm24-contenido-unidad") &&
+        !ev.target.closest(".rm24-contenido-cantidad")
+      ) {
+        return;
+      }
       configActiva.rm24h_contenidos = leerContenidosDesdePanel();
-      renderRm24ContentBlocks();
+      if (ev.target.closest(".rm24-contenido-url")) {
+        renderRm24ContentBlocks();
+      }
       persistirContenidosEnNodo();
     });
   }
@@ -666,14 +770,9 @@ window.MacBotRemarketingGlobal = (function () {
       '<h5 class="rm24-section-title">Contenido de remarketing</h5>' +
       '<p class="rm24h-hint rm24-contenidos-intro">Se envían en orden tras 23h sin respuesta. URLs HTTPS públicas.</p>' +
       '<div id="rm24hContenidosError" class="rm24-contenidos-error" hidden></div>' +
+      htmlRm24BlockPicker() +
       '<div id="rm24hContenidosLista" class="rm24-contenidos-lista"></div>' +
-      '<div id="rm24hContenidosToolbar" class="rm24-contenidos-toolbar">' +
-      '<button type="button" class="rm24-contenido-add" data-add-tipo="texto">+ Texto</button>' +
-      '<button type="button" class="rm24-contenido-add" data-add-tipo="imagen">+ Imagen</button>' +
-      '<button type="button" class="rm24-contenido-add" data-add-tipo="audio">+ Audio</button>' +
-      '<button type="button" class="rm24-contenido-add" data-add-tipo="video">+ Video</button>' +
-      '<button type="button" class="rm24-contenido-add" data-add-tipo="documento">+ Documento</button>' +
-      "</div></section>" +
+      "</section>" +
       '<section class="rm24-section rm24-section--future">' +
       '<h5 class="rm24-section-title">Opciones futuras</h5>' +
       '<div class="rm24-rule rm24h-field--locked">' +

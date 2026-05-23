@@ -1728,26 +1728,83 @@ body:has(#builderArea) {
   word-break: break-all;
 }
 
-.panel-nodo--rm24h .rm24-contenidos-toolbar {
+/* RM24H — selector de bloques (grid premium) */
+.panel-nodo--rm24h .rm24-block-picker {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.panel-nodo--rm24h .rm24-block-card {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.panel-nodo--rm24h .rm24-contenido-add {
-  padding: 6px 10px;
-  border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.04);
-  color: #d1d5db;
-  font-size: 11px;
-  font-weight: 500;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 88px;
+  padding: 14px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: linear-gradient(165deg, #161c2a 0%, #111827 100%);
+  color: #e5e7eb;
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  transition:
+    transform 0.2s ease,
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    background 0.2s ease;
 }
 
-.panel-nodo--rm24h .rm24-contenido-add:hover {
-  background: rgba(255, 122, 24, 0.12);
-  border-color: rgba(255, 122, 24, 0.3);
-  color: #f3f4f6;
+.panel-nodo--rm24h .rm24-block-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255, 122, 24, 0.55);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(255, 122, 24, 0.12);
+  background: linear-gradient(165deg, #1a2234 0%, #121a2a 100%);
+}
+
+.panel-nodo--rm24h .rm24-block-card:active {
+  transform: translateY(0);
+}
+
+.panel-nodo--rm24h .rm24-block-icon {
+  font-size: 26px;
+  line-height: 1;
+  filter: none;
+}
+
+.panel-nodo--rm24h .rm24-block-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #9ca3af;
+}
+
+.panel-nodo--rm24h .rm24-block-card:hover .rm24-block-label {
+  color: #fdba74;
+}
+
+.panel-nodo--rm24h .rm24-content-block {
+  margin-bottom: 0;
+}
+
+.panel-nodo--rm24h .rm24-content-block-header {
+  margin-bottom: 8px;
+}
+
+.panel-nodo--rm24h .rm24-delay-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.panel-nodo--rm24h .rm24-contenido-unidad {
+  cursor: pointer;
+}
+
+@media (max-width: 420px) {
+  .panel-nodo--rm24h .rm24-block-picker {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
