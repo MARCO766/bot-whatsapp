@@ -1690,11 +1690,36 @@ body:has(#builderArea) {
   margin-top: 4px;
 }
 
-.panel-nodo--rm24h .rm24-contenido-preview img {
+.panel-nodo--rm24h .rm24-contenido-preview img,
+.panel-nodo--rm24h .rm24-contenido-preview-img {
   max-width: 100%;
   max-height: 80px;
   border-radius: 6px;
   object-fit: cover;
+}
+
+.panel-nodo--rm24h .rm24-contenido-preview-audio,
+.panel-nodo--rm24h .rm24-contenido-preview-video {
+  width: 100%;
+  max-height: 120px;
+  margin-top: 4px;
+}
+
+#builderArea .rm24-preview-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+#builderArea .rm24-preview-chip {
+  font-size: 8px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: #d1d5db;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .panel-nodo--rm24h .rm24-contenido-preview-link {
