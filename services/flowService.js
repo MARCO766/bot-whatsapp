@@ -559,6 +559,7 @@ async function ejecutarFlujo(
             cliente_numero: numero,
             flujo_id: String(flujoId),
             motivo: "conversion",
+            flujo_nombre: opts.flujoNombre || null,
           });
         } catch (err) {
           console.log(

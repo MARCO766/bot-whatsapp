@@ -22,6 +22,27 @@ function normalizarUltimoNodo(ultimoNodo) {
   };
 }
 
+function flujoNombreValido(valor) {
+  const s = String(valor ?? "").trim();
+  return s.length > 0 ? s : null;
+}
+
+async function resolverFlujoNombreCancelacion({
+  fila,
+  usuario_id,
+  flujo_id,
+  flujo_nombre_hint,
+}) {
+  const existente = flujoNombreValido(fila?.flujo_nombre);
+  if (existente) return existente;
+
+  const hint = flujoNombreValido(flujo_nombre_hint);
+  if (hint) return hint;
+
+  if (!usuario_id || !flujo_id) return null;
+  return repo.obtenerNombreFlujo(usuario_id, flujo_id);
+}
+
 async function iniciarRemarketing24h({
   usuario_id,
   cliente_numero,
@@ -136,6 +157,7 @@ async function cancelarRemarketing24h({
   cliente_numero,
   flujo_id,
   motivo,
+  flujo_nombre: flujo_nombre_hint,
 }) {
   if (!usuario_id || !cliente_numero || !flujo_id) return null;
 
@@ -152,12 +174,35 @@ async function cancelarRemarketing24h({
     ? ESTADOS_RM24H.CONVERTIDO
     : ESTADOS_RM24H.CANCELADO;
 
-  const actualizado = await repo.actualizarPorId(fila.id, {
+  const payload = {
     estado,
     activo: false,
     cancelado_en: nowUtc(),
     motivo_cancelacion: motivo || null,
-  });
+  };
+
+  let flujoNombreFinal = null;
+
+  if (esConversion) {
+    const flujoNombreAntes = flujoNombreValido(fila.flujo_nombre);
+    console.log("[RM24H] cancelando por conversion");
+    console.log("[RM24H] flujo_nombre antes:", flujoNombreAntes || "(vacío)");
+
+    flujoNombreFinal = await resolverFlujoNombreCancelacion({
+      fila,
+      usuario_id,
+      flujo_id: String(flujo_id),
+      flujo_nombre_hint,
+    });
+
+    console.log("[RM24H] flujo_nombre final:", flujoNombreFinal || "(vacío)");
+
+    if (flujoNombreFinal) {
+      payload.flujo_nombre = flujoNombreFinal;
+    }
+  }
+
+  const actualizado = await repo.actualizarPorId(fila.id, payload);
 
   if (esConversion) {
     console.log("[RM24H] cancelado por conversión", {
@@ -166,6 +211,8 @@ async function cancelarRemarketing24h({
       flujo_id,
       motivo,
       estado,
+      flujo_nombre:
+        actualizado?.flujo_nombre || flujoNombreFinal || fila.flujo_nombre || null,
     });
   } else {
     console.log("[RM24H] cancelado", {

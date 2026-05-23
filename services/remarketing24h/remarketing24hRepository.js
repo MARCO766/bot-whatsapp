@@ -99,6 +99,44 @@ async function reservarParaEnvio(id) {
   return (response.data || [])[0] || null;
 }
 
+/** Nombre del flujo (builder o legacy) para rellenar flujo_nombre en cancelación. */
+async function obtenerNombreFlujo(usuario_id, flujo_id) {
+  if (!usuario_id || !flujo_id) return null;
+
+  const idEnc = encodeURIComponent(String(flujo_id));
+  const uidEnc = encodeURIComponent(String(usuario_id));
+
+  try {
+    const builder = await axios.get(
+      `${SUPABASE_URL}/rest/v1/flujos_builder?id=eq.${idEnc}` +
+        `&usuario_id=eq.${uidEnc}&select=nombre&limit=1`,
+      { headers: headers() }
+    );
+    const nombreBuilder = (builder.data || [])[0]?.nombre;
+    if (nombreBuilder && String(nombreBuilder).trim()) {
+      return String(nombreBuilder).trim();
+    }
+  } catch {
+    /* fallback flujos */
+  }
+
+  try {
+    const legacy = await axios.get(
+      `${SUPABASE_URL}/rest/v1/flujos?id=eq.${idEnc}` +
+        `&usuario_id=eq.${uidEnc}&select=nombre&limit=1`,
+      { headers: headers() }
+    );
+    const nombreLegacy = (legacy.data || [])[0]?.nombre;
+    if (nombreLegacy && String(nombreLegacy).trim()) {
+      return String(nombreLegacy).trim();
+    }
+  } catch {
+    /* sin nombre */
+  }
+
+  return null;
+}
+
 async function listarReinicioPorCliente(usuario_id, cliente_numero) {
   const estados = [
     ESTADOS_RM24H.ACTIVO,
@@ -119,6 +157,7 @@ module.exports = {
   buscarAbierto,
   insertar,
   actualizarPorId,
+  obtenerNombreFlujo,
   listarActivosPorCliente,
   listarReinicioPorCliente,
   listarVencidos,
