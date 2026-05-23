@@ -13,7 +13,8 @@ const ESTADOS_RM24H = {
 const HORAS_INACTIVIDAD = 23;
 const MS_INACTIVIDAD = HORAS_INACTIVIDAD * 60 * 60 * 1000;
 
-const MAX_INTENTOS = 3;
+/** Single shot: un solo remarketing por ciclo (sin reprogramar expira_en) */
+const MAX_INTENTOS = 1;
 
 const ESTADOS_ABIERTOS = [
   ESTADOS_RM24H.ACTIVO,
