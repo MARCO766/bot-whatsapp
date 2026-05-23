@@ -477,12 +477,20 @@ function agregarNodo(tipo){
    MOVER NODOS
 ========================= */
 
+function getNodeCanvasPosition(nodo){
+  const left = parseFloat(nodo.style.left);
+  const top = parseFloat(nodo.style.top);
+
+  return {
+    x: Number.isFinite(left) ? left : nodo.offsetLeft,
+    y: Number.isFinite(top) ? top : nodo.offsetTop,
+  };
+}
+
 function hacerMovible(nodo){
   let moviendo = false;
-  let startX = 0;
-  let startY = 0;
-  let origLeft = 0;
-  let origTop = 0;
+  let dragOffsetX = 0;
+  let dragOffsetY = 0;
   let historialDragRegistrado = false;
 
   nodo.addEventListener("mousedown", function(e){
@@ -501,21 +509,32 @@ function hacerMovible(nodo){
       historialDragRegistrado = true;
     }
 
+    const canvasPos = screenToCanvas(e);
+    const nodePos = getNodeCanvasPosition(nodo);
+
+    dragOffsetX = canvasPos.x - nodePos.x;
+    dragOffsetY = canvasPos.y - nodePos.y;
     moviendo = true;
-    startX = e.clientX;
-    startY = e.clientY;
-    origLeft = nodo.offsetLeft;
-    origTop = nodo.offsetTop;
+    e.stopPropagation();
+    e.preventDefault();
     marcarNodoSeleccionado(nodo);
   });
 
   document.addEventListener("mousemove", function(e){
     if(!moviendo) return;
 
-    const zoom = getCanvasZoom();
+    const canvasPos = screenToCanvas(e);
+    const nodeX = canvasPos.x - dragOffsetX;
+    const nodeY = canvasPos.y - dragOffsetY;
 
-    nodo.style.left = origLeft + (e.clientX - startX) / zoom + "px";
-    nodo.style.top = origTop + (e.clientY - startY) / zoom + "px";
+    console.log("[DRAG DEBUG] clientX/clientY", e.clientX, e.clientY);
+    console.log("[DRAG DEBUG] canvasX/canvasY", canvasPos.x, canvasPos.y);
+    console.log("[DRAG DEBUG] panX/panY", viewportState.panX, viewportState.panY);
+    console.log("[DRAG DEBUG] zoom", getCanvasZoom());
+    console.log("[DRAG DEBUG] node x/y", nodeX, nodeY);
+
+    nodo.style.left = nodeX + "px";
+    nodo.style.top = nodeY + "px";
 
     actualizarLineas();
     actualizarPanelPosicion(nodo);
@@ -687,7 +706,7 @@ function moverConexionTemporal(e){
   if(!puerto) return;
 
   const inicio = getPortCanvasPoint(puerto);
-  const fin = screenPointToCanvas(e.clientX, e.clientY);
+  const fin = screenToCanvas(e);
 
   actualizarLineaTemporalCurva(
     lineaTemporal._tempPath,
@@ -1335,6 +1354,14 @@ function screenPointToCanvas(clientX, clientY){
     x: (clientX - rect.left - viewportState.panX) / zoom,
     y: (clientY - rect.top - viewportState.panY) / zoom,
   };
+}
+
+function screenToCanvas(event){
+  if(!event || typeof event.clientX !== "number" || typeof event.clientY !== "number"){
+    return { x: 0, y: 0 };
+  }
+
+  return screenPointToCanvas(event.clientX, event.clientY);
 }
 
 function getPortCanvasPoint(puerto){
