@@ -309,6 +309,22 @@ window.MacBotRemarketingGlobal = (function () {
       .replace(/"/g, "&quot;");
   }
 
+  function clampHorasInactividad(val) {
+    const n = parseInt(val, 10);
+    if (!Number.isFinite(n)) return 23;
+    if (n < 1) return 1;
+    if (n > 23) return 23;
+    return n;
+  }
+
+  function normalizarInputHorasRm24h(inputEl) {
+    if (!inputEl) return 23;
+    const raw = String(inputEl.value || "").replace(/\D/g, "");
+    const horas = raw === "" ? 23 : clampHorasInactividad(parseInt(raw, 10));
+    inputEl.value = String(horas);
+    return horas;
+  }
+
   function leerTextareaJson(ta) {
     if (!ta) return null;
     const raw = String(ta.value || ta.textContent || "").trim();
@@ -334,7 +350,7 @@ window.MacBotRemarketingGlobal = (function () {
     if (!parsed || typeof parsed !== "object") return base;
 
     const config = Object.assign({}, base, parsed, {
-      horasInactividad: 23,
+      horasInactividad: clampHorasInactividad(parsed.horasInactividad ?? 23),
       detenerSiResponde: false,
       reiniciarAlResponder: parsed.reiniciarAlResponder !== false,
       detenerEnConversion: parsed.detenerEnConversion !== false,
@@ -1051,7 +1067,7 @@ window.MacBotRemarketingGlobal = (function () {
     const detenerConvEl = document.getElementById("rm24hDetenerConversion");
 
     if (activoEl) activoEl.checked = !!cfg.activo;
-    if (horasEl) horasEl.value = String(cfg.horasInactividad ?? 23);
+    if (horasEl) horasEl.value = String(clampHorasInactividad(cfg.horasInactividad ?? 23));
     if (reiniciarEl) reiniciarEl.checked = cfg.reiniciarAlResponder !== false;
     if (detenerConvEl) detenerConvEl.checked = cfg.detenerEnConversion !== false;
     renderRm24ContentBlocks();
@@ -1092,8 +1108,10 @@ window.MacBotRemarketingGlobal = (function () {
       '<h5 class="rm24-section-title">Tiempo de inactividad</h5>' +
       '<div class="rm24h-field rm24-field">' +
       "<label for=\"rm24hHoras\">Horas de inactividad</label>" +
-      '<input type="number" id="rm24hHoras" class="rm24-input rm24-input--readonly" value="23" disabled readonly>' +
-      '<p class="rm24h-hint">23h (ventana WhatsApp Cloud API)</p></div></section>' +
+      '<input type="number" id="rm24hHoras" class="rm24-input" min="1" max="23" step="1" inputmode="numeric" value="' +
+      esc(String(clampHorasInactividad(configActiva.horasInactividad ?? 23))) +
+      '">' +
+      '<p class="rm24h-hint">Entre 1 y 23 h (ventana WhatsApp Cloud API)</p></div></section>' +
       '<section class="rm24-section rm24-section--rules">' +
       '<h5 class="rm24-section-title">Reglas automáticas</h5>' +
       '<div class="rm24-rule rm24h-field--locked">' +
@@ -1137,6 +1155,17 @@ window.MacBotRemarketingGlobal = (function () {
     aplicarConfigAlPanel(configActiva);
 
     document.getElementById("rm24hActivo")?.addEventListener("change", onPanelChange);
+    const horasEl = document.getElementById("rm24hHoras");
+    if (horasEl) {
+      horasEl.addEventListener("input", onHorasInactividadInput);
+      horasEl.addEventListener("change", onHorasInactividadCommit);
+      horasEl.addEventListener("blur", onHorasInactividadCommit);
+      horasEl.addEventListener("keydown", function (e) {
+        if (["e", "E", "+", "-", ".", ","].includes(e.key)) {
+          e.preventDefault();
+        }
+      });
+    }
     document
       .getElementById("rm24hGuardarPanel")
       ?.addEventListener("click", guardarDesdePanel);
@@ -1146,15 +1175,33 @@ window.MacBotRemarketingGlobal = (function () {
     if (!panelRemarketingAbierto()) return;
 
     const activoEl = document.getElementById("rm24hActivo");
+    const horasEl = document.getElementById("rm24hHoras");
 
     if (activoEl) configActiva.activo = !!activoEl.checked;
-    configActiva.horasInactividad = 23;
+    configActiva.horasInactividad = normalizarInputHorasRm24h(horasEl);
     configActiva.detenerSiResponde = false;
     configActiva.reiniciarAlResponder = true;
     configActiva.detenerEnConversion = true;
     configActiva.modoContextual = false;
     configActiva.rm24h_contenidos = leerContenidosDesdePanel();
     sincronizarMensajeRemarketingDesdeContenidos(configActiva);
+  }
+
+  function onHorasInactividadInput(ev) {
+    const el = ev.target;
+    const cleaned = String(el.value || "").replace(/\D/g, "");
+    if (cleaned !== el.value) el.value = cleaned;
+    if (cleaned === "") return;
+    const n = parseInt(cleaned, 10);
+    if (n > 23) el.value = "23";
+    if (n < 1 && cleaned.length >= 1) el.value = "1";
+  }
+
+  function onHorasInactividadCommit() {
+    const horasEl = document.getElementById("rm24hHoras");
+    if (!horasEl) return;
+    configActiva.horasInactividad = normalizarInputHorasRm24h(horasEl);
+    onPanelChange();
   }
 
   function onPanelChange() {
