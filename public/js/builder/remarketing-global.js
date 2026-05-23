@@ -80,7 +80,7 @@ window.MacBotRemarketingGlobal = (function () {
 
     if (!config.activo) {
       body.innerHTML =
-        '<p class="rm24h-empty">Inactivo · abre el panel para activar</p>';
+        '<p class="rm24h-empty rm24-node-idle">Inactivo · abre el panel para activar</p>';
       return;
     }
 
@@ -90,11 +90,51 @@ window.MacBotRemarketingGlobal = (function () {
       : "Sin mensaje configurado";
 
     body.innerHTML =
-      '<div class="rm24h-badge-on">ACTIVO</div>' +
-      '<p class="rm24h-meta">⏱ 23h inactividad · reinicia al responder</p>' +
-      '<p class="rm24h-preview">' +
+      '<div class="rm24-status rm24h-badge-on">ACTIVO</div>' +
+      '<ul class="rm24-summary" aria-label="Resumen del remarketing">' +
+      '<li><span class="rm24-summary-dot"></span>23h de inactividad</li>' +
+      '<li><span class="rm24-summary-dot"></span>Reinicia si responde</li>' +
+      '<li><span class="rm24-summary-dot"></span>1 solo envío</li>' +
+      '<li><span class="rm24-summary-dot"></span>Termina flujo</li>' +
+      "</ul>" +
+      '<p class="rm24h-preview rm24-node-msg-preview">' +
       esc(preview) +
       "</p>";
+  }
+
+  function aplicarShellVisualNodo(nodo) {
+    if (!esNodoRemarketingGlobal(nodo)) return;
+    nodo.classList.add("rm24-node");
+
+    const chip = nodo.querySelector(".rm24h-chip");
+    if (chip) {
+      chip.textContent = "RM24H";
+      chip.classList.add("rm24-badge", "rm24-badge--type");
+    }
+
+    const header = nodo.querySelector(".rm24h-header");
+    if (header) header.classList.add("rm24-node-header");
+
+    const body = nodo.querySelector(".rm24h-body");
+    if (body) body.classList.add("rm24-node-body");
+
+    const edit = nodo.querySelector(".edit-node");
+    const del = nodo.querySelector(".delete-node");
+    if (edit && del && !nodo.querySelector(".rm24-node-actions")) {
+      const wrap = document.createElement("div");
+      wrap.className = "rm24-node-actions node-actions";
+      nodo.insertBefore(wrap, edit);
+      wrap.appendChild(edit);
+      wrap.appendChild(del);
+    }
+  }
+
+  function actualizarContadorMensaje() {
+    const mensajeEl = document.getElementById("rm24hMensaje");
+    const countEl = document.getElementById("rm24hMensajeCount");
+    if (!mensajeEl || !countEl) return;
+    const len = String(mensajeEl.value || "").length;
+    countEl.textContent = len + " caracteres";
   }
 
   function esNodoRemarketingGlobal(nodo) {
@@ -137,50 +177,82 @@ window.MacBotRemarketingGlobal = (function () {
     if (panelShell) panelShell.classList.add("panel-nodo--rm24h");
 
     contenido.innerHTML =
-      '<div class="rm24h-panel">' +
-      '<div class="rm24h-panel-hero">' +
-      '<span class="rm24h-panel-icon">🔥</span>' +
+      '<div class="rm24h-panel rm24-config-panel">' +
+      '<div class="rm24-card rm24-card--hero">' +
+      '<span class="rm24h-panel-icon" aria-hidden="true">🔥</span>' +
       "<div>" +
-      "<h3>Remarketing Global 24h</h3>" +
+      "<h4>🔥 Remarketing Global 24h</h4>" +
       "<p>Cerebro global del flujo · no mueve leads entre nodos</p>" +
       "</div></div>" +
-      '<label class="rm24h-toggle">' +
+      '<div class="rm24-config-scroll">' +
+      '<section class="rm24-section">' +
+      '<h5 class="rm24-section-title">Estado</h5>' +
+      '<label class="rm24-switch rm24h-toggle">' +
       '<input type="checkbox" id="rm24hActivo" ' +
       (configActiva.activo ? "checked" : "") +
       ">" +
-      "<span>Activar remarketing global</span></label>" +
-      '<div class="rm24h-field">' +
-      "<label>Horas de inactividad</label>" +
-      '<input type="number" id="rm24hHoras" value="23" disabled readonly>' +
-      '<p class="rm24h-hint">23h (ventana WhatsApp Cloud API)</p></div>' +
-      '<div class="rm24h-field rm24h-field--locked">' +
+      '<span class="rm24-switch-track" aria-hidden="true"></span>' +
+      "<span class=\"rm24-switch-label\">Activar remarketing global</span></label>" +
+      "</section>" +
+      '<section class="rm24-section">' +
+      '<h5 class="rm24-section-title">Tiempo de inactividad</h5>' +
+      '<div class="rm24h-field rm24-field">' +
+      "<label for=\"rm24hHoras\">Horas de inactividad</label>" +
+      '<input type="number" id="rm24hHoras" class="rm24-input rm24-input--readonly" value="23" disabled readonly>' +
+      '<p class="rm24h-hint">23h (ventana WhatsApp Cloud API)</p></div></section>' +
+      '<section class="rm24-section">' +
+      '<h5 class="rm24-section-title">Reglas automáticas</h5>' +
+      '<div class="rm24h-field rm24-field rm24h-field--locked rm24-field--locked">' +
       "<label>Detener si responde</label>" +
+      '<label class="rm24-switch rm24-switch--locked">' +
       '<input type="checkbox" id="rm24hDetenerSiResponde" disabled>' +
+      '<span class="rm24-switch-track" aria-hidden="true"></span>' +
+      '<span class="rm24-switch-label">Desactivado</span></label>' +
       '<p class="rm24h-hint">NO — responder reinicia el contador</p></div>' +
-      '<div class="rm24h-field rm24h-field--locked">' +
+      '<div class="rm24h-field rm24-field rm24h-field--locked rm24-field--locked">' +
       "<label>Reiniciar contador al responder</label>" +
+      '<label class="rm24-switch rm24-switch--locked rm24-switch--on">' +
       '<input type="checkbox" id="rm24hReiniciar" checked disabled>' +
+      '<span class="rm24-switch-track" aria-hidden="true"></span>' +
+      '<span class="rm24-switch-label">Activado</span></label>' +
       '<p class="rm24h-hint">SÍ (fijo en Fase 1)</p></div>' +
-      '<div class="rm24h-field rm24h-field--locked">' +
+      '<div class="rm24h-field rm24-field rm24h-field--locked rm24-field--locked">' +
       "<label>Detener al llegar a Conversión</label>" +
+      '<label class="rm24-switch rm24-switch--locked rm24-switch--on">' +
       '<input type="checkbox" id="rm24hDetenerConversion" checked disabled>' +
-      '<p class="rm24h-hint">SÍ (fijo en Fase 1)</p></div>' +
-      '<div class="rm24h-field">' +
-      "<label>Mensaje de remarketing</label>" +
-      '<textarea id="rm24hMensaje" rows="5" placeholder="Mensaje cuando venza el contador (Fase 2 enviará por WA)">' +
+      '<span class="rm24-switch-track" aria-hidden="true"></span>' +
+      '<span class="rm24-switch-label">Activado</span></label>' +
+      '<p class="rm24h-hint">SÍ (fijo en Fase 1)</p></div></section>' +
+      '<section class="rm24-section">' +
+      '<h5 class="rm24-section-title">Mensaje</h5>' +
+      '<div class="rm24h-field rm24-field">' +
+      '<div class="rm24-field-head">' +
+      "<label for=\"rm24hMensaje\">Mensaje de remarketing</label>" +
+      '<span class="rm24-char-count" id="rm24hMensajeCount">0 caracteres</span></div>' +
+      '<textarea id="rm24hMensaje" class="rm24-textarea" rows="5" placeholder="Mensaje cuando venza el contador (Fase 2 enviará por WA)">' +
       esc(configActiva.mensajeRemarketing) +
-      "</textarea></div>" +
-      '<div class="rm24h-field rm24h-field--locked">' +
+      "</textarea></div></section>" +
+      '<section class="rm24-section rm24-section--future">' +
+      '<h5 class="rm24-section-title">Opciones futuras</h5>' +
+      '<div class="rm24h-field rm24-field rm24h-field--locked rm24-field--locked">' +
       "<label>Modo contextual (futuro)</label>" +
+      '<label class="rm24-switch rm24-switch--locked">' +
       '<input type="checkbox" id="rm24hModoContextual" disabled>' +
-      '<p class="rm24h-hint">Desactivado en Fase 1</p></div>' +
-      '<button type="button" class="panel-btn" id="rm24hGuardarPanel">Guardar nodo</button>' +
-      "</div>";
+      '<span class="rm24-switch-track" aria-hidden="true"></span>' +
+      '<span class="rm24-switch-label">Desactivado</span></label>' +
+      '<p class="rm24h-hint">Desactivado en Fase 1</p></div></section>' +
+      '<div class="rm24-config-footer">' +
+      '<button type="button" class="panel-btn rm24-btn-save" id="rm24hGuardarPanel">Guardar nodo</button>' +
+      "</div></div></div>";
 
     aplicarConfigAlPanel(configActiva);
+    actualizarContadorMensaje();
 
     document.getElementById("rm24hActivo")?.addEventListener("change", onPanelChange);
-    document.getElementById("rm24hMensaje")?.addEventListener("input", onPanelChange);
+    document.getElementById("rm24hMensaje")?.addEventListener("input", function () {
+      actualizarContadorMensaje();
+      onPanelChange();
+    });
     document
       .getElementById("rm24hGuardarPanel")
       ?.addEventListener("click", guardarDesdePanel);
@@ -239,11 +311,13 @@ window.MacBotRemarketingGlobal = (function () {
   }
 
   function initNodoRecienCreado(nodo) {
+    aplicarShellVisualNodo(nodo);
     renderPreviewNodo(nodo, leerConfigDeNodo(nodo));
   }
 
   function refrescarNodoCargado(nodo) {
     try {
+      aplicarShellVisualNodo(nodo);
       renderPreviewNodo(nodo, leerConfigDeNodo(nodo));
     } catch (e) {
       console.warn("RM24H: error refrescando nodo", e.message);
@@ -259,7 +333,7 @@ window.MacBotRemarketingGlobal = (function () {
     const cfg = JSON.stringify(crearConfigVacia());
 
     const nodo = document.createElement("div");
-    nodo.className = "node remarketing-global-node node-remarketing-global";
+    nodo.className = "node remarketing-global-node node-remarketing-global rm24-node";
     nodo.id = id;
     nodo.dataset.tipo = "remarketing_global";
     nodo.style.left = 80 + nodoCount * 40 + "px";
@@ -271,16 +345,20 @@ window.MacBotRemarketingGlobal = (function () {
       '" onmousedown="iniciarConexion(event, \'' +
       id +
       '\', \'in\')"></div>' +
-      '<div class="rm24h-header">' +
-      "<span>🔥 Remarketing Global 24h</span>" +
-      '<span class="rm24h-chip">CEREBRO</span></div>' +
+      '<div class="rm24-node-actions node-actions">' +
       '<button type="button" class="edit-node" onclick="event.stopPropagation(); abrirEditorRemarketingGlobal(\'' +
       id +
       '\')">✎</button>' +
       '<button type="button" class="delete-node" onclick="event.stopPropagation(); borrarNodo(\'' +
       id +
-      '\')">×</button>' +
-      '<div class="rm24h-body"><p class="rm24h-empty">Inactivo · abre el panel</p></div>' +
+      '\')">×</button></div>' +
+      '<header class="rm24-node-header rm24h-header">' +
+      '<span class="rm24-node-icon" aria-hidden="true">🔥</span>' +
+      '<div class="rm24-node-title-group">' +
+      '<span class="rm24-node-title">Remarketing Global 24h</span>' +
+      '<span class="rm24-badge rm24-badge--type rm24h-chip">RM24H</span>' +
+      "</div></header>" +
+      '<div class="rm24h-body rm24-node-body"><p class="rm24h-empty rm24-node-idle">Inactivo · abre el panel para activar</p></div>' +
       '<textarea class="remarketing-global-data" style="display:none;">' +
       cfg +
       "</textarea>";
