@@ -98,7 +98,12 @@ res.send(renderAdminPage({
   flujoActual,
   activadores,
   etiquetas,
-  conexionActiva
+  conexionActiva,
+  supabaseUrl: SUPABASE_URL || "",
+  supabaseAnonKey:
+    process.env.SUPABASE_ANON_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+    "",
 }));
 
 });

@@ -70,19 +70,12 @@ router.post(
         return res.status(400).json({ error: "Tipo de media inválido" });
       }
 
-      const resultado = await subirArchivoRm24hMedia(
-        req.file,
-        tipo,
-        req.session?.usuario?.id
-      );
+      const resultado = await subirArchivoRm24hMedia(req.file, tipo);
 
       res.json(resultado);
     } catch (error) {
       const status = error.status || 500;
-      console.log(
-        "ERROR SUBIENDO RM24H MEDIA:",
-        error.response?.data || error.message
-      );
+      console.error("[RM24H_UPLOAD] error:", error.message);
       res.status(status).json({
         error: error.message || "Error subiendo archivo RM24H",
       });

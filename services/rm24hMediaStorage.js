@@ -1,7 +1,5 @@
 const axios = require("axios");
 const path = require("path");
-const { esArchivoImagen, prepararImagenParaWhatsApp } = require("./imageWhatsAppService");
-const { optimizarImagenFlujoStorage } = require("./flowImageStorageService");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
@@ -35,16 +33,11 @@ const LIMITES = {
 };
 
 function extnameSeguro(name) {
-  const ext = path.extname(String(name || "")).toLowerCase();
-  return ext || "";
+  return path.extname(String(name || "")).toLowerCase();
 }
 
-function nombreSeguro(originalname) {
-  const base = path
-    .basename(String(originalname || "archivo"), extnameSeguro(originalname))
-    .replace(/[^a-zA-Z0-9._-]+/g, "-")
-    .slice(0, 80);
-  return base || "archivo";
+function nombreArchivoSeguro(originalname) {
+  return String(originalname || "archivo").replace(/[^a-zA-Z0-9._-]+/g, "-");
 }
 
 function validarArchivoRm24h(file, tipo) {
@@ -65,11 +58,7 @@ function validarArchivoRm24h(file, tipo) {
   }
 
   const extOk = reglas.exts.includes(ext);
-  const mimeOk = reglas.mimes.some((m) => mime === m || mime.startsWith(m.split("/")[0] + "/"));
-
-  if (tipo === "imagen" && esArchivoImagen(file)) {
-    return { ok: true };
-  }
+  const mimeOk = reglas.mimes.some((m) => mime === m);
 
   if (!extOk && !mimeOk) {
     return {
@@ -81,47 +70,21 @@ function validarArchivoRm24h(file, tipo) {
   return { ok: true };
 }
 
-async function prepararBufferSubida(file, tipo) {
-  if (tipo === "imagen") {
-    if (file.size <= LIMITES.imagen.maxBytes && extnameSeguro(file.originalname) === ".webp") {
-      try {
-        return await optimizarImagenFlujoStorage(
-          file.buffer,
-          file.mimetype,
-          file.originalname
-        );
-      } catch {
-        /* fallback preparar */
-      }
-    }
-    try {
-      const prep = await prepararImagenParaWhatsApp(
-        file.buffer,
-        file.mimetype,
-        file.originalname
-      );
-      if (prep.buffer.length > LIMITES.imagen.maxBytes) {
-        return optimizarImagenFlujoStorage(file.buffer, file.mimetype, file.originalname);
-      }
-      return {
-        buffer: prep.buffer,
-        mimetype: prep.mimetype,
-        extension: prep.extension,
-      };
-    } catch {
-      return optimizarImagenFlujoStorage(file.buffer, file.mimetype, file.originalname);
-    }
+function mensajeErrorSupabase(err) {
+  const body = err?.response?.data;
+  if (typeof body === "string" && body.trim()) return body;
+  if (body && typeof body === "object") {
+    return body.message || body.error || body.statusCode || JSON.stringify(body);
   }
-
-  const ext = extnameSeguro(file.originalname) || LIMITES[tipo].exts[0];
-  return {
-    buffer: file.buffer,
-    mimetype: file.mimetype || "application/octet-stream",
-    extension: ext.replace(/^\./, ""),
-  };
+  return err?.message || "Error subiendo a Storage";
 }
 
-async function subirArchivoRm24hMedia(file, tipo, usuarioId) {
+function buildUploadPath(originalname) {
+  const safeName = nombreArchivoSeguro(originalname);
+  return `rm24h/test-${Date.now()}-${safeName}`;
+}
+
+async function subirArchivoRm24hMedia(file, tipo) {
   if (!SUPABASE_URL || !SUPABASE_KEY) {
     throw new Error("Supabase no configurado en el servidor");
   }
@@ -133,43 +96,52 @@ async function subirArchivoRm24hMedia(file, tipo, usuarioId) {
     throw err;
   }
 
-  const preparado = await prepararBufferSubida(file, tipo);
-  const uid = usuarioId ? String(usuarioId).trim() : "";
-  const carpeta = uid ? `rm24h/${uid}` : "rm24h/global";
-  const nombreArchivo =
-    Date.now() +
-    "-" +
-    Math.random().toString(36).slice(2, 8) +
-    "-" +
-    nombreSeguro(file.originalname) +
-    "." +
-    preparado.extension;
+  const bucketName = BUCKET;
+  const uploadPath = buildUploadPath(file.originalname);
+  const mime = file.mimetype || "application/octet-stream";
 
-  const ruta = `${carpeta}/${nombreArchivo}`;
+  console.log("[RM24H_UPLOAD] file:", {
+    name: file.originalname,
+    size: file.size,
+    mimetype: mime,
+    tipo,
+  });
+  console.log("[RM24H_UPLOAD] bucket:", bucketName);
+  console.log("[RM24H_UPLOAD] path:", uploadPath);
 
-  await axios.post(
-    `${SUPABASE_URL}/storage/v1/object/${BUCKET}/${ruta}`,
-    preparado.buffer,
-    {
-      headers: {
-        apikey: SUPABASE_KEY,
-        Authorization: `Bearer ${SUPABASE_KEY}`,
-        "Content-Type": preparado.mimetype,
-        "x-upsert": "true",
-      },
-    }
-  );
+  try {
+    await axios.post(
+      `${SUPABASE_URL}/storage/v1/object/${bucketName}/${uploadPath}`,
+      file.buffer,
+      {
+        headers: {
+          apikey: SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_KEY}`,
+          "Content-Type": mime,
+          "x-upsert": "false",
+        },
+      }
+    );
+  } catch (uploadErr) {
+    const detail = mensajeErrorSupabase(uploadErr);
+    console.error("[RM24H_UPLOAD] error:", detail, uploadErr.response?.data);
+    const err = new Error(detail);
+    err.status = uploadErr.response?.status || 500;
+    throw err;
+  }
 
-  const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${ruta}`;
-
-  return {
+  const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${bucketName}/${uploadPath}`;
+  const result = {
     ok: true,
     url: publicUrl,
-    path: ruta,
-    filename: file.originalname || nombreArchivo,
-    mimetype: preparado.mimetype,
+    path: uploadPath,
+    filename: file.originalname || path.basename(uploadPath),
+    mimetype: mime,
     tipo,
   };
+
+  console.log("[RM24H_UPLOAD] result:", result);
+  return result;
 }
 
 module.exports = {

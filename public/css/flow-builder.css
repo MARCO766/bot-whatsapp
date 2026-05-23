@@ -1728,6 +1728,13 @@ body:has(#builderArea) {
   word-break: break-all;
 }
 
+.panel-nodo--rm24h .rm24-contenido-preview-filename {
+  margin: 0 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #e5e7eb;
+}
+
 .panel-nodo--rm24h .rm24-media-upload {
   display: flex;
   flex-direction: column;

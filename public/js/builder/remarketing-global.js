@@ -594,7 +594,59 @@ window.MacBotRemarketingGlobal = (function () {
     if (wrap) wrap.hidden = true;
   }
 
-  function subirArchivoRm24hEnBloque(card, file) {
+  const RM24H_BUCKET = "rm24h-media";
+
+  function getRm24hSupabaseClient() {
+    const cfg = window.MACBOT_BUILDER || {};
+    const url = String(cfg.supabaseUrl || "").trim();
+    const key = String(cfg.supabaseAnonKey || "").trim();
+    if (!url || !key) {
+      return {
+        client: null,
+        error:
+          "Supabase no configurado: añade SUPABASE_ANON_KEY en .env (clave anon/public, no service_role)",
+      };
+    }
+    const lib = window.supabase;
+    if (!lib || typeof lib.createClient !== "function") {
+      return { client: null, error: "Biblioteca @supabase/supabase-js no cargada" };
+    }
+    if (!window.__rm24hSupabaseClient) {
+      window.__rm24hSupabaseClient = lib.createClient(url, key);
+    }
+    return { client: window.__rm24hSupabaseClient, error: null };
+  }
+
+  function mensajeErrorRm24hUpload(err) {
+    if (!err) return "Error desconocido al subir";
+    if (typeof err === "string") return err;
+    return (
+      err.message ||
+      err.error_description ||
+      err.error ||
+      (err.statusCode ? String(err.statusCode) : "") ||
+      "Error al subir"
+    );
+  }
+
+  function nombreArchivoRm24hSeguro(name) {
+    return String(name || "archivo").replace(/[^a-zA-Z0-9._-]+/g, "-");
+  }
+
+  async function verificarBucketRm24hMedia(client) {
+    const { error } = await client.storage.from(RM24H_BUCKET).list("rm24h", { limit: 1 });
+    if (!error) return null;
+    const msg = mensajeErrorRm24hUpload(error);
+    if (/bucket not found|does not exist|no existe|not found/i.test(msg)) {
+      return "Bucket rm24h-media no existe";
+    }
+    if (/policy|denied|permission|unauthorized|403|401/i.test(msg)) {
+      return msg;
+    }
+    return null;
+  }
+
+  async function subirArchivoRm24hEnBloque(card, file) {
     if (!card || !file || rm24hSubidaEnCurso) return;
     const tipo = card.dataset.tipo;
     if (!RM24H_MEDIA_CLIENT[tipo]) return;
@@ -605,59 +657,72 @@ window.MacBotRemarketingGlobal = (function () {
       return;
     }
 
+    const { client, error: clientErr } = getRm24hSupabaseClient();
+    if (!client) {
+      mostrarErrorContenidos(clientErr);
+      return;
+    }
+
     rm24hSubidaEnCurso = true;
     mostrarErrorContenidos("");
-    setProgresoSubidaRm24h(card, 0, "Preparando…");
+    setProgresoSubidaRm24h(card, 5, "Verificando bucket…");
 
-    const formData = new FormData();
-    formData.append("archivo", file);
-    formData.append("tipo", tipo);
-
-    const xhr = new XMLHttpRequest();
-    xhr.upload.addEventListener("progress", function (ev) {
-      if (!ev.lengthComputable) return;
-      const pct = 5 + Math.round((ev.loaded / ev.total) * 90);
-      setProgresoSubidaRm24h(card, pct, "Subiendo…");
-    });
-
-    xhr.addEventListener("load", function () {
-      rm24hSubidaEnCurso = false;
-      let data = {};
-      try {
-        data = JSON.parse(xhr.responseText || "{}");
-      } catch (e) {
-        data = {};
-      }
-
-      if (xhr.status >= 200 && xhr.status < 300 && data.url) {
-        setProgresoSubidaRm24h(card, 100, "Listo");
-        const urlInput = card.querySelector(".rm24-contenido-url");
-        if (urlInput) urlInput.value = data.url;
-        if (tipo === "documento") {
-          const fn = card.querySelector(".rm24-contenido-filename");
-          if (fn && data.filename) fn.value = data.filename;
-        }
-        configActiva.rm24h_contenidos = leerContenidosDesdePanel();
-        renderRm24ContentBlocks();
-        persistirContenidosEnNodo();
-        setTimeout(function () {
-          ocultarProgresoSubidaRm24h(card);
-        }, 600);
+    try {
+      const bucketErr = await verificarBucketRm24hMedia(client);
+      if (bucketErr) {
+        mostrarErrorContenidos(bucketErr);
         return;
       }
 
-      ocultarProgresoSubidaRm24h(card);
-      mostrarErrorContenidos(data.error || "Error al subir el archivo");
-    });
+      const bucketName = RM24H_BUCKET;
+      const uploadPath =
+        "rm24h/test-" + Date.now() + "-" + nombreArchivoRm24hSeguro(file.name);
 
-    xhr.addEventListener("error", function () {
+      console.log("[RM24H_UPLOAD] file:", file);
+      console.log("[RM24H_UPLOAD] bucket:", bucketName);
+      console.log("[RM24H_UPLOAD] path:", uploadPath);
+
+      setProgresoSubidaRm24h(card, 25, "Subiendo…");
+
+      const { data: uploadData, error: uploadError } = await client.storage
+        .from(bucketName)
+        .upload(uploadPath, file, {
+          cacheControl: "3600",
+          upsert: false,
+          contentType: file.type || undefined,
+        });
+
+      if (uploadError) {
+        throw uploadError;
+      }
+
+      console.log("[RM24H_UPLOAD] result:", uploadData);
+
+      const { data: pubData } = client.storage.from(bucketName).getPublicUrl(uploadPath);
+      const publicUrl = pubData?.publicUrl || "";
+      if (!publicUrl) {
+        throw new Error("No se obtuvo URL pública del archivo");
+      }
+
+      setProgresoSubidaRm24h(card, 100, "Listo");
+
+      const urlInput = card.querySelector(".rm24-contenido-url");
+      if (urlInput) urlInput.value = publicUrl;
+      if (tipo === "documento") {
+        const fn = card.querySelector(".rm24-contenido-filename");
+        if (fn) fn.value = file.name || "archivo.pdf";
+      }
+
+      configActiva.rm24h_contenidos = leerContenidosDesdePanel();
+      renderRm24ContentBlocks();
+      persistirContenidosEnNodo();
+    } catch (error) {
+      console.error("[RM24H_UPLOAD] error:", error);
+      mostrarErrorContenidos(mensajeErrorRm24hUpload(error));
+    } finally {
       rm24hSubidaEnCurso = false;
       ocultarProgresoSubidaRm24h(card);
-      mostrarErrorContenidos("Error de red al subir");
-    });
-
-    xhr.open("POST", "/subir-rm24h-media");
-    xhr.send(formData);
+    }
   }
 
   function htmlCamposMedia(item, index, tipo) {
@@ -722,6 +787,15 @@ window.MacBotRemarketingGlobal = (function () {
           '<video class="rm24-contenido-preview-video" controls preload="metadata" src="' +
           esc(url) +
           '"></video>';
+      } else if (tipo === "documento") {
+        const fn = String(item.filename || "").trim() || "Documento";
+        html +=
+          '<p class="rm24-contenido-preview-filename">📄 ' +
+          esc(fn) +
+          "</p>" +
+          '<a class="rm24-contenido-preview-link" href="' +
+          esc(url) +
+          '" target="_blank" rel="noopener">Abrir archivo</a>';
       } else {
         html += '<span class="rm24-contenido-preview-link">' + esc(url) + "</span>";
       }

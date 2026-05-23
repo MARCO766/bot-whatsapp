@@ -7,7 +7,9 @@ function renderAdminPage({
   flujoActual,
   activadores,
   etiquetas,
-  conexionActiva
+  conexionActiva,
+  supabaseUrl,
+  supabaseAnonKey,
 }) {
   return `
 
@@ -709,7 +711,9 @@ ${tab === "flujos" && builder ? `
   flujoEditandoId: flujoId || "",
   flujoCargado: flujoActual ? flujoActual.data : null,
   activadoresData: activadores || [],
-  etiquetasData: etiquetas || []
+  etiquetasData: etiquetas || [],
+  supabaseUrl: supabaseUrl || "",
+  supabaseAnonKey: supabaseAnonKey || "",
 }).replace(/</g, "\\u003c")}</script>
 <script>
 (function () {
@@ -718,6 +722,7 @@ ${tab === "flujos" && builder ? `
 })();
 </script>
 ${builder ? `
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="/js/builder/remarketing-global.js"></script>
 <script src="/js/builder/seguimiento.js"></script>
 <script src="/js/builder/contenido.js"></script>
