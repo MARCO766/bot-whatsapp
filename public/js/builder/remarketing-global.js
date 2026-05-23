@@ -27,26 +27,50 @@ window.MacBotRemarketingGlobal = (function () {
       .replace(/"/g, "&quot;");
   }
 
-  function leerConfigDeNodo(nodo) {
-    const base = crearConfigVacia();
-    const ta = nodo?.querySelector?.(".remarketing-global-data");
-    if (!ta?.value) return base;
+  function leerTextareaJson(ta) {
+    if (!ta) return null;
+    const raw = String(ta.value || ta.textContent || "").trim();
+    if (!raw) return null;
     try {
-      const parsed = JSON.parse(ta.value);
-      return Object.assign({}, base, parsed, {
-        horasInactividad: 23,
-        detenerSiResponde: false,
-        reiniciarAlResponder: parsed.reiniciarAlResponder !== false,
-        detenerEnConversion: parsed.detenerEnConversion !== false,
-      });
+      return JSON.parse(raw);
     } catch (e) {
-      return base;
+      return null;
     }
   }
 
+  function leerConfigDeNodo(nodo) {
+    const base = crearConfigVacia();
+    if (!nodo) return base;
+
+    const ta = nodo.querySelector?.(".remarketing-global-data");
+    let parsed = leerTextareaJson(ta);
+
+    if (!parsed && nodo.__rm24hConfig && typeof nodo.__rm24hConfig === "object") {
+      parsed = nodo.__rm24hConfig;
+    }
+
+    if (!parsed || typeof parsed !== "object") return base;
+
+    const config = Object.assign({}, base, parsed, {
+      horasInactividad: 23,
+      detenerSiResponde: false,
+      reiniciarAlResponder: parsed.reiniciarAlResponder !== false,
+      detenerEnConversion: parsed.detenerEnConversion !== false,
+    });
+
+    nodo.__rm24hConfig = config;
+    return config;
+  }
+
   function guardarConfigEnNodo(nodo, config) {
+    if (!nodo || !config) return;
+    const json = JSON.stringify(config);
     const ta = nodo.querySelector(".remarketing-global-data");
-    if (ta) ta.value = JSON.stringify(config);
+    if (ta) {
+      ta.value = json;
+      ta.textContent = json;
+    }
+    nodo.__rm24hConfig = config;
     renderPreviewNodo(nodo, config);
   }
 
@@ -81,7 +105,28 @@ window.MacBotRemarketingGlobal = (function () {
     );
   }
 
+  function panelRemarketingAbierto() {
+    return !!document.getElementById("rm24hActivo");
+  }
+
+  function aplicarConfigAlPanel(config) {
+    const cfg = config || configActiva;
+    const activoEl = document.getElementById("rm24hActivo");
+    const mensajeEl = document.getElementById("rm24hMensaje");
+    const horasEl = document.getElementById("rm24hHoras");
+    const reiniciarEl = document.getElementById("rm24hReiniciar");
+    const detenerConvEl = document.getElementById("rm24hDetenerConversion");
+
+    if (activoEl) activoEl.checked = !!cfg.activo;
+    if (horasEl) horasEl.value = String(cfg.horasInactividad ?? 23);
+    if (mensajeEl) mensajeEl.value = cfg.mensajeRemarketing ?? "";
+    if (reiniciarEl) reiniciarEl.checked = cfg.reiniciarAlResponder !== false;
+    if (detenerConvEl) detenerConvEl.checked = cfg.detenerEnConversion !== false;
+  }
+
   function renderPanel(nodo) {
+    if (!nodo) return;
+
     nodoActivo = nodo;
     configActiva = leerConfigDeNodo(nodo);
 
@@ -132,6 +177,8 @@ window.MacBotRemarketingGlobal = (function () {
       '<button type="button" class="panel-btn" id="rm24hGuardarPanel">Guardar nodo</button>' +
       "</div>";
 
+    aplicarConfigAlPanel(configActiva);
+
     document.getElementById("rm24hActivo")?.addEventListener("change", onPanelChange);
     document.getElementById("rm24hMensaje")?.addEventListener("input", onPanelChange);
     document
@@ -140,15 +187,20 @@ window.MacBotRemarketingGlobal = (function () {
   }
 
   function syncDesdePanel() {
-    configActiva.activo = !!document.getElementById("rm24hActivo")?.checked;
+    if (!panelRemarketingAbierto()) return;
+
+    const activoEl = document.getElementById("rm24hActivo");
+    const mensajeEl = document.getElementById("rm24hMensaje");
+
+    if (activoEl) configActiva.activo = !!activoEl.checked;
     configActiva.horasInactividad = 23;
     configActiva.detenerSiResponde = false;
     configActiva.reiniciarAlResponder = true;
     configActiva.detenerEnConversion = true;
     configActiva.modoContextual = false;
-    configActiva.mensajeRemarketing = (
-      document.getElementById("rm24hMensaje")?.value || ""
-    ).trim();
+    if (mensajeEl) {
+      configActiva.mensajeRemarketing = String(mensajeEl.value || "").trim();
+    }
   }
 
   function onPanelChange() {
@@ -177,14 +229,17 @@ window.MacBotRemarketingGlobal = (function () {
   function clearPanelActivo() {
     const restaurando =
       typeof builderHistorial !== "undefined" && builderHistorial.restaurando;
-    if (!restaurando) flushPanelToNode();
+    if (!restaurando && nodoActivo) {
+      syncDesdePanel();
+      guardarConfigEnNodo(nodoActivo, configActiva);
+    }
     nodoActivo = null;
     configActiva = crearConfigVacia();
     document.getElementById("panelNodo")?.classList.remove("panel-nodo--rm24h");
   }
 
   function initNodoRecienCreado(nodo) {
-    guardarConfigEnNodo(nodo, crearConfigVacia());
+    renderPreviewNodo(nodo, leerConfigDeNodo(nodo));
   }
 
   function refrescarNodoCargado(nodo) {

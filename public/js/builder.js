@@ -1946,6 +1946,10 @@ function cerrarPanelNodo(){
     window.MacBotIA.clearPanelActivo();
   }
 
+  if(window.MacBotRemarketingGlobal && window.MacBotRemarketingGlobal.clearPanelActivo){
+    window.MacBotRemarketingGlobal.clearPanelActivo();
+  }
+
   configPanelOpen = false;
   nodoSeleccionadoPanel = null;
 
