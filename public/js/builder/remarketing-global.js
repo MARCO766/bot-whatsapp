@@ -12,8 +12,120 @@ window.MacBotRemarketingGlobal = (function () {
       reiniciarAlResponder: true,
       detenerEnConversion: true,
       mensajeRemarketing: "",
+      rm24h_contenidos: [],
       modoContextual: false,
     };
+  }
+
+  function normalizarContenidosLista(raw, mensajeLegacy) {
+    const lista = [];
+    if (Array.isArray(raw)) {
+      raw.forEach(function (item) {
+        const n = normalizarItemContenidoUi(item);
+        if (n) lista.push(n);
+      });
+    }
+    if (!lista.length) {
+      const legacy = String(mensajeLegacy || "").trim();
+      if (legacy) lista.push({ tipo: "texto", texto: legacy });
+    }
+    return lista;
+  }
+
+  function normalizarItemContenidoUi(item) {
+    if (!item || typeof item !== "object") return null;
+    const tipo = String(item.tipo || "").toLowerCase();
+    if (tipo === "texto") {
+      const texto = String(item.texto || "").trim();
+      if (!texto) return null;
+      return { tipo: "texto", texto: texto };
+    }
+    if (tipo === "imagen") {
+      const url = String(item.url || "").trim();
+      if (!url) return null;
+      return { tipo: "imagen", url: url, caption: String(item.caption || "").trim() };
+    }
+    if (tipo === "audio") {
+      const url = String(item.url || "").trim();
+      if (!url) return null;
+      return { tipo: "audio", url: url };
+    }
+    if (tipo === "video") {
+      const url = String(item.url || "").trim();
+      if (!url) return null;
+      return { tipo: "video", url: url, caption: String(item.caption || "").trim() };
+    }
+    if (tipo === "documento" || tipo === "pdf") {
+      const url = String(item.url || "").trim();
+      if (!url) return null;
+      return {
+        tipo: "documento",
+        url: url,
+        filename: String(item.filename || "archivo.pdf").trim() || "archivo.pdf",
+        caption: String(item.caption || "").trim(),
+      };
+    }
+    return null;
+  }
+
+  function validarContenidoUi(item) {
+    if (!item) return "Bloque vacío";
+    if (item.tipo === "texto") {
+      return item.texto ? null : "El texto no puede estar vacío";
+    }
+    if (!item.url) return "La URL HTTPS es obligatoria";
+    if (!/^https:\/\//i.test(item.url)) {
+      return "Usa una URL pública HTTPS";
+    }
+    if (item.tipo === "imagen" && !/\.(jpe?g|png|webp)(\?|$)/i.test(item.url)) {
+      return "Imagen: .jpg, .png o .webp";
+    }
+    if (item.tipo === "audio" && !/\.(mp3|ogg|m4a)(\?|$)/i.test(item.url)) {
+      return "Audio: .mp3, .ogg o .m4a";
+    }
+    if (item.tipo === "video" && !/\.mp4(\?|$)/i.test(item.url)) {
+      return "Video: .mp4";
+    }
+    if (item.tipo === "documento") {
+      const fn = item.filename || "";
+      if (!/\.(pdf|docx?)(\?|$)/i.test(item.url) && !/\.(pdf|docx?)$/i.test(fn)) {
+        return "Documento: .pdf, .doc o .docx";
+      }
+    }
+    return null;
+  }
+
+  function etiquetaTipoContenido(tipo) {
+    const map = {
+      texto: "Texto",
+      imagen: "Imagen",
+      audio: "Audio",
+      video: "Video",
+      documento: "Documento",
+    };
+    return map[tipo] || tipo;
+  }
+
+  function iconoTipoContenido(tipo) {
+    const map = {
+      texto: "💬",
+      imagen: "🖼️",
+      audio: "🎵",
+      video: "🎬",
+      documento: "📄",
+    };
+    return map[tipo] || "📎";
+  }
+
+  function sincronizarMensajeRemarketingDesdeContenidos(config) {
+    const lista = normalizarContenidosLista(config.rm24h_contenidos, "");
+    const primero = lista.find(function (c) {
+      return c.tipo === "texto";
+    });
+    if (primero) config.mensajeRemarketing = primero.texto;
+    else if (!lista.length) config.mensajeRemarketing = String(config.mensajeRemarketing || "").trim();
+    config.rm24h_contenidos = lista;
+    return config;
   }
 
   let nodoActivo = null;
@@ -56,8 +168,13 @@ window.MacBotRemarketingGlobal = (function () {
       detenerSiResponde: false,
       reiniciarAlResponder: parsed.reiniciarAlResponder !== false,
       detenerEnConversion: parsed.detenerEnConversion !== false,
+      rm24h_contenidos: normalizarContenidosLista(
+        parsed.rm24h_contenidos,
+        parsed.mensajeRemarketing
+      ),
     });
 
+    sincronizarMensajeRemarketingDesdeContenidos(config);
     nodo.__rm24hConfig = config;
     return config;
   }
@@ -84,10 +201,24 @@ window.MacBotRemarketingGlobal = (function () {
       return;
     }
 
-    const msg = (config.mensajeRemarketing || "").trim();
-    const preview = msg
-      ? msg.slice(0, 48) + (msg.length > 48 ? "…" : "")
-      : "Sin mensaje configurado";
+    const lista = normalizarContenidosLista(
+      config.rm24h_contenidos,
+      config.mensajeRemarketing
+    );
+    let preview;
+    if (!lista.length) {
+      preview = "Sin contenido configurado";
+    } else if (lista.length === 1 && lista[0].tipo === "texto") {
+      const msg = lista[0].texto;
+      preview = msg.slice(0, 48) + (msg.length > 48 ? "…" : "");
+    } else {
+      preview =
+        lista.length +
+        " contenido(s): " +
+        lista.map(function (c) {
+          return etiquetaTipoContenido(c.tipo);
+        }).join(", ");
+    }
 
     body.innerHTML =
       '<div class="rm24-status rm24h-badge-on">ACTIVO</div>' +
@@ -145,12 +276,165 @@ window.MacBotRemarketingGlobal = (function () {
     }
   }
 
-  function actualizarContadorMensaje() {
-    const mensajeEl = document.getElementById("rm24hMensaje");
-    const countEl = document.getElementById("rm24hMensajeCount");
-    if (!mensajeEl || !countEl) return;
-    const len = String(mensajeEl.value || "").length;
-    countEl.textContent = len + " caracteres";
+  function mostrarErrorContenidos(msg) {
+    const el = document.getElementById("rm24hContenidosError");
+    if (!el) return;
+    if (msg) {
+      el.textContent = msg;
+      el.hidden = false;
+    } else {
+      el.textContent = "";
+      el.hidden = true;
+    }
+  }
+
+  function leerContenidosDesdePanel() {
+    const lista = [];
+    document.querySelectorAll("#rm24hContenidosLista .rm24-contenido-item").forEach(function (card) {
+      const tipo = card.dataset.tipo;
+      if (tipo === "texto") {
+        const texto = card.querySelector(".rm24-contenido-texto")?.value || "";
+        lista.push({ tipo: "texto", texto: String(texto).trim() });
+        return;
+      }
+      const url = String(card.querySelector(".rm24-contenido-url")?.value || "").trim();
+      const caption = String(card.querySelector(".rm24-contenido-caption")?.value || "").trim();
+      const filename = String(card.querySelector(".rm24-contenido-filename")?.value || "").trim();
+      if (tipo === "imagen") lista.push({ tipo: "imagen", url: url, caption: caption });
+      else if (tipo === "audio") lista.push({ tipo: "audio", url: url });
+      else if (tipo === "video") lista.push({ tipo: "video", url: url, caption: caption });
+      else if (tipo === "documento") {
+        lista.push({
+          tipo: "documento",
+          url: url,
+          filename: filename || "archivo.pdf",
+          caption: caption,
+        });
+      }
+    });
+    return lista.map(normalizarItemContenidoUi).filter(Boolean);
+  }
+
+  function htmlBloqueContenido(item, index) {
+    const tipo = item.tipo || "texto";
+    const orden = index + 1;
+    let campos = "";
+    if (tipo === "texto") {
+      campos =
+        '<textarea class="rm24-input rm24-textarea rm24-contenido-texto" rows="3" placeholder="Mensaje de texto">' +
+        esc(item.texto) +
+        "</textarea>";
+    } else {
+      campos =
+        '<input type="url" class="rm24-input rm24-contenido-url" placeholder="https://... URL pública HTTPS" value="' +
+        esc(item.url) +
+        '">';
+      if (tipo === "imagen" || tipo === "video" || tipo === "documento") {
+        campos +=
+          '<input type="text" class="rm24-input rm24-contenido-caption" placeholder="Caption (opcional)" value="' +
+          esc(item.caption) +
+          '">';
+      }
+      if (tipo === "documento") {
+        campos +=
+          '<input type="text" class="rm24-input rm24-contenido-filename" placeholder="Nombre archivo (ej. oferta.pdf)" value="' +
+          esc(item.filename || "archivo.pdf") +
+          '">';
+      }
+      if (tipo !== "audio" && item.url) {
+        campos +=
+          '<div class="rm24-contenido-preview">' +
+          (tipo === "imagen"
+            ? '<img src="' + esc(item.url) + '" alt="" onerror="this.style.display=\'none\'">'
+            : '<span class="rm24-contenido-preview-link">' + esc(item.url) + "</span>") +
+          "</div>";
+      }
+    }
+
+    return (
+      '<div class="rm24-contenido-item" data-tipo="' +
+      esc(tipo) +
+      '" data-index="' +
+      index +
+      '">' +
+      '<div class="rm24-contenido-item-head">' +
+      '<span class="rm24-contenido-orden">#' +
+      orden +
+      "</span>" +
+      '<span class="rm24-contenido-tipo">' +
+      iconoTipoContenido(tipo) +
+      " " +
+      etiquetaTipoContenido(tipo) +
+      "</span>" +
+      '<button type="button" class="rm24-contenido-remove" title="Eliminar">×</button>' +
+      "</div>" +
+      '<div class="rm24-contenido-fields">' +
+      campos +
+      "</div></div>"
+    );
+  }
+
+  function renderListaContenidos(contenidos) {
+    const lista = document.getElementById("rm24hContenidosLista");
+    if (!lista) return;
+    const items = normalizarContenidosLista(contenidos, "");
+    if (!items.length) {
+      lista.innerHTML = '<p class="rm24-contenidos-empty">Sin bloques. Agrega texto o media abajo.</p>';
+      return;
+    }
+    lista.innerHTML = items
+      .map(function (item, i) {
+        return htmlBloqueContenido(item, i);
+      })
+      .join("");
+  }
+
+  function bindContenidosPanelEvents() {
+    const lista = document.getElementById("rm24hContenidosLista");
+    const toolbar = document.getElementById("rm24hContenidosToolbar");
+    if (!lista || !toolbar) return;
+
+    if (!toolbar.dataset.rm24hBound) {
+      toolbar.dataset.rm24hBound = "1";
+      toolbar.addEventListener("click", function (ev) {
+        const btn = ev.target.closest("[data-add-tipo]");
+        if (!btn) return;
+        const tipo = btn.getAttribute("data-add-tipo");
+        const actual = leerContenidosDesdePanel();
+        const nuevo = { tipo: tipo };
+        if (tipo === "texto") nuevo.texto = "";
+        else if (tipo === "documento") {
+          nuevo.url = "";
+          nuevo.filename = "archivo.pdf";
+        } else nuevo.url = "";
+        actual.push(nuevo);
+        configActiva.rm24h_contenidos = actual;
+        renderListaContenidos(actual);
+        mostrarErrorContenidos("");
+        onPanelChange();
+      });
+    }
+
+    if (!lista.dataset.rm24hBound) {
+      lista.dataset.rm24hBound = "1";
+      lista.addEventListener("click", function (ev) {
+        const btn = ev.target.closest(".rm24-contenido-remove");
+        if (!btn) return;
+        ev.preventDefault();
+        const card = btn.closest(".rm24-contenido-item");
+        if (!card) return;
+        card.remove();
+        if (!lista.querySelector(".rm24-contenido-item")) {
+          lista.innerHTML =
+            '<p class="rm24-contenidos-empty">Sin bloques. Agrega texto o media abajo.</p>';
+        }
+        onPanelChange();
+      });
+      lista.addEventListener("input", function () {
+        mostrarErrorContenidos("");
+        onPanelChange();
+      });
+    }
   }
 
   function esNodoRemarketingGlobal(nodo) {
@@ -168,16 +452,16 @@ window.MacBotRemarketingGlobal = (function () {
   function aplicarConfigAlPanel(config) {
     const cfg = config || configActiva;
     const activoEl = document.getElementById("rm24hActivo");
-    const mensajeEl = document.getElementById("rm24hMensaje");
     const horasEl = document.getElementById("rm24hHoras");
     const reiniciarEl = document.getElementById("rm24hReiniciar");
     const detenerConvEl = document.getElementById("rm24hDetenerConversion");
 
     if (activoEl) activoEl.checked = !!cfg.activo;
     if (horasEl) horasEl.value = String(cfg.horasInactividad ?? 23);
-    if (mensajeEl) mensajeEl.value = cfg.mensajeRemarketing ?? "";
     if (reiniciarEl) reiniciarEl.checked = cfg.reiniciarAlResponder !== false;
     if (detenerConvEl) detenerConvEl.checked = cfg.detenerEnConversion !== false;
+    renderListaContenidos(cfg.rm24h_contenidos || cfg.mensajeRemarketing);
+    mostrarErrorContenidos("");
   }
 
   function renderPanel(nodo) {
@@ -236,15 +520,18 @@ window.MacBotRemarketingGlobal = (function () {
       '<span class="rm24-switch-track" aria-hidden="true"></span>' +
       '<span class="rm24-switch-label">Detener al llegar a Conversión</span></label>' +
       '<p class="rm24h-hint rm24-rule-hint">SÍ (fijo en Fase 1)</p></div></section>' +
-      '<section class="rm24-section">' +
-      '<h5 class="rm24-section-title">Mensaje</h5>' +
-      '<div class="rm24h-field rm24-field">' +
-      '<div class="rm24-field-head">' +
-      "<label for=\"rm24hMensaje\">Mensaje de remarketing</label>" +
-      '<span class="rm24-char-count" id="rm24hMensajeCount">0 caracteres</span></div>' +
-      '<textarea id="rm24hMensaje" class="rm24-textarea" rows="5" placeholder="Mensaje cuando venza el contador (Fase 2 enviará por WA)">' +
-      esc(configActiva.mensajeRemarketing) +
-      "</textarea></div></section>" +
+      '<section class="rm24-section rm24-section--contenidos">' +
+      '<h5 class="rm24-section-title">Contenido de remarketing</h5>' +
+      '<p class="rm24h-hint rm24-contenidos-intro">Se envían en orden tras 23h sin respuesta. URLs HTTPS públicas.</p>' +
+      '<div id="rm24hContenidosError" class="rm24-contenidos-error" hidden></div>' +
+      '<div id="rm24hContenidosLista" class="rm24-contenidos-lista"></div>' +
+      '<div id="rm24hContenidosToolbar" class="rm24-contenidos-toolbar">' +
+      '<button type="button" class="rm24-contenido-add" data-add-tipo="texto">+ Texto</button>' +
+      '<button type="button" class="rm24-contenido-add" data-add-tipo="imagen">+ Imagen</button>' +
+      '<button type="button" class="rm24-contenido-add" data-add-tipo="audio">+ Audio</button>' +
+      '<button type="button" class="rm24-contenido-add" data-add-tipo="video">+ Video</button>' +
+      '<button type="button" class="rm24-contenido-add" data-add-tipo="documento">+ Documento</button>' +
+      "</div></section>" +
       '<section class="rm24-section rm24-section--future">' +
       '<h5 class="rm24-section-title">Opciones futuras</h5>' +
       '<div class="rm24-rule rm24h-field--locked">' +
@@ -258,13 +545,9 @@ window.MacBotRemarketingGlobal = (function () {
       "</div></div></div>";
 
     aplicarConfigAlPanel(configActiva);
-    actualizarContadorMensaje();
+    bindContenidosPanelEvents();
 
     document.getElementById("rm24hActivo")?.addEventListener("change", onPanelChange);
-    document.getElementById("rm24hMensaje")?.addEventListener("input", function () {
-      actualizarContadorMensaje();
-      onPanelChange();
-    });
     document
       .getElementById("rm24hGuardarPanel")
       ?.addEventListener("click", guardarDesdePanel);
@@ -274,7 +557,6 @@ window.MacBotRemarketingGlobal = (function () {
     if (!panelRemarketingAbierto()) return;
 
     const activoEl = document.getElementById("rm24hActivo");
-    const mensajeEl = document.getElementById("rm24hMensaje");
 
     if (activoEl) configActiva.activo = !!activoEl.checked;
     configActiva.horasInactividad = 23;
@@ -282,9 +564,8 @@ window.MacBotRemarketingGlobal = (function () {
     configActiva.reiniciarAlResponder = true;
     configActiva.detenerEnConversion = true;
     configActiva.modoContextual = false;
-    if (mensajeEl) {
-      configActiva.mensajeRemarketing = String(mensajeEl.value || "").trim();
-    }
+    configActiva.rm24h_contenidos = leerContenidosDesdePanel();
+    sincronizarMensajeRemarketingDesdeContenidos(configActiva);
   }
 
   function onPanelChange() {
@@ -300,6 +581,19 @@ window.MacBotRemarketingGlobal = (function () {
   function guardarDesdePanel() {
     if (!nodoActivo) return;
     syncDesdePanel();
+    const lista = configActiva.rm24h_contenidos || [];
+    for (let i = 0; i < lista.length; i++) {
+      const err = validarContenidoUi(lista[i]);
+      if (err) {
+        mostrarErrorContenidos("Bloque " + (i + 1) + ": " + err);
+        return;
+      }
+    }
+    if (configActiva.activo && !lista.length) {
+      mostrarErrorContenidos("Agrega al menos un contenido con el remarketing activo.");
+      return;
+    }
+    mostrarErrorContenidos("");
     guardarConfigEnNodo(nodoActivo, configActiva);
     alert("Remarketing Global guardado. Recuerda guardar el flujo completo.");
   }

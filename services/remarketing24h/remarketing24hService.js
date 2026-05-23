@@ -7,6 +7,7 @@ const {
 } = require("./constants");
 const repo = require("./remarketing24hRepository");
 const { procesarPendientesDisparo } = require("./executeRemarketing24h");
+const { obtenerContenidosRemarketing } = require("./rm24hContenidos");
 const { nowUtc } = require("../seguimiento/timestamps");
 
 function calcularExpiraEn() {
@@ -55,7 +56,17 @@ async function iniciarRemarketing24h({
 
   const ahora = nowUtc();
   const expira_en = calcularExpiraEn();
-  const mensaje = String(config?.mensajeRemarketing || "").trim() || null;
+  const contenidos = obtenerContenidosRemarketing(config || {});
+  const mensajeTexto = contenidos.find((c) => c.tipo === "texto");
+  const mensaje =
+    (mensajeTexto && mensajeTexto.texto) ||
+    String(config?.mensajeRemarketing || "").trim() ||
+    null;
+  const configSnapshot = {
+    ...(config || {}),
+    rm24h_contenidos: contenidos,
+    mensajeRemarketing: mensaje || config?.mensajeRemarketing || "",
+  };
 
   const existente = await repo.buscarAbierto({
     usuario_id,
@@ -73,7 +84,7 @@ async function iniciarRemarketing24h({
     ultimo_mensaje_lead_at: ahora,
     expira_en,
     mensaje_remarketing: mensaje,
-    config_snapshot: config || {},
+    config_snapshot: configSnapshot,
     cancelado_en: null,
     motivo_cancelacion: null,
     disparado_en: null,

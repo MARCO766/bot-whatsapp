@@ -1,4 +1,7 @@
-const { enviarTextoWhatsApp } = require("../whatsappService");
+const {
+  obtenerContenidosRemarketing,
+  enviarContenidosRemarketing,
+} = require("./rm24hContenidos");
 const {
   ESTADOS_RM24H,
   MOTIVOS_RM24H,
@@ -104,8 +107,8 @@ async function procesarPendienteDisparo(fila) {
     ultimo_mensaje_lead_at: fila.ultimo_mensaje_lead_at,
   });
 
-  const texto = String(fila.mensaje_remarketing || "").trim();
-  if (!texto) {
+  const contenidos = obtenerContenidosRemarketing(fila);
+  if (!contenidos.length) {
     await repo.actualizarPorId(
       fila.id,
       {
@@ -134,7 +137,7 @@ async function procesarPendienteDisparo(fila) {
     });
     console.log("[RM24H] enviando", reservado.cliente_numero);
 
-    await enviarTextoWhatsApp(reservado.cliente_numero, texto, {
+    await enviarContenidosRemarketing(reservado.cliente_numero, contenidos, {
       usuarioId: reservado.usuario_id,
     });
 

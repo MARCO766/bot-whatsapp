@@ -1,4 +1,8 @@
 const { HORAS_INACTIVIDAD } = require("./constants");
+const {
+  normalizarItemContenido,
+  sincronizarMensajeLegacy,
+} = require("./rm24hContenidos");
 
 function crearConfigPorDefecto() {
   return {
@@ -9,8 +13,24 @@ function crearConfigPorDefecto() {
     reiniciarAlResponder: true,
     detenerEnConversion: true,
     mensajeRemarketing: "",
+    rm24h_contenidos: [],
     modoContextual: false,
   };
+}
+
+function normalizarContenidosConfig(raw, base) {
+  const lista = [];
+  if (Array.isArray(raw?.rm24h_contenidos)) {
+    for (const item of raw.rm24h_contenidos) {
+      const n = normalizarItemContenido(item);
+      if (n) lista.push(n);
+    }
+  }
+  if (!lista.length) {
+    const legacy = String(raw?.mensajeRemarketing || base.mensajeRemarketing || "").trim();
+    if (legacy) lista.push({ tipo: "texto", texto: legacy });
+  }
+  return lista;
 }
 
 function esNodoRemarketingGlobal(nodo) {
@@ -64,14 +84,16 @@ function leerConfigDeNodo(nodo) {
 
   if (!raw || typeof raw !== "object") return base;
 
-  return {
+  const config = {
     ...base,
     ...raw,
     horasInactividad: HORAS_INACTIVIDAD,
     detenerSiResponde: false,
     reiniciarAlResponder: raw.reiniciarAlResponder !== false,
     detenerEnConversion: raw.detenerEnConversion !== false,
+    rm24h_contenidos: normalizarContenidosConfig(raw, base),
   };
+  return sincronizarMensajeLegacy(config);
 }
 
 function buscarNodoRemarketingGlobal(flujoData) {
