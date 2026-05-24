@@ -10,6 +10,7 @@ const ESTADOS_RM24H = {
   CANCELADO_RESPUESTA: "cancelado_respuesta",
   EXPIRADO_VENTANA: "expirado_ventana",
   CERRADO_SIN_RESPUESTA: "cerrado_sin_respuesta",
+  CANCELADO_RESETBOT: "cancelado_resetbot",
 };
 
 const MOTIVOS_RM24H = {
@@ -18,6 +19,7 @@ const MOTIVOS_RM24H = {
   MAX_INTENTOS: "max_intentos",
   VENTANA_CERRADA: "ventana_whatsapp_cerrada",
   MENSAJE_VACIO: "mensaje_vacio",
+  RESETBOT: "resetbot",
 };
 
 /** Máximo / default inactividad RM24H antes de disparar (no 24 exactas) */

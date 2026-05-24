@@ -13,6 +13,7 @@ const ESTADOS_CON_ACTIVO_FALSE = new Set([
   ESTADOS_RM24H.EXPIRADO_VENTANA,
   ESTADOS_RM24H.CONVERTIDO,
   ESTADOS_RM24H.CANCELADO,
+  ESTADOS_RM24H.CANCELADO_RESETBOT,
 ]);
 
 function inferirEstadoCerrado(payload = {}, filaActual = {}) {
@@ -20,6 +21,9 @@ function inferirEstadoCerrado(payload = {}, filaActual = {}) {
     payload.motivo_cancelacion ?? filaActual.motivo_cancelacion ?? ""
   ).trim();
 
+  if (motivo === "resetbot") {
+    return ESTADOS_RM24H.CANCELADO_RESETBOT;
+  }
   if (motivo === "conversion") {
     return ESTADOS_RM24H.CANCELADO_CONVERSION;
   }

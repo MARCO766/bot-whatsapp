@@ -1061,6 +1061,11 @@ async function procesarMensajeEntrante(numero, texto, usuarioId, messageId) {
     return true;
   }
 
+  if (esComandoResetFlujo(texto)) {
+    await resetearFlujoLead(numero, usuarioId);
+    return true;
+  }
+
   if (usuarioId && numero) {
     try {
       await resetearRemarketing24h({
@@ -1070,11 +1075,6 @@ async function procesarMensajeEntrante(numero, texto, usuarioId, messageId) {
     } catch (err) {
       console.log("[RM24H] error al resetear por respuesta:", err.response?.data || err.message);
     }
-  }
-
-  if (esComandoResetFlujo(texto)) {
-    await resetearFlujoLead(numero, usuarioId);
-    return true;
   }
 
   const reanudado = await reanudarFlujoIAPendiente(numero, texto, usuarioId);

@@ -6,12 +6,15 @@
 const axios = require("axios");
 const { limpiarSesionIAPendiente } = require("./iaFlowSession");
 const { enviarTextoWhatsApp } = require("./whatsappService");
+const {
+  cancelarRemarketing24hPorResetbot,
+} = require("./remarketing24h/remarketing24hService");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
 
 const MENSAJE_CONFIRMACION =
-  '✅ Flujo reiniciado. Escribe "hola" para empezar nuevamente.';
+  "✅ Flujo reiniciado. Escribe un activador válido para comenzar de nuevo.";
 
 function supabaseHeaders(extra = {}) {
   return {
@@ -99,10 +102,29 @@ async function resetearFlujoLead(numero, usuarioId) {
 
   if (!num) return { ok: false, motivo: "sin_numero" };
 
+  console.log("[RESETBOT] detectado", { lead: num, usuario: uid });
+
   limpiarSesionIAPendiente(uid, num);
+
+  if (uid) {
+    try {
+      await cancelarRemarketing24hPorResetbot({
+        usuario_id: uid,
+        cliente_numero: num,
+      });
+    } catch (err) {
+      console.log(
+        "[RESETBOT_RM24H] error:",
+        err.response?.data || err.message
+      );
+    }
+  }
 
   await cancelarSeguimientosPendientesLead(num, uid);
   await limpiarHistorialFlujoLead(num, uid);
+
+  console.log("[RESETBOT] flujo cancelado");
+  console.log("[RESETBOT] esperando nuevo activador");
 
   try {
     await enviarTextoWhatsApp(num, MENSAJE_CONFIRMACION, {

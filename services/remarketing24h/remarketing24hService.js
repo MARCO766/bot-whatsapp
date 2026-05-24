@@ -261,6 +261,44 @@ async function cancelarRemarketing24h({
   return actualizado;
 }
 
+/** Comando resetbot: cancela RM24H vivo sin reiniciar contador ni crear fila nueva. */
+async function cancelarRemarketing24hPorResetbot({ usuario_id, cliente_numero }) {
+  if (!usuario_id || !cliente_numero) return [];
+
+  console.log("[RESETBOT_RM24H] cancelando remarketing activo", {
+    usuario_id,
+    cliente: cliente_numero,
+  });
+
+  const filas = await repo.listarReinicioPorCliente(usuario_id, cliente_numero);
+  const ahora = nowUtc();
+  const actualizados = [];
+
+  for (const fila of filas) {
+    const actualizado = await repo.actualizarPorId(
+      fila.id,
+      {
+        estado: ESTADOS_RM24H.CANCELADO_RESETBOT,
+        activo: false,
+        cancelado_en: ahora,
+        motivo_cancelacion: MOTIVOS_RM24H.RESETBOT,
+        ultimo_nodo_id: null,
+        ultimo_nodo_tipo: null,
+        ultimo_nodo_nombre: null,
+        ultimo_camino: null,
+      },
+      fila
+    );
+    if (actualizado) actualizados.push(actualizado);
+    console.log("[RESETBOT_RM24H] estado=cancelado_resetbot activo=false", {
+      id: fila.id,
+      flujo_id: fila.flujo_id,
+    });
+  }
+
+  return actualizados;
+}
+
 async function listarVencidos() {
   return repo.listarVencidos();
 }
@@ -311,6 +349,7 @@ module.exports = {
   iniciarRemarketing24h,
   resetearRemarketing24h,
   cancelarRemarketing24h,
+  cancelarRemarketing24hPorResetbot,
   listarVencidos,
   marcarVencidosComoPendienteDisparo,
   procesarRemarketing24hWorker,
