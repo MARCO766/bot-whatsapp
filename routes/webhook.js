@@ -531,8 +531,6 @@ if (esComandoResetFlujo(textoParaActivador)) {
 
 await enviarEventoMeta(usuarioIdWebhook, "Lead", from);
 
-const marcaAntesFlujo = new Date().toISOString();
-
 console.log("🔎 ACTIVADOR — texto:", textoParaActivador, "| usuario:", usuarioIdWebhook);
 
 const activadorEjecutado = await procesarMensajeEntrante(
@@ -548,7 +546,7 @@ if (!activadorEjecutado) {
 
 try {
   await cancelarSeguimientosPorRespuesta(from, usuarioIdWebhook, req, {
-    creadoAntesDe: marcaAntesFlujo,
+    mensajeAt: creadoEn,
   });
 } catch (cancelErr) {
   console.log("[WEBHOOK] cancelar seguimientos:", cancelErr.message);

@@ -52,10 +52,7 @@ async function insertarProgramados(rows) {
 
 function buildClaveDedupPaso(item) {
   return [
-    item.usuario_id || "",
-    item.cliente_numero || "",
-    item.flujo_id || "",
-    item.nodo_id || "",
+    item.campana_id || "",
     String(item.paso_index ?? ""),
   ].join("|");
 }
@@ -67,18 +64,18 @@ function filtroEqCampo(campo, valor) {
   return `${campo}=eq.${encodeURIComponent(valor)}`;
 }
 
+/** Deduplicación solo dentro del mismo lote (campana_id). */
 async function existePasoEnviadoOProcesando(item, excludeId = null) {
+  if (!item.campana_id) return null;
+
   const estados = [
     ESTADOS_SEGUIMIENTO.ENVIADO,
     ESTADOS_SEGUIMIENTO.PROCESANDO,
   ].join(",");
 
   let url =
-    `${SUPABASE_URL}/rest/v1/seguimientos_programados?estado=in.(${estados})` +
-    `&${filtroEqCampo("usuario_id", item.usuario_id)}` +
-    `&cliente_numero=eq.${encodeURIComponent(item.cliente_numero)}` +
-    `&${filtroEqCampo("flujo_id", item.flujo_id)}` +
-    `&nodo_id=eq.${encodeURIComponent(item.nodo_id)}` +
+    `${SUPABASE_URL}/rest/v1/seguimientos_programados?campana_id=eq.${item.campana_id}` +
+    `&estado=in.(${estados})` +
     `&paso_index=eq.${item.paso_index}` +
     "&select=id,estado&limit=1";
 
@@ -90,20 +87,19 @@ async function existePasoEnviadoOProcesando(item, excludeId = null) {
   return (response.data || [])[0] || null;
 }
 
-function filtrosClavePaso(item) {
+function filtrosLotePaso(item) {
   return (
-    `${filtroEqCampo("usuario_id", item.usuario_id)}` +
-    `&cliente_numero=eq.${encodeURIComponent(item.cliente_numero)}` +
-    `&${filtroEqCampo("flujo_id", item.flujo_id)}` +
-    `&nodo_id=eq.${encodeURIComponent(item.nodo_id)}` +
+    `campana_id=eq.${item.campana_id}` +
     `&paso_index=eq.${item.paso_index}`
   );
 }
 
-/** Tras reservar: solo una fila en "procesando" por clave debe enviar (evita carrera entre 2 pendientes). */
+/** Tras reservar: solo una fila en "procesando" por lote+paso debe enviar. */
 async function esUnicoProcesandoEnClave(item) {
+  if (!item.campana_id) return true;
+
   const response = await axios.get(
-    `${SUPABASE_URL}/rest/v1/seguimientos_programados?estado=eq.${ESTADOS_SEGUIMIENTO.PROCESANDO}&${filtrosClavePaso(item)}&select=id&order=id.asc&limit=1`,
+    `${SUPABASE_URL}/rest/v1/seguimientos_programados?estado=eq.${ESTADOS_SEGUIMIENTO.PROCESANDO}&${filtrosLotePaso(item)}&select=id&order=id.asc&limit=1`,
     { headers: headers() }
   );
   const primero = (response.data || [])[0];
@@ -111,8 +107,10 @@ async function esUnicoProcesandoEnClave(item) {
 }
 
 async function cancelarPendientesDuplicadosClave(item, exceptId) {
+  if (!item.campana_id) return;
+
   const url =
-    `${SUPABASE_URL}/rest/v1/seguimientos_programados?estado=eq.${ESTADOS_SEGUIMIENTO.PENDIENTE}&${filtrosClavePaso(item)}&id=neq.${exceptId}`;
+    `${SUPABASE_URL}/rest/v1/seguimientos_programados?estado=eq.${ESTADOS_SEGUIMIENTO.PENDIENTE}&${filtrosLotePaso(item)}&id=neq.${exceptId}`;
 
   await axios.patch(
     url,
@@ -120,7 +118,7 @@ async function cancelarPendientesDuplicadosClave(item, exceptId) {
       estado: ESTADOS_SEGUIMIENTO.CANCELADO,
       cancelado_en: nowUtc(),
       actualizado_en: nowUtc(),
-      error_detalle: "Duplicado: paso ya reservado para envío",
+      error_detalle: "Duplicado: paso ya reservado para envío (mismo lote)",
     },
     { headers: headers({ Prefer: "return=minimal" }) }
   );
@@ -246,20 +244,44 @@ async function cancelarPendientesCliente(
   );
 }
 
-async function clienteRespondioDespues(numero, usuarioId, checkpointAt) {
-  if (!checkpointAt) return false;
+async function clienteRespondioDespues(numero, usuarioId, checkpointAt, fallbackAt = null) {
+  const umbral = checkpointAt || fallbackAt;
+  if (!umbral) return false;
 
-  const checkpointEncoded = encodeTimestampFilter(checkpointAt);
+  const checkpointEncoded = encodeTimestampFilter(umbral);
 
   let url =
-    `${SUPABASE_URL}/rest/v1/mensajes?cliente_numero=eq.${encodeURIComponent(numero)}&direccion=eq.entrante&creado_en=gt.${checkpointEncoded}&select=id&limit=1`;
+    `${SUPABASE_URL}/rest/v1/mensajes?cliente_numero=eq.${encodeURIComponent(numero)}&direccion=eq.entrante&creado_en=gt.${checkpointEncoded}&select=id,creado_en&limit=1`;
 
   if (usuarioId) {
     url += `&usuario_id=eq.${encodeURIComponent(usuarioId)}`;
   }
 
   const response = await axios.get(url, { headers: headers() });
-  return (response.data || []).length > 0;
+  const hay = (response.data || []).length > 0;
+
+  console.log("[SEGUIMIENTO_FIX] mensaje > checkpoint_at ?", {
+    checkpoint_at: umbral,
+    hay_respuesta: hay,
+    mensaje: response.data?.[0] || null,
+  });
+
+  return hay;
+}
+
+async function listarPendientesRespondibles(numero, usuarioId, limite = 100) {
+  let url =
+    `${SUPABASE_URL}/rest/v1/seguimientos_programados?cliente_numero=eq.${encodeURIComponent(numero)}` +
+    `&estado=in.(${ESTADOS_SEGUIMIENTO.PENDIENTE},${ESTADOS_SEGUIMIENTO.PROCESANDO})` +
+    `&or=(solo_si_no_respondio.eq.true,detener_si_responde.eq.true)` +
+    `&order=creado_en.asc&limit=${limite}&select=*`;
+
+  if (usuarioId) {
+    url += `&usuario_id=eq.${encodeURIComponent(usuarioId)}`;
+  }
+
+  const response = await axios.get(url, { headers: headers() });
+  return response.data || [];
 }
 
 async function listarPorCliente(numero, usuarioId, limite = 50) {
@@ -292,6 +314,7 @@ module.exports = {
   cancelarCampana,
   cancelarPendientesCliente,
   clienteRespondioDespues,
+  listarPendientesRespondibles,
   listarPorCliente,
   listarPorNodo,
 };

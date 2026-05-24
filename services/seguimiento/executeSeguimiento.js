@@ -101,25 +101,28 @@ async function enviarMensajeSeguimiento(item) {
 
 async function intentarReservarYEnviarPaso(item, io) {
   const clave = buildClaveDedupPaso(item);
+  console.log("[SEGUIMIENTO_FIX] lote_id", item.campana_id);
   console.log("[SEGUIMIENTO DEBUG] paso candidato:", {
     id: item.id,
     clave,
+    lote_id: item.campana_id,
     paso_index: item.paso_index,
     cliente: item.cliente_numero,
   });
 
   const duplicado = await existePasoEnviadoOProcesando(item, item.id);
   if (duplicado) {
-    console.log("[SEGUIMIENTO DEBUG] ya enviado, saltando:", {
+    console.log("[SEGUIMIENTO DEBUG] duplicado en mismo lote, saltando:", {
       id: item.id,
       clave,
+      lote_id: item.campana_id,
       existente_id: duplicado.id,
       existente_estado: duplicado.estado,
     });
 
     if (duplicado.estado === ESTADOS_SEGUIMIENTO.ENVIADO) {
       await actualizarEstado(item.id, ESTADOS_SEGUIMIENTO.CANCELADO, {
-        error_detalle: "Duplicado: paso ya enviado (clave lógica)",
+        error_detalle: "Duplicado: paso ya enviado en el mismo lote",
       });
     }
 
@@ -156,14 +159,18 @@ async function intentarReservarYEnviarPaso(item, io) {
   }
 
   try {
-    console.log("[SEGUIMIENTO_WORKER_DEBUG] enviando", reservado);
-    const result = await enviarMensajeSeguimiento(reservado);
+    console.log("[SEGUIMIENTO_WORKER] enviando seguimiento", {
+      id: reservado.id,
+      lote_id: reservado.campana_id,
+      cliente: reservado.cliente_numero,
+      paso_index: reservado.paso_index,
+    });
+    await enviarMensajeSeguimiento(reservado);
     await actualizarEstado(reservado.id, ESTADOS_SEGUIMIENTO.ENVIADO);
     emitirEstadoSeguimiento(io, reservado, ESTADOS_SEGUIMIENTO.ENVIADO);
-    console.log("[SEGUIMIENTO_WORKER_DEBUG] enviado ok", result ?? { id: reservado.id });
     console.log("[SEGUIMIENTO_WORKER] enviado ok", {
       id: reservado.id,
-      clave,
+      lote_id: reservado.campana_id,
       paso_index: reservado.paso_index,
     });
     return { ok: true };
@@ -188,7 +195,8 @@ async function procesarSeguimientoItem(item, io) {
     const respondio = await clienteRespondioDespues(
       item.cliente_numero,
       item.usuario_id,
-      item.checkpoint_at
+      item.checkpoint_at,
+      item.creado_en
     );
 
     if (respondio) {
