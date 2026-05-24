@@ -5,8 +5,7 @@ const {
 const {
   ESTADOS_RM24H,
   MOTIVOS_RM24H,
-  msInactividadDesdeHoras,
-  horasDesdeConfigOrigen,
+  MS_VENTANA_WHATSAPP,
   MAX_INTENTOS,
 } = require("./constants");
 const repo = require("./remarketing24hRepository");
@@ -16,9 +15,8 @@ const { nowUtc } = require("../seguimiento/timestamps");
 function ventanaWhatsAppAbierta(fila) {
   const ultimo = fila.ultimo_mensaje_lead_at;
   if (!ultimo) return false;
-  const horas = horasDesdeConfigOrigen(fila);
-  const finVentana = new Date(ultimo).getTime() + msInactividadDesdeHoras(horas);
-  return finVentana > Date.now();
+  const ventanaCierraEn = new Date(ultimo).getTime() + MS_VENTANA_WHATSAPP;
+  return ventanaCierraEn > Date.now();
 }
 
 async function cerrarIntentoMaximo(fila) {
@@ -50,10 +48,17 @@ async function marcarExpiradoVentana(fila) {
     },
     fila
   );
-  console.log("[RM24H] fuera ventana", {
+  const ventanaCierraEn = fila.ultimo_mensaje_lead_at
+    ? new Date(
+        new Date(fila.ultimo_mensaje_lead_at).getTime() + MS_VENTANA_WHATSAPP
+      ).toISOString()
+    : null;
+  console.log("[RM24H] fuera ventana WhatsApp (24h)", {
     id: fila.id,
     cliente: fila.cliente_numero,
     ultimo_mensaje_lead_at: fila.ultimo_mensaje_lead_at,
+    ventana_cierra_en: ventanaCierraEn,
+    expira_en: fila.expira_en,
   });
 }
 
@@ -103,10 +108,11 @@ async function procesarPendienteDisparo(fila) {
     return { ok: false, motivo: "fuera_ventana" };
   }
 
-  console.log("[RM24H] dentro ventana", {
+  console.log("[RM24H] dentro ventana WhatsApp (24h)", {
     id: fila.id,
     cliente: fila.cliente_numero,
     ultimo_mensaje_lead_at: fila.ultimo_mensaje_lead_at,
+    expira_en: fila.expira_en,
   });
 
   const contenidos = obtenerContenidosRemarketing(fila);

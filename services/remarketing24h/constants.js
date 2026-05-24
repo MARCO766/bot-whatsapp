@@ -20,10 +20,14 @@ const MOTIVOS_RM24H = {
   MENSAJE_VACIO: "mensaje_vacio",
 };
 
-/** Máximo / default — ventana WhatsApp Cloud API (no 24 exactas) */
+/** Máximo / default inactividad RM24H antes de disparar (no 24 exactas) */
 const HORAS_INACTIVIDAD = 23;
 const HORAS_INACTIVIDAD_MIN = 1;
 const MS_INACTIVIDAD = HORAS_INACTIVIDAD * 60 * 60 * 1000;
+
+/** Ventana de mensajería WhatsApp Cloud API desde último mensaje del lead */
+const HORAS_VENTANA_WHATSAPP = 24;
+const MS_VENTANA_WHATSAPP = HORAS_VENTANA_WHATSAPP * 60 * 60 * 1000;
 
 function clampHorasInactividad(val) {
   const n = parseInt(val, 10);
@@ -72,6 +76,8 @@ module.exports = {
   HORAS_INACTIVIDAD,
   HORAS_INACTIVIDAD_MIN,
   MS_INACTIVIDAD,
+  HORAS_VENTANA_WHATSAPP,
+  MS_VENTANA_WHATSAPP,
   clampHorasInactividad,
   msInactividadDesdeHoras,
   horasDesdeConfigOrigen,
