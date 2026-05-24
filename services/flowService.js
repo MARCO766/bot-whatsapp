@@ -576,6 +576,12 @@ async function ejecutarFlujo(
     }
 
     if (tipoNodo === "seguimiento") {
+      console.log("[SEGUIMIENTO_DEBUG] nodo detectado", {
+        nodoId,
+        nodoTipo: tipoNodo,
+        nodoNombre: nodo.data?.label || nodo.data?.nombre || nodo.dataset?.nombre || null,
+        data: nodo.data,
+      });
       console.log("[SEGUIMIENTO] nodo detectado en flujo", {
         nodoId,
         flujoId,

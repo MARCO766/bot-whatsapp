@@ -17,6 +17,9 @@ function headers(extra = {}) {
 async function insertarProgramados(rows) {
   if (!rows.length) return [];
 
+  const payload = rows;
+  console.log("[SEGUIMIENTO_DEBUG] insert payload", payload);
+
   try {
     const response = await axios.post(
       `${SUPABASE_URL}/rest/v1/seguimientos_programados`,
@@ -26,11 +29,18 @@ async function insertarProgramados(rows) {
       }
     );
 
-    const insertados = response.data || [];
-    console.log("[SEGUIMIENTO] Supabase POST OK:", insertados.length, "fila(s)");
-    return insertados;
+    const data = response.data || [];
+    console.log("[SEGUIMIENTO_DEBUG] insert result", { data, error: null });
+    console.log("[SEGUIMIENTO] Supabase POST OK:", data.length, "fila(s)");
+    return data;
   } catch (error) {
-    const detalle = error.response?.data || error.message;
+    const errBody = error.response?.data || error.message;
+    console.log("[SEGUIMIENTO_DEBUG] insert result", {
+      data: null,
+      error: errBody,
+    });
+    console.error("[SEGUIMIENTO_DEBUG] insert error", error);
+    const detalle = errBody;
     console.error(
       "[SEGUIMIENTO] Supabase POST ERROR:",
       error.response?.status || "sin status",
@@ -131,14 +141,34 @@ async function reservarPasoParaEnvio(id) {
 }
 
 async function obtenerPendientesVencidos(limite = 40) {
-  const ahoraEncoded = encodeTimestampFilter(new Date());
+  const ahora = new Date();
+  const ahoraEncoded = encodeTimestampFilter(ahora);
 
   const response = await axios.get(
     `${SUPABASE_URL}/rest/v1/seguimientos_programados?estado=eq.${ESTADOS_SEGUIMIENTO.PENDIENTE}&run_at=lte.${ahoraEncoded}&order=run_at.asc&limit=${limite}&select=*`,
     { headers: headers() }
   );
 
-  return response.data || [];
+  const pendientes = response.data || [];
+
+  if (!pendientes.length) {
+    try {
+      const diag = await axios.get(
+        `${SUPABASE_URL}/rest/v1/seguimientos_programados?order=creado_en.desc&limit=5&select=id,estado,run_at,enviado_en,cancelado_en,usuario_id,cliente_numero,error_detalle`,
+        { headers: headers() }
+      );
+      console.log("[SEGUIMIENTO_WORKER_DEBUG] 0 pendientes — filtros worker:", {
+        estado_requerido: ESTADOS_SEGUIMIENTO.PENDIENTE,
+        run_at_lte: ahora.toISOString(),
+        run_at_filtro_encoded: ahoraEncoded,
+        ultimas_5_filas: diag.data || [],
+      });
+    } catch (diagErr) {
+      console.log("[SEGUIMIENTO_WORKER_DEBUG] 0 pendientes — no se pudo diagnosticar:", diagErr.message);
+    }
+  }
+
+  return pendientes;
 }
 
 async function actualizarEstado(id, estado, extra = {}) {

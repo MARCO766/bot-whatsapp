@@ -156,9 +156,11 @@ async function intentarReservarYEnviarPaso(item, io) {
   }
 
   try {
-    await enviarMensajeSeguimiento(reservado);
+    console.log("[SEGUIMIENTO_WORKER_DEBUG] enviando", reservado);
+    const result = await enviarMensajeSeguimiento(reservado);
     await actualizarEstado(reservado.id, ESTADOS_SEGUIMIENTO.ENVIADO);
     emitirEstadoSeguimiento(io, reservado, ESTADOS_SEGUIMIENTO.ENVIADO);
+    console.log("[SEGUIMIENTO_WORKER_DEBUG] enviado ok", result ?? { id: reservado.id });
     console.log("[SEGUIMIENTO_WORKER] enviado ok", {
       id: reservado.id,
       clave,
@@ -167,6 +169,7 @@ async function intentarReservarYEnviarPaso(item, io) {
     return { ok: true };
   } catch (error) {
     const detalle = error.message || "Error enviando seguimiento";
+    console.error("[SEGUIMIENTO_WORKER_DEBUG] error envio", error);
     console.log("[SEGUIMIENTO_WORKER] error", {
       id: reservado.id,
       cliente: reservado.cliente_numero,
@@ -211,6 +214,12 @@ async function procesarSeguimientoItem(item, io) {
 
 async function procesarSeguimientosVencidos(io) {
   const pendientes = await obtenerPendientesVencidos(40);
+  console.log(
+    "[SEGUIMIENTO_WORKER_DEBUG] pendientes encontrados",
+    pendientes?.length,
+    pendientes
+  );
+
   if (!pendientes.length) return { procesados: 0, enviados: 0 };
 
   console.log("[SEGUIMIENTO_WORKER] pendientes encontrados:", pendientes.length);
@@ -219,6 +228,7 @@ async function procesarSeguimientosVencidos(io) {
   let enviados = 0;
 
   for (const item of pendientes) {
+    console.log("[SEGUIMIENTO_WORKER_DEBUG] enviando", item);
     console.log("[SEGUIMIENTO_WORKER] enviando", {
       id: item.id,
       cliente: item.cliente_numero,

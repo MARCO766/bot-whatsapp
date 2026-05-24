@@ -19,6 +19,7 @@ function startSeguimientoWorker(app) {
 
     try {
       const io = app?.get ? app.get("io") : null;
+      console.log("[SEGUIMIENTO_WORKER_DEBUG] tick", new Date().toISOString());
       console.log("[SEGUIMIENTO_WORKER] tick");
       const resultado = await procesarSeguimientosVencidos(io);
 
