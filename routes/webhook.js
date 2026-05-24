@@ -531,11 +531,7 @@ if (esComandoResetFlujo(textoParaActivador)) {
 
 await enviarEventoMeta(usuarioIdWebhook, "Lead", from);
 
-try {
-  await cancelarSeguimientosPorRespuesta(from, usuarioIdWebhook, req);
-} catch (cancelErr) {
-  console.log("[WEBHOOK] cancelar seguimientos:", cancelErr.message);
-}
+const marcaAntesFlujo = new Date().toISOString();
 
 console.log("🔎 ACTIVADOR — texto:", textoParaActivador, "| usuario:", usuarioIdWebhook);
 
@@ -548,6 +544,14 @@ const activadorEjecutado = await procesarMensajeEntrante(
 
 if (!activadorEjecutado) {
   console.log("⚠️ ACTIVADOR — no se encontró coincidencia para:", textoParaActivador);
+}
+
+try {
+  await cancelarSeguimientosPorRespuesta(from, usuarioIdWebhook, req, {
+    creadoAntesDe: marcaAntesFlujo,
+  });
+} catch (cancelErr) {
+  console.log("[WEBHOOK] cancelar seguimientos:", cancelErr.message);
 }
 
 return res.sendStatus(200);

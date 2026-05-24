@@ -159,7 +159,7 @@ async function intentarReservarYEnviarPaso(item, io) {
     await enviarMensajeSeguimiento(reservado);
     await actualizarEstado(reservado.id, ESTADOS_SEGUIMIENTO.ENVIADO);
     emitirEstadoSeguimiento(io, reservado, ESTADOS_SEGUIMIENTO.ENVIADO);
-    console.log("[SEGUIMIENTO DEBUG] enviado OK:", {
+    console.log("[SEGUIMIENTO_WORKER] enviado ok", {
       id: reservado.id,
       clave,
       paso_index: reservado.paso_index,
@@ -167,6 +167,11 @@ async function intentarReservarYEnviarPaso(item, io) {
     return { ok: true };
   } catch (error) {
     const detalle = error.message || "Error enviando seguimiento";
+    console.log("[SEGUIMIENTO_WORKER] error", {
+      id: reservado.id,
+      cliente: reservado.cliente_numero,
+      detalle,
+    });
     await actualizarEstado(reservado.id, ESTADOS_SEGUIMIENTO.CANCELADO, {
       error_detalle: detalle,
     });
@@ -206,16 +211,25 @@ async function procesarSeguimientoItem(item, io) {
 
 async function procesarSeguimientosVencidos(io) {
   const pendientes = await obtenerPendientesVencidos(40);
-  if (!pendientes.length) return { procesados: 0 };
+  if (!pendientes.length) return { procesados: 0, enviados: 0 };
+
+  console.log("[SEGUIMIENTO_WORKER] pendientes encontrados:", pendientes.length);
 
   let procesados = 0;
+  let enviados = 0;
 
   for (const item of pendientes) {
-    await procesarSeguimientoItem(item, io);
+    console.log("[SEGUIMIENTO_WORKER] enviando", {
+      id: item.id,
+      cliente: item.cliente_numero,
+      run_at: item.run_at,
+    });
+    const res = await procesarSeguimientoItem(item, io);
     procesados++;
+    if (res?.ok) enviados++;
   }
 
-  return { procesados };
+  return { procesados, enviados };
 }
 
 module.exports = {

@@ -4,14 +4,15 @@ const {
 const { ESTADOS_SEGUIMIENTO } = require("./constants");
 const rt = require("../realtimeService");
 
-async function cancelarSeguimientosPorRespuesta(numero, usuarioId, io) {
+async function cancelarSeguimientosPorRespuesta(numero, usuarioId, io, opts = {}) {
   if (!numero) return;
 
   await cancelarPendientesCliente(
     numero,
     usuarioId,
     ESTADOS_SEGUIMIENTO.RESPONDIDO,
-    "Lead respondió"
+    "Lead respondió",
+    opts
   );
 
   rt.seguimientoActualizado(io, usuarioId, {

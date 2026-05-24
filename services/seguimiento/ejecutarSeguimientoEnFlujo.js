@@ -11,6 +11,7 @@ async function ejecutarSeguimientoEnFlujo({
   const html = nodo.html || "";
   const className = nodo.className || "";
 
+  console.log("[SEGUIMIENTO] nodo detectado", { nodoId, flujoId, numero });
   console.log("[SEGUIMIENTO] ─────────────────────────────");
   console.log("[SEGUIMIENTO] Nodo actual:", nodoId);
   console.log("[SEGUIMIENTO] Tipo detectado: seguimiento");
@@ -50,6 +51,10 @@ async function ejecutarSeguimientoEnFlujo({
     html,
   });
 
+  console.log("[SEGUIMIENTO] insert seguimiento", {
+    programados: result.programados,
+    campanaId: result.campanaId,
+  });
   console.log(
     "[SEGUIMIENTO] ✓ Insertados en Supabase:",
     result.programados,

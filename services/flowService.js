@@ -576,6 +576,11 @@ async function ejecutarFlujo(
     }
 
     if (tipoNodo === "seguimiento") {
+      console.log("[SEGUIMIENTO] nodo detectado en flujo", {
+        nodoId,
+        flujoId,
+        numero,
+      });
       try {
         await ejecutarSeguimientoEnFlujo({
           numero,
@@ -1066,7 +1071,21 @@ async function procesarMensajeEntrante(numero, texto, usuarioId, messageId) {
     return true;
   }
 
-  if (usuarioId && numero) {
+  const reanudado = await reanudarFlujoIAPendiente(numero, texto, usuarioId);
+  if (reanudado) {
+    console.log("[FLUJO] reanudado IA/OpenAI pendiente OK");
+    return true;
+  }
+
+  console.log("[FLUJO] sin sesión IA pendiente → buscar activador");
+  const activadorEjecutado = await buscarYEjecutarActivador(
+    numero,
+    texto,
+    usuarioId,
+    messageId
+  );
+
+  if (!activadorEjecutado && usuarioId && numero) {
     try {
       await resetearRemarketing24h({
         usuario_id: usuarioId,
@@ -1077,14 +1096,7 @@ async function procesarMensajeEntrante(numero, texto, usuarioId, messageId) {
     }
   }
 
-  const reanudado = await reanudarFlujoIAPendiente(numero, texto, usuarioId);
-  if (reanudado) {
-    console.log("[FLUJO] reanudado IA/OpenAI pendiente OK");
-    return true;
-  }
-
-  console.log("[FLUJO] sin sesión IA pendiente → buscar activador");
-  return buscarYEjecutarActivador(numero, texto, usuarioId, messageId);
+  return activadorEjecutado;
 }
 
 function supabaseHeaders(extra = {}) {

@@ -19,14 +19,21 @@ function startSeguimientoWorker(app) {
 
     try {
       const io = app?.get ? app.get("io") : null;
+      console.log("[SEGUIMIENTO_WORKER] tick");
       const resultado = await procesarSeguimientosVencidos(io);
 
       if (resultado.procesados > 0) {
-        console.log("⏱️ Worker seguimientos:", resultado.procesados, "procesados");
+        console.log(
+          "[SEGUIMIENTO_WORKER] tick done:",
+          resultado.procesados,
+          "procesados,",
+          resultado.enviados,
+          "enviados"
+        );
       }
     } catch (error) {
       console.log(
-        "ERROR worker seguimientos:",
+        "[SEGUIMIENTO_WORKER] error:",
         error.response?.data || error.message
       );
     } finally {

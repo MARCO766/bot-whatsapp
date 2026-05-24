@@ -182,7 +182,13 @@ async function cancelarCampana(campanaId, estado, motivo) {
   );
 }
 
-async function cancelarPendientesCliente(numero, usuarioId, estado, motivo) {
+async function cancelarPendientesCliente(
+  numero,
+  usuarioId,
+  estado,
+  motivo,
+  opts = {}
+) {
   const ahora = nowUtc();
   const campoFecha =
     estado === ESTADOS_SEGUIMIENTO.RESPONDIDO ? "respondido_en" : "cancelado_en";
@@ -192,6 +198,10 @@ async function cancelarPendientesCliente(numero, usuarioId, estado, motivo) {
 
   if (usuarioId) {
     url += `&usuario_id=eq.${usuarioId}`;
+  }
+
+  if (opts.creadoAntesDe) {
+    url += `&creado_en=lt.${encodeTimestampFilter(opts.creadoAntesDe)}`;
   }
 
   await axios.patch(
