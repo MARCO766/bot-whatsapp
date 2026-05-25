@@ -19,12 +19,8 @@ window.MacBotOpenAIAgent = (function () {
     "Responde corto, humano y sin inventar datos.";
 
   const OPENAI_ICON_SVG =
-    '<svg class="openai-agent-icon-svg" viewBox="0 0 32 32" width="38" height="38" aria-hidden="true">' +
-    '<defs><linearGradient id="oaiIconGrad" x1="0%" y1="0%" x2="100%" y2="100%">' +
-    '<stop offset="0%" stop-color="#67e8f9"/><stop offset="55%" stop-color="#a78bfa"/>' +
-    '<stop offset="100%" stop-color="#818cf8"/></linearGradient></defs>' +
-    '<circle cx="16" cy="16" r="14" fill="none" stroke="url(#oaiIconGrad)" stroke-width="1.4" opacity="0.85"/>' +
-    '<path fill="url(#oaiIconGrad)" d="M16 6c3.2 0 5.8 2.1 6.8 5.1-2.4.4-4.2 2.4-4.5 4.8 2.6-.3 4.8 1.5 5.4 3.9-2.9 1.2-6.3-.2-7.7-2.8 1.4 3.6 5.2 5.6 9 4.8-1.1 3.5-4.5 5.8-8.2 5.2 1.2-1.8 1.9-4 1.7-6.3-2.5 2.1-6.2 2.4-9 .8 2.2-3.4 6.2-5.3 10.5-4.5C20.4 8.2 18.5 6 16 6z"/>' +
+    '<svg class="openai-agent-icon-svg" viewBox="0 0 24 24" width="34" height="34" aria-hidden="true">' +
+    '<path fill="currentColor" d="M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9868 6.0182 6.0182 0 0 0-6.0933-2.889 5.9847 5.9847 0 0 0-4.9868.5157A6.0182 6.0182 0 0 0 4.186 2.728a5.9847 5.9847 0 0 0-4.9868.5157 6.0182 6.0182 0 0 0-2.889 6.0933 5.9847 5.9847 0 0 0 .5157 4.9868A6.0182 6.0182 0 0 0 .408 17.93a5.9847 5.9847 0 0 0 4.9868.5157 6.0182 6.0182 0 0 0 6.0933 2.889 5.9847 5.9847 0 0 0 4.9868-.5157 6.0182 6.0182 0 0 0 6.0933 2.889 5.9847 5.9847 0 0 0 4.9868-.5157 6.0182 6.0182 0 0 0 2.889-6.0933 5.9847 5.9847 0 0 0-.5157-4.9868 6.0182 6.0182 0 0 0-2.889-6.0933zM12.732 18.459a4.4865 4.4865 0 0 1-2.4035-4.3622 4.4865 4.4865 0 0 1 2.4035-4.3622 4.4865 4.4865 0 0 1 4.8042 0 4.4865 4.4865 0 0 1 2.4035 4.3622 4.4865 4.4865 0 0 1-4.8042 0z"/>' +
     "</svg>";
 
   const ROUTE_ICON_SVG = {
@@ -214,12 +210,15 @@ window.MacBotOpenAIAgent = (function () {
       const circle = shell.querySelector(".openai-agent-circle");
       if (circle) {
         ensureBadgeEnCirculo(circle);
-        if (!circle.querySelector(".openai-agent-icon-wrap")) {
-          const iconWrap = document.createElement(TAG_DIV);
-          iconWrap.className = "openai-agent-icon-wrap";
+        const iconWrap = circle.querySelector(".openai-agent-icon-wrap");
+        if (iconWrap) {
           iconWrap.innerHTML = OPENAI_ICON_SVG;
+        } else {
+          const wrap = document.createElement(TAG_DIV);
+          wrap.className = "openai-agent-icon-wrap";
+          wrap.innerHTML = OPENAI_ICON_SVG;
           const title = circle.querySelector(".openai-agent-title");
-          circle.insertBefore(iconWrap, title || null);
+          circle.insertBefore(wrap, title || null);
         }
       }
       return;

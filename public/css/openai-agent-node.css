@@ -159,8 +159,10 @@
 
 .node.openai-agent-node .openai-agent-icon-svg {
   display: block;
-  width: 36px;
-  height: 36px;
+  width: 34px;
+  height: 34px;
+  color: #e0f7fa;
+  filter: drop-shadow(0 0 8px rgba(103, 232, 249, 0.65));
 }
 
 .node.openai-agent-node .openai-agent-title {
