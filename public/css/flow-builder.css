@@ -1323,45 +1323,212 @@ body:has(#builderArea) {
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   Remarketing Global 24h — nodo canvas + panel (premium SaaS)
+   Remarketing Global 24h — nodo canvas watchdog global (solo UI)
    ═══════════════════════════════════════════════════════════════ */
+
+@keyframes rm24-global-glow-pulse {
+  0%,
+  100% {
+    box-shadow:
+      0 10px 28px rgba(0, 0, 0, 0.5),
+      0 0 0 1px rgba(255, 255, 255, 0.04) inset,
+      0 0 12px rgba(255, 122, 24, 0.08);
+  }
+  50% {
+    box-shadow:
+      0 12px 32px rgba(0, 0, 0, 0.55),
+      0 0 0 1px rgba(255, 255, 255, 0.05) inset,
+      0 0 20px rgba(255, 122, 24, 0.16);
+  }
+}
+
+@keyframes rm24-global-glow-pulse-active {
+  0%,
+  100% {
+    box-shadow:
+      0 12px 34px rgba(0, 0, 0, 0.55),
+      0 0 0 1px rgba(57, 255, 20, 0.12) inset,
+      0 0 14px rgba(255, 122, 24, 0.2),
+      0 0 22px rgba(57, 255, 20, 0.1);
+  }
+  50% {
+    box-shadow:
+      0 14px 38px rgba(0, 0, 0, 0.58),
+      0 0 0 1px rgba(57, 255, 20, 0.18) inset,
+      0 0 24px rgba(255, 122, 24, 0.28),
+      0 0 30px rgba(57, 255, 20, 0.14);
+  }
+}
+
+@keyframes rm24-global-halo-breathe {
+  0%,
+  100% {
+    opacity: 0.28;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.42;
+    transform: scale(1.015);
+  }
+}
+
+@keyframes rm24-global-orbit-drift {
+  0% {
+    transform: rotate(0deg);
+    opacity: 0.22;
+  }
+  50% {
+    opacity: 0.34;
+  }
+  100% {
+    transform: rotate(360deg);
+    opacity: 0.22;
+  }
+}
 
 #builderArea .node.remarketing-global-node,
 #builderArea .node.node-remarketing-global,
-#builderArea .node.rm24-node {
-  --rm24-fire: #ff7a18;
-  --rm24-fire-2: #e86a10;
-  --rm24-glow: rgba(255, 122, 24, 0.18);
+#builderArea .node.rm24-node,
+#builderArea .node.rm24-global-node {
+  --rm24-orange: #ff7a18;
+  --rm24-fire: #ff4500;
   --rm24-neon: #39ff14;
-  --rm24-bg: rgba(11, 17, 28, 0.88);
+  --rm24-glass-bg: rgba(15, 23, 42, 0.92);
+  --rm24-border-idle: rgba(255, 122, 24, 0.22);
+  --rm24-border-active: rgba(255, 122, 24, 0.75);
+  --rm24-glow: rgba(255, 122, 24, 0.18);
   --rm24-border: rgba(255, 255, 255, 0.08);
-  min-width: 200px;
-  max-width: 220px;
+  position: relative;
+  isolation: isolate;
+  min-width: 210px;
+  max-width: 236px;
   padding-top: 0;
-  border: 1px solid color-mix(in srgb, var(--rm24-fire) 32%, transparent) !important;
-  border-radius: 10px !important;
+  border: 1px solid var(--rm24-border-idle) !important;
+  border-radius: 12px !important;
   background:
     linear-gradient(
-      160deg,
-      rgba(255, 122, 24, 0.05) 0%,
-      rgba(11, 17, 28, 0.92) 42%,
-      rgba(17, 24, 39, 0.96) 100%
+      155deg,
+      rgba(255, 122, 24, 0.07) 0%,
+      var(--rm24-glass-bg) 38%,
+      rgba(15, 23, 42, 0.96) 100%
     ) !important;
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  box-shadow:
-    0 8px 24px rgba(0, 0, 0, 0.45),
-    0 0 0 1px rgba(255, 255, 255, 0.04) inset !important;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  animation: rm24-global-glow-pulse 2.5s ease-in-out infinite;
   overflow: visible;
+}
+
+#builderArea .node.rm24-global-node-active {
+  border-color: var(--rm24-border-active) !important;
+  animation: rm24-global-glow-pulse-active 2.5s ease-in-out infinite;
 }
 
 #builderArea .node.remarketing-global-node::before,
 #builderArea .node.node-remarketing-global::before,
-#builderArea .node.rm24-node::before {
-  width: 3px;
-  border-radius: 10px 0 0 10px;
-  background: linear-gradient(180deg, var(--rm24-fire), var(--rm24-fire-2));
-  box-shadow: none;
+#builderArea .node.rm24-node::before,
+#builderArea .node.rm24-global-node::before {
+  display: none;
+}
+
+#builderArea .rm24-global-halo {
+  position: absolute;
+  inset: -7px;
+  border-radius: 16px;
+  pointer-events: none;
+  z-index: -2;
+  background: radial-gradient(
+    ellipse 85% 70% at 50% 40%,
+    rgba(255, 122, 24, 0.14) 0%,
+    rgba(255, 69, 0, 0.05) 42%,
+    transparent 72%
+  );
+  animation: rm24-global-halo-breathe 2.5s ease-in-out infinite;
+}
+
+#builderArea .node.rm24-global-node-active .rm24-global-halo {
+  background: radial-gradient(
+    ellipse 90% 75% at 50% 38%,
+    rgba(255, 122, 24, 0.2) 0%,
+    rgba(57, 255, 20, 0.06) 38%,
+    transparent 74%
+  );
+}
+
+#builderArea .rm24-global-orbit {
+  position: absolute;
+  inset: -9px;
+  border-radius: 15px;
+  pointer-events: none;
+  z-index: -1;
+  border: 1px solid rgba(255, 122, 24, 0.14);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.02) inset;
+  animation: rm24-global-orbit-drift 24s linear infinite;
+}
+
+#builderArea .node.rm24-global-node-active .rm24-global-orbit {
+  border-color: rgba(255, 122, 24, 0.26);
+}
+
+#builderArea .rm24-global-badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px 5px;
+  border-bottom: 1px solid rgba(255, 122, 24, 0.14);
+  background: linear-gradient(180deg, rgba(255, 122, 24, 0.06) 0%, transparent 100%);
+}
+
+#builderArea .rm24-global-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 7px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 2px 5px;
+  border-radius: 3px;
+  color: #fdba74;
+  background: rgba(255, 122, 24, 0.12);
+  border: 1px solid rgba(255, 122, 24, 0.32);
+  line-height: 1.2;
+}
+
+#builderArea .rm24-global-badge--watchdog {
+  color: #fed7aa;
+  background: rgba(255, 69, 0, 0.14);
+  border-color: rgba(255, 69, 0, 0.35);
+}
+
+#builderArea .rm24-global-badge--type {
+  margin-left: auto;
+  color: #fff7ed;
+  background: linear-gradient(135deg, rgba(255, 122, 24, 0.28), rgba(255, 69, 0, 0.2));
+  border-color: rgba(255, 122, 24, 0.45);
+  box-shadow: 0 0 10px rgba(255, 122, 24, 0.12);
+}
+
+#builderArea .rm24-global-taglines {
+  margin: 0;
+  padding: 0 10px 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+#builderArea .rm24-global-tagline {
+  margin: 0;
+  font-size: 9px;
+  line-height: 1.35;
+  font-weight: 500;
+  color: #e2e8f0;
+  letter-spacing: 0.01em;
+}
+
+#builderArea .rm24-global-tagline--sub {
+  margin-top: 2px;
+  font-size: 8.5px;
+  font-weight: 400;
+  color: #94a3b8;
 }
 
 #builderArea .rm24-node .port.in {
@@ -1375,8 +1542,15 @@ body:has(#builderArea) {
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  padding: 8px 10px 7px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 7px 10px 6px;
+  border-bottom: none;
+}
+
+#builderArea .rm24-global-node .rm24-node-icon {
+  font-size: 15px;
+  line-height: 1.2;
+  flex-shrink: 0;
+  filter: drop-shadow(0 0 6px rgba(255, 122, 24, 0.45));
 }
 
 #builderArea .rm24-node-icon {
@@ -1396,6 +1570,15 @@ body:has(#builderArea) {
   align-items: center;
   flex-wrap: wrap;
   gap: 6px;
+}
+
+#builderArea .rm24-global-node .rm24-node-title {
+  font-weight: 700;
+  font-size: 11px;
+  line-height: 1.3;
+  color: #fff7ed;
+  letter-spacing: -0.01em;
+  text-shadow: 0 0 12px rgba(255, 122, 24, 0.2);
 }
 
 #builderArea .rm24-node-title {
@@ -1493,7 +1676,8 @@ body:has(#builderArea) {
 }
 
 #builderArea .rm24-status,
-#builderArea .rm24h-badge-on {
+#builderArea .rm24h-badge-on,
+#builderArea .rm24-global-status {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -1506,16 +1690,28 @@ body:has(#builderArea) {
   border-radius: 4px;
   margin-bottom: 6px;
   background: rgba(57, 255, 20, 0.88);
-  box-shadow: none;
+  box-shadow: 0 0 10px rgba(57, 255, 20, 0.2);
 }
 
-#builderArea .rm24-status::before {
+#builderArea .rm24-status::before,
+#builderArea .rm24-global-status::before {
   content: "";
   width: 4px;
   height: 4px;
   border-radius: 50%;
   background: #052e12;
-  box-shadow: none;
+  box-shadow: 0 0 6px rgba(57, 255, 20, 0.45);
+  animation: rm24-global-status-dot 2.5s ease-in-out infinite;
+}
+
+@keyframes rm24-global-status-dot {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.65;
+  }
 }
 
 #builderArea .rm24-summary {
@@ -1570,12 +1766,23 @@ body:has(#builderArea) {
 
 #builderArea .node.remarketing-global-node.selected,
 #builderArea .node.node-remarketing-global.selected,
-#builderArea .node.rm24-node.selected {
-  outline: 1px solid color-mix(in srgb, var(--rm24-fire) 55%, transparent) !important;
-  outline-offset: 2px;
+#builderArea .node.rm24-node.selected,
+#builderArea .node.rm24-global-node.selected {
+  outline: 1px solid rgba(255, 122, 24, 0.55) !important;
+  outline-offset: 3px;
+  animation: none;
   box-shadow:
-    0 8px 24px rgba(0, 0, 0, 0.5),
-    0 0 16px var(--rm24-glow) !important;
+    0 12px 32px rgba(0, 0, 0, 0.55),
+    0 0 22px var(--rm24-glow),
+    0 0 0 1px rgba(255, 255, 255, 0.06) inset !important;
+}
+
+#builderArea .node.rm24-global-node-active.selected {
+  outline-color: rgba(57, 255, 20, 0.35) !important;
+  box-shadow:
+    0 12px 34px rgba(0, 0, 0, 0.58),
+    0 0 18px rgba(255, 122, 24, 0.22),
+    0 0 26px rgba(57, 255, 20, 0.12) !important;
 }
 
 .menu-nodo-btn-rm24h {
@@ -2234,9 +2441,14 @@ body:has(#builderArea) {
   font-weight: 600;
   padding: 2px 6px;
   border-radius: 4px;
-  color: #d1d5db;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #fde68a;
+  background: rgba(255, 122, 24, 0.12);
+  border: 1px solid rgba(255, 122, 24, 0.28);
+}
+
+#builderArea .rm24-global-node:not(.rm24-global-node-active) .rm24h-empty,
+#builderArea .rm24-global-node:not(.rm24-global-node-active) .rm24-node-idle {
+  color: #64748b;
 }
 
 .panel-nodo--rm24h .rm24-contenido-preview-filename {

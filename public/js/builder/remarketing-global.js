@@ -381,6 +381,9 @@ window.MacBotRemarketingGlobal = (function () {
     const body = nodo.querySelector(".rm24h-body");
     if (!body) return;
 
+    nodo.classList.add("rm24-global-node");
+    nodo.classList.toggle("rm24-global-node-active", !!config.activo);
+
     if (!config.activo) {
       body.innerHTML =
         '<p class="rm24h-empty rm24-node-idle">Inactivo · abre el panel para activar</p>';
@@ -418,10 +421,14 @@ window.MacBotRemarketingGlobal = (function () {
       });
     if (chips.length) {
       previewHtml +=
-        '<div class="rm24-preview-chips">' +
+        '<div class="rm24-preview-chips rm24-global-content-chips">' +
         chips
           .map(function (lbl) {
-            return '<span class="rm24-preview-chip">' + esc(lbl) + "</span>";
+            return (
+              '<span class="rm24-preview-chip rm24-global-content-chip">' +
+              esc(lbl) +
+              "</span>"
+            );
           })
           .join("") +
         "</div>";
@@ -432,7 +439,7 @@ window.MacBotRemarketingGlobal = (function () {
     }
 
     body.innerHTML =
-      '<div class="rm24-status rm24h-badge-on">ACTIVO</div>' +
+      '<div class="rm24-status rm24-global-status rm24h-badge-on">ACTIVO</div>' +
       '<ul class="rm24-summary rm24-summary--compact" aria-label="Resumen del remarketing">' +
       '<li><span class="rm24-summary-dot"></span>23h de inactividad</li>' +
       '<li><span class="rm24-summary-dot"></span>Reinicia si responde</li>' +
@@ -442,14 +449,81 @@ window.MacBotRemarketingGlobal = (function () {
       previewHtml;
   }
 
+  function ensureDecoracionGlobalNodo(nodo) {
+    if (!nodo.querySelector(".rm24-global-halo")) {
+      const halo = document.createElement("div");
+      halo.className = "rm24-global-halo";
+      halo.setAttribute("aria-hidden", "true");
+      nodo.insertBefore(halo, nodo.firstChild);
+    }
+    if (!nodo.querySelector(".rm24-global-orbit")) {
+      const orbit = document.createElement("div");
+      orbit.className = "rm24-global-orbit";
+      orbit.setAttribute("aria-hidden", "true");
+      const halo = nodo.querySelector(".rm24-global-halo");
+      if (halo && halo.nextSibling) {
+        nodo.insertBefore(orbit, halo.nextSibling);
+      } else {
+        nodo.insertBefore(orbit, nodo.firstChild);
+      }
+    }
+    if (!nodo.querySelector(".rm24-global-badges")) {
+      const badges = document.createElement("div");
+      badges.className = "rm24-global-badges";
+      badges.setAttribute("aria-label", "Tipo de nodo global");
+      badges.innerHTML =
+        '<span class="rm24-global-badge">GLOBAL</span>' +
+        '<span class="rm24-global-badge rm24-global-badge--watchdog">WATCHDOG</span>' +
+        '<span class="rm24-global-badge rm24-global-badge--type rm24h-chip">RM24H</span>';
+      const header = nodo.querySelector(".rm24h-header, .rm24-node-header");
+      if (header) {
+        nodo.insertBefore(badges, header);
+      } else {
+        const body = nodo.querySelector(".rm24h-body, .rm24-node-body");
+        if (body) nodo.insertBefore(badges, body);
+        else nodo.appendChild(badges);
+      }
+    }
+    if (!nodo.querySelector(".rm24-global-taglines")) {
+      const taglines = document.createElement("div");
+      taglines.className = "rm24-global-taglines";
+      taglines.innerHTML =
+        '<p class="rm24-global-tagline">Cerebro global del flujo</p>' +
+        '<p class="rm24-global-tagline rm24-global-tagline--sub">No mueve leads entre nodos</p>';
+      const header = nodo.querySelector(".rm24h-header, .rm24-node-header");
+      if (header) {
+        header.insertAdjacentElement("afterend", taglines);
+      } else {
+        const badges = nodo.querySelector(".rm24-global-badges");
+        if (badges) badges.insertAdjacentElement("afterend", taglines);
+        else nodo.appendChild(taglines);
+      }
+    }
+  }
+
   function aplicarShellVisualNodo(nodo) {
     if (!esNodoRemarketingGlobal(nodo)) return;
-    nodo.classList.add("rm24-node");
+    nodo.classList.add("rm24-node", "rm24-global-node");
+    ensureDecoracionGlobalNodo(nodo);
 
-    const chip = nodo.querySelector(".rm24h-chip");
+    const chip =
+      nodo.querySelector(".rm24-global-badges .rm24h-chip") ||
+      nodo.querySelector(".rm24h-chip");
     if (chip) {
       chip.textContent = "RM24H";
-      chip.classList.add("rm24-badge", "rm24-badge--type", "rm24-badge--pill");
+      chip.classList.add(
+        "rm24-badge",
+        "rm24-badge--type",
+        "rm24-badge--pill",
+        "rm24-global-badge",
+        "rm24-global-badge--type"
+      );
+    }
+    const chipDuplicadoTitulo = nodo.querySelector(
+      ".rm24-node-title-row .rm24h-chip, .rm24-node-title-row .rm24-badge"
+    );
+    if (chipDuplicadoTitulo && nodo.querySelector(".rm24-global-badges")) {
+      chipDuplicadoTitulo.remove();
     }
 
     const header = nodo.querySelector(".rm24h-header");
@@ -1272,13 +1346,16 @@ window.MacBotRemarketingGlobal = (function () {
     const cfg = JSON.stringify(crearConfigVacia());
 
     const nodo = document.createElement("div");
-    nodo.className = "node remarketing-global-node node-remarketing-global rm24-node";
+    nodo.className =
+      "node remarketing-global-node node-remarketing-global rm24-node rm24-global-node";
     nodo.id = id;
     nodo.dataset.tipo = "remarketing_global";
     nodo.style.left = 80 + nodoCount * 40 + "px";
     nodo.style.top = 120 + nodoCount * 30 + "px";
 
     nodo.innerHTML =
+      '<div class="rm24-global-halo" aria-hidden="true"></div>' +
+      '<div class="rm24-global-orbit" aria-hidden="true"></div>' +
       '<div class="port in" data-nodo="' +
       id +
       '" onmousedown="iniciarConexion(event, \'' +
@@ -1291,13 +1368,21 @@ window.MacBotRemarketingGlobal = (function () {
       '<button type="button" class="delete-node" onclick="event.stopPropagation(); borrarNodo(\'' +
       id +
       '\')">×</button></div>' +
+      '<div class="rm24-global-badges" aria-label="Tipo de nodo global">' +
+      '<span class="rm24-global-badge">GLOBAL</span>' +
+      '<span class="rm24-global-badge rm24-global-badge--watchdog">WATCHDOG</span>' +
+      '<span class="rm24-global-badge rm24-global-badge--type rm24h-chip">RM24H</span>' +
+      "</div>" +
       '<header class="rm24-node-header rm24h-header">' +
       '<span class="rm24-node-icon" aria-hidden="true">🔥</span>' +
       '<div class="rm24-node-title-group">' +
       '<div class="rm24-node-title-row">' +
       '<span class="rm24-node-title">Remarketing Global 24h</span>' +
-      '<span class="rm24-badge rm24-badge--pill rm24-badge--type rm24h-chip">RM24H</span>' +
       "</div></div></header>" +
+      '<div class="rm24-global-taglines">' +
+      '<p class="rm24-global-tagline">Cerebro global del flujo</p>' +
+      '<p class="rm24-global-tagline rm24-global-tagline--sub">No mueve leads entre nodos</p>' +
+      "</div>" +
       '<div class="rm24h-body rm24-node-body"><p class="rm24h-empty rm24-node-idle">Inactivo · abre el panel para activar</p></div>' +
       '<textarea class="remarketing-global-data" style="display:none;">' +
       cfg +
