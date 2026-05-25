@@ -238,6 +238,36 @@ body:has(#builderArea) {
   pointer-events: none !important;
 }
 
+/* ── Capas canvas: conexiones debajo de nodos ── */
+#builderArea #flowConnectionsLayer,
+#canvasFlujo #flowConnectionsLayer {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 5;
+  pointer-events: none;
+  overflow: visible;
+}
+
+#builderArea #canvasFlujo > .node,
+#builderArea #canvasFlujo .node {
+  z-index: 10 !important;
+  position: absolute;
+}
+
+#builderArea #canvasFlujo .port,
+#builderArea #canvasFlujo .port.in,
+#builderArea #canvasFlujo .port.out {
+  z-index: 20 !important;
+}
+
+#builderArea .borrar-linea,
+#builderArea .flow-edge-delete {
+  z-index: 15 !important;
+}
+
 /* ── Conexiones SVG (rutas inteligentes) ── */
 #builderArea .flow-connection-svg,
 #canvasFlujo .flow-connection-svg {
@@ -249,7 +279,7 @@ body:has(#builderArea) {
   min-height: 0 !important;
   overflow: visible;
   pointer-events: none;
-  z-index: 2;
+  z-index: 1;
   background: none !important;
   background-image: none !important;
   border: none !important;
@@ -303,13 +333,13 @@ body:has(#builderArea) {
 #builderArea .flow-edge-glow,
 #canvasFlujo .flow-edge-glow {
   fill: none;
-  stroke: rgba(45, 212, 191, 0.1);
-  stroke-width: 7;
+  stroke: rgba(45, 212, 191, 0.08);
+  stroke-width: 5;
   stroke-linecap: round;
   stroke-linejoin: round;
-  filter: blur(3px);
+  filter: blur(2px);
   pointer-events: none;
-  opacity: 0.32;
+  opacity: 0.22;
 }
 
 #builderArea .flow-edge-dash,
@@ -475,24 +505,38 @@ body:has(#builderArea) {
   stroke: rgba(253, 186, 116, 1);
 }
 
-/* Temporal (al arrastrar nueva conexión) */
-#builderArea .temp-connection-base {
-  stroke: rgba(34, 211, 238, 0.12);
-  stroke-width: 4;
-  opacity: 0.4;
+/* Línea temporal al arrastrar conexión (curva premium, sin punteado) */
+#builderArea .flow-temp-edge,
+#canvasFlujo .flow-temp-edge {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100% !important;
+  height: 100% !important;
+  pointer-events: none;
+  z-index: 2;
+  overflow: visible;
 }
 
-#builderArea .temp-connection-path,
-#builderArea .temp-connection-path.flow-edge-dash {
-  stroke: rgba(52, 211, 153, 0.75);
-  stroke-width: 2.8;
-  stroke-dasharray: 0.1 16;
-  opacity: 0.9;
+#builderArea .flow-temp-edge-glow,
+#canvasFlujo .flow-temp-edge-glow {
+  fill: none;
+  stroke: rgba(34, 211, 238, 0.2);
+  stroke-width: 5;
+  stroke-linecap: round;
+  filter: blur(2px);
+  pointer-events: none;
 }
 
-#builderArea .temp-connection-glow.flow-edge-halo {
-  stroke: rgba(45, 212, 191, 0.1);
-  opacity: 0.35;
+#builderArea .flow-temp-edge-path,
+#canvasFlujo .flow-temp-edge-path {
+  fill: none;
+  stroke: rgba(148, 163, 184, 0.85);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 6px rgba(34, 211, 238, 0.35));
+  pointer-events: none;
 }
 
 #builderArea.builder-theme-light .flow-connection-path,
@@ -590,7 +634,8 @@ body:has(#builderArea) {
 
 /* Línea temporal al arrastrar (SVG curva Bézier) */
 #builderArea .temp-connection-svg,
-#canvasFlujo .temp-connection-svg {
+#canvasFlujo .temp-connection-svg,
+#canvasFlujo .flow-temp-edge {
   position: absolute;
   left: 0;
   top: 0;
@@ -598,7 +643,7 @@ body:has(#builderArea) {
   height: 100%;
   overflow: visible;
   pointer-events: none;
-  z-index: 4;
+  z-index: 2;
 }
 
 #builderArea .temp-connection-glow,
