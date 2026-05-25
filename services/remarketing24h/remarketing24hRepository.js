@@ -1,7 +1,13 @@
 const axios = require("axios");
 const { ESTADOS_RM24H, ESTADOS_ABIERTOS } = require("./constants");
 const { coherenciaEstadoRm24h } = require("./estadoCoherencia");
-const { nowUtc, encodeTimestampFilter } = require("../seguimiento/timestamps");
+const { nowUtc, toTimestamptzUtc } = require("../seguimiento/timestamps");
+
+/** PostgREST: timestamps con ms llevan '.' — hay que usar lte."ISO" entre comillas. */
+function encodeExpiraEnLteFilter(date = new Date()) {
+  const iso = toTimestamptzUtc(date);
+  return encodeURIComponent(`lte."${iso}"`);
+}
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
@@ -82,14 +88,43 @@ async function listarActivosPorCliente(usuario_id, cliente_numero) {
 }
 
 async function listarVencidos(limite = 50) {
-  const ahoraEncoded = encodeTimestampFilter(new Date());
-  const response = await axios.get(
+  const ahora = new Date();
+  const ahoraIso = toTimestamptzUtc(ahora);
+  const expiraFilter = encodeExpiraEnLteFilter(ahora);
+
+  if (!SUPABASE_URL || !SUPABASE_KEY) {
+    console.log("[RM24H_WORKER] error", {
+      motivo: "falta SUPABASE_URL o SUPABASE_SECRET_KEY",
+    });
+    return [];
+  }
+
+  const url =
     `${SUPABASE_URL}/rest/v1/remarketing_global_24h?estado=eq.${ESTADOS_RM24H.ACTIVO}` +
-      `&activo=eq.true&expira_en=lte.${ahoraEncoded}` +
-      `&order=expira_en.asc&limit=${limite}&select=*`,
-    { headers: headers() }
-  );
-  return response.data || [];
+    `&activo=eq.true&expira_en=${expiraFilter}` +
+    `&order=expira_en.asc&limit=${limite}&select=*`;
+
+  console.log("[RM24H_WORKER] now", ahoraIso);
+
+  let response;
+  try {
+    response = await axios.get(url, { headers: headers() });
+  } catch (err) {
+    console.log("[RM24H_WORKER] error", err.response?.data || err.message);
+    throw err;
+  }
+
+  const filas = response.data || [];
+  console.log("[RM24H_WORKER] vencidos encontrados", filas.length, {
+    filtros: {
+      estado: ESTADOS_RM24H.ACTIVO,
+      activo: true,
+      expira_en_lte: ahoraIso,
+    },
+    ids: filas.map((f) => f.id),
+  });
+
+  return filas;
 }
 
 async function marcarPendienteDisparo(id, filaActual = {}) {

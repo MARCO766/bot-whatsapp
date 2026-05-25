@@ -308,6 +308,12 @@ async function marcarVencidosComoPendienteDisparo() {
   const marcados = [];
 
   for (const fila of vencidos) {
+    console.log("[RM24H_WORKER] procesando id", fila.id, {
+      cliente: fila.cliente_numero,
+      expira_en: fila.expira_en,
+      estado: fila.estado,
+      activo: fila.activo,
+    });
     await repo.marcarPendienteDisparo(fila.id, fila);
 
     console.log("[RM24H] contador vencido");

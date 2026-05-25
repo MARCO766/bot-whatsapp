@@ -138,6 +138,13 @@ async function procesarPendienteDisparo(fila) {
   }
 
   try {
+    console.log("[RM24H_WORKER] enviando", {
+      id: reservado.id,
+      cliente: reservado.cliente_numero,
+      intento: intentosActuales + 1,
+      contenidos: contenidos.length,
+      usuario_id: reservado.usuario_id,
+    });
     console.log("[RM24H] enviando WhatsApp", {
       id: reservado.id,
       cliente: reservado.cliente_numero,
@@ -149,6 +156,10 @@ async function procesarPendienteDisparo(fila) {
       usuarioId: reservado.usuario_id,
     });
 
+    console.log("[RM24H_WORKER] enviado ok", {
+      id: reservado.id,
+      cliente: reservado.cliente_numero,
+    });
     console.log("[RM24H] enviado OK", {
       id: reservado.id,
       cliente: reservado.cliente_numero,
@@ -161,6 +172,11 @@ async function procesarPendienteDisparo(fila) {
     return { ok: true, motivo: MOTIVOS_RM24H.MAX_INTENTOS_TRAS_ENVIO };
   } catch (error) {
     const detalle = error.response?.data || error.message;
+    console.log("[RM24H_WORKER] error", {
+      id: reservado.id,
+      cliente: reservado.cliente_numero,
+      detalle,
+    });
     console.log("[RM24H] error envío:", detalle);
 
     await repo.actualizarPorId(
@@ -183,9 +199,25 @@ async function procesarPendientesDisparo() {
   const pendientes = await repo.listarPendientesDisparo(40);
   let enviados = 0;
 
+  if (pendientes.length) {
+    console.log("[RM24H_WORKER] pendientes_disparo", pendientes.length, {
+      ids: pendientes.map((f) => f.id),
+    });
+  }
+
   for (const fila of pendientes) {
+    console.log("[RM24H_WORKER] procesando id", fila.id, {
+      fase: "pendiente_disparo",
+      cliente: fila.cliente_numero,
+    });
     const resultado = await procesarPendienteDisparo(fila);
     if (resultado.ok) enviados++;
+    else if (resultado.motivo) {
+      console.log("[RM24H_WORKER] sin envio", {
+        id: fila.id,
+        motivo: resultado.motivo,
+      });
+    }
   }
 
   return { procesados: pendientes.length, enviados };
