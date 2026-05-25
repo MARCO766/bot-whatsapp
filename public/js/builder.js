@@ -586,6 +586,165 @@ const FLOW_ROUTE_PAD = 30;
 const FLOW_ROUTE_EXIT = 28;
 const FLOW_ROUTE_ENTRY = 28;
 const FLOW_ROUTE_CORNER = 14;
+const FLOW_LANE_OFFSETS = [-36, -18, 0, 18, 36];
+let conexionSeleccionadaLinea = null;
+
+function getLaneOffsetForIndex(index, total){
+  if(!total || total <= 1) return 0;
+
+  if(total <= FLOW_LANE_OFFSETS.length){
+    const start = Math.floor((FLOW_LANE_OFFSETS.length - total) / 2);
+    return FLOW_LANE_OFFSETS[Math.min(start + index, FLOW_LANE_OFFSETS.length - 1)];
+  }
+
+  const t = index / (total - 1);
+  return -36 + t * 72;
+}
+
+function assignConnectionLaneMeta(list){
+  const bySource = new Map();
+  const byTarget = new Map();
+
+  list.forEach(function (c) {
+    const sourceKey = (c.desde?.id || "") + "|" + (c.sourceHandle || "");
+    const targetKey = c.hasta?.id || "";
+
+    if(!bySource.has(sourceKey)) bySource.set(sourceKey, []);
+    bySource.get(sourceKey).push(c);
+
+    if(!byTarget.has(targetKey)) byTarget.set(targetKey, []);
+    byTarget.get(targetKey).push(c);
+  });
+
+  function sortByTargetY(a, b){
+    const ay = parseFloat(a.hasta?.style?.top) || 0;
+    const by = parseFloat(b.hasta?.style?.top) || 0;
+    if(ay !== by) return ay - by;
+    return String(a.hasta?.id || "").localeCompare(String(b.hasta?.id || ""));
+  }
+
+  function sortBySourceY(a, b){
+    const ay = parseFloat(a.desde?.style?.top) || 0;
+    const by = parseFloat(b.desde?.style?.top) || 0;
+    if(ay !== by) return ay - by;
+    return String(a.desde?.id || "").localeCompare(String(b.desde?.id || ""));
+  }
+
+  bySource.forEach(function (group) {
+    group.sort(sortByTargetY);
+    const total = group.length;
+    group.forEach(function (c, index) {
+      c._laneOffset = getLaneOffsetForIndex(index, total);
+      c._laneIndex = index;
+      c._laneTotal = total;
+      c._laneMidOffset = getLaneOffsetForIndex(index, total) * 0.7;
+    });
+  });
+
+  byTarget.forEach(function (group) {
+    group.sort(sortBySourceY);
+    const total = group.length;
+    group.forEach(function (c, index) {
+      c._laneTargetOffset = getLaneOffsetForIndex(index, total);
+    });
+  });
+}
+
+function esNodoIaOrigen(node){
+  if(!node) return false;
+  return (
+    node.classList.contains("ia-node") ||
+    node.classList.contains("ia-pro-node") ||
+    node.classList.contains("openai-agent-node") ||
+    node.classList.contains("node-ia") ||
+    node.dataset.tipo === "ia" ||
+    node.dataset.tipo === "ia_pro" ||
+    node.dataset.tipo === "openai_agent"
+  );
+}
+
+function esNodoConversionDestino(node){
+  if(!node) return false;
+  return (
+    node.classList.contains("conversion-node") ||
+    node.classList.contains("node-conversion") ||
+    node.dataset.tipo === "conversion"
+  );
+}
+
+function getConnectionVisualType(sourceNode, targetNode){
+  if(esNodoConversionDestino(targetNode)) return "conversion";
+  if(esNodoIaOrigen(sourceNode)) return "ia";
+  return "default";
+}
+
+function aplicarEstiloConexion(svg, visualType){
+  if(!svg) return;
+
+  svg.classList.remove(
+    "flow-conn--default",
+    "flow-conn--ia",
+    "flow-conn--conversion"
+  );
+
+  const tipo = visualType || "default";
+  svg.classList.add("flow-conn--" + tipo);
+}
+
+function limpiarSeleccionConexion(){
+  if(conexionSeleccionadaLinea){
+    conexionSeleccionadaLinea.classList.remove("flow-connection--selected");
+    conexionSeleccionadaLinea = null;
+  }
+  document.querySelectorAll("#builderArea .borrar-linea--visible").forEach(function (btn) {
+    btn.classList.remove("borrar-linea--visible");
+  });
+}
+
+function wireConnectionHover(c){
+  const svg = c.linea;
+  const borrar = c.borrar;
+  const hitbox = svg?._connHitbox;
+
+  if(!svg || !borrar || !hitbox || svg._connWired) return;
+
+  svg._connWired = true;
+
+  function mostrar(){
+    borrar.classList.add("borrar-linea--visible");
+    svg.classList.add("flow-connection--hover");
+  }
+
+  function ocultar(){
+    if(svg.classList.contains("flow-connection--selected")) return;
+    if(borrar.matches(":hover")) return;
+    borrar.classList.remove("borrar-linea--visible");
+    svg.classList.remove("flow-connection--hover");
+  }
+
+  hitbox.addEventListener("mouseenter", mostrar);
+  hitbox.addEventListener("mouseleave", function () {
+    setTimeout(ocultar, 100);
+  });
+  borrar.addEventListener("mouseenter", mostrar);
+  borrar.addEventListener("mouseleave", ocultar);
+
+  hitbox.addEventListener("click", function (e) {
+    e.stopPropagation();
+
+    if(conexionSeleccionadaLinea && conexionSeleccionadaLinea !== svg){
+      conexionSeleccionadaLinea.classList.remove("flow-connection--selected");
+      const prev = conexiones.find(function (x) {
+        return x.linea === conexionSeleccionadaLinea;
+      });
+      prev?.borrar?.classList.remove("borrar-linea--visible");
+    }
+
+    conexionSeleccionadaLinea = svg;
+    svg.classList.add("flow-connection--selected");
+    borrar.classList.add("borrar-linea--visible");
+  });
+}
 
 function getFlowNodeObstacles(canvas, excludeIds){
   const skip = excludeIds || new Set();
@@ -829,22 +988,41 @@ function getSmartConnectionPath(x1, y1, x2, y2, opts){
     return !exclude.has(b.id);
   });
 
+  const laneOffset = opts.laneOffset || 0;
+  const laneTargetOffset = opts.laneTargetOffset || 0;
+  const laneMidOffset = opts.laneMidOffset || 0;
+  const exitY = y1 + laneOffset;
+  const entryY = y2 + laneTargetOffset;
+
   const dx = x2 - x1;
   const dy = y2 - y1;
   const dist = Math.hypot(dx, dy) || 1;
 
   if(dist < 100){
-    const d = buildSmoothBezierPath(x1, y1, x2, y2);
+    let d;
+    if(Math.abs(laneOffset) > 0.5 || Math.abs(laneTargetOffset) > 0.5){
+      d = buildPolylineRoundedCorners(
+        [
+          { x: x1, y: y1 },
+          { x: (x1 + x2) / 2 + laneMidOffset * 0.25, y: exitY },
+          { x: (x1 + x2) / 2 + laneMidOffset * 0.25, y: entryY },
+          { x: x2, y: y2 },
+        ],
+        FLOW_ROUTE_CORNER
+      );
+    } else {
+      d = buildSmoothBezierPath(x1, y1, x2, y2);
+    }
     return {
       d: d,
-      labelPoint: { x: (x1 + x2) / 2, y: (y1 + y2) / 2 },
+      labelPoint: { x: (x1 + x2) / 2, y: (exitY + entryY) / 2 },
     };
   }
 
   const baseMidX =
-    dx >= 0
+    (dx >= 0
       ? x1 + FLOW_ROUTE_EXIT + Math.min(140, Math.max(56, dx * 0.42))
-      : x1 + FLOW_ROUTE_EXIT + 48;
+      : x1 + FLOW_ROUTE_EXIT + 48) + laneMidOffset;
 
   const routeCandidates = [];
 
@@ -867,7 +1045,7 @@ function getSmartConnectionPath(x1, y1, x2, y2, opts){
         const dxTry = detourX + step * 42;
         const pts = [
           { x: x1, y: y1 },
-          { x: dxTry, y: y1 },
+          { x: dxTry, y: exitY },
           { x: dxTry, y: laneY },
           { x: x2, y: laneY },
           { x: x2, y: y2 },
@@ -888,8 +1066,8 @@ function getSmartConnectionPath(x1, y1, x2, y2, opts){
     const midX = baseMidX + (dx >= 0 ? attempt * 40 : attempt * 36);
     const pts = [
       { x: x1, y: y1 },
-      { x: midX, y: y1 },
-      { x: midX, y: y2 },
+      { x: midX, y: exitY },
+      { x: midX, y: entryY },
       { x: x2, y: y2 },
     ];
 
@@ -897,7 +1075,7 @@ function getSmartConnectionPath(x1, y1, x2, y2, opts){
       routeCandidates.push({
         kind: "hvh",
         midX: midX,
-        labelPoint: { x: midX, y: (y1 + y2) / 2 },
+        labelPoint: { x: midX, y: (exitY + entryY) / 2 },
       });
     }
   }
@@ -929,7 +1107,7 @@ function getSmartConnectionPath(x1, y1, x2, y2, opts){
         const midX = baseMidX + step * 38;
         const pts = [
           { x: x1, y: y1 },
-          { x: midX, y: y1 },
+          { x: midX, y: exitY },
           { x: midX, y: laneY },
           { x: x2, y: laneY },
           { x: x2, y: y2 },
@@ -973,11 +1151,45 @@ function getSmartConnectionPath(x1, y1, x2, y2, opts){
     d = buildDetourRoundedPath(x1, y1, chosen.detourX, chosen.laneY, x2, y2, FLOW_ROUTE_CORNER);
   } else if(chosen.kind === "bus"){
     d = buildDetourRoundedPath(x1, y1, chosen.midX, chosen.laneY, x2, y2, FLOW_ROUTE_CORNER);
+  } else if(Math.abs(laneOffset) > 0.5 || Math.abs(laneTargetOffset) > 0.5){
+    d = buildPolylineRoundedCorners(
+      [
+        { x: x1, y: y1 },
+        { x: chosen.midX, y: exitY },
+        { x: chosen.midX, y: entryY },
+        { x: x2, y: y2 },
+      ],
+      FLOW_ROUTE_CORNER
+    );
   } else {
     d = buildHVHRoundedPath(x1, y1, chosen.midX, y2, x2, FLOW_ROUTE_CORNER);
   }
 
   return { d: d, labelPoint: chosen.labelPoint };
+}
+
+function getSmartConnectionPathFromNodes(sourceNode, targetNode, connectionIndex, totalConnections, x1, y1, x2, y2, opts){
+  opts = opts || {};
+  const laneOffset =
+    opts.laneOffset !== undefined
+      ? opts.laneOffset
+      : getLaneOffsetForIndex(connectionIndex || 0, totalConnections || 1);
+  const laneTargetOffset = opts.laneTargetOffset || 0;
+  const laneMidOffset =
+    opts.laneMidOffset !== undefined
+      ? opts.laneMidOffset
+      : laneOffset * 0.7;
+
+  return getSmartConnectionPath(x1, y1, x2, y2, {
+    obstacles: opts.obstacles,
+    sourceId: sourceNode?.id || opts.sourceId,
+    targetId: targetNode?.id || opts.targetId,
+    laneOffset: laneOffset,
+    laneTargetOffset: laneTargetOffset,
+    laneMidOffset: laneMidOffset,
+    connectionIndex: connectionIndex,
+    totalConnections: totalConnections,
+  });
 }
 
 function aplicarPathConexion(svg, route){
@@ -1045,14 +1257,14 @@ function crearConexionSvg(canvas){
   glow.setAttribute("fill", "none");
 
   const path = document.createElementNS(NS, "path");
-  path.setAttribute("class", "flow-connection-path flow-connection-path-active");
+  path.setAttribute("class", "flow-connection-path");
   path.setAttribute("fill", "none");
 
   const packet = document.createElementNS(NS, "circle");
   packet.setAttribute("class", "flow-connection-packet");
   packet.setAttribute("r", "3.5");
   const motion = document.createElementNS(NS, "animateMotion");
-  motion.setAttribute("dur", "2.1s");
+  motion.setAttribute("dur", "2.8s");
   motion.setAttribute("repeatCount", "indefinite");
   motion.setAttribute("path", "");
   packet.appendChild(motion);
@@ -1107,8 +1319,6 @@ function iniciarConexion(e, id, portSide){
   lineaTemporal._tempPath = tempSvg.path;
   lineaTemporal._tempGlow = tempSvg.glow;
   lineaTemporal._tempMotion = tempSvg.motion;
-
-  console.log("🎨 Drag connection curve active");
 
   document.addEventListener("mousemove", moverConexionTemporal);
   document.addEventListener("mouseup", soltarConexion);
@@ -1204,6 +1414,10 @@ function conectarNodos(nodo1, nodo2, sourceHandle){
 
     conexiones = conexiones.filter(c => c.linea !== linea);
 
+    if(conexionSeleccionadaLinea === linea){
+      conexionSeleccionadaLinea = null;
+    }
+
     linea.remove();
     borrar.remove();
   };
@@ -1244,6 +1458,8 @@ function actualizarLineas(){
 
   const obstacles = getFlowNodeObstacles(canvas);
 
+  assignConnectionLaneMeta(conexiones);
+
   conexiones.forEach(c => {
     const puertoDesde = obtenerPuertoSalida(c.desde, c.sourceHandle);
     const puertoHasta = c.hasta.querySelector(".port.in") || c.hasta.querySelector(".port");
@@ -1253,13 +1469,29 @@ function actualizarLineas(){
     const inicio = getPortCanvasPoint(puertoDesde);
     const fin = getPortCanvasPoint(puertoHasta);
 
-    const route = getSmartConnectionPath(inicio.x, inicio.y, fin.x, fin.y, {
-      sourceId: c.desde.id,
-      targetId: c.hasta.id,
-      obstacles: obstacles,
-    });
+    const route = getSmartConnectionPathFromNodes(
+      c.desde,
+      c.hasta,
+      c._laneIndex || 0,
+      c._laneTotal || 1,
+      inicio.x,
+      inicio.y,
+      fin.x,
+      fin.y,
+      {
+        sourceId: c.desde.id,
+        targetId: c.hasta.id,
+        obstacles: obstacles,
+        laneOffset: c._laneOffset,
+        laneTargetOffset: c._laneTargetOffset,
+        laneMidOffset: c._laneMidOffset,
+      }
+    );
 
     posicionarLinea(c.linea, inicio.x, inicio.y, fin.x, fin.y, route);
+
+    aplicarEstiloConexion(c.linea, getConnectionVisualType(c.desde, c.hasta));
+    wireConnectionHover(c);
 
     if(c.borrar){
       const label = route.labelPoint || {
@@ -1268,6 +1500,10 @@ function actualizarLineas(){
       };
       c.borrar.style.left = label.x - 12 + "px";
       c.borrar.style.top = label.y - 12 + "px";
+
+      if(conexionSeleccionadaLinea !== c.linea){
+        c.borrar.classList.remove("borrar-linea--visible");
+      }
     }
   });
 }
@@ -2040,6 +2276,8 @@ function initCanvasViewport(){
     if(e.button !== 0){
       return;
     }
+
+    limpiarSeleccionConexion();
 
     canvasPanningActive = true;
     wrap.classList.add("panning");
