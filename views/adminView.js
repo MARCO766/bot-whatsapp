@@ -606,7 +606,7 @@ ${tab === "activadores" ? `
 ` : ""}
 ${tab === "flujos" && builder ? `
 
-<div id="builderArea" class="flow-builder">
+<div id="builderArea" class="flow-builder builder-theme-dark">
   <header class="flow-toolbar">
     <div class="flow-toolbar-left">
       <button type="button" class="flow-back" onclick="window.location.href='/admin?tab=flujos'">← Volver</button>
@@ -616,6 +616,7 @@ ${tab === "flujos" && builder ? `
       </div>
     </div>
     <div class="flow-toolbar-right">
+      <button type="button" class="flow-theme-toggle" id="btnBuilderTheme" title="Modo claro" aria-label="Cambiar tema claro u oscuro" aria-pressed="true">☀️</button>
       <div class="flow-history-controls" role="group" aria-label="Deshacer y rehacer">
         <button type="button" class="flow-history-btn" id="btnBuilderUndo" title="Deshacer (Ctrl+Z)" aria-label="Deshacer" disabled>←</button>
         <button type="button" class="flow-history-btn" id="btnBuilderRedo" title="Rehacer (Ctrl+Y)" aria-label="Rehacer" disabled>→</button>
@@ -648,6 +649,32 @@ ${tab === "flujos" && builder ? `
     </aside>
   </div>
 </div>
+<script>
+(function () {
+  var STORAGE_KEY = "macbot_builder_theme";
+  var area = document.getElementById("builderArea");
+  var btn = document.getElementById("btnBuilderTheme");
+  if (!area || !btn) return;
+
+  function applyTheme(theme) {
+    theme = theme === "light" ? "light" : "dark";
+    area.classList.remove("builder-theme-light", "builder-theme-dark");
+    area.classList.add("builder-theme-" + theme);
+    area.setAttribute("data-builder-theme", theme);
+    localStorage.setItem(STORAGE_KEY, theme);
+    btn.textContent = theme === "dark" ? "\u2600\ufe0f" : "\ud83c\udf19";
+    btn.title = theme === "dark" ? "Modo claro" : "Modo oscuro";
+    btn.setAttribute("aria-pressed", theme === "dark" ? "true" : "false");
+  }
+
+  var saved = localStorage.getItem(STORAGE_KEY);
+  applyTheme(saved === "light" ? "light" : "dark");
+
+  btn.addEventListener("click", function () {
+    applyTheme(area.classList.contains("builder-theme-light") ? "dark" : "light");
+  });
+})();
+</script>
 ` : ""}
 
 </div>

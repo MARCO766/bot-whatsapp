@@ -2026,3 +2026,306 @@ body:has(#builderArea) {
     grid-template-columns: repeat(2, 1fr);
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   Builder theme — solo UI (claro / oscuro)
+   Clases: builder-theme-light | builder-theme-dark en #builderArea
+   ═══════════════════════════════════════════════════════════════ */
+
+.flow-theme-toggle {
+  min-width: 42px;
+  height: 38px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  color: inherit;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    transform 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.flow-theme-toggle:hover {
+  transform: scale(1.04);
+  background: rgba(109, 93, 252, 0.18);
+  border-color: rgba(109, 93, 252, 0.45);
+  box-shadow: 0 0 16px rgba(109, 93, 252, 0.25);
+}
+
+/* ── Tema oscuro (premium) ── */
+#builderArea.builder-theme-dark.flow-builder,
+body:has(#builderArea.builder-theme-dark) {
+  background: #060b12;
+}
+
+#builderArea.builder-theme-dark .flow-toolbar {
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+  background: #111827;
+}
+
+#builderArea.builder-theme-dark .flow-title {
+  color: #a78bfa;
+}
+
+#builderArea.builder-theme-dark .flow-hint {
+  color: #94a3b8;
+}
+
+#builderArea.builder-theme-dark .flow-back {
+  background: rgba(255, 255, 255, 0.06);
+  color: #f8fafc;
+}
+
+#builderArea.builder-theme-dark .flow-back:hover {
+  background: rgba(124, 58, 237, 0.22);
+}
+
+#builderArea.builder-theme-dark .flow-history-controls {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+#builderArea.builder-theme-dark .flow-history-btn {
+  background: rgba(255, 255, 255, 0.08);
+  color: #e5e7eb;
+}
+
+#builderArea.builder-theme-dark .flow-history-btn:hover:not(:disabled) {
+  background: rgba(124, 58, 237, 0.28);
+  color: #fff;
+}
+
+#builderArea.builder-theme-dark .flow-save {
+  background: linear-gradient(135deg, #6d28d9, #7c3aed) !important;
+  color: #fff !important;
+  border: none !important;
+  box-shadow: 0 8px 24px rgba(124, 58, 237, 0.35) !important;
+}
+
+#builderArea.builder-theme-dark .flow-theme-toggle {
+  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+#builderArea.builder-theme-dark .flow-canvas-wrap,
+#builderArea.builder-theme-dark #canvasWrapper {
+  background-color: #07111f;
+  background-image:
+    radial-gradient(circle, rgba(59, 130, 246, 0.22) 1px, transparent 1px),
+    radial-gradient(circle at 70% 80%, rgba(124, 58, 237, 0.18), transparent 35%);
+  background-size: 18px 18px, 100% 100%;
+  background-repeat: repeat, no-repeat;
+}
+
+#builderArea.builder-theme-dark .flow-canvas-hint {
+  color: #94a3b8;
+  background: rgba(15, 23, 42, 0.88);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+#builderArea.builder-theme-dark .flow-zoom-controls {
+  background: rgba(15, 23, 42, 0.92);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+#builderArea.builder-theme-dark .flow-zoom-controls button {
+  background: rgba(255, 255, 255, 0.08);
+  color: #e5e7eb;
+}
+
+#builderArea.builder-theme-dark .flow-zoom-controls button:hover {
+  background: rgba(124, 58, 237, 0.28);
+  color: #fff;
+}
+
+#builderArea.builder-theme-dark #btnCanvasZoomReset {
+  color: #a78bfa;
+}
+
+#builderArea.builder-theme-dark .flow-panel.panel-nodo {
+  background: #0f172a;
+  border-left-color: rgba(255, 255, 255, 0.08);
+}
+
+#builderArea.builder-theme-dark .panel-nodo-header h3 {
+  color: #c4b5fd;
+}
+
+#builderArea.builder-theme-dark .flow-panel .panel-empty,
+#builderArea.builder-theme-dark .flow-panel .panel-hint p {
+  color: #94a3b8;
+}
+
+body:has(#builderArea.builder-theme-dark) .sidebar {
+  background: #0f172a;
+  border-right-color: rgba(255, 255, 255, 0.08);
+}
+
+body:has(#builderArea.builder-theme-dark) .sidebar .logo {
+  color: #c4b5fd;
+}
+
+body:has(#builderArea.builder-theme-dark) .menu-nodos-title {
+  color: #67e8f9;
+}
+
+body:has(#builderArea.builder-theme-dark) .menu-nodo-btn {
+  background: #1e293b;
+  color: #f8fafc;
+}
+
+body:has(#builderArea.builder-theme-dark) .menu-nodo-btn:hover:not(:disabled) {
+  background: #334155;
+}
+
+/* ── Tema claro (SaaS) ── */
+#builderArea.builder-theme-light.flow-builder,
+body:has(#builderArea.builder-theme-light) {
+  background: #f1f5f9;
+}
+
+#builderArea.builder-theme-light .flow-toolbar {
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+  background: #ffffff;
+}
+
+#builderArea.builder-theme-light .flow-title {
+  color: #6d5dfc;
+}
+
+#builderArea.builder-theme-light .flow-hint {
+  color: #64748b;
+}
+
+#builderArea.builder-theme-light .flow-back {
+  background: #f1f5f9;
+  color: #0f172a;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+#builderArea.builder-theme-light .flow-back:hover {
+  background: #e2e8f0;
+}
+
+#builderArea.builder-theme-light .flow-history-controls {
+  background: #f8fafc;
+  border-color: rgba(15, 23, 42, 0.08);
+}
+
+#builderArea.builder-theme-light .flow-history-btn {
+  background: #ffffff;
+  color: #0f172a;
+  border: 1px solid rgba(15, 23, 42, 0.06);
+}
+
+#builderArea.builder-theme-light .flow-history-btn:hover:not(:disabled) {
+  background: rgba(109, 93, 252, 0.12);
+  color: #6d5dfc;
+}
+
+#builderArea.builder-theme-light .flow-save {
+  background: linear-gradient(135deg, #6d5dfc, #8b7cff) !important;
+  color: #fff !important;
+  border: none !important;
+  box-shadow: 0 8px 22px rgba(109, 93, 252, 0.28) !important;
+}
+
+#builderArea.builder-theme-light .flow-theme-toggle {
+  border-color: rgba(15, 23, 42, 0.1);
+  background: #f8fafc;
+  color: #0f172a;
+}
+
+#builderArea.builder-theme-light .flow-theme-toggle:hover {
+  background: rgba(109, 93, 252, 0.12);
+  border-color: rgba(109, 93, 252, 0.35);
+  box-shadow: 0 0 12px rgba(109, 93, 252, 0.18);
+}
+
+#builderArea.builder-theme-light .flow-canvas-wrap,
+#builderArea.builder-theme-light #canvasWrapper {
+  background-color: #f8fafc;
+  background-image:
+    radial-gradient(circle, rgba(99, 102, 241, 0.3) 1px, transparent 1px),
+    radial-gradient(circle at 80% 80%, rgba(124, 58, 237, 0.1), transparent 35%);
+  background-size: 18px 18px, 100% 100%;
+  background-repeat: repeat, no-repeat;
+}
+
+#builderArea.builder-theme-light .flow-canvas-hint {
+  color: #64748b;
+  background: rgba(255, 255, 255, 0.92);
+  border-color: rgba(15, 23, 42, 0.08);
+}
+
+#builderArea.builder-theme-light .flow-zoom-controls {
+  background: rgba(255, 255, 255, 0.95);
+  border-color: rgba(15, 23, 42, 0.1);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+}
+
+#builderArea.builder-theme-light .flow-zoom-controls button {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+#builderArea.builder-theme-light .flow-zoom-controls button:hover {
+  background: rgba(109, 93, 252, 0.14);
+  color: #6d5dfc;
+}
+
+#builderArea.builder-theme-light #btnCanvasZoomReset {
+  color: #6d5dfc;
+}
+
+#builderArea.builder-theme-light .flow-panel.panel-nodo {
+  background: #ffffff;
+  border-left-color: rgba(15, 23, 42, 0.08);
+}
+
+#builderArea.builder-theme-light .panel-nodo-header h3 {
+  color: #6d5dfc;
+}
+
+#builderArea.builder-theme-light .flow-panel .panel-empty,
+#builderArea.builder-theme-light .flow-panel .panel-hint p {
+  color: #64748b;
+}
+
+#builderArea.builder-theme-light .flow-panel .panel-close {
+  background: rgba(239, 68, 68, 0.12);
+  color: #dc2626;
+}
+
+body:has(#builderArea.builder-theme-light) .sidebar {
+  background: #ffffff;
+  border-right-color: rgba(15, 23, 42, 0.08);
+}
+
+body:has(#builderArea.builder-theme-light) .sidebar .logo {
+  color: #6d5dfc;
+}
+
+body:has(#builderArea.builder-theme-light) .menu-nodos-title {
+  color: #6d5dfc;
+}
+
+body:has(#builderArea.builder-theme-light) .menu-nodo-btn {
+  background: #f8fafc;
+  color: #0f172a;
+  border: 1px solid rgba(15, 23, 42, 0.06);
+}
+
+body:has(#builderArea.builder-theme-light) .menu-nodo-btn:hover:not(:disabled) {
+  background: #eef2ff;
+  color: #0f172a;
+}
+
+body:has(#builderArea.builder-theme-light) .menu-nodo-btn.active {
+  background: #6d5dfc;
+  color: #ffffff;
+}
