@@ -153,16 +153,19 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
+  width: 100%;
   line-height: 0;
-  filter: drop-shadow(0 0 10px rgba(103, 232, 249, 0.55));
+  margin: 2px 0 0;
 }
 
 .node.openai-agent-node .openai-agent-icon-svg {
   display: block;
-  width: 34px;
-  height: 34px;
-  color: #e0f7fa;
-  filter: drop-shadow(0 0 8px rgba(103, 232, 249, 0.65));
+  width: 72px;
+  height: 72px;
+  color: #f0fdfa;
+  shape-rendering: geometricPrecision;
+  filter: drop-shadow(0 0 12px rgba(103, 232, 249, 0.5));
 }
 
 .node.openai-agent-node .openai-agent-title {
