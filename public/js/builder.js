@@ -582,40 +582,99 @@ function obtenerPuertoSalida(nodo, handle){
   return nodo.querySelector(".port.out") || nodo.querySelector(".port");
 }
 
-function crearLineaTemporalSvg(canvas){
-  const NS = "http://www.w3.org/2000/svg";
-  const svg = document.createElementNS(NS, "svg");
-  svg.id = "tempConnectionSvg";
-  svg.setAttribute("class", "temp-connection-svg");
-  svg.setAttribute("aria-hidden", "true");
+const FLOW_ROUTE_PAD = 30;
+const FLOW_ROUTE_EXIT = 28;
+const FLOW_ROUTE_ENTRY = 28;
+const FLOW_ROUTE_CORNER = 14;
 
-  const glow = document.createElementNS(NS, "path");
-  glow.setAttribute("class", "temp-connection-glow");
-  glow.setAttribute("fill", "none");
+function getFlowNodeObstacles(canvas, excludeIds){
+  const skip = excludeIds || new Set();
+  const boxes = [];
 
-  const path = document.createElementNS(NS, "path");
-  path.id = "tempConnectionPath";
-  path.setAttribute("class", "temp-connection-path");
-  path.setAttribute("fill", "none");
+  if(!canvas) return boxes;
 
-  const packet = document.createElementNS(NS, "circle");
-  packet.setAttribute("class", "temp-connection-packet");
-  packet.setAttribute("r", "4");
-  const motion = document.createElementNS(NS, "animateMotion");
-  motion.setAttribute("dur", "1.65s");
-  motion.setAttribute("repeatCount", "indefinite");
-  motion.setAttribute("path", "");
-  packet.appendChild(motion);
+  canvas.querySelectorAll(".node").forEach(function (node) {
+    if(skip.has(node.id)) return;
 
-  svg.appendChild(glow);
-  svg.appendChild(path);
-  svg.appendChild(packet);
-  canvas.appendChild(svg);
+    const left = parseFloat(node.style.left) || 0;
+    const top = parseFloat(node.style.top) || 0;
 
-  return { svg, glow, path, motion };
+    boxes.push({
+      id: node.id,
+      x: left - FLOW_ROUTE_PAD,
+      y: top - FLOW_ROUTE_PAD,
+      width: node.offsetWidth + FLOW_ROUTE_PAD * 2,
+      height: node.offsetHeight + FLOW_ROUTE_PAD * 2,
+    });
+  });
+
+  return boxes;
 }
 
-function buildTempBezierPath(x1, y1, x2, y2){
+function pointInRouteBox(px, py, box){
+  return (
+    px >= box.x &&
+    px <= box.x + box.width &&
+    py >= box.y &&
+    py <= box.y + box.height
+  );
+}
+
+function segmentIntersectsBox(x1, y1, x2, y2, box){
+  const left = box.x;
+  const right = box.x + box.width;
+  const top = box.y;
+  const bottom = box.y + box.height;
+
+  if(pointInRouteBox(x1, y1, box) || pointInRouteBox(x2, y2, box)){
+    return true;
+  }
+
+  if(Math.abs(y1 - y2) < 0.5){
+    const y = y1;
+    if(y < top || y > bottom) return false;
+    const minX = Math.min(x1, x2);
+    const maxX = Math.max(x1, x2);
+    return maxX >= left && minX <= right;
+  }
+
+  if(Math.abs(x1 - x2) < 0.5){
+    const x = x1;
+    if(x < left || x > right) return false;
+    const minY = Math.min(y1, y2);
+    const maxY = Math.max(y1, y2);
+    return maxY >= top && minY <= bottom;
+  }
+
+  const minX = Math.min(x1, x2);
+  const maxX = Math.max(x1, x2);
+  const minY = Math.min(y1, y2);
+  const maxY = Math.max(y1, y2);
+
+  return maxX >= left && minX <= right && maxY >= top && minY <= bottom;
+}
+
+function segmentHitsObstacles(x1, y1, x2, y2, obstacles){
+  for(let i = 0; i < obstacles.length; i++){
+    if(segmentIntersectsBox(x1, y1, x2, y2, obstacles[i])){
+      return true;
+    }
+  }
+  return false;
+}
+
+function pathHitsObstacles(points, obstacles){
+  for(let i = 0; i < points.length - 1; i++){
+    const a = points[i];
+    const b = points[i + 1];
+    if(segmentHitsObstacles(a.x, a.y, b.x, b.y, obstacles)){
+      return true;
+    }
+  }
+  return false;
+}
+
+function buildSmoothBezierPath(x1, y1, x2, y2){
   const dx = x2 - x1;
   const dy = y2 - y1;
   const dist = Math.hypot(dx, dy) || 1;
@@ -658,8 +717,367 @@ function buildTempBezierPath(x1, y1, x2, y2){
   );
 }
 
+function buildHVHRoundedPath(x1, y1, midX, y2, x2, cornerR){
+  const yA = y1;
+  const yB = y2;
+  const r = Math.min(
+    cornerR,
+    Math.abs(midX - x1) / 2,
+    Math.abs(midX - x2) / 2,
+    Math.abs(yB - yA) / 2 || cornerR
+  );
+
+  if(Math.abs(yB - yA) < 2){
+    return "M " + x1 + " " + yA + " L " + x2 + " " + yB;
+  }
+
+  const hDir1 = midX >= x1 ? 1 : -1;
+  const hDir2 = x2 >= midX ? 1 : -1;
+  const vDir = yB >= yA ? 1 : -1;
+
+  let d = "M " + x1 + " " + yA;
+
+  if(Math.abs(midX - x1) > 0.5){
+    d += " L " + (midX - hDir1 * r) + " " + yA;
+    d += " Q " + midX + " " + yA + ", " + midX + " " + (yA + vDir * r);
+  } else {
+    d += " L " + midX + " " + yA;
+  }
+
+  d += " L " + midX + " " + (yB - vDir * r);
+
+  if(Math.abs(x2 - midX) > 0.5){
+    d += " Q " + midX + " " + yB + ", " + (midX + hDir2 * r) + " " + yB;
+    d += " L " + x2 + " " + yB;
+  } else {
+    d += " L " + midX + " " + yB;
+  }
+
+  return d;
+}
+
+function buildPolylineRoundedCorners(points, cornerR){
+  if(!points || points.length < 2){
+    return "";
+  }
+
+  if(points.length === 2){
+    return (
+      "M " +
+      points[0].x +
+      " " +
+      points[0].y +
+      " L " +
+      points[1].x +
+      " " +
+      points[1].y
+    );
+  }
+
+  let d = "M " + points[0].x + " " + points[0].y;
+
+  for(let i = 1; i < points.length - 1; i++){
+    const p0 = points[i - 1];
+    const p1 = points[i];
+    const p2 = points[i + 1];
+
+    const v1x = p1.x - p0.x;
+    const v1y = p1.y - p0.y;
+    const v2x = p2.x - p1.x;
+    const v2y = p2.y - p1.y;
+    const len1 = Math.hypot(v1x, v1y) || 1;
+    const len2 = Math.hypot(v2x, v2y) || 1;
+    const r = Math.min(cornerR, len1 / 2, len2 / 2);
+
+    const ax = p1.x - (v1x / len1) * r;
+    const ay = p1.y - (v1y / len1) * r;
+    const bx = p1.x + (v2x / len2) * r;
+    const by = p1.y + (v2y / len2) * r;
+
+    d += " L " + ax + " " + ay;
+    d += " Q " + p1.x + " " + p1.y + ", " + bx + " " + by;
+  }
+
+  const last = points[points.length - 1];
+  d += " L " + last.x + " " + last.y;
+
+  return d;
+}
+
+function buildDetourRoundedPath(x1, y1, detourX, laneY, x2, y2, cornerR){
+  return buildPolylineRoundedCorners(
+    [
+      { x: x1, y: y1 },
+      { x: detourX, y: y1 },
+      { x: detourX, y: laneY },
+      { x: x2, y: laneY },
+      { x: x2, y: y2 },
+    ],
+    cornerR
+  );
+}
+
+function getSmartConnectionPath(x1, y1, x2, y2, opts){
+  opts = opts || {};
+  const obstacles = opts.obstacles || [];
+  const exclude = new Set(
+    [opts.sourceId, opts.targetId].filter(function (id) {
+      return !!id;
+    })
+  );
+  const blocks = obstacles.filter(function (b) {
+    return !exclude.has(b.id);
+  });
+
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const dist = Math.hypot(dx, dy) || 1;
+
+  if(dist < 100){
+    const d = buildSmoothBezierPath(x1, y1, x2, y2);
+    return {
+      d: d,
+      labelPoint: { x: (x1 + x2) / 2, y: (y1 + y2) / 2 },
+    };
+  }
+
+  const baseMidX =
+    dx >= 0
+      ? x1 + FLOW_ROUTE_EXIT + Math.min(140, Math.max(56, dx * 0.42))
+      : x1 + FLOW_ROUTE_EXIT + 48;
+
+  const routeCandidates = [];
+
+  if(dx < -36){
+    let detourX = Math.max(x1, x2) + FLOW_ROUTE_EXIT + 56;
+    blocks.forEach(function (b) {
+      detourX = Math.max(detourX, b.x + b.width + FLOW_ROUTE_PAD);
+    });
+
+    const laneOptions = [
+      (y1 + y2) / 2,
+      Math.min(y1, y2) - FLOW_ROUTE_PAD * 2,
+      Math.max(y1, y2) + FLOW_ROUTE_PAD * 2,
+      y1,
+      y2,
+    ];
+
+    laneOptions.forEach(function (laneY) {
+      for(let step = 0; step < 6; step++){
+        const dxTry = detourX + step * 42;
+        const pts = [
+          { x: x1, y: y1 },
+          { x: dxTry, y: y1 },
+          { x: dxTry, y: laneY },
+          { x: x2, y: laneY },
+          { x: x2, y: y2 },
+        ];
+        if(!pathHitsObstacles(pts, blocks)){
+          routeCandidates.push({
+            kind: "detour",
+            detourX: dxTry,
+            laneY: laneY,
+            labelPoint: { x: dxTry, y: laneY },
+          });
+        }
+      }
+    });
+  }
+
+  for(let attempt = 0; attempt < 12; attempt++){
+    const midX = baseMidX + (dx >= 0 ? attempt * 40 : attempt * 36);
+    const pts = [
+      { x: x1, y: y1 },
+      { x: midX, y: y1 },
+      { x: midX, y: y2 },
+      { x: x2, y: y2 },
+    ];
+
+    if(!pathHitsObstacles(pts, blocks)){
+      routeCandidates.push({
+        kind: "hvh",
+        midX: midX,
+        labelPoint: { x: midX, y: (y1 + y2) / 2 },
+      });
+    }
+  }
+
+  const blocking = blocks.filter(function (b) {
+    const minX = Math.min(x1, x2) - 20;
+    const maxX = Math.max(x1, x2) + FLOW_ROUTE_EXIT + 80;
+    return b.x + b.width >= minX && b.x <= maxX;
+  });
+
+  if(blocking.length){
+    const aboveY =
+      Math.min.apply(
+        null,
+        blocking.map(function (b) {
+          return b.y;
+        })
+      ) - FLOW_ROUTE_PAD;
+    const belowY =
+      Math.max.apply(
+        null,
+        blocking.map(function (b) {
+          return b.y + b.height;
+        })
+      ) + FLOW_ROUTE_PAD;
+
+    [aboveY, belowY, (y1 + y2) / 2].forEach(function (laneY) {
+      for(let step = 0; step < 8; step++){
+        const midX = baseMidX + step * 38;
+        const pts = [
+          { x: x1, y: y1 },
+          { x: midX, y: y1 },
+          { x: midX, y: laneY },
+          { x: x2, y: laneY },
+          { x: x2, y: y2 },
+        ];
+        if(!pathHitsObstacles(pts, blocks)){
+          routeCandidates.push({
+            kind: "bus",
+            midX: midX,
+            laneY: laneY,
+            labelPoint: { x: midX, y: laneY },
+          });
+        }
+      }
+    });
+  }
+
+  let chosen = null;
+
+  if(routeCandidates.length){
+    routeCandidates.sort(function (a, b) {
+      const scoreA =
+        Math.abs((a.midX || a.detourX || baseMidX) - x1) +
+        Math.abs((a.laneY || y2) - y1) +
+        Math.abs(x2 - (a.midX || a.detourX || baseMidX));
+      const scoreB =
+        Math.abs((b.midX || b.detourX || baseMidX) - x1) +
+        Math.abs((b.laneY || y2) - y1) +
+        Math.abs(x2 - (b.midX || b.detourX || baseMidX));
+      return scoreA - scoreB;
+    });
+    chosen = routeCandidates[0];
+  }
+
+  if(!chosen){
+    chosen = { kind: "hvh", midX: baseMidX, labelPoint: { x: baseMidX, y: (y1 + y2) / 2 } };
+  }
+
+  let d;
+
+  if(chosen.kind === "detour"){
+    d = buildDetourRoundedPath(x1, y1, chosen.detourX, chosen.laneY, x2, y2, FLOW_ROUTE_CORNER);
+  } else if(chosen.kind === "bus"){
+    d = buildDetourRoundedPath(x1, y1, chosen.midX, chosen.laneY, x2, y2, FLOW_ROUTE_CORNER);
+  } else {
+    d = buildHVHRoundedPath(x1, y1, chosen.midX, y2, x2, FLOW_ROUTE_CORNER);
+  }
+
+  return { d: d, labelPoint: chosen.labelPoint };
+}
+
+function aplicarPathConexion(svg, route){
+  if(!svg || !route) return;
+
+  const d = route.d || route;
+  const pathEl = svg._connPath || svg.querySelector(".flow-connection-path");
+  const glowEl = svg._connGlow || svg.querySelector(".flow-connection-glow");
+  const hitboxEl = svg._connHitbox || svg.querySelector(".flow-connection-hitbox");
+  const motionEl = svg._connMotion || svg.querySelector("animateMotion");
+
+  if(pathEl) pathEl.setAttribute("d", d);
+  if(glowEl) glowEl.setAttribute("d", d);
+  if(hitboxEl) hitboxEl.setAttribute("d", d);
+  if(motionEl) motionEl.setAttribute("path", d);
+
+  svg._routeLabelPoint = route.labelPoint || null;
+}
+
+function crearLineaTemporalSvg(canvas){
+  const NS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(NS, "svg");
+  svg.id = "tempConnectionSvg";
+  svg.setAttribute("class", "temp-connection-svg flow-connection-svg");
+  svg.setAttribute("aria-hidden", "true");
+
+  const glow = document.createElementNS(NS, "path");
+  glow.setAttribute("class", "temp-connection-glow flow-connection-glow");
+  glow.setAttribute("fill", "none");
+
+  const path = document.createElementNS(NS, "path");
+  path.id = "tempConnectionPath";
+  path.setAttribute("class", "temp-connection-path flow-connection-path");
+  path.setAttribute("fill", "none");
+
+  const packet = document.createElementNS(NS, "circle");
+  packet.setAttribute("class", "temp-connection-packet flow-connection-packet");
+  packet.setAttribute("r", "4");
+  const motion = document.createElementNS(NS, "animateMotion");
+  motion.setAttribute("dur", "1.65s");
+  motion.setAttribute("repeatCount", "indefinite");
+  motion.setAttribute("path", "");
+  packet.appendChild(motion);
+
+  svg.appendChild(glow);
+  svg.appendChild(path);
+  svg.appendChild(packet);
+  canvas.appendChild(svg);
+
+  return { svg, glow, path, motion };
+}
+
+function crearConexionSvg(canvas){
+  const NS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("class", "flow-connection-svg linea");
+  svg.setAttribute("aria-hidden", "true");
+
+  const hitbox = document.createElementNS(NS, "path");
+  hitbox.setAttribute("class", "flow-connection-hitbox");
+  hitbox.setAttribute("fill", "none");
+
+  const glow = document.createElementNS(NS, "path");
+  glow.setAttribute("class", "flow-connection-glow");
+  glow.setAttribute("fill", "none");
+
+  const path = document.createElementNS(NS, "path");
+  path.setAttribute("class", "flow-connection-path flow-connection-path-active");
+  path.setAttribute("fill", "none");
+
+  const packet = document.createElementNS(NS, "circle");
+  packet.setAttribute("class", "flow-connection-packet");
+  packet.setAttribute("r", "3.5");
+  const motion = document.createElementNS(NS, "animateMotion");
+  motion.setAttribute("dur", "2.1s");
+  motion.setAttribute("repeatCount", "indefinite");
+  motion.setAttribute("path", "");
+  packet.appendChild(motion);
+
+  svg.appendChild(hitbox);
+  svg.appendChild(glow);
+  svg.appendChild(path);
+  svg.appendChild(packet);
+
+  svg._connHitbox = hitbox;
+  svg._connGlow = glow;
+  svg._connPath = path;
+  svg._connMotion = motion;
+
+  canvas.appendChild(svg);
+
+  return svg;
+}
+
 function actualizarLineaTemporalCurva(pathEl, glowEl, motionEl, x1, y1, x2, y2){
-  const d = buildTempBezierPath(x1, y1, x2, y2);
+  const canvas = document.getElementById("canvasFlujo");
+  const obstacles = getFlowNodeObstacles(canvas);
+  const route = getSmartConnectionPath(x1, y1, x2, y2, { obstacles: obstacles });
+  const d = route.d;
+
   pathEl.setAttribute("d", d);
   if(glowEl) glowEl.setAttribute("d", d);
   if(motionEl) motionEl.setAttribute("path", d);
@@ -773,8 +1191,7 @@ function conectarNodos(nodo1, nodo2, sourceHandle){
   });
   if(yaExiste) return;
 
-  const linea = document.createElement("div");
-  linea.className = "linea linea-dashed";
+  const linea = crearConexionSvg(canvas);
 
   const borrar = document.createElement("button");
   borrar.innerText = "×";
@@ -791,7 +1208,6 @@ function conectarNodos(nodo1, nodo2, sourceHandle){
     borrar.remove();
   };
 
-  canvas.appendChild(linea);
   canvas.appendChild(borrar);
 
   const item = {
@@ -826,6 +1242,8 @@ function actualizarLineas(){
     return true;
   });
 
+  const obstacles = getFlowNodeObstacles(canvas);
+
   conexiones.forEach(c => {
     const puertoDesde = obtenerPuertoSalida(c.desde, c.sourceHandle);
     const puertoHasta = c.hasta.querySelector(".port.in") || c.hasta.querySelector(".port");
@@ -835,11 +1253,21 @@ function actualizarLineas(){
     const inicio = getPortCanvasPoint(puertoDesde);
     const fin = getPortCanvasPoint(puertoHasta);
 
-    posicionarLinea(c.linea, inicio.x, inicio.y, fin.x, fin.y);
+    const route = getSmartConnectionPath(inicio.x, inicio.y, fin.x, fin.y, {
+      sourceId: c.desde.id,
+      targetId: c.hasta.id,
+      obstacles: obstacles,
+    });
+
+    posicionarLinea(c.linea, inicio.x, inicio.y, fin.x, fin.y, route);
 
     if(c.borrar){
-      c.borrar.style.left = (inicio.x + fin.x) / 2 - 12 + "px";
-      c.borrar.style.top = (inicio.y + fin.y) / 2 - 12 + "px";
+      const label = route.labelPoint || {
+        x: (inicio.x + fin.x) / 2,
+        y: (inicio.y + fin.y) / 2,
+      };
+      c.borrar.style.left = label.x - 12 + "px";
+      c.borrar.style.top = label.y - 12 + "px";
     }
   });
 }
@@ -1373,7 +1801,19 @@ function getPortCanvasPoint(puerto){
   );
 }
 
-function posicionarLinea(linea, x1, y1, x2, y2){
+function posicionarLinea(linea, x1, y1, x2, y2, routePrecalculada){
+  if(!linea) return;
+
+  if(linea.tagName === "svg" || linea.classList.contains("flow-connection-svg")){
+    const route =
+      routePrecalculada ||
+      getSmartConnectionPath(x1, y1, x2, y2, {
+        obstacles: getFlowNodeObstacles(document.getElementById("canvasFlujo")),
+      });
+    aplicarPathConexion(linea, route);
+    return;
+  }
+
   const largo = Math.hypot(x2 - x1, y2 - y1);
   const angulo = (Math.atan2(y2 - y1, x2 - x1) * 180) / Math.PI;
 
@@ -1591,6 +2031,7 @@ function initCanvasViewport(){
       e.target.closest(".node") ||
       e.target.closest(".port") ||
       e.target.closest(".borrar-linea") ||
+      e.target.closest(".flow-connection-hitbox") ||
       e.target.closest(".flow-zoom-controls")
     ){
       return;

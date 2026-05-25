@@ -238,8 +238,100 @@ body:has(#builderArea) {
   pointer-events: none !important;
 }
 
-/* ── Conexiones premium (solo visual, scope builder) ── */
-#builderArea .linea {
+/* ── Conexiones SVG (rutas inteligentes) ── */
+#builderArea .flow-connection-svg,
+#canvasFlujo .flow-connection-svg {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  overflow: visible;
+  pointer-events: none;
+  z-index: 2;
+  background: none !important;
+  background-image: none !important;
+  border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  transform: none !important;
+  animation: none !important;
+  opacity: 1;
+}
+
+#builderArea .flow-connection-svg::before,
+#builderArea .flow-connection-svg::after,
+#canvasFlujo .flow-connection-svg::before,
+#canvasFlujo .flow-connection-svg::after {
+  display: none !important;
+  content: none !important;
+}
+
+#builderArea .flow-connection-hitbox,
+#canvasFlujo .flow-connection-hitbox {
+  stroke: transparent;
+  stroke-width: 14;
+  pointer-events: stroke;
+  cursor: default;
+}
+
+#builderArea .flow-connection-glow,
+#canvasFlujo .flow-connection-glow {
+  fill: none;
+  stroke: rgba(34, 255, 136, 0.32);
+  stroke-width: 7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: blur(4px);
+  pointer-events: none;
+}
+
+#builderArea .flow-connection-path,
+#canvasFlujo .flow-connection-path {
+  fill: none;
+  stroke: rgba(34, 211, 238, 0.88);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 11 9;
+  filter: drop-shadow(0 0 4px rgba(34, 255, 136, 0.55))
+    drop-shadow(0 0 10px rgba(34, 211, 238, 0.28));
+  animation: flowConnectionDash 1.5s linear infinite;
+  pointer-events: none;
+}
+
+#builderArea .flow-connection-path-active,
+#canvasFlujo .flow-connection-path-active {
+  stroke: rgba(34, 255, 136, 0.92);
+}
+
+#builderArea .flow-connection-packet,
+#canvasFlujo .flow-connection-packet {
+  fill: #5dffc8;
+  filter: drop-shadow(0 0 5px #22ff88) drop-shadow(0 0 10px rgba(255, 230, 90, 0.55));
+  pointer-events: none;
+}
+
+@keyframes flowConnectionDash {
+  to {
+    stroke-dashoffset: -40;
+  }
+}
+
+#builderArea.builder-theme-light .flow-connection-path,
+#builderArea.builder-theme-light .temp-connection-path {
+  stroke: rgba(109, 93, 252, 0.85);
+  filter: drop-shadow(0 0 4px rgba(109, 93, 252, 0.35));
+}
+
+#builderArea.builder-theme-light .flow-connection-glow,
+#builderArea.builder-theme-light .temp-connection-glow {
+  stroke: rgba(109, 93, 252, 0.22);
+}
+
+/* ── Conexiones legacy (div) — compatibilidad ── */
+#builderArea .linea:not(.flow-connection-svg) {
   position: absolute !important;
   height: 2px !important;
   min-height: 2px !important;
@@ -271,7 +363,7 @@ body:has(#builderArea) {
   animation: flowLineDash 1.85s linear infinite, flowLineEnergy 2.4s linear infinite;
 }
 
-#builderArea .linea::before {
+#builderArea .linea:not(.flow-connection-svg)::before {
   content: "";
   position: absolute;
   inset: -3px -2px;
@@ -290,7 +382,7 @@ body:has(#builderArea) {
   pointer-events: none;
 }
 
-#builderArea .linea::after {
+#builderArea .linea:not(.flow-connection-svg)::after {
   content: "";
   position: absolute;
   top: 50%;
@@ -314,7 +406,7 @@ body:has(#builderArea) {
   will-change: left, opacity;
 }
 
-#builderArea .linea:hover {
+#builderArea .linea:not(.flow-connection-svg):hover {
   opacity: 1;
   filter: drop-shadow(0 0 6px rgba(34, 255, 136, 0.85))
     drop-shadow(0 0 16px rgba(56, 189, 248, 0.45));
