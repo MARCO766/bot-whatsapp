@@ -582,23 +582,17 @@ function obtenerPuertoSalida(nodo, handle){
   return nodo.querySelector(".port.out") || nodo.querySelector(".port");
 }
 
-const FLOW_ROUTE_PAD = 30;
-const FLOW_ROUTE_EXIT = 28;
-const FLOW_ROUTE_ENTRY = 28;
-const FLOW_ROUTE_CORNER = 14;
-const FLOW_LANE_OFFSETS = [-36, -18, 0, 18, 36];
+const FLOW_ROUTE_PAD = 40;
+const FLOW_ROUTE_EXIT = 32;
+const FLOW_ROUTE_ENTRY = 32;
+const FLOW_ROUTE_CORNER = 20;
+const FLOW_LANE_SPACING = 22;
 let conexionSeleccionadaLinea = null;
 
 function getLaneOffsetForIndex(index, total){
   if(!total || total <= 1) return 0;
-
-  if(total <= FLOW_LANE_OFFSETS.length){
-    const start = Math.floor((FLOW_LANE_OFFSETS.length - total) / 2);
-    return FLOW_LANE_OFFSETS[Math.min(start + index, FLOW_LANE_OFFSETS.length - 1)];
-  }
-
-  const t = index / (total - 1);
-  return -36 + t * 72;
+  const center = (total - 1) / 2;
+  return (index - center) * FLOW_LANE_SPACING;
 }
 
 function assignConnectionLaneMeta(list){
@@ -637,7 +631,7 @@ function assignConnectionLaneMeta(list){
       c._laneOffset = getLaneOffsetForIndex(index, total);
       c._laneIndex = index;
       c._laneTotal = total;
-      c._laneMidOffset = getLaneOffsetForIndex(index, total) * 0.7;
+      c._laneMidOffset = getLaneOffsetForIndex(index, total) * 1.15;
     });
   });
 
@@ -672,7 +666,10 @@ function esNodoConversionDestino(node){
   );
 }
 
-function getConnectionVisualType(sourceNode, targetNode){
+function getConnectionVisualType(sourceNode, targetNode, connection){
+  if(connection?.isError || connection?.linea?.classList?.contains("linea-error")){
+    return "error";
+  }
   if(esNodoConversionDestino(targetNode)) return "conversion";
   if(esNodoIaOrigen(sourceNode)) return "ia";
   return "default";
@@ -684,21 +681,31 @@ function aplicarEstiloConexion(svg, visualType){
   svg.classList.remove(
     "flow-conn--default",
     "flow-conn--ia",
-    "flow-conn--conversion"
+    "flow-conn--conversion",
+    "flow-conn--error",
+    "flow-edge--default",
+    "flow-edge--ia",
+    "flow-edge--conversion",
+    "flow-edge--error"
   );
 
   const tipo = visualType || "default";
-  svg.classList.add("flow-conn--" + tipo);
+  svg.classList.add("flow-conn--" + tipo, "flow-edge--" + tipo);
 }
 
 function limpiarSeleccionConexion(){
   if(conexionSeleccionadaLinea){
-    conexionSeleccionadaLinea.classList.remove("flow-connection--selected");
+    conexionSeleccionadaLinea.classList.remove(
+      "flow-connection--selected",
+      "flow-edge-selected"
+    );
     conexionSeleccionadaLinea = null;
   }
-  document.querySelectorAll("#builderArea .borrar-linea--visible").forEach(function (btn) {
-    btn.classList.remove("borrar-linea--visible");
-  });
+  document
+    .querySelectorAll("#builderArea .borrar-linea--visible, #builderArea .flow-edge-delete-visible")
+    .forEach(function (btn) {
+      btn.classList.remove("borrar-linea--visible", "flow-edge-delete-visible");
+    });
 }
 
 function wireConnectionHover(c){
@@ -711,14 +718,19 @@ function wireConnectionHover(c){
   svg._connWired = true;
 
   function mostrar(){
-    borrar.classList.add("borrar-linea--visible");
+    borrar.classList.add("borrar-linea--visible", "flow-edge-delete-visible");
     svg.classList.add("flow-connection--hover");
   }
 
   function ocultar(){
-    if(svg.classList.contains("flow-connection--selected")) return;
+    if(
+      svg.classList.contains("flow-connection--selected") ||
+      svg.classList.contains("flow-edge-selected")
+    ){
+      return;
+    }
     if(borrar.matches(":hover")) return;
-    borrar.classList.remove("borrar-linea--visible");
+    borrar.classList.remove("borrar-linea--visible", "flow-edge-delete-visible");
     svg.classList.remove("flow-connection--hover");
   }
 
@@ -741,8 +753,8 @@ function wireConnectionHover(c){
     }
 
     conexionSeleccionadaLinea = svg;
-    svg.classList.add("flow-connection--selected");
-    borrar.classList.add("borrar-linea--visible");
+    svg.classList.add("flow-connection--selected", "flow-edge-selected");
+    borrar.classList.add("borrar-linea--visible", "flow-edge-delete-visible");
   });
 }
 
@@ -823,14 +835,159 @@ function segmentHitsObstacles(x1, y1, x2, y2, obstacles){
 }
 
 function pathHitsObstacles(points, obstacles){
+  return countPathCollisions(points, obstacles) > 0;
+}
+
+function countPathCollisions(points, obstacles){
+  let hits = 0;
   for(let i = 0; i < points.length - 1; i++){
     const a = points[i];
     const b = points[i + 1];
-    if(segmentHitsObstacles(a.x, a.y, b.x, b.y, obstacles)){
-      return true;
+    for(let j = 0; j < obstacles.length; j++){
+      if(segmentIntersectsBox(a.x, a.y, b.x, b.y, obstacles[j])){
+        hits++;
+      }
     }
   }
-  return false;
+  return hits;
+}
+
+function getFlowNodeObstaclesFromNodes(nodes, connection){
+  const exclude = new Set(
+    [connection?.desde?.id, connection?.hasta?.id].filter(function (id) {
+      return !!id;
+    })
+  );
+  const boxes = [];
+
+  (nodes || []).forEach(function (node) {
+    if(!node || exclude.has(node.id)) return;
+
+    const left = parseFloat(node.style?.left) || node.offsetLeft || 0;
+    const top = parseFloat(node.style?.top) || node.offsetTop || 0;
+
+    boxes.push({
+      id: node.id,
+      x: left - FLOW_ROUTE_PAD,
+      y: top - FLOW_ROUTE_PAD,
+      width: node.offsetWidth + FLOW_ROUTE_PAD * 2,
+      height: node.offsetHeight + FLOW_ROUTE_PAD * 2,
+    });
+  });
+
+  return boxes;
+}
+
+/** Path ortogonal con esquinas suaves (cúbicas) — estilo Make/n8n */
+function buildProfessionalSmoothPath(points, cornerR){
+  if(!points || points.length < 2){
+    return "";
+  }
+
+  if(points.length === 2){
+    const p0 = points[0];
+    const p1 = points[1];
+    const mx = (p0.x + p1.x) / 2;
+    const my = (p0.y + p1.y) / 2;
+    return (
+      "M " +
+      p0.x +
+      " " +
+      p0.y +
+      " C " +
+      mx +
+      " " +
+      p0.y +
+      ", " +
+      mx +
+      " " +
+      p1.y +
+      ", " +
+      p1.x +
+      " " +
+      p1.y
+    );
+  }
+
+  let d = "M " + points[0].x + " " + points[0].y;
+
+  for(let i = 1; i < points.length - 1; i++){
+    const p0 = points[i - 1];
+    const p1 = points[i];
+    const p2 = points[i + 1];
+
+    const v1x = p1.x - p0.x;
+    const v1y = p1.y - p0.y;
+    const v2x = p2.x - p1.x;
+    const v2y = p2.y - p1.y;
+    const len1 = Math.hypot(v1x, v1y) || 1;
+    const len2 = Math.hypot(v2x, v2y) || 1;
+    const r = Math.min(cornerR, len1 * 0.48, len2 * 0.48);
+
+    const t1x = p1.x - (v1x / len1) * r;
+    const t1y = p1.y - (v1y / len1) * r;
+    const t2x = p1.x + (v2x / len2) * r;
+    const t2y = p1.y + (v2y / len2) * r;
+
+    d += " L " + t1x + " " + t1y;
+    d +=
+      " C " +
+      (p1.x + (v1x / len1) * r * 0.15) +
+      " " +
+      (p1.y + (v1y / len1) * r * 0.15) +
+      ", " +
+      (p1.x + (v2x / len2) * r * 0.15) +
+      " " +
+      (p1.y + (v2y / len2) * r * 0.15) +
+      ", " +
+      t2x +
+      " " +
+      t2y;
+  }
+
+  const last = points[points.length - 1];
+  d += " L " + last.x + " " + last.y;
+
+  return d;
+}
+
+function buildRoutePointsFromPorts(x1, y1, x2, y2, midX, exitY, entryY, laneY, kind){
+  const exitStub = x1 + (x2 >= x1 ? FLOW_ROUTE_EXIT : -FLOW_ROUTE_EXIT);
+
+  if(kind === "detour" || kind === "bus"){
+    const detourX = midX;
+    return [
+      { x: x1, y: y1 },
+      { x: exitStub, y: y1 },
+      { x: detourX, y: exitY },
+      { x: detourX, y: laneY },
+      { x: x2 - (x2 >= detourX ? FLOW_ROUTE_ENTRY : -FLOW_ROUTE_ENTRY), y: laneY },
+      { x: x2, y: y2 },
+    ];
+  }
+
+  return [
+    { x: x1, y: y1 },
+    { x: exitStub, y: y1 },
+    { x: midX, y: exitY },
+    { x: midX, y: entryY },
+    { x: x2, y: y2 },
+  ];
+}
+
+function pathFromRouteChoice(x1, y1, x2, y2, chosen, exitY, entryY){
+  const pts =
+    chosen.kind === "detour"
+      ? buildRoutePointsFromPorts(x1, y1, x2, y2, chosen.detourX, exitY, entryY, chosen.laneY, "detour")
+      : chosen.kind === "bus"
+        ? buildRoutePointsFromPorts(x1, y1, x2, y2, chosen.midX, exitY, entryY, chosen.laneY, "bus")
+        : buildRoutePointsFromPorts(x1, y1, x2, y2, chosen.midX, exitY, entryY, null, "hvh");
+
+  return {
+    d: buildProfessionalSmoothPath(pts, FLOW_ROUTE_CORNER),
+    labelPoint: chosen.labelPoint,
+    points: pts,
+  };
 }
 
 function buildSmoothBezierPath(x1, y1, x2, y2){
@@ -999,22 +1156,14 @@ function getSmartConnectionPath(x1, y1, x2, y2, opts){
   const dist = Math.hypot(dx, dy) || 1;
 
   if(dist < 100){
-    let d;
-    if(Math.abs(laneOffset) > 0.5 || Math.abs(laneTargetOffset) > 0.5){
-      d = buildPolylineRoundedCorners(
-        [
-          { x: x1, y: y1 },
-          { x: (x1 + x2) / 2 + laneMidOffset * 0.25, y: exitY },
-          { x: (x1 + x2) / 2 + laneMidOffset * 0.25, y: entryY },
-          { x: x2, y: y2 },
-        ],
-        FLOW_ROUTE_CORNER
-      );
-    } else {
-      d = buildSmoothBezierPath(x1, y1, x2, y2);
-    }
+    const pts = [
+      { x: x1, y: y1 },
+      { x: (x1 + x2) / 2 + laneMidOffset * 0.2, y: exitY },
+      { x: (x1 + x2) / 2 + laneMidOffset * 0.2, y: entryY },
+      { x: x2, y: y2 },
+    ];
     return {
-      d: d,
+      d: buildProfessionalSmoothPath(pts, FLOW_ROUTE_CORNER),
       labelPoint: { x: (x1 + x2) / 2, y: (exitY + entryY) / 2 },
     };
   }
@@ -1050,14 +1199,14 @@ function getSmartConnectionPath(x1, y1, x2, y2, opts){
           { x: x2, y: laneY },
           { x: x2, y: y2 },
         ];
-        if(!pathHitsObstacles(pts, blocks)){
-          routeCandidates.push({
-            kind: "detour",
-            detourX: dxTry,
-            laneY: laneY,
-            labelPoint: { x: dxTry, y: laneY },
-          });
-        }
+        const collisions = countPathCollisions(pts, blocks);
+        routeCandidates.push({
+          kind: "detour",
+          detourX: dxTry,
+          laneY: laneY,
+          labelPoint: { x: dxTry, y: laneY },
+          collisions: collisions,
+        });
       }
     });
   }
@@ -1071,13 +1220,12 @@ function getSmartConnectionPath(x1, y1, x2, y2, opts){
       { x: x2, y: y2 },
     ];
 
-    if(!pathHitsObstacles(pts, blocks)){
-      routeCandidates.push({
-        kind: "hvh",
-        midX: midX,
-        labelPoint: { x: midX, y: (exitY + entryY) / 2 },
-      });
-    }
+    routeCandidates.push({
+      kind: "hvh",
+      midX: midX,
+      labelPoint: { x: midX, y: (exitY + entryY) / 2 },
+      collisions: countPathCollisions(pts, blocks),
+    });
   }
 
   const blocking = blocks.filter(function (b) {
@@ -1112,14 +1260,13 @@ function getSmartConnectionPath(x1, y1, x2, y2, opts){
           { x: x2, y: laneY },
           { x: x2, y: y2 },
         ];
-        if(!pathHitsObstacles(pts, blocks)){
-          routeCandidates.push({
-            kind: "bus",
-            midX: midX,
-            laneY: laneY,
-            labelPoint: { x: midX, y: laneY },
-          });
-        }
+        routeCandidates.push({
+          kind: "bus",
+          midX: midX,
+          laneY: laneY,
+          labelPoint: { x: midX, y: laneY },
+          collisions: countPathCollisions(pts, blocks),
+        });
       }
     });
   }
@@ -1128,13 +1275,17 @@ function getSmartConnectionPath(x1, y1, x2, y2, opts){
 
   if(routeCandidates.length){
     routeCandidates.sort(function (a, b) {
+      const colA = a.collisions != null ? a.collisions : 99;
+      const colB = b.collisions != null ? b.collisions : 99;
+      if(colA !== colB) return colA - colB;
+
       const scoreA =
         Math.abs((a.midX || a.detourX || baseMidX) - x1) +
-        Math.abs((a.laneY || y2) - y1) +
+        Math.abs((a.laneY || entryY) - exitY) +
         Math.abs(x2 - (a.midX || a.detourX || baseMidX));
       const scoreB =
         Math.abs((b.midX || b.detourX || baseMidX) - x1) +
-        Math.abs((b.laneY || y2) - y1) +
+        Math.abs((b.laneY || entryY) - exitY) +
         Math.abs(x2 - (b.midX || b.detourX || baseMidX));
       return scoreA - scoreB;
     });
@@ -1142,53 +1293,78 @@ function getSmartConnectionPath(x1, y1, x2, y2, opts){
   }
 
   if(!chosen){
-    chosen = { kind: "hvh", midX: baseMidX, labelPoint: { x: baseMidX, y: (y1 + y2) / 2 } };
+    chosen = {
+      kind: "hvh",
+      midX: baseMidX,
+      labelPoint: { x: baseMidX, y: (exitY + entryY) / 2 },
+      collisions: 0,
+    };
   }
 
-  let d;
+  return pathFromRouteChoice(x1, y1, x2, y2, chosen, exitY, entryY);
+}
 
-  if(chosen.kind === "detour"){
-    d = buildDetourRoundedPath(x1, y1, chosen.detourX, chosen.laneY, x2, y2, FLOW_ROUTE_CORNER);
-  } else if(chosen.kind === "bus"){
-    d = buildDetourRoundedPath(x1, y1, chosen.midX, chosen.laneY, x2, y2, FLOW_ROUTE_CORNER);
-  } else if(Math.abs(laneOffset) > 0.5 || Math.abs(laneTargetOffset) > 0.5){
-    d = buildPolylineRoundedCorners(
-      [
-        { x: x1, y: y1 },
-        { x: chosen.midX, y: exitY },
-        { x: chosen.midX, y: entryY },
-        { x: x2, y: y2 },
-      ],
-      FLOW_ROUTE_CORNER
-    );
-  } else {
-    d = buildHVHRoundedPath(x1, y1, chosen.midX, y2, x2, FLOW_ROUTE_CORNER);
+/** Ruta profesional: puertos correctos, carriles, obstáculos, curvas suaves */
+function getProfessionalConnectionPath(connection, nodes){
+  if(!connection?.desde || !connection?.hasta){
+    return { d: "", labelPoint: { x: 0, y: 0 } };
   }
 
-  return { d: d, labelPoint: chosen.labelPoint };
+  const canvas = document.getElementById("canvasFlujo");
+  const nodeList =
+    nodes ||
+    (canvas ? Array.from(canvas.querySelectorAll(".node")) : []);
+
+  const obstacles = getFlowNodeObstaclesFromNodes(nodeList, connection);
+
+  const puertoDesde = obtenerPuertoSalida(connection.desde, connection.sourceHandle);
+  const puertoHasta =
+    connection.hasta.querySelector(".port.in") ||
+    connection.hasta.querySelector(".port");
+
+  if(!puertoDesde || !puertoHasta){
+    return { d: "", labelPoint: { x: 0, y: 0 } };
+  }
+
+  const inicio = getPortCanvasPoint(puertoDesde);
+  const fin = getPortCanvasPoint(puertoHasta);
+
+  return getSmartConnectionPath(inicio.x, inicio.y, fin.x, fin.y, {
+    sourceId: connection.desde.id,
+    targetId: connection.hasta.id,
+    obstacles: obstacles,
+    laneOffset: connection._laneOffset || 0,
+    laneTargetOffset: connection._laneTargetOffset || 0,
+    laneMidOffset: connection._laneMidOffset || 0,
+  });
 }
 
 function getSmartConnectionPathFromNodes(sourceNode, targetNode, connectionIndex, totalConnections, x1, y1, x2, y2, opts){
   opts = opts || {};
-  const laneOffset =
-    opts.laneOffset !== undefined
-      ? opts.laneOffset
-      : getLaneOffsetForIndex(connectionIndex || 0, totalConnections || 1);
-  const laneTargetOffset = opts.laneTargetOffset || 0;
-  const laneMidOffset =
-    opts.laneMidOffset !== undefined
-      ? opts.laneMidOffset
-      : laneOffset * 0.7;
+  const mockConnection = {
+    desde: sourceNode,
+    hasta: targetNode,
+    _laneOffset:
+      opts.laneOffset !== undefined
+        ? opts.laneOffset
+        : getLaneOffsetForIndex(connectionIndex || 0, totalConnections || 1),
+    _laneTargetOffset: opts.laneTargetOffset || 0,
+    _laneMidOffset:
+      opts.laneMidOffset !== undefined
+        ? opts.laneMidOffset
+        : getLaneOffsetForIndex(connectionIndex || 0, totalConnections || 1) * 1.15,
+  };
+
+  const route = getProfessionalConnectionPath(mockConnection, null);
+  if(route.d) return route;
 
   return getSmartConnectionPath(x1, y1, x2, y2, {
     obstacles: opts.obstacles,
     sourceId: sourceNode?.id || opts.sourceId,
     targetId: targetNode?.id || opts.targetId,
-    laneOffset: laneOffset,
-    laneTargetOffset: laneTargetOffset,
-    laneMidOffset: laneMidOffset,
-    connectionIndex: connectionIndex,
-    totalConnections: totalConnections,
+    laneOffset: mockConnection._laneOffset,
+    laneTargetOffset: mockConnection._laneTargetOffset,
+    laneMidOffset: mockConnection._laneMidOffset,
   });
 }
 
@@ -1245,19 +1421,25 @@ function crearLineaTemporalSvg(canvas){
 function crearConexionSvg(canvas){
   const NS = "http://www.w3.org/2000/svg";
   const svg = document.createElementNS(NS, "svg");
-  svg.setAttribute("class", "flow-connection-svg linea");
+  svg.setAttribute(
+    "class",
+    "flow-connection-svg flow-edge linea"
+  );
   svg.setAttribute("aria-hidden", "true");
 
   const hitbox = document.createElementNS(NS, "path");
-  hitbox.setAttribute("class", "flow-connection-hitbox");
+  hitbox.setAttribute("class", "flow-connection-hitbox flow-edge-hitbox");
   hitbox.setAttribute("fill", "none");
 
   const glow = document.createElementNS(NS, "path");
-  glow.setAttribute("class", "flow-connection-glow");
+  glow.setAttribute("class", "flow-connection-glow flow-edge-glow");
   glow.setAttribute("fill", "none");
 
   const path = document.createElementNS(NS, "path");
-  path.setAttribute("class", "flow-connection-path");
+  path.setAttribute(
+    "class",
+    "flow-connection-path flow-edge flow-edge-animated"
+  );
   path.setAttribute("fill", "none");
 
   const packet = document.createElementNS(NS, "circle");
@@ -1405,7 +1587,9 @@ function conectarNodos(nodo1, nodo2, sourceHandle){
 
   const borrar = document.createElement("button");
   borrar.innerText = "×";
-  borrar.className = "borrar-linea";
+  borrar.className = "borrar-linea flow-edge-delete";
+  borrar.setAttribute("type", "button");
+  borrar.setAttribute("aria-label", "Eliminar conexión");
 
   borrar.onclick = function(e){
     e.stopPropagation();
@@ -1456,9 +1640,9 @@ function actualizarLineas(){
     return true;
   });
 
-  const obstacles = getFlowNodeObstacles(canvas);
-
   assignConnectionLaneMeta(conexiones);
+
+  const nodes = Array.from(canvas.querySelectorAll(".node"));
 
   conexiones.forEach(c => {
     const puertoDesde = obtenerPuertoSalida(c.desde, c.sourceHandle);
@@ -1469,28 +1653,14 @@ function actualizarLineas(){
     const inicio = getPortCanvasPoint(puertoDesde);
     const fin = getPortCanvasPoint(puertoHasta);
 
-    const route = getSmartConnectionPathFromNodes(
-      c.desde,
-      c.hasta,
-      c._laneIndex || 0,
-      c._laneTotal || 1,
-      inicio.x,
-      inicio.y,
-      fin.x,
-      fin.y,
-      {
-        sourceId: c.desde.id,
-        targetId: c.hasta.id,
-        obstacles: obstacles,
-        laneOffset: c._laneOffset,
-        laneTargetOffset: c._laneTargetOffset,
-        laneMidOffset: c._laneMidOffset,
-      }
-    );
+    const route = getProfessionalConnectionPath(c, nodes);
 
     posicionarLinea(c.linea, inicio.x, inicio.y, fin.x, fin.y, route);
 
-    aplicarEstiloConexion(c.linea, getConnectionVisualType(c.desde, c.hasta));
+    aplicarEstiloConexion(
+      c.linea,
+      getConnectionVisualType(c.desde, c.hasta, c)
+    );
     wireConnectionHover(c);
 
     if(c.borrar){
