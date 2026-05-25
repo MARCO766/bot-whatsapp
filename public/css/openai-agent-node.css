@@ -1,10 +1,32 @@
 .menu-nodo-btn-openai-agent {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
   background: linear-gradient(135deg, rgba(30, 27, 75, 0.5), rgba(49, 46, 129, 0.45));
   border-color: rgba(34, 211, 238, 0.55);
 }
 
 .menu-nodo-btn-openai-agent:hover {
   box-shadow: 0 0 18px rgba(34, 211, 238, 0.45);
+}
+
+.menu-nodo-btn-openai-agent__icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  line-height: 0;
+}
+
+.menu-nodo-btn-openai-agent .openai-palette-icon-svg {
+  display: block;
+  width: 20px;
+  height: 20px;
+  color: #cffafe;
+  shape-rendering: geometricPrecision;
+  filter: drop-shadow(0 0 4px rgba(103, 232, 249, 0.4));
 }
 
 /* ═══════════════════════════════════════════════════════════════

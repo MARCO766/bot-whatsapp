@@ -47,7 +47,7 @@ ${builder ? '<link rel="stylesheet" href="/css/seguimiento.css"><link rel="style
     <button type="button" class="menu-nodo-btn menu-nodo-btn-contenido" onclick="agregarNodoContenido()">💬 Contenido</button>
     <button type="button" class="menu-nodo-btn menu-nodo-btn-ia" onclick="agregarNodoIA()">⚡ Agente Rápido</button>
     <button type="button" class="menu-nodo-btn menu-nodo-btn-ia-pro" onclick="agregarNodoIAPro()">🤖 Agente IA Pro</button>
-    <button type="button" class="menu-nodo-btn menu-nodo-btn-openai-agent" onclick="agregarNodoOpenAIAgent()">🤖 Agente OpenAI</button>
+    <button type="button" class="menu-nodo-btn menu-nodo-btn-openai-agent" onclick="agregarNodoOpenAIAgent()"><span class="menu-nodo-btn-openai-agent__icon" aria-hidden="true"></span> Agente OpenAI</button>
     <button type="button" class="menu-nodo-btn menu-nodo-btn-seguimiento" onclick="agregarNodo('seguimiento')">🔔 Seguimiento</button>
     <button type="button" class="menu-nodo-btn menu-nodo-btn-rm24h" onclick="agregarNodoRemarketingGlobal()">🔥 Remarketing 24h</button>
     <button type="button" class="menu-nodo-btn menu-nodo-btn-espera" onclick="agregarNodo('espera')">⏳ Espera</button>
