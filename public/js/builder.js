@@ -697,7 +697,8 @@ function limpiarSeleccionConexion(){
   if(conexionSeleccionadaLinea){
     conexionSeleccionadaLinea.classList.remove(
       "flow-connection--selected",
-      "flow-edge-selected"
+      "flow-edge-selected",
+      "flow-edge--selected"
     );
     conexionSeleccionadaLinea = null;
   }
@@ -719,7 +720,7 @@ function wireConnectionHover(c){
 
   function mostrar(){
     borrar.classList.add("borrar-linea--visible", "flow-edge-delete-visible");
-    svg.classList.add("flow-connection--hover");
+    svg.classList.add("flow-connection--hover", "flow-edge--hover");
   }
 
   function ocultar(){
@@ -731,7 +732,7 @@ function wireConnectionHover(c){
     }
     if(borrar.matches(":hover")) return;
     borrar.classList.remove("borrar-linea--visible", "flow-edge-delete-visible");
-    svg.classList.remove("flow-connection--hover");
+    svg.classList.remove("flow-connection--hover", "flow-edge--hover");
   }
 
   hitbox.addEventListener("mouseenter", mostrar);
@@ -745,7 +746,11 @@ function wireConnectionHover(c){
     e.stopPropagation();
 
     if(conexionSeleccionadaLinea && conexionSeleccionadaLinea !== svg){
-      conexionSeleccionadaLinea.classList.remove("flow-connection--selected");
+      conexionSeleccionadaLinea.classList.remove(
+        "flow-connection--selected",
+        "flow-edge-selected",
+        "flow-edge--selected"
+      );
       const prev = conexiones.find(function (x) {
         return x.linea === conexionSeleccionadaLinea;
       });
@@ -753,7 +758,7 @@ function wireConnectionHover(c){
     }
 
     conexionSeleccionadaLinea = svg;
-    svg.classList.add("flow-connection--selected", "flow-edge-selected");
+    svg.classList.add("flow-connection--selected", "flow-edge-selected", "flow-edge--selected");
     borrar.classList.add("borrar-linea--visible", "flow-edge-delete-visible");
   });
 }
@@ -1368,54 +1373,101 @@ function getSmartConnectionPathFromNodes(sourceNode, targetNode, connectionIndex
   });
 }
 
+function syncEdgePathLayers(svg, d){
+  if(!svg || !d) return;
+
+  const layers = [
+    svg._connBase,
+    svg._connMicro,
+    svg._connDash,
+    svg._connPath,
+    svg._connGlow,
+    svg._connHitbox,
+  ];
+
+  layers.forEach(function (el) {
+    if(el) el.setAttribute("d", d);
+  });
+
+  if(svg._connMotion){
+    svg._connMotion.setAttribute("path", d);
+  }
+  if(svg._connMotionGlow){
+    svg._connMotionGlow.setAttribute("path", d);
+  }
+}
+
 function aplicarPathConexion(svg, route){
   if(!svg || !route) return;
 
   const d = route.d || route;
-  const pathEl = svg._connPath || svg.querySelector(".flow-connection-path");
-  const glowEl = svg._connGlow || svg.querySelector(".flow-connection-glow");
-  const hitboxEl = svg._connHitbox || svg.querySelector(".flow-connection-hitbox");
-  const motionEl = svg._connMotion || svg.querySelector("animateMotion");
-
-  if(pathEl) pathEl.setAttribute("d", d);
-  if(glowEl) glowEl.setAttribute("d", d);
-  if(hitboxEl) hitboxEl.setAttribute("d", d);
-  if(motionEl) motionEl.setAttribute("path", d);
-
+  syncEdgePathLayers(svg, d);
   svg._routeLabelPoint = route.labelPoint || null;
+}
+
+function appendEdgePulse(svg, NS, options){
+  options = options || {};
+  const pulseGlow = document.createElementNS(NS, "circle");
+  pulseGlow.setAttribute("class", "flow-edge-pulse-glow");
+  pulseGlow.setAttribute("r", options.glowR || "5");
+
+  const pulse = document.createElementNS(NS, "circle");
+  pulse.setAttribute("class", "flow-edge-pulse flow-connection-packet");
+  pulse.setAttribute("r", options.coreR || "2.5");
+
+  const motion = document.createElementNS(NS, "animateMotion");
+  motion.setAttribute("dur", options.dur || "2.2s");
+  motion.setAttribute("repeatCount", "indefinite");
+  motion.setAttribute("path", "");
+  motion.setAttribute("rotate", "auto");
+  pulse.appendChild(motion);
+
+  const motionGlow = document.createElementNS(NS, "animateMotion");
+  motionGlow.setAttribute("dur", options.dur || "2.2s");
+  motionGlow.setAttribute("repeatCount", "indefinite");
+  motionGlow.setAttribute("path", "");
+  motionGlow.setAttribute("rotate", "auto");
+  pulseGlow.appendChild(motionGlow);
+
+  svg.appendChild(pulseGlow);
+  svg.appendChild(pulse);
+
+  return { pulseGlow: pulseGlow, pulse: pulse, motion: motion, motionGlow: motionGlow };
 }
 
 function crearLineaTemporalSvg(canvas){
   const NS = "http://www.w3.org/2000/svg";
   const svg = document.createElementNS(NS, "svg");
   svg.id = "tempConnectionSvg";
-  svg.setAttribute("class", "temp-connection-svg flow-connection-svg");
+  svg.setAttribute("class", "temp-connection-svg flow-connection-svg flow-edge");
   svg.setAttribute("aria-hidden", "true");
 
-  const glow = document.createElementNS(NS, "path");
-  glow.setAttribute("class", "temp-connection-glow flow-connection-glow");
-  glow.setAttribute("fill", "none");
+  const base = document.createElementNS(NS, "path");
+  base.setAttribute("class", "flow-edge-base temp-connection-base");
+  base.setAttribute("fill", "none");
 
-  const path = document.createElementNS(NS, "path");
-  path.id = "tempConnectionPath";
-  path.setAttribute("class", "temp-connection-path flow-connection-path");
-  path.setAttribute("fill", "none");
+  const micro = document.createElementNS(NS, "path");
+  micro.setAttribute("class", "flow-edge-halo temp-connection-glow");
+  micro.setAttribute("fill", "none");
 
-  const packet = document.createElementNS(NS, "circle");
-  packet.setAttribute("class", "temp-connection-packet flow-connection-packet");
-  packet.setAttribute("r", "4");
-  const motion = document.createElementNS(NS, "animateMotion");
-  motion.setAttribute("dur", "1.65s");
-  motion.setAttribute("repeatCount", "indefinite");
-  motion.setAttribute("path", "");
-  packet.appendChild(motion);
+  const dash = document.createElementNS(NS, "path");
+  dash.id = "tempConnectionPath";
+  dash.setAttribute("class", "flow-edge-dash temp-connection-path flow-connection-path");
+  dash.setAttribute("fill", "none");
 
-  svg.appendChild(glow);
-  svg.appendChild(path);
-  svg.appendChild(packet);
+  svg.appendChild(base);
+  svg.appendChild(micro);
+  svg.appendChild(dash);
+  const pulseParts = appendEdgePulse(svg, NS, { dur: "2s", coreR: "2.5", glowR: "4.5" });
+
   canvas.appendChild(svg);
 
-  return { svg, glow, path, motion };
+  return {
+    svg: svg,
+    glow: micro,
+    path: dash,
+    motion: pulseParts.motion,
+  };
 }
 
 function crearConexionSvg(canvas){
@@ -1427,39 +1479,38 @@ function crearConexionSvg(canvas){
   );
   svg.setAttribute("aria-hidden", "true");
 
+  const base = document.createElementNS(NS, "path");
+  base.setAttribute("class", "flow-edge-base");
+  base.setAttribute("fill", "none");
+
+  const micro = document.createElementNS(NS, "path");
+  micro.setAttribute("class", "flow-edge-halo flow-connection-glow flow-edge-glow");
+  micro.setAttribute("fill", "none");
+
+  const dash = document.createElementNS(NS, "path");
+  dash.setAttribute("class", "flow-edge-dash flow-connection-path flow-edge");
+  dash.setAttribute("fill", "none");
+
   const hitbox = document.createElementNS(NS, "path");
   hitbox.setAttribute("class", "flow-connection-hitbox flow-edge-hitbox");
   hitbox.setAttribute("fill", "none");
 
-  const glow = document.createElementNS(NS, "path");
-  glow.setAttribute("class", "flow-connection-glow flow-edge-glow");
-  glow.setAttribute("fill", "none");
-
-  const path = document.createElementNS(NS, "path");
-  path.setAttribute(
-    "class",
-    "flow-connection-path flow-edge flow-edge-animated"
-  );
-  path.setAttribute("fill", "none");
-
-  const packet = document.createElementNS(NS, "circle");
-  packet.setAttribute("class", "flow-connection-packet");
-  packet.setAttribute("r", "3.5");
-  const motion = document.createElementNS(NS, "animateMotion");
-  motion.setAttribute("dur", "2.8s");
-  motion.setAttribute("repeatCount", "indefinite");
-  motion.setAttribute("path", "");
-  packet.appendChild(motion);
-
+  svg.appendChild(base);
+  svg.appendChild(micro);
+  svg.appendChild(dash);
+  const pulseParts = appendEdgePulse(svg, NS, { dur: "2.2s" });
   svg.appendChild(hitbox);
-  svg.appendChild(glow);
-  svg.appendChild(path);
-  svg.appendChild(packet);
 
+  svg._connBase = base;
+  svg._connMicro = micro;
+  svg._connDash = dash;
+  svg._connPath = dash;
+  svg._connGlow = micro;
   svg._connHitbox = hitbox;
-  svg._connGlow = glow;
-  svg._connPath = path;
-  svg._connMotion = motion;
+  svg._connPulse = pulseParts.pulse;
+  svg._connPulseGlow = pulseParts.pulseGlow;
+  svg._connMotion = pulseParts.motion;
+  svg._connMotionGlow = pulseParts.motionGlow;
 
   canvas.appendChild(svg);
 
@@ -1471,10 +1522,15 @@ function actualizarLineaTemporalCurva(pathEl, glowEl, motionEl, x1, y1, x2, y2){
   const obstacles = getFlowNodeObstacles(canvas);
   const route = getSmartConnectionPath(x1, y1, x2, y2, { obstacles: obstacles });
   const d = route.d;
+  const svg = pathEl?.closest?.("svg");
 
-  pathEl.setAttribute("d", d);
-  if(glowEl) glowEl.setAttribute("d", d);
-  if(motionEl) motionEl.setAttribute("path", d);
+  if(svg){
+    syncEdgePathLayers(svg, d);
+  } else {
+    if(pathEl) pathEl.setAttribute("d", d);
+    if(glowEl) glowEl.setAttribute("d", d);
+    if(motionEl) motionEl.setAttribute("path", d);
+  }
 }
 
 function removerLineaTemporal(){
