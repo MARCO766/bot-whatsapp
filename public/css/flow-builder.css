@@ -1326,63 +1326,59 @@ body:has(#builderArea) {
    Remarketing Global 24h — nodo canvas watchdog global (solo UI)
    ═══════════════════════════════════════════════════════════════ */
 
-@keyframes rm24-global-glow-pulse {
-  0%,
-  100% {
-    box-shadow:
-      0 10px 28px rgba(0, 0, 0, 0.5),
-      0 0 0 1px rgba(255, 255, 255, 0.04) inset,
-      0 0 12px rgba(255, 122, 24, 0.08);
+/* Luz recorriendo el perímetro (conic-gradient + máscara de borde) */
+@keyframes rm24-border-flow {
+  from {
+    transform: rotate(0deg);
   }
-  50% {
-    box-shadow:
-      0 12px 32px rgba(0, 0, 0, 0.55),
-      0 0 0 1px rgba(255, 255, 255, 0.05) inset,
-      0 0 20px rgba(255, 122, 24, 0.16);
+  to {
+    transform: rotate(360deg);
   }
 }
 
-@keyframes rm24-global-glow-pulse-active {
+@keyframes rm24-border-glow-breathe {
   0%,
   100% {
-    box-shadow:
-      0 12px 34px rgba(0, 0, 0, 0.55),
-      0 0 0 1px rgba(57, 255, 20, 0.12) inset,
-      0 0 14px rgba(255, 122, 24, 0.2),
-      0 0 22px rgba(57, 255, 20, 0.1);
+    opacity: 0.55;
   }
   50% {
-    box-shadow:
-      0 14px 38px rgba(0, 0, 0, 0.58),
-      0 0 0 1px rgba(57, 255, 20, 0.18) inset,
-      0 0 24px rgba(255, 122, 24, 0.28),
-      0 0 30px rgba(57, 255, 20, 0.14);
+    opacity: 0.85;
   }
 }
 
 @keyframes rm24-global-halo-breathe {
   0%,
   100% {
-    opacity: 0.28;
+    opacity: 0.22;
     transform: scale(1);
   }
   50% {
-    opacity: 0.42;
-    transform: scale(1.015);
+    opacity: 0.34;
+    transform: scale(1.012);
   }
 }
 
-@keyframes rm24-global-orbit-drift {
-  0% {
-    transform: rotate(0deg);
-    opacity: 0.22;
+@keyframes rm24-global-status-dot {
+  0%,
+  100% {
+    opacity: 1;
   }
   50% {
-    opacity: 0.34;
+    opacity: 0.65;
   }
+}
+
+@keyframes rm24-global-status-glow {
+  0%,
   100% {
-    transform: rotate(360deg);
-    opacity: 0.22;
+    box-shadow:
+      0 0 10px rgba(57, 255, 20, 0.22),
+      0 0 18px rgba(57, 255, 20, 0.08);
+  }
+  50% {
+    box-shadow:
+      0 0 14px rgba(57, 255, 20, 0.38),
+      0 0 24px rgba(57, 255, 20, 0.14);
   }
 }
 
@@ -1393,80 +1389,190 @@ body:has(#builderArea) {
   --rm24-orange: #ff7a18;
   --rm24-fire: #ff4500;
   --rm24-neon: #39ff14;
-  --rm24-glass-bg: rgba(15, 23, 42, 0.92);
-  --rm24-border-idle: rgba(255, 122, 24, 0.22);
-  --rm24-border-active: rgba(255, 122, 24, 0.75);
-  --rm24-glow: rgba(255, 122, 24, 0.18);
+  --rm24-glass-bg: rgba(12, 18, 32, 0.94);
+  --rm24-border-base: rgba(180, 83, 9, 0.55);
+  --rm24-border-idle: rgba(154, 52, 18, 0.42);
+  --rm24-border-active: rgba(255, 122, 24, 0.82);
+  --rm24-glow: rgba(255, 122, 24, 0.2);
   --rm24-border: rgba(255, 255, 255, 0.08);
   position: relative;
   isolation: isolate;
   min-width: 210px;
   max-width: 236px;
   padding-top: 0;
-  border: 1px solid var(--rm24-border-idle) !important;
+  border: 1px solid var(--rm24-border-base) !important;
   border-radius: 12px !important;
   background:
     linear-gradient(
       155deg,
-      rgba(255, 122, 24, 0.07) 0%,
-      var(--rm24-glass-bg) 38%,
-      rgba(15, 23, 42, 0.96) 100%
+      rgba(255, 122, 24, 0.06) 0%,
+      var(--rm24-glass-bg) 36%,
+      rgba(10, 15, 28, 0.97) 100%
     ) !important;
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
-  animation: rm24-global-glow-pulse 2.5s ease-in-out infinite;
+  box-shadow:
+    0 10px 28px rgba(0, 0, 0, 0.52),
+    0 0 0 1px rgba(255, 255, 255, 0.04) inset,
+    0 0 16px rgba(255, 69, 0, 0.1),
+    0 0 28px rgba(255, 122, 24, 0.06);
   overflow: visible;
+}
+
+/* Contenido por encima del borde animado; clicks en editar/eliminar intactos */
+#builderArea .node.rm24-global-node > *:not(.port) {
+  position: relative;
+  z-index: 2;
 }
 
 #builderArea .node.rm24-global-node-active {
   border-color: var(--rm24-border-active) !important;
-  animation: rm24-global-glow-pulse-active 2.5s ease-in-out infinite;
+  box-shadow:
+    0 12px 34px rgba(0, 0, 0, 0.56),
+    0 0 0 1px rgba(57, 255, 20, 0.1) inset,
+    0 0 20px rgba(255, 122, 24, 0.18),
+    0 0 32px rgba(57, 255, 20, 0.08);
 }
 
+/* .rm24-global-border-flow — segmento de energía en el contorno */
 #builderArea .node.remarketing-global-node::before,
 #builderArea .node.node-remarketing-global::before,
 #builderArea .node.rm24-node::before,
-#builderArea .node.rm24-global-node::before {
-  display: none;
+#builderArea .node.rm24-global-node::before,
+#builderArea .node.rm24-global-node.rm24-global-border-flow::before {
+  content: "";
+  display: block;
+  position: absolute;
+  inset: -2px;
+  border-radius: 14px;
+  padding: 2px;
+  box-sizing: border-box;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg,
+    transparent 248deg,
+    rgba(255, 122, 24, 0.2) 268deg,
+    #ff7a18 286deg,
+    #ffb347 298deg,
+    rgba(57, 255, 20, 0.35) 308deg,
+    transparent 322deg,
+    transparent 360deg
+  );
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0.72;
+  animation: rm24-border-flow 5s linear infinite;
+  will-change: transform;
+}
+
+#builderArea .node.rm24-global-node-active::before {
+  opacity: 1;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg,
+    transparent 242deg,
+    rgba(255, 122, 24, 0.35) 262deg,
+    #ff7a18 280deg,
+    #ffcc80 292deg,
+    rgba(57, 255, 20, 0.55) 302deg,
+    #39ff14 310deg,
+    transparent 324deg,
+    transparent 360deg
+  );
+  animation: rm24-border-flow 3s linear infinite;
+}
+
+/* Halo exterior suave (no bloquea interacción) */
+#builderArea .node.remarketing-global-node::after,
+#builderArea .node.node-remarketing-global::after,
+#builderArea .node.rm24-node::after,
+#builderArea .node.rm24-global-node::after {
+  content: "";
+  position: absolute;
+  inset: -5px;
+  border-radius: 16px;
+  pointer-events: none;
+  z-index: 0;
+  box-shadow:
+    0 0 18px rgba(255, 122, 24, 0.14),
+    0 0 36px rgba(255, 69, 0, 0.08);
+  animation: rm24-border-glow-breathe 4s ease-in-out infinite;
+}
+
+#builderArea .node.rm24-global-node-active::after {
+  box-shadow:
+    0 0 22px rgba(255, 122, 24, 0.22),
+    0 0 40px rgba(255, 69, 0, 0.12),
+    0 0 48px rgba(57, 255, 20, 0.06);
+  animation-duration: 3s;
+}
+
+#builderArea .node.rm24-global-node:not(.rm24-global-node-active)::before {
+  opacity: 0.48;
+  animation-duration: 6s;
+  animation-timing-function: linear;
+}
+
+#builderArea .node.rm24-global-node:not(.rm24-global-node-active)::after {
+  opacity: 0.65;
+  animation-play-state: paused;
+}
+
+/* Handle: oculto solo en RM24H; el elemento sigue en DOM para anclaje interno */
+#builderArea .node.rm24-global-node .port.rm24-hidden-handle,
+#builderArea .node.remarketing-global-node > .port.in,
+#builderArea .node.node-remarketing-global > .port.in,
+#builderArea .node.rm24-global-node > .port.in,
+#builderArea .node.rm24-node.rm24-global-node > .port.in {
+  opacity: 0 !important;
+  visibility: hidden !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  filter: none !important;
+  pointer-events: none !important;
+}
+
+#builderArea .node.rm24-global-node .port.rm24-hidden-handle:hover,
+#builderArea .node.rm24-global-node > .port.in:hover {
+  transform: translateY(-50%) scale(1) !important;
+  animation: none !important;
 }
 
 #builderArea .rm24-global-halo {
   position: absolute;
-  inset: -7px;
+  inset: -8px;
   border-radius: 16px;
   pointer-events: none;
-  z-index: -2;
+  z-index: -1;
   background: radial-gradient(
-    ellipse 85% 70% at 50% 40%,
-    rgba(255, 122, 24, 0.14) 0%,
-    rgba(255, 69, 0, 0.05) 42%,
-    transparent 72%
+    ellipse 88% 72% at 50% 42%,
+    rgba(255, 122, 24, 0.1) 0%,
+    rgba(255, 69, 0, 0.04) 44%,
+    transparent 74%
   );
-  animation: rm24-global-halo-breathe 2.5s ease-in-out infinite;
+  animation: rm24-global-halo-breathe 4s ease-in-out infinite;
 }
 
 #builderArea .node.rm24-global-node-active .rm24-global-halo {
   background: radial-gradient(
-    ellipse 90% 75% at 50% 38%,
-    rgba(255, 122, 24, 0.2) 0%,
-    rgba(57, 255, 20, 0.06) 38%,
-    transparent 74%
+    ellipse 92% 78% at 50% 40%,
+    rgba(255, 122, 24, 0.16) 0%,
+    rgba(57, 255, 20, 0.05) 40%,
+    transparent 76%
   );
 }
 
 #builderArea .rm24-global-orbit {
-  position: absolute;
-  inset: -9px;
-  border-radius: 15px;
-  pointer-events: none;
-  z-index: -1;
-  border: 1px solid rgba(255, 122, 24, 0.14);
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.02) inset;
-  animation: rm24-global-orbit-drift 24s linear infinite;
-}
-
-#builderArea .node.rm24-global-node-active .rm24-global-orbit {
-  border-color: rgba(255, 122, 24, 0.26);
+  display: none;
 }
 
 #builderArea .rm24-global-badges {
@@ -1531,11 +1637,6 @@ body:has(#builderArea) {
   color: #94a3b8;
 }
 
-#builderArea .rm24-node .port.in {
-  background: var(--rm24-fire) !important;
-  border-color: rgba(255, 255, 255, 0.35) !important;
-  box-shadow: 0 0 6px rgba(255, 122, 24, 0.4) !important;
-}
 
 #builderArea .rm24-node-header,
 #builderArea .rm24h-header {
@@ -1693,6 +1794,10 @@ body:has(#builderArea) {
   box-shadow: 0 0 10px rgba(57, 255, 20, 0.2);
 }
 
+#builderArea .node.rm24-global-node-active .rm24-global-status {
+  animation: rm24-global-status-glow 2.5s ease-in-out infinite;
+}
+
 #builderArea .rm24-status::before,
 #builderArea .rm24-global-status::before {
   content: "";
@@ -1702,16 +1807,6 @@ body:has(#builderArea) {
   background: #052e12;
   box-shadow: 0 0 6px rgba(57, 255, 20, 0.45);
   animation: rm24-global-status-dot 2.5s ease-in-out infinite;
-}
-
-@keyframes rm24-global-status-dot {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.65;
-  }
 }
 
 #builderArea .rm24-summary {
@@ -1770,11 +1865,14 @@ body:has(#builderArea) {
 #builderArea .node.rm24-global-node.selected {
   outline: 1px solid rgba(255, 122, 24, 0.55) !important;
   outline-offset: 3px;
-  animation: none;
   box-shadow:
     0 12px 32px rgba(0, 0, 0, 0.55),
     0 0 22px var(--rm24-glow),
     0 0 0 1px rgba(255, 255, 255, 0.06) inset !important;
+}
+
+#builderArea .node.rm24-global-node.selected::before {
+  opacity: 1;
 }
 
 #builderArea .node.rm24-global-node-active.selected {
