@@ -1326,13 +1326,31 @@ body:has(#builderArea) {
    Remarketing Global 24h — nodo canvas watchdog global (solo UI)
    ═══════════════════════════════════════════════════════════════ */
 
-/* Luz recorriendo el perímetro (conic-gradient + máscara de borde) */
-@keyframes rm24-border-flow {
+/* Chispa premium recorriendo el perímetro (offset-path) */
+@keyframes rm24SparkTravel {
   from {
-    transform: rotate(0deg);
+    offset-distance: 0%;
+    -webkit-offset-distance: 0%;
   }
   to {
-    transform: rotate(360deg);
+    offset-distance: 100%;
+    -webkit-offset-distance: 100%;
+  }
+}
+
+@keyframes rm24SparkFlicker {
+  0%,
+  100% {
+    opacity: 0.86;
+    filter: brightness(0.96) blur(0.35px);
+  }
+  35% {
+    opacity: 1;
+    filter: brightness(1.14) blur(0.45px);
+  }
+  70% {
+    opacity: 0.92;
+    filter: brightness(1.04) blur(0.4px);
   }
 }
 
@@ -1434,60 +1452,79 @@ body:has(#builderArea) {
     0 0 32px rgba(57, 255, 20, 0.08);
 }
 
-/* .rm24-global-border-flow — segmento de energía en el contorno */
+/* .rm24-spark-flow — mini partícula sobre el borde naranja */
 #builderArea .node.remarketing-global-node::before,
 #builderArea .node.node-remarketing-global::before,
 #builderArea .node.rm24-node::before,
 #builderArea .node.rm24-global-node::before,
-#builderArea .node.rm24-global-node.rm24-global-border-flow::before {
+#builderArea .node.rm24-global-node.rm24-spark-flow::before {
   content: "";
   display: block;
   position: absolute;
-  inset: -2px;
-  border-radius: 14px;
-  padding: 2px;
-  box-sizing: border-box;
-  background: conic-gradient(
-    from 0deg,
-    transparent 0deg,
-    transparent 248deg,
-    rgba(255, 122, 24, 0.2) 268deg,
-    #ff7a18 286deg,
-    #ffb347 298deg,
-    rgba(57, 255, 20, 0.35) 308deg,
-    transparent 322deg,
-    transparent 360deg
+  top: 0;
+  left: 0;
+  width: 7px;
+  height: 4px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: radial-gradient(
+    ellipse 90% 80% at 72% 50%,
+    #fff7cc 0%,
+    #ffb347 42%,
+    rgba(255, 122, 24, 0.35) 72%,
+    transparent 100%
   );
-  -webkit-mask:
-    linear-gradient(#fff 0 0) content-box,
-    linear-gradient(#fff 0 0);
-  -webkit-mask-composite: xor;
-  mask:
-    linear-gradient(#fff 0 0) content-box,
-    linear-gradient(#fff 0 0);
-  mask-composite: exclude;
+  box-shadow:
+    0 0 3px 1px rgba(255, 247, 204, 0.95),
+    0 0 8px 2px rgba(255, 179, 71, 0.7),
+    0 0 16px 4px rgba(255, 122, 24, 0.45),
+    0 0 26px 7px rgba(255, 122, 24, 0.18),
+    -5px 0 10px rgba(255, 122, 24, 0.22);
+  -webkit-offset-path: inset(0 round 12px);
+  offset-path: inset(0 round 12px);
+  -webkit-offset-distance: 0%;
+  offset-distance: 0%;
+  -webkit-offset-anchor: center;
+  offset-anchor: center;
+  -webkit-offset-rotate: auto;
+  offset-rotate: auto;
   pointer-events: none;
   z-index: 1;
-  opacity: 0.72;
-  animation: rm24-border-flow 5s linear infinite;
-  will-change: transform;
+  opacity: 0.82;
+  will-change: offset-distance, opacity;
+  animation:
+    rm24SparkTravel 3.6s linear infinite,
+    rm24SparkFlicker 0.52s ease-in-out infinite;
 }
 
 #builderArea .node.rm24-global-node-active::before {
   opacity: 1;
-  background: conic-gradient(
-    from 0deg,
-    transparent 0deg,
-    transparent 242deg,
-    rgba(255, 122, 24, 0.35) 262deg,
-    #ff7a18 280deg,
-    #ffcc80 292deg,
-    rgba(57, 255, 20, 0.55) 302deg,
-    #39ff14 310deg,
-    transparent 324deg,
-    transparent 360deg
-  );
-  animation: rm24-border-flow 3s linear infinite;
+  width: 8px;
+  height: 4px;
+  box-shadow:
+    0 0 4px 1px rgba(255, 247, 204, 1),
+    0 0 10px 3px rgba(255, 179, 71, 0.82),
+    0 0 18px 5px rgba(255, 122, 24, 0.55),
+    0 0 30px 8px rgba(255, 122, 24, 0.22),
+    0 0 40px 10px rgba(57, 255, 20, 0.06),
+    -6px 0 12px rgba(255, 122, 24, 0.28);
+  animation:
+    rm24SparkTravel 2.8s linear infinite,
+    rm24SparkFlicker 0.45s ease-in-out infinite;
+}
+
+@supports not (offset-path: inset(0 round 12px)) {
+  #builderArea .node.rm24-global-node::before {
+    inset: -1px auto auto 50%;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    transform: translateX(-50%);
+    background: radial-gradient(circle, #fff7cc 0%, #ffb347 45%, transparent 75%);
+    animation: rm24SparkFlicker 0.52s ease-in-out infinite;
+  }
 }
 
 /* Halo exterior suave (no bloquea interacción) */
@@ -1516,9 +1553,10 @@ body:has(#builderArea) {
 }
 
 #builderArea .node.rm24-global-node:not(.rm24-global-node-active)::before {
-  opacity: 0.48;
-  animation-duration: 6s;
-  animation-timing-function: linear;
+  opacity: 0.58;
+  animation:
+    rm24SparkTravel 4s linear infinite,
+    rm24SparkFlicker 0.65s ease-in-out infinite;
 }
 
 #builderArea .node.rm24-global-node:not(.rm24-global-node-active)::after {
