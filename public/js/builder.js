@@ -269,6 +269,28 @@ function cargarFlujoGuardado(){
     }
   });
 
+  if(flujoCargado.nodos && window.MacBotLectorPago){
+    flujoCargado.nodos.forEach((item) => {
+      if(item.tipo !== "lector_pago" && item.type !== "lector_pago") return;
+      const nodo = mapaNodos[item.id];
+      if(!nodo) return;
+      if(item.data){
+        window.MacBotLectorPago.applyDataToNodo(nodo, item.data);
+      }
+      window.MacBotLectorPago.refrescarNodoCargado(nodo);
+    });
+  }
+
+  document.querySelectorAll(".lector-pago-node").forEach((nodo) => {
+    try {
+      if(window.MacBotLectorPago){
+        window.MacBotLectorPago.refrescarNodoCargado(nodo);
+      }
+    } catch (e) {
+      console.warn("Lector Pago: error al refrescar nodo cargado", e);
+    }
+  });
+
   if(flujoCargado.conexiones){
     flujoCargado.conexiones.forEach(c => {
       const desdeId = c.desde || c.from || c.source || c.source_node_id;
@@ -319,6 +341,12 @@ function agregarNodo(tipo){
   if(tipo === "ia" && window.MacBotIA && window.MacBotIA.crearNodoEnCanvas){
     registrarHistorialBuilder();
     window.MacBotIA.crearNodoEnCanvas();
+    return;
+  }
+
+  if(tipo === "lector_pago" && window.MacBotLectorPago && window.MacBotLectorPago.crearNodoEnCanvas){
+    registrarHistorialBuilder();
+    window.MacBotLectorPago.crearNodoEnCanvas();
     return;
   }
 
@@ -1869,14 +1897,27 @@ async function guardarFlujo(){
       }
     });
 
-    nodos.push({
+    const tipoNodo = nodo.dataset.tipo || "";
+    const payload = {
       id: nodo.id,
       html: nodo.innerHTML,
       left: nodo.style.left,
       top: nodo.style.top,
       className: nodo.className,
-      tipo: nodo.dataset.tipo || ""
-    });
+      tipo: tipoNodo,
+    };
+
+    if(
+      tipoNodo === "lector_pago" &&
+      window.MacBotLectorPago &&
+      window.MacBotLectorPago.getPersistPayload
+    ){
+      const extra = window.MacBotLectorPago.getPersistPayload(nodo);
+      payload.type = extra.type;
+      payload.data = extra.data;
+    }
+
+    nodos.push(payload);
   });
 
   if(nodos.length === 0){
@@ -2526,6 +2567,10 @@ function abrirPanelNodo(nodo){
     if(window.MacBotRemarketingGlobal && window.MacBotRemarketingGlobal.clearPanelActivo){
       window.MacBotRemarketingGlobal.clearPanelActivo();
     }
+
+    if(window.MacBotLectorPago && window.MacBotLectorPago.clearPanelActivo){
+      window.MacBotLectorPago.clearPanelActivo();
+    }
   }
 
   nodoSeleccionadoPanel = nodo;
@@ -2572,6 +2617,11 @@ function abrirPanelNodo(nodo){
 
   if(nodo.dataset.tipo === "conversion" || nodo.classList.contains("conversion-node")){
     renderPanelConversion(nodo);
+    return;
+  }
+
+  if(window.MacBotLectorPago && window.MacBotLectorPago.esNodoLectorPago(nodo)){
+    window.MacBotLectorPago.renderPanel(nodo);
     return;
   }
 
@@ -2700,6 +2750,11 @@ function guardarPanelNodo(){
     return;
   }
 
+  if(window.MacBotLectorPago && window.MacBotLectorPago.esNodoLectorPago(nodoSeleccionadoPanel)){
+    window.MacBotLectorPago.guardarPanelLectorPago();
+    return;
+  }
+
   const nuevoTitulo = document.getElementById("panelTituloNodo")?.value.trim();
 
   const h3 = nodoSeleccionadoPanel.querySelector("h3");
@@ -2745,6 +2800,10 @@ function cerrarPanelNodo(){
     window.MacBotRemarketingGlobal.clearPanelActivo();
   }
 
+  if(window.MacBotLectorPago && window.MacBotLectorPago.clearPanelActivo){
+    window.MacBotLectorPago.clearPanelActivo();
+  }
+
   configPanelOpen = false;
   nodoSeleccionadoPanel = null;
 
@@ -2785,6 +2844,10 @@ function sincronizarPanelAntesDeSnapshot(){
   }
   if(window.MacBotRemarketingGlobal && window.MacBotRemarketingGlobal.flushPanelToNode){
     window.MacBotRemarketingGlobal.flushPanelToNode();
+  }
+
+  if(window.MacBotLectorPago && window.MacBotLectorPago.flushPanelToNode){
+    window.MacBotLectorPago.flushPanelToNode();
   }
 }
 
