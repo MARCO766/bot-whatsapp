@@ -25,6 +25,10 @@ const {
   esComandoResetFlujo,
   resetearFlujoLead,
 } = require("./resetFlujoLeadService");
+const {
+  iniciarEsperaLectorPago,
+  procesarImagenLectorPago,
+} = require("./lectorPagoService");
 const { esTipoIA, resolverTipoRaw } = require("./seguimiento/detectarTipoNodo");
 const { obtenerConfigRemarketingGlobal } = require("./remarketing24h/parseRemarketingGlobalNode");
 const {
@@ -512,6 +516,7 @@ async function ejecutarFlujo(
 
     const html = nodo.html || "";
     const tipoNodo = detectarTipoNodo(nodo);
+    const tipoRaw = resolverTipoRaw(nodo);
 
     console.log("🧩 Tipo nodo detectado:", tipoNodo);
 
@@ -530,6 +535,30 @@ async function ejecutarFlujo(
 
     if (tipoNodo === "inicio") {
       await continuarASiguientes(nodoId, visitados, "inicio");
+      return;
+    }
+
+    if (tipoNodo === "lector_pago" || tipoRaw === "lector_pago") {
+      try {
+        await iniciarEsperaLectorPago({
+          usuarioId,
+          clienteNumero: numero,
+          flujoId,
+          nodoId,
+          nodo,
+        });
+        console.log("[LECTOR_PAGO] estado en espera activado:", {
+          usuarioId,
+          numero,
+          flujoId,
+          nodoId,
+        });
+      } catch (err) {
+        console.log(
+          "[LECTOR_PAGO] error iniciando estado:",
+          err.response?.data || err.message
+        );
+      }
       return;
     }
 
@@ -1053,7 +1082,13 @@ function mensajeEntranteYaProcesado(messageId) {
   return false;
 }
 
-async function procesarMensajeEntrante(numero, texto, usuarioId, messageId) {
+async function procesarMensajeEntrante(
+  numero,
+  texto,
+  usuarioId,
+  messageId,
+  opts = {}
+) {
   console.log("[FLOW SERVICE ENTRANTE]", {
     numero,
     usuarioId,
@@ -1075,6 +1110,21 @@ async function procesarMensajeEntrante(numero, texto, usuarioId, messageId) {
   if (esComandoResetFlujo(texto)) {
     await resetearFlujoLead(numero, usuarioId);
     return true;
+  }
+
+  if (opts?.messageType === "image") {
+    const lecturaPago = await procesarImagenLectorPago({
+      usuarioId,
+      clienteNumero: numero,
+      imageMetaId: opts.imageMetaId || null,
+      metaToken: opts.metaToken || null,
+      imagePublicUrl: opts.imageUrl || null,
+    });
+
+    if (lecturaPago?.handled) {
+      await enviarTextoWhatsApp(numero, lecturaPago.mensaje, { usuarioId });
+      return true;
+    }
   }
 
   const reanudado = await reanudarFlujoIAPendiente(numero, texto, usuarioId);
