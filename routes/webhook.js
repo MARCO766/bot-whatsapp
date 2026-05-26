@@ -15,6 +15,7 @@ const {
 const {
   registrarRespuestaBotonSeguimiento,
 } = require("../services/seguimiento/registrarRespuestaBoton");
+const { procesarImagenLectorPago } = require("../services/lectorPagoService");
 const rt = require("../services/realtimeService");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -527,6 +528,24 @@ const textoParaActivador =
 if (esComandoResetFlujo(textoParaActivador)) {
   await resetearFlujoLead(from, usuarioIdWebhook);
   return res.sendStatus(200);
+}
+
+if (message.type === "image" && mediaUrlFinal && usuarioIdWebhook) {
+  const procesadoLectorPago = await procesarImagenLectorPago({
+    usuarioId: usuarioIdWebhook,
+    clienteNumero: from,
+    imagenUrl: mediaUrlFinal,
+  });
+  if (procesadoLectorPago) {
+    try {
+      await cancelarSeguimientosPorRespuesta(from, usuarioIdWebhook, req, {
+        mensajeAt: creadoEn,
+      });
+    } catch (cancelErr) {
+      console.log("[WEBHOOK] cancelar seguimientos:", cancelErr.message);
+    }
+    return res.sendStatus(200);
+  }
 }
 
 await enviarEventoMeta(usuarioIdWebhook, "Lead", from);

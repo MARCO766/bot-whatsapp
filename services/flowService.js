@@ -32,6 +32,10 @@ const {
   resetearRemarketing24h,
   cancelarRemarketing24h,
 } = require("./remarketing24h/remarketing24hService");
+const {
+  esNodoLectorPago,
+  ejecutarNodoLectorPago,
+} = require("./lectorPagoService");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
@@ -603,6 +607,17 @@ async function ejecutarFlujo(
       }
 
       await continuarASiguientes(nodoId, visitados, "seguimiento");
+      return;
+    }
+
+    if (esNodoLectorPago(nodo)) {
+      await ejecutarNodoLectorPago({
+        numero,
+        usuarioId,
+        flujoId,
+        nodoId,
+        nodo,
+      });
       return;
     }
 
