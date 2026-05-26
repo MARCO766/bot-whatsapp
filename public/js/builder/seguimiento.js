@@ -19,6 +19,7 @@ window.MacBotSeguimiento = (function () {
   let nodoActivo = null;
   let configActiva = crearConfigVacia();
   let pasoActivoIndex = 0;
+  const uiBloqueActivoPorPaso = {};
 
   function esc(str) {
     return String(str || "")
@@ -67,13 +68,13 @@ window.MacBotSeguimiento = (function () {
 
   function iconoTipo(tipo) {
     const map = {
-      texto: "💬",
+      texto: "📝",
       imagen: "🖼️",
-      audio: "🎧",
-      pdf: "📄",
+      audio: "🎵",
+      pdf: "📁",
       video: "🎬",
     };
-    return map[tipo] || "💬";
+    return map[tipo] || "📝";
   }
 
   function normalizarBotones(botones, pasoId) {
@@ -345,7 +346,9 @@ window.MacBotSeguimiento = (function () {
     paso.delay.unidad = document.getElementById("segDelayUnidad")?.value || "minutos";
     paso.segundos = delayToSeconds(paso.delay.valor, paso.delay.unidad);
     paso.mensaje.tipo =
-      document.querySelector(".seg-tipo-tab.active")?.dataset.tipo || "texto";
+      document.querySelector(".seg-block-card.seg-block-card-active[data-tipo]")?.dataset.tipo ||
+      document.querySelector(".seg-tipo-tab.active")?.dataset.tipo ||
+      "texto";
     paso.mensaje.texto = document.getElementById("segTexto")?.value.trim() || "";
     paso.mensaje.caption = document.getElementById("segCaption")?.value.trim() || "";
 
@@ -503,19 +506,36 @@ window.MacBotSeguimiento = (function () {
       );
     }).join("");
 
-    const tabsTipo = TIPOS.map(function (t) {
-      return (
-        '<button type="button" class="seg-tipo-tab' +
-        (paso.mensaje.tipo === t ? " active" : "") +
-        '" data-tipo="' +
-        t +
-        '">' +
-        iconoTipo(t) +
-        " " +
-        t +
-        "</button>"
-      );
-    }).join("");
+    const tarjetasTipo = [
+      { tipo: "texto", icon: "📝", label: "TEXTO" },
+      { tipo: "imagen", icon: "🖼️", label: "IMAGEN" },
+      { tipo: "video", icon: "🎬", label: "VIDEO" },
+      { tipo: "pdf", icon: "📁", label: "ARCHIVO" },
+      { tipo: "audio", icon: "🎵", label: "AUDIO" },
+      { tipo: "retraso", icon: "⏱️", label: "RETRASO" },
+    ];
+    const bloqueUiActivo = uiBloqueActivoPorPaso[paso.id] || paso.mensaje.tipo;
+    const pickerTipo = tarjetasTipo
+      .map(function (item) {
+        const esTipoMensaje = item.tipo !== "retraso";
+        const activo = bloqueUiActivo === item.tipo || (item.tipo === paso.mensaje.tipo && esTipoMensaje);
+        return (
+          '<button type="button" class="seg-block-card seg-tipo-tab' +
+          (activo ? " seg-block-card-active active" : "") +
+          '"' +
+          (esTipoMensaje ? ' data-tipo="' + item.tipo + '"' : ' data-action="delay"') +
+          ' aria-label="' +
+          item.label +
+          '">' +
+          '<span class="seg-block-icon" aria-hidden="true">' +
+          item.icon +
+          "</span>" +
+          '<span class="seg-block-label">' +
+          item.label +
+          "</span></button>"
+        );
+      })
+      .join("");
 
     wrap.innerHTML =
       '<div class="seg-visual-timer"><strong>⏱ Temporizador acumulado</strong>' +
@@ -529,8 +549,8 @@ window.MacBotSeguimiento = (function () {
       '<div class="seg-field"><label>Unidad</label><select id="segDelayUnidad">' +
       opcionesUnidad +
       "</select></div></div>" +
-      '<div class="seg-field"><label>Tipo de mensaje</label><div class="seg-tipo-tabs">' +
-      tabsTipo +
+      '<div class="seg-type-panel seg-field"><label>Tipo de mensaje</label><div class="seg-block-picker seg-tipo-tabs">' +
+      pickerTipo +
       '</div></div></div><div id="segCamposMensaje"></div>';
 
     renderCamposMensaje(paso);
@@ -550,9 +570,10 @@ window.MacBotSeguimiento = (function () {
     document.getElementById("segDelayValor")?.addEventListener("input", onFormChange);
     document.getElementById("segDelayUnidad")?.addEventListener("change", onFormChange);
 
-    wrap.querySelectorAll(".seg-tipo-tab").forEach(function (btn) {
+    wrap.querySelectorAll(".seg-block-card[data-tipo]").forEach(function (btn) {
       btn.addEventListener("click", function () {
         syncPasoDesdeFormulario();
+        uiBloqueActivoPorPaso[paso.id] = btn.dataset.tipo;
         paso.mensaje.tipo = btn.dataset.tipo;
         paso.mensaje.texto = "";
         paso.mensaje.url = "";
@@ -561,6 +582,12 @@ window.MacBotSeguimiento = (function () {
         renderFormularioPaso();
         renderListaPasos();
       });
+    });
+
+    wrap.querySelector('.seg-block-card[data-action="delay"]')?.addEventListener("click", function () {
+      uiBloqueActivoPorPaso[paso.id] = "retraso";
+      renderFormularioPaso();
+      document.getElementById("segDelayValor")?.focus();
     });
   }
 
@@ -652,6 +679,9 @@ window.MacBotSeguimiento = (function () {
     nodoActivo = null;
     configActiva = crearConfigVacia();
     pasoActivoIndex = 0;
+    Object.keys(uiBloqueActivoPorPaso).forEach(function (k) {
+      delete uiBloqueActivoPorPaso[k];
+    });
   }
 
   function getNodoActivo() {

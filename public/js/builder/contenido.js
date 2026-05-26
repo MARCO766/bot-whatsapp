@@ -60,6 +60,39 @@ window.MacBotContenido = (function () {
     return ETIQUETAS[tipo] || "Bloque";
   }
 
+  function htmlAgregarBloquePicker() {
+    const cards = [
+      { tipo: "texto", icon: "📝", label: "TEXTO" },
+      { tipo: "tiempo", icon: "⏳", label: "PAUSA" },
+      { tipo: "imagen", icon: "🖼️", label: "IMAGEN" },
+      { tipo: "audio", icon: "🎵", label: "AUDIO" },
+      { tipo: "video", icon: "🎬", label: "VIDEO" },
+      { tipo: "doc", icon: "📁", label: "ARCHIVO" },
+    ];
+
+    return (
+      '<div class="content-block-picker content-block-grid cnt-quick-add" role="group" aria-label="Agregar bloque">' +
+      cards
+        .map(function (c) {
+          return (
+            '<button type="button" class="content-block-card cnt-quick-btn" data-tipo="' +
+            c.tipo +
+            '" aria-label="' +
+            c.label +
+            '">' +
+            '<span class="content-block-icon" aria-hidden="true">' +
+            c.icon +
+            "</span>" +
+            '<span class="content-block-label">' +
+            c.label +
+            "</span></button>"
+          );
+        })
+        .join("") +
+      "</div>"
+    );
+  }
+
   function parseJsonTextarea(raw) {
     const texto = String(raw || "[]")
       .replace(/&quot;/g, '"')
@@ -548,8 +581,10 @@ window.MacBotContenido = (function () {
       if (el) el.style.display = k === tipo ? "block" : "none";
     });
 
-    document.querySelectorAll(".cnt-quick-btn").forEach(function (btn) {
-      btn.classList.toggle("active", btn.dataset.tipo === tipo);
+    document.querySelectorAll(".content-block-card[data-tipo]").forEach(function (btn) {
+      const activo = btn.dataset.tipo === tipo;
+      btn.classList.toggle("active", activo);
+      btn.classList.toggle("content-block-card-active", activo);
     });
   }
 
@@ -1144,14 +1179,9 @@ window.MacBotContenido = (function () {
       "</div>" +
       '<div class="cnt-panel-field"><label>Variantes</label><div id="cntVariantChips" class="cnt-variant-chips"></div>' +
       '<button type="button" class="cnt-btn cnt-btn-ghost" id="cntAddVariante" style="margin-top:6px;">+ Variante</button></div>' +
-      '<div class="cnt-panel-field"><label>Agregar bloque</label><div class="cnt-quick-add">' +
-      '<button type="button" class="cnt-quick-btn" data-tipo="texto">💬 Texto</button>' +
-      '<button type="button" class="cnt-quick-btn" data-tipo="tiempo">⏳ Pausa</button>' +
-      '<button type="button" class="cnt-quick-btn" data-tipo="imagen">🖼 Imagen</button>' +
-      '<button type="button" class="cnt-quick-btn" data-tipo="audio">🎧 Audio</button>' +
-      '<button type="button" class="cnt-quick-btn" data-tipo="video">🎬 Video</button>' +
-      '<button type="button" class="cnt-quick-btn" data-tipo="doc">📄 PDF</button>' +
-      "</div></div>" +
+      '<div class="cnt-panel-field"><label>Agregar bloque</label>' +
+      htmlAgregarBloquePicker() +
+      "</div>" +
       '<div class="cnt-panel-field" id="cntFieldTexto">' +
       "<label>Texto</label>" +
       '<textarea id="cntPanelTexto" rows="3" placeholder="Escribe el mensaje…"></textarea>' +
@@ -1205,7 +1235,7 @@ window.MacBotContenido = (function () {
       doc: "cntFieldDoc",
     };
 
-    contenido.querySelectorAll(".cnt-quick-btn").forEach(function (btn) {
+    contenido.querySelectorAll(".content-block-card[data-tipo]").forEach(function (btn) {
       btn.addEventListener("click", function () {
         if (isEditingBlock) cancelarEdicionBloque();
         mostrarCampoTipoEnPanel(btn.dataset.tipo);
@@ -1234,6 +1264,7 @@ window.MacBotContenido = (function () {
     renderVariantChips();
     renderPanelPreview();
     renderPanelBloques();
+    mostrarCampoTipoEnPanel("texto");
   }
 
   function flushPanelToNode() {

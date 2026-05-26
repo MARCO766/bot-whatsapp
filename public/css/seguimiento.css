@@ -372,26 +372,98 @@
 }
 
 .seg-tipo-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
 }
 
 .seg-tipo-tab {
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.05);
-  color: #cbd5e1;
-  border-radius: 999px;
-  padding: 6px 12px;
-  font-size: 12px;
-  font-weight: 700;
+  padding: 0;
+}
+
+.seg-block-picker {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.seg-block-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 90px;
+  padding: 14px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  background: linear-gradient(165deg, #161c2a 0%, #111827 100%);
+  color: #e5e7eb;
   cursor: pointer;
+  transition:
+    transform 0.2s ease,
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    background 0.2s ease,
+    color 0.2s ease;
+}
+
+.seg-block-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(103, 232, 249, 0.55);
+  box-shadow:
+    0 12px 22px rgba(0, 0, 0, 0.38),
+    0 0 0 1px rgba(57, 255, 20, 0.15);
+  background: linear-gradient(165deg, #1a2234 0%, #121a2a 100%);
+}
+
+.seg-block-card:active {
+  transform: translateY(0);
+}
+
+.seg-block-card-active {
+  border-color: rgba(57, 255, 20, 0.65);
+  box-shadow:
+    0 12px 24px rgba(0, 0, 0, 0.4),
+    0 0 0 1px rgba(57, 255, 20, 0.28),
+    0 0 18px rgba(103, 232, 249, 0.25);
+  background: linear-gradient(165deg, rgba(57, 255, 20, 0.14), rgba(8, 20, 31, 0.96));
+}
+
+.seg-block-icon {
+  font-size: 27px;
+  line-height: 1;
+}
+
+.seg-block-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: #9ca3af;
+}
+
+.seg-block-card:hover .seg-block-label {
+  color: #a5f3fc;
+}
+
+.seg-block-card-active .seg-block-label {
+  color: #d9f99d;
+}
+
+.seg-type-panel {
+  margin-top: 4px;
 }
 
 .seg-tipo-tab.active {
-  background: rgba(57, 255, 20, 0.18);
-  border-color: rgba(57, 255, 20, 0.5);
-  color: #39ff14;
+  border-color: rgba(57, 255, 20, 0.65);
+}
+
+@media (max-width: 420px) {
+  .seg-block-picker,
+  .seg-tipo-tabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .seg-upload-row {
