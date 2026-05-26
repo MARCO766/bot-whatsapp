@@ -1122,7 +1122,9 @@ async function procesarMensajeEntrante(
     });
 
     if (lecturaPago?.handled) {
-      await enviarTextoWhatsApp(numero, lecturaPago.mensaje, { usuarioId });
+      if (!lecturaPago.enviadoPorServicio && lecturaPago.mensaje) {
+        await enviarTextoWhatsApp(numero, lecturaPago.mensaje, { usuarioId });
+      }
       return true;
     }
   }

@@ -1,4 +1,5 @@
 const axios = require("axios");
+const { enviarTextoWhatsApp } = require("./whatsappService");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
@@ -107,6 +108,22 @@ function parseNodoConfig(nodo) {
       "Pago invalido. Verifica el comprobante e intentalo nuevamente."
   ).trim();
 
+  const productoTexto = String(
+    data.producto_texto ??
+      data.productoTexto ??
+      parsedHtmlConfig.producto_texto ??
+      parsedHtmlConfig.productoTexto ??
+      ""
+  ).trim();
+
+  const productoUrl = String(
+    data.producto_url ??
+      data.productoUrl ??
+      parsedHtmlConfig.producto_url ??
+      parsedHtmlConfig.productoUrl ??
+      ""
+  ).trim();
+
   return {
     montoEsperado,
     monedaEsperada,
@@ -114,7 +131,42 @@ function parseNodoConfig(nodo) {
     tolerancia,
     mensajeValido,
     mensajeInvalido,
+    productoTexto,
+    productoUrl,
   };
+}
+
+function tieneConfianzaSuficiente(lectura) {
+  if (!lectura) return false;
+  const monto = toNumber(lectura.monto, 0);
+  const moneda = String(lectura.moneda || "").trim();
+  if (monto <= 0 || !moneda || moneda === "null") return false;
+  return true;
+}
+
+function armarMensajeEntregaProducto(estado) {
+  const partes = [];
+  const msgValido = String(estado.mensaje_pago_valido || "").trim();
+  const productoTexto = String(estado.producto_texto || "").trim();
+  const productoUrl = String(estado.producto_url || "").trim();
+
+  if (msgValido) partes.push(msgValido);
+  if (productoTexto) partes.push(productoTexto);
+  if (productoUrl) partes.push(productoUrl);
+
+  return partes.join("\n").trim();
+}
+
+async function enviarMensajesWhatsApp(numero, mensajes, usuarioId) {
+  const lista = (Array.isArray(mensajes) ? mensajes : [mensajes])
+    .map((m) => String(m || "").trim())
+    .filter(Boolean);
+
+  for (const texto of lista) {
+    await enviarTextoWhatsApp(numero, texto, { usuarioId });
+  }
+
+  return lista.length;
 }
 
 async function iniciarEsperaLectorPago({
@@ -154,6 +206,10 @@ async function iniciarEsperaLectorPago({
     moneda_esperada: cfg.monedaEsperada,
     nombre_esperado: cfg.nombreEsperado || null,
     tolerancia: cfg.tolerancia,
+    producto_texto: cfg.productoTexto || null,
+    producto_url: cfg.productoUrl || null,
+    mensaje_pago_valido: cfg.mensajeValido || null,
+    mensaje_pago_invalido: cfg.mensajeInvalido || null,
     estado_pago: "pendiente",
     creado_en: new Date().toISOString(),
     actualizado_en: new Date().toISOString(),
@@ -187,6 +243,25 @@ async function obtenerEstadoPagoActivo({ usuarioId, clienteNumero }) {
   );
 
   return res.data?.[0] || null;
+}
+
+async function obtenerUltimoEstadoLector({ usuarioId, clienteNumero }) {
+  if (!SUPABASE_URL || !SUPABASE_KEY || !usuarioId || !clienteNumero) return null;
+
+  const res = await axios.get(
+    `${SUPABASE_URL}/rest/v1/lector_pagos_estado?usuario_id=eq.${usuarioId}&cliente_numero=eq.${encodeURIComponent(
+      clienteNumero
+    )}&order=actualizado_en.desc&limit=1`,
+    { headers: supabaseHeaders() }
+  );
+
+  return res.data?.[0] || null;
+}
+
+function productoYaEntregado(estado) {
+  if (!estado) return false;
+  if (estado.producto_entregado_at) return true;
+  return estado.estado_pago === "valido" && !!estado.pagado_en;
 }
 
 function extractJson(text) {
@@ -305,8 +380,36 @@ async function procesarImagenLectorPago({
 }) {
   if (!usuarioId || !clienteNumero) return { handled: false };
 
-  const estado = await obtenerEstadoPagoActivo({ usuarioId, clienteNumero });
-  if (!estado) return { handled: false };
+  let estado = await obtenerEstadoPagoActivo({ usuarioId, clienteNumero });
+
+  if (!estado) {
+    const ultimo = await obtenerUltimoEstadoLector({ usuarioId, clienteNumero });
+    if (productoYaEntregado(ultimo)) {
+      console.log("[LECTOR_PAGO_V1] producto ya entregado, ignorando duplicado");
+      return {
+        handled: true,
+        valido: true,
+        duplicado: true,
+        enviadoPorServicio: true,
+      };
+    }
+    return { handled: false };
+  }
+
+  if (productoYaEntregado(estado)) {
+    console.log("[LECTOR_PAGO_V1] producto ya entregado, ignorando duplicado");
+    return {
+      handled: true,
+      valido: true,
+      duplicado: true,
+      enviadoPorServicio: true,
+    };
+  }
+
+  const ahora = new Date().toISOString();
+  const msgInvalidoDefault =
+    String(estado.mensaje_pago_invalido || "").trim() ||
+    "Pago invalido. Monto, moneda o nombre no coinciden.";
 
   try {
     const media = await descargarImagenMeta(imageMetaId, metaToken);
@@ -314,54 +417,152 @@ async function procesarImagenLectorPago({
       imageDataUrl: media?.dataUrl || null,
       imagePublicUrl: imagePublicUrl || null,
     });
-    const comparacion = compararPago(estado, lectura);
-    const estadoPago = comparacion.valido ? "valido" : "invalido";
 
-    await axios.patch(
-      `${SUPABASE_URL}/rest/v1/lector_pagos_estado?id=eq.${estado.id}`,
+    const confianzaOk = tieneConfianzaSuficiente(lectura);
+    const comparacion = compararPago(estado, lectura);
+    const pagoValido = confianzaOk && comparacion.valido;
+
+    if (!pagoValido) {
+      const patchInvalido = await axios.patch(
+        `${SUPABASE_URL}/rest/v1/lector_pagos_estado?id=eq.${estado.id}&esperando_pago=eq.true`,
+        {
+          esperando_pago: false,
+          estado_pago: "invalido",
+          actualizado_en: ahora,
+        },
+        {
+          headers: supabaseHeaders({
+            "Content-Type": "application/json",
+            Prefer: "return=representation",
+          }),
+        }
+      );
+
+      if (!patchInvalido.data?.length) {
+        console.log("[LECTOR_PAGO_V1] producto ya entregado, ignorando duplicado");
+        return {
+          handled: true,
+          valido: false,
+          duplicado: true,
+          enviadoPorServicio: true,
+        };
+      }
+
+      await enviarMensajesWhatsApp(clienteNumero, msgInvalidoDefault, usuarioId);
+
+      return {
+        handled: true,
+        valido: false,
+        lectura,
+        comparacion,
+        confianzaOk,
+        mensaje: msgInvalidoDefault,
+        enviadoPorServicio: true,
+      };
+    }
+
+    console.log("[LECTOR_PAGO_V1] pago valido");
+
+    const patchValido = await axios.patch(
+      `${SUPABASE_URL}/rest/v1/lector_pagos_estado?id=eq.${estado.id}&esperando_pago=eq.true`,
       {
         esperando_pago: false,
-        estado_pago: estadoPago,
-        actualizado_en: new Date().toISOString(),
+        estado_pago: "valido",
+        pagado_en: ahora,
+        actualizado_en: ahora,
       },
       {
         headers: supabaseHeaders({
           "Content-Type": "application/json",
-          Prefer: "return=minimal",
+          Prefer: "return=representation",
         }),
       }
     );
+
+    if (!patchValido.data?.length) {
+      console.log("[LECTOR_PAGO_V1] producto ya entregado, ignorando duplicado");
+      return {
+        handled: true,
+        valido: true,
+        duplicado: true,
+        enviadoPorServicio: true,
+      };
+    }
+
+    estado = patchValido.data[0] || estado;
+
+    const mensajeEntrega = armarMensajeEntregaProducto(estado);
+    if (mensajeEntrega) {
+      console.log("[LECTOR_PAGO_V1] enviando producto");
+      await enviarMensajesWhatsApp(clienteNumero, mensajeEntrega, usuarioId);
+      console.log("[LECTOR_PAGO_V1] producto enviado");
+
+      await axios.patch(
+        `${SUPABASE_URL}/rest/v1/lector_pagos_estado?id=eq.${estado.id}`,
+        {
+          producto_entregado_at: ahora,
+          actualizado_en: ahora,
+        },
+        {
+          headers: supabaseHeaders({
+            "Content-Type": "application/json",
+            Prefer: "return=minimal",
+          }),
+        }
+      );
+    } else {
+      const msgValido =
+        String(estado.mensaje_pago_valido || "").trim() ||
+        "Pago valido. Comprobante recibido correctamente.";
+      await enviarMensajesWhatsApp(clienteNumero, msgValido, usuarioId);
+    }
 
     return {
       handled: true,
-      valido: comparacion.valido,
+      valido: true,
       lectura,
       comparacion,
-      mensaje: comparacion.valido
-        ? "Pago valido. Comprobante recibido correctamente."
-        : "Pago invalido. Monto, moneda o nombre no coinciden.",
+      mensaje: mensajeEntrega,
+      enviadoPorServicio: true,
     };
   } catch (error) {
     console.log("[LECTOR_PAGO] error validando comprobante:", error.message);
-    await axios.patch(
-      `${SUPABASE_URL}/rest/v1/lector_pagos_estado?id=eq.${estado.id}`,
+
+    const patchErr = await axios.patch(
+      `${SUPABASE_URL}/rest/v1/lector_pagos_estado?id=eq.${estado.id}&esperando_pago=eq.true`,
       {
         esperando_pago: false,
         estado_pago: "invalido",
-        actualizado_en: new Date().toISOString(),
+        actualizado_en: ahora,
       },
       {
         headers: supabaseHeaders({
           "Content-Type": "application/json",
-          Prefer: "return=minimal",
+          Prefer: "return=representation",
         }),
       }
     );
+
+    if (!patchErr.data?.length) {
+      console.log("[LECTOR_PAGO_V1] producto ya entregado, ignorando duplicado");
+      return {
+        handled: true,
+        valido: false,
+        duplicado: true,
+        enviadoPorServicio: true,
+      };
+    }
+
+    const msgError =
+      String(estado.mensaje_pago_invalido || "").trim() ||
+      "Pago invalido. No se pudo validar el comprobante.";
+    await enviarMensajesWhatsApp(clienteNumero, msgError, usuarioId);
 
     return {
       handled: true,
       valido: false,
-      mensaje: "Pago invalido. No se pudo validar el comprobante.",
+      mensaje: msgError,
+      enviadoPorServicio: true,
     };
   }
 }

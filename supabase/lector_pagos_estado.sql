@@ -52,3 +52,19 @@ comment on table public.lector_pagos_estado is
 
 comment on column public.lector_pagos_estado.estado_pago is
   'esperando | valido | invalido';
+
+-- Fase 2: entrega de producto
+alter table public.lector_pagos_estado
+  add column if not exists producto_url text;
+
+alter table public.lector_pagos_estado
+  add column if not exists producto_entregado_at timestamptz;
+
+alter table public.lector_pagos_estado
+  add column if not exists mensaje_pago_valido text;
+
+alter table public.lector_pagos_estado
+  add column if not exists mensaje_pago_invalido text;
+
+alter table public.lector_pagos_estado
+  add column if not exists pagado_en timestamptz;

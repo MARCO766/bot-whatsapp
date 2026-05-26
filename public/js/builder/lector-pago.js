@@ -10,6 +10,8 @@
     mensaje_pedir_foto: "",
     mensaje_pago_valido: "",
     mensaje_pago_invalido: "",
+    producto_texto: "",
+    producto_url: "",
   };
 
   function decodeHtmlEntities(str) {
@@ -47,6 +49,10 @@
       mensaje_pago_invalido: String(
         raw.mensaje_pago_invalido ?? raw.mensajePagoInvalido ?? ""
       ).trim(),
+      producto_texto: String(
+        raw.producto_texto ?? raw.productoTexto ?? ""
+      ).trim(),
+      producto_url: String(raw.producto_url ?? raw.productoUrl ?? "").trim(),
     };
   }
 
@@ -246,7 +252,15 @@
         <label>Mensaje pago inválido</label>
         <textarea id="panelLectorMsgInvalido" rows="3" placeholder="Ej: Pago invalido. Revisa el comprobante.">${escaparHTML(data.mensaje_pago_invalido)}</textarea>
       </div>
-      <p class="panel-hint">Valida comprobante por monto, moneda y nombre. No entrega producto en esta fase.</p>
+      <div class="panel-campo">
+        <label>Producto texto</label>
+        <textarea id="panelLectorProductoTexto" rows="2" placeholder="Ej: Aquí tienes tu producto 👇">${escaparHTML(data.producto_texto)}</textarea>
+      </div>
+      <div class="panel-campo">
+        <label>Producto URL</label>
+        <input id="panelLectorProductoUrl" type="url" value="${escaparHTML(data.producto_url)}" placeholder="https://mi-link.com/producto">
+      </div>
+      <p class="panel-hint">Si el pago es válido, envía mensaje + producto (texto y URL). Pago inválido no entrega producto.</p>
       <button type="button" class="panel-btn" onclick="window.MacBotLectorPago.guardarPanelLectorPago()">Guardar Lector Pago</button>
     `;
 
@@ -258,6 +272,8 @@
       "panelLectorMsgPedir",
       "panelLectorMsgValido",
       "panelLectorMsgInvalido",
+      "panelLectorProductoTexto",
+      "panelLectorProductoUrl",
     ].forEach((id) => {
       document.getElementById(id)?.addEventListener("input", function () {
         if (typeof macbotRecordHistoryDebounced === "function") {
@@ -282,6 +298,8 @@
       mensaje_pedir_foto: document.getElementById("panelLectorMsgPedir")?.value,
       mensaje_pago_valido: document.getElementById("panelLectorMsgValido")?.value,
       mensaje_pago_invalido: document.getElementById("panelLectorMsgInvalido")?.value,
+      producto_texto: document.getElementById("panelLectorProductoTexto")?.value,
+      producto_url: document.getElementById("panelLectorProductoUrl")?.value,
     });
 
     syncDataToNodo(panelNodoActivo, data);
