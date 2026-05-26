@@ -539,25 +539,33 @@ async function ejecutarFlujo(
     }
 
     if (tipoNodo === "lector_pago" || tipoRaw === "lector_pago") {
+      console.log("[LECTOR_PAGO_V1] entrando nodo (flowService)", {
+        nodoId,
+        numero,
+        flujoId,
+      });
       try {
-        await iniciarEsperaLectorPago({
+        const resultado = await iniciarEsperaLectorPago({
           usuarioId,
           clienteNumero: numero,
           flujoId,
           nodoId,
           nodo,
         });
-        console.log("[LECTOR_PAGO] estado en espera activado:", {
-          usuarioId,
-          numero,
-          flujoId,
-          nodoId,
-        });
+        if (!resultado?.ok) {
+          console.error(
+            "[LECTOR_PAGO_V1] insert error",
+            "iniciarEsperaLectorPago no devolvió ok"
+          );
+          return;
+        }
+        console.log("[LECTOR_PAGO_V1] nodo listo, estado id:", resultado.estado?.id);
       } catch (err) {
-        console.log(
-          "[LECTOR_PAGO] error iniciando estado:",
+        console.error(
+          "[LECTOR_PAGO_V1] insert error",
           err.response?.data || err.message
         );
+        return;
       }
       return;
     }

@@ -92,6 +92,14 @@ function parseNodoConfig(nodo) {
     0.01
   );
 
+  const mensajePedirFoto = String(
+    data.mensaje_pedir_foto ??
+      data.mensajePedirFoto ??
+      parsedHtmlConfig.mensaje_pedir_foto ??
+      parsedHtmlConfig.mensajePedirFoto ??
+      ""
+  ).trim();
+
   const mensajeValido = String(
     data.mensaje_pago_valido ??
       data.mensajePagoValido ??
@@ -129,11 +137,54 @@ function parseNodoConfig(nodo) {
     monedaEsperada,
     nombreEsperado,
     tolerancia,
+    mensajePedirFoto,
     mensajeValido,
     mensajeInvalido,
     productoTexto,
     productoUrl,
   };
+}
+
+function logInsertError(err) {
+  const detalle = err.response?.data || err.message;
+  console.error("[LECTOR_PAGO_V1] insert error", detalle);
+}
+
+function buildPayloadEstadoLector({ usuarioId, clienteNumero, flujoId, nodoId, cfg, extended }) {
+  const base = {
+    usuario_id: usuarioId,
+    cliente_numero: clienteNumero,
+    flujo_id: String(flujoId || ""),
+    nodo_id: String(nodoId || ""),
+    esperando_pago: true,
+    estado_pago: "esperando",
+    monto_esperado: cfg.montoEsperado,
+    moneda_esperada: cfg.monedaEsperada,
+    nombre_esperado: cfg.nombreEsperado || null,
+    tolerancia: cfg.tolerancia,
+  };
+
+  if (!extended) return base;
+
+  const extra = {};
+  if (cfg.productoTexto) extra.producto_texto = cfg.productoTexto;
+  if (cfg.productoUrl) extra.producto_url = cfg.productoUrl;
+
+  return { ...base, ...extra };
+}
+
+async function insertarEstadoLectorPago(payload) {
+  const res = await axios.post(
+    `${SUPABASE_URL}/rest/v1/lector_pagos_estado`,
+    payload,
+    {
+      headers: supabaseHeaders({
+        "Content-Type": "application/json",
+        Prefer: "return=representation",
+      }),
+    }
+  );
+  return res.data?.[0] || null;
 }
 
 function tieneConfianzaSuficiente(lectura) {
@@ -176,58 +227,108 @@ async function iniciarEsperaLectorPago({
   nodoId,
   nodo,
 }) {
-  if (!SUPABASE_URL || !SUPABASE_KEY || !usuarioId || !clienteNumero) return null;
+  console.log("[LECTOR_PAGO_V1] entrando nodo", {
+    usuarioId,
+    clienteNumero,
+    flujoId,
+    nodoId,
+  });
+
+  if (!SUPABASE_URL || !SUPABASE_KEY) {
+    const err = new Error("Supabase no configurado");
+    console.error("[LECTOR_PAGO_V1] insert error", err.message);
+    throw err;
+  }
+
+  if (!usuarioId || !clienteNumero) {
+    const err = new Error("Falta usuario_id o cliente_numero");
+    console.error("[LECTOR_PAGO_V1] insert error", err.message);
+    throw err;
+  }
 
   const cfg = parseNodoConfig(nodo);
-
-  await axios.patch(
-    `${SUPABASE_URL}/rest/v1/lector_pagos_estado?usuario_id=eq.${usuarioId}&cliente_numero=eq.${encodeURIComponent(
-      clienteNumero
-    )}&esperando_pago=eq.true`,
-    {
-      esperando_pago: false,
-      actualizado_en: new Date().toISOString(),
-    },
-    {
-      headers: supabaseHeaders({
-        "Content-Type": "application/json",
-        Prefer: "return=minimal",
-      }),
-    }
-  );
-
-  const payload = {
-    usuario_id: usuarioId,
-    cliente_numero: clienteNumero,
-    flujo_id: String(flujoId || ""),
-    nodo_id: String(nodoId || ""),
-    esperando_pago: true,
+  console.log("[LECTOR_PAGO_V1] config recibida", {
     monto_esperado: cfg.montoEsperado,
     moneda_esperada: cfg.monedaEsperada,
-    nombre_esperado: cfg.nombreEsperado || null,
+    nombre_esperado: cfg.nombreEsperado,
     tolerancia: cfg.tolerancia,
-    producto_texto: cfg.productoTexto || null,
-    producto_url: cfg.productoUrl || null,
-    mensaje_pago_valido: cfg.mensajeValido || null,
-    mensaje_pago_invalido: cfg.mensajeInvalido || null,
-    estado_pago: "pendiente",
-    creado_en: new Date().toISOString(),
-    actualizado_en: new Date().toISOString(),
+    producto_texto: cfg.productoTexto ? "(si)" : "(no)",
+    producto_url: cfg.productoUrl ? "(si)" : "(no)",
+    mensaje_pedir_foto: cfg.mensajePedirFoto ? "(si)" : "(no)",
+  });
+
+  console.log("[LECTOR_PAGO_V1] creando estado");
+
+  try {
+    await axios.patch(
+      `${SUPABASE_URL}/rest/v1/lector_pagos_estado?usuario_id=eq.${usuarioId}&cliente_numero=eq.${encodeURIComponent(
+        clienteNumero
+      )}&esperando_pago=eq.true`,
+      {
+        esperando_pago: false,
+        actualizado_en: new Date().toISOString(),
+      },
+      {
+        headers: supabaseHeaders({
+          "Content-Type": "application/json",
+          Prefer: "return=minimal",
+        }),
+      }
+    );
+  } catch (err) {
+    console.log(
+      "[LECTOR_PAGO_V1] aviso: no se pudo cerrar estado anterior:",
+      err.response?.data?.message || err.message
+    );
+  }
+
+  const ctx = { usuarioId, clienteNumero, flujoId, nodoId, cfg };
+  let estado = null;
+
+  const payloadExtendido = buildPayloadEstadoLector({ ...ctx, extended: true });
+  console.log("[LECTOR_PAGO_V1] insert payload", payloadExtendido);
+
+  try {
+    estado = await insertarEstadoLectorPago(payloadExtendido);
+  } catch (errExt) {
+    logInsertError(errExt);
+    const payloadMinimo = buildPayloadEstadoLector({ ...ctx, extended: false });
+    console.log("[LECTOR_PAGO_V1] insert payload (minimo)", payloadMinimo);
+    try {
+      estado = await insertarEstadoLectorPago(payloadMinimo);
+    } catch (errMin) {
+      logInsertError(errMin);
+      throw errMin;
+    }
+  }
+
+  if (!estado?.id) {
+    const err = new Error("Insert sin fila devuelta");
+    console.error("[LECTOR_PAGO_V1] insert error", err.message);
+    throw err;
+  }
+
+  console.log("[LECTOR_PAGO_V1] insert ok", { id: estado.id });
+
+  const estadoConConfig = {
+    ...estado,
+    mensaje_pago_valido: cfg.mensajeValido,
+    mensaje_pago_invalido: cfg.mensajeInvalido,
+    producto_texto: estado.producto_texto || cfg.productoTexto || null,
+    producto_url: estado.producto_url || cfg.productoUrl || null,
   };
 
-  const res = await axios.post(
-    `${SUPABASE_URL}/rest/v1/lector_pagos_estado`,
-    payload,
-    {
-      headers: supabaseHeaders({
-        "Content-Type": "application/json",
-        Prefer: "return=representation",
-      }),
-    }
-  );
+  const msgPedir = cfg.mensajePedirFoto;
+  if (msgPedir) {
+    console.log("[LECTOR_PAGO_V1] enviando mensaje pedir foto");
+    await enviarMensajesWhatsApp(clienteNumero, msgPedir, usuarioId);
+  } else {
+    console.log("[LECTOR_PAGO_V1] sin mensaje_pedir_foto configurado");
+  }
 
   return {
-    estado: res.data?.[0] || payload,
+    ok: true,
+    estado: estadoConConfig,
     config: cfg,
   };
 }
