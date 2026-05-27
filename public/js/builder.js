@@ -1772,6 +1772,57 @@ function borrarNodo(id){
    GUARDAR FLUJO
 ========================= */
 
+const FLOW_SAVE_BTN_LABEL = "💾 Guardar flujo";
+const FLOW_SAVE_VISUAL_MIN_MS = 600;
+let guardandoFlujo = false;
+
+function showBuilderFlowToast(texto, tipo = "success"){
+  let toast = document.getElementById("builderFlowToast");
+  if(!toast){
+    toast = document.createElement("div");
+    toast.id = "builderFlowToast";
+    toast.className = "builder-flow-toast";
+    toast.setAttribute("role", "status");
+    toast.setAttribute("aria-live", "polite");
+    document.body.appendChild(toast);
+  }
+  toast.className = "builder-flow-toast builder-flow-toast--" + tipo;
+  toast.textContent = texto;
+  toast.classList.add("builder-flow-toast--show");
+  clearTimeout(toast._hideTimer);
+  const duracion = tipo === "warn" ? 3800 : 3000;
+  toast._hideTimer = setTimeout(() => {
+    toast.classList.remove("builder-flow-toast--show");
+  }, duracion);
+}
+
+function setFlowSaveLoading(activo){
+  const btn = document.getElementById("btnGuardarFlujo");
+  if(!btn) return;
+
+  if(activo){
+    btn.disabled = true;
+    btn.classList.add("flow-save--saving");
+    btn.setAttribute("aria-busy", "true");
+    btn.innerHTML =
+      '<span class="flow-save-label">Guardando…</span>' +
+      '<span class="flow-save-bar" aria-hidden="true"></span>';
+    return;
+  }
+
+  btn.disabled = false;
+  btn.classList.remove("flow-save--saving");
+  btn.removeAttribute("aria-busy");
+  btn.innerHTML = FLOW_SAVE_BTN_LABEL;
+}
+
+async function esperarMinimoVisualGuardado(inicioMs){
+  const transcurrido = Date.now() - inicioMs;
+  if(transcurrido < FLOW_SAVE_VISUAL_MIN_MS){
+    await new Promise(resolve => setTimeout(resolve, FLOW_SAVE_VISUAL_MIN_MS - transcurrido));
+  }
+}
+
 function normalizarConexionGuardada(c){
   const desde = c.desde || c.from || c.source || c.source_node_id;
   const hasta = c.hasta || c.to || c.target || c.target_node_id;
@@ -1851,11 +1902,13 @@ function macbotUnlockCanvasInteraction(){
 window.macbotUnlockCanvasInteraction = macbotUnlockCanvasInteraction;
 
 async function guardarFlujo(){
+  if(guardandoFlujo) return;
+
   console.log("💾 CLICK GUARDAR FLUJO");
   const titulo = document.getElementById("tituloFlujo");
 
   if(!titulo){
-    alert("No existe tituloFlujo");
+    showBuilderFlowToast("❌ Error al guardar flujo", "error");
     return;
   }
 
@@ -1865,7 +1918,7 @@ async function guardarFlujo(){
     sincronizarPanelAntesDeSnapshot();
   } catch (err) {
     console.error("[BUILDER] Error sincronizando panel antes de guardar:", err.message);
-    alert("Error al preparar el guardado: " + err.message);
+    showBuilderFlowToast("❌ Error al guardar flujo", "error");
     return;
   }
 
@@ -1921,21 +1974,19 @@ async function guardarFlujo(){
   });
 
   if(nodos.length === 0){
-    alert("Primero agrega al menos un nodo");
+    showBuilderFlowToast("Primero agrega al menos un nodo", "warn");
     return;
   }
 
   const conexionesGuardadas = obtenerConexionesParaGuardar();
   const avisos = validarFlujoAntesDeGuardar(nodos, conexionesGuardadas);
+  const teniaAvisos = avisos.length > 0;
 
-  if(avisos.length){
-    const continuar = confirm(
-      "Avisos del flujo:\n\n" +
-      avisos.slice(0, 8).join("\n") +
-      (avisos.length > 8 ? "\n… y " + (avisos.length - 8) + " más" : "") +
-      "\n\n¿Guardar igualmente?"
+  if(teniaAvisos){
+    console.warn(
+      "[BUILDER] Avisos del flujo (se guarda automáticamente):",
+      avisos
     );
-    if(!continuar) return;
   }
 
   const data = {
@@ -1945,36 +1996,60 @@ async function guardarFlujo(){
 
   console.log("[BUILDER] Guardando flujo:", conexionesGuardadas.length, "conexión(es)", conexionesGuardadas);
 
+  guardandoFlujo = true;
+  setFlowSaveLoading(true);
+  const inicioVisual = Date.now();
+
   let res;
   try {
     res = await fetch("/guardar-flujo-builder", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      id: flujoEditandoId,
-      nombre,
-      data
-    })
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        id: flujoEditandoId,
+        nombre,
+        data
+      })
     });
   } catch (err) {
     console.error("[BUILDER] Error guardando flujo:", err.message);
     macbotUnlockCanvasInteraction();
-    alert("Error al guardar el flujo: " + err.message);
+    await esperarMinimoVisualGuardado(inicioVisual);
+    setFlowSaveLoading(false);
+    guardandoFlujo = false;
+    showBuilderFlowToast("❌ Error al guardar flujo", "error");
     return;
   }
 
   const respuesta = await res.text();
+  await esperarMinimoVisualGuardado(inicioVisual);
+  setFlowSaveLoading(false);
+  guardandoFlujo = false;
 
   if(respuesta.includes("<!DOCTYPE html>") || respuesta.includes("<html")){
-    alert("Tu sesión expiró. Inicia sesión otra vez y vuelve a guardar.");
-    window.location.href = "/login";
+    showBuilderFlowToast("Tu sesión expiró. Inicia sesión otra vez.", "error");
+    setTimeout(() => {
+      window.location.href = "/login";
+    }, 1400);
     return;
   }
 
-  console.log("✅ FLUJO GUARDADO");
-  alert(respuesta);
+  if(!res.ok){
+    console.error("[BUILDER] Error HTTP guardando flujo:", res.status, respuesta);
+    showBuilderFlowToast("❌ Error al guardar flujo", "error");
+    return;
+  }
+
+  console.log("✅ FLUJO GUARDADO", respuesta);
+
+  if(teniaAvisos){
+    showBuilderFlowToast("Flujo guardado con avisos", "warn");
+    return;
+  }
+
+  showBuilderFlowToast("✅ Flujo guardado", "success");
 }
 
 /* =========================
