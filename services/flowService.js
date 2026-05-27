@@ -1017,6 +1017,21 @@ if (html.includes("🏷️ Etiqueta")) {
     await continuarASiguientes(nodoId, visitados, tipoNodo);
   }
 
+  if (opts.lectorContinuarDesdeNodoId) {
+    const visitadosLector = new Set(opts.visitadosLector || []);
+    visitadosLector.add(opts.lectorContinuarDesdeNodoId);
+    console.log(
+      "[LECTOR_PAGO_V1] continuando al siguiente nodo",
+      opts.lectorContinuarDesdeNodoId
+    );
+    await continuarASiguientes(
+      opts.lectorContinuarDesdeNodoId,
+      visitadosLector,
+      "lector_pago"
+    );
+    return;
+  }
+
   if (opts.iaResume && opts.nodoResumeId) {
     const visitadosResume = new Set(opts.visitadosResume || []);
     visitadosResume.delete(opts.nodoResumeId);
@@ -1031,6 +1046,36 @@ if (html.includes("🏷️ Etiqueta")) {
   }
 
   await ejecutarNodo("nodo_inicio");
+}
+
+async function continuarFlujoDesdeLectorPago(numero, usuarioId, resultado) {
+  const flujoId = resultado?.flujoId;
+  const nodoId = resultado?.nodoId;
+  if (!flujoId || !nodoId) {
+    console.log("[LECTOR_PAGO_V1] sin flujo/nodo para continuar");
+    return false;
+  }
+
+  if (!SUPABASE_URL || !SUPABASE_KEY) return false;
+
+  const responseFlujo = await axios.get(
+    `${SUPABASE_URL}/rest/v1/flujos_builder?id=eq.${flujoId}&usuario_id=eq.${usuarioId}&select=*`,
+    { headers: supabaseHeaders() }
+  );
+
+  const flujo = responseFlujo.data?.[0];
+  const flujoDatos = obtenerDatosFlujo(flujo);
+  if (!flujo || !flujoDatos) return false;
+
+  if (!flujoEstaActivo(flujo)) return false;
+
+  await ejecutarFlujo(numero, flujoDatos, usuarioId, flujo.id, {
+    lectorContinuarDesdeNodoId: nodoId,
+    visitadosLector: [nodoId],
+    flujoNombre: flujo.nombre || null,
+  });
+
+  return true;
 }
 
 async function reanudarFlujoIAPendiente(numero, mensaje, usuarioId) {
@@ -1132,6 +1177,9 @@ async function procesarMensajeEntrante(
     if (lecturaPago?.handled) {
       if (!lecturaPago.enviadoPorServicio && lecturaPago.mensaje) {
         await enviarTextoWhatsApp(numero, lecturaPago.mensaje, { usuarioId });
+      }
+      if (lecturaPago.valido && lecturaPago.continuarFlujo) {
+        await continuarFlujoDesdeLectorPago(numero, usuarioId, lecturaPago);
       }
       return true;
     }

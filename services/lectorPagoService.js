@@ -524,36 +524,27 @@ async function procesarImagenLectorPago({
     const pagoValido = confianzaOk && comparacion.valido;
 
     if (!pagoValido) {
-      const patchInvalido = await axios.patch(
+      await axios.patch(
         `${SUPABASE_URL}/rest/v1/lector_pagos_estado?id=eq.${estado.id}&esperando_pago=eq.true`,
         {
-          esperando_pago: false,
           estado_pago: "invalido",
           actualizado_en: ahora,
         },
         {
           headers: supabaseHeaders({
             "Content-Type": "application/json",
-            Prefer: "return=representation",
+            Prefer: "return=minimal",
           }),
         }
       );
 
-      if (!patchInvalido.data?.length) {
-        console.log("[LECTOR_PAGO_V1] producto ya entregado, ignorando duplicado");
-        return {
-          handled: true,
-          valido: false,
-          duplicado: true,
-          enviadoPorServicio: true,
-        };
-      }
-
       await enviarMensajesWhatsApp(clienteNumero, msgInvalidoDefault, usuarioId);
+      console.log("[LECTOR_PAGO_V1] pago invalido, permanece esperando");
 
       return {
         handled: true,
         valido: false,
+        continuarFlujo: false,
         lectura,
         comparacion,
         confianzaOk,
@@ -562,7 +553,7 @@ async function procesarImagenLectorPago({
       };
     }
 
-    console.log("[LECTOR_PAGO_V1] pago valido");
+    console.log("[LECTOR_PAGO_V1] pago valido, entrega producto");
 
     const patchValido = await axios.patch(
       `${SUPABASE_URL}/rest/v1/lector_pagos_estado?id=eq.${estado.id}&esperando_pago=eq.true`,
@@ -621,6 +612,9 @@ async function procesarImagenLectorPago({
     return {
       handled: true,
       valido: true,
+      continuarFlujo: true,
+      flujoId: estado.flujo_id || null,
+      nodoId: estado.nodo_id || null,
       lectura,
       comparacion,
       mensaje: mensajeEntrega,
@@ -629,39 +623,37 @@ async function procesarImagenLectorPago({
   } catch (error) {
     console.log("[LECTOR_PAGO] error validando comprobante:", error.message);
 
-    const patchErr = await axios.patch(
-      `${SUPABASE_URL}/rest/v1/lector_pagos_estado?id=eq.${estado.id}&esperando_pago=eq.true`,
-      {
-        esperando_pago: false,
-        estado_pago: "invalido",
-        actualizado_en: ahora,
-      },
-      {
-        headers: supabaseHeaders({
-          "Content-Type": "application/json",
-          Prefer: "return=representation",
-        }),
-      }
-    );
-
-    if (!patchErr.data?.length) {
-      console.log("[LECTOR_PAGO_V1] producto ya entregado, ignorando duplicado");
-      return {
-        handled: true,
-        valido: false,
-        duplicado: true,
-        enviadoPorServicio: true,
-      };
+    try {
+      await axios.patch(
+        `${SUPABASE_URL}/rest/v1/lector_pagos_estado?id=eq.${estado.id}&esperando_pago=eq.true`,
+        {
+          estado_pago: "invalido",
+          actualizado_en: ahora,
+        },
+        {
+          headers: supabaseHeaders({
+            "Content-Type": "application/json",
+            Prefer: "return=minimal",
+          }),
+        }
+      );
+    } catch (patchErr) {
+      console.log(
+        "[LECTOR_PAGO_V1] aviso patch error:",
+        patchErr.response?.data || patchErr.message
+      );
     }
 
     const msgError =
       String(estado.mensaje_pago_invalido || "").trim() ||
       "Pago invalido. No se pudo validar el comprobante.";
     await enviarMensajesWhatsApp(clienteNumero, msgError, usuarioId);
+    console.log("[LECTOR_PAGO_V1] pago invalido, permanece esperando");
 
     return {
       handled: true,
       valido: false,
+      continuarFlujo: false,
       mensaje: msgError,
       enviadoPorServicio: true,
     };
