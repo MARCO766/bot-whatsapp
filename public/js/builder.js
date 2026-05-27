@@ -37,12 +37,25 @@ const CONVERSION_MONEDAS = [
   { v: "BRL", l: "Real brasileño" },
 ];
 
+function normalizarMonedaISO(raw){
+  if(raw == null || raw === "") return "";
+
+  const s = String(raw).trim();
+  const isoMatch = s.match(/^([A-Za-z]{3})\b/);
+  if(isoMatch) return isoMatch[1].toUpperCase();
+
+  const parte = s.split(/\s*-\s*/)[0].trim();
+  if(/^[A-Za-z]{3}$/i.test(parte)) return parte.toUpperCase();
+
+  return parte.slice(0, 3).toUpperCase();
+}
+
 function opcionesSelectConversionMoneda(monedaActual, monedaPorDefecto) {
   const actual =
     monedaActual != null && monedaActual !== ""
-      ? String(monedaActual).toUpperCase()
+      ? normalizarMonedaISO(monedaActual)
       : "";
-  const def = String(monedaPorDefecto || "USD").toUpperCase();
+  const def = normalizarMonedaISO(monedaPorDefecto) || "USD";
   const known = new Set(CONVERSION_MONEDAS.map((m) => m.v));
   let html = "";
   if (actual && !known.has(actual)) {
@@ -2794,8 +2807,17 @@ function esNodoConversion(nodo){
   );
 }
 
+function actualizarConversionMonedaSelect(select, monedaRaw){
+  if(!select) return normalizarMonedaISO(monedaRaw) || "USD";
+
+  const iso = normalizarMonedaISO(monedaRaw) || normalizarMonedaISO(select.value) || "USD";
+  select.innerHTML = opcionesSelectConversionMoneda(iso);
+  select.value = iso;
+  return iso;
+}
+
 function leerConversionDataDesdeNodo(nodo){
-  let data = { valor: 0, moneda: "USD", origen: "flujo" };
+  let data = { valor: 0, moneda: "", origen: "flujo" };
 
   try {
     const raw = nodo.querySelector(".conversion-data")?.value;
@@ -2806,25 +2828,43 @@ function leerConversionDataDesdeNodo(nodo){
   const selMoneda = nodo.querySelector(".conversion-moneda");
   const selOrigen = nodo.querySelector(".conversion-origen");
 
-  if(inputValor) data.valor = parseFloat(inputValor.value) || 0;
-  if(selMoneda) data.moneda = selMoneda.value || data.moneda;
-  if(selOrigen) data.origen = selOrigen.value || data.origen;
+  if(inputValor && inputValor.value !== ""){
+    data.valor = parseFloat(inputValor.value) || 0;
+  }
 
-  data.moneda = String(data.moneda || "USD").toUpperCase();
+  const monedaGuardada = normalizarMonedaISO(data.moneda);
+  const monedaSelect = selMoneda ? normalizarMonedaISO(selMoneda.value) : "";
+
+  if(monedaGuardada && monedaSelect && monedaGuardada !== monedaSelect){
+    data.moneda = monedaGuardada;
+  } else {
+    data.moneda = monedaSelect || monedaGuardada;
+  }
+
+  if(selOrigen && selOrigen.value){
+    data.origen = selOrigen.value;
+  }
+
+  data.moneda = normalizarMonedaISO(data.moneda) || "USD";
   return data;
 }
 
 function renderConversionVisual(nodo, data){
-  if(!nodo) return;
+  if(!nodo || !data) return;
 
-  const valor = parseFloat(data?.valor) || 0;
-  const moneda = String(data?.moneda || "USD").toUpperCase();
-  const ventaEl = nodo.querySelector(".conversion-venta");
+  const valor = parseFloat(data.valor) || 0;
+  const moneda = normalizarMonedaISO(data.moneda) || "USD";
+  const textoVenta = `Venta: ${valor} ${moneda}`;
 
-  if(ventaEl){
-    ventaEl.textContent = `Venta: ${valor} ${moneda}`;
+  nodo.querySelectorAll(".conversion-venta").forEach((ventaEl) => {
+    ventaEl.textContent = textoVenta;
     ventaEl.classList.toggle("conversion-venta--empty", valor <= 0);
-  }
+  });
+
+  nodo.querySelectorAll(".conversion-hint").forEach((hintEl) => {
+    if(hintEl.classList.contains("conversion-venta")) return;
+    hintEl.textContent = textoVenta;
+  });
 }
 
 function ensureConversionFieldsHidden(nodo){
@@ -2906,13 +2946,21 @@ function initConversionNodeUI(nodo){
     }
   });
 
-  syncConversionDataToNodo(nodo);
+  const data = leerConversionDataDesdeNodo(nodo);
+  actualizarConversionMonedaSelect(nodo.querySelector(".conversion-moneda"), data.moneda);
+  syncConversionDataToNodo(nodo, data);
 }
 
-function syncConversionDataToNodo(nodo){
+function syncConversionDataToNodo(nodo, dataOverride){
   if(!nodo) return;
 
-  const data = leerConversionDataDesdeNodo(nodo);
+  const data = dataOverride
+    ? {
+        valor: parseFloat(dataOverride.valor) || 0,
+        moneda: normalizarMonedaISO(dataOverride.moneda) || "USD",
+        origen: dataOverride.origen || "flujo",
+      }
+    : leerConversionDataDesdeNodo(nodo);
 
   const ta = nodo.querySelector(".conversion-data");
   if(ta) ta.value = JSON.stringify(data);
@@ -2925,18 +2973,19 @@ function aplicarConversionDesdePanel(){
   if(!nodo || !esNodoConversion(nodo)) return;
 
   const valor = parseFloat(document.getElementById("panelConversionValor")?.value) || 0;
-  const moneda = document.getElementById("panelConversionMoneda")?.value || "USD";
+  const moneda = normalizarMonedaISO(document.getElementById("panelConversionMoneda")?.value) || "USD";
   const origen = document.getElementById("panelConversionOrigen")?.value || "flujo";
+  const data = { valor, moneda, origen };
 
   const inputValor = nodo.querySelector(".conversion-valor");
   const selMoneda = nodo.querySelector(".conversion-moneda");
   const selOrigen = nodo.querySelector(".conversion-origen");
 
   if(inputValor) inputValor.value = valor;
-  if(selMoneda) selMoneda.value = moneda;
+  actualizarConversionMonedaSelect(selMoneda, moneda);
   if(selOrigen) selOrigen.value = origen;
 
-  syncConversionDataToNodo(nodo);
+  syncConversionDataToNodo(nodo, data);
 }
 
 function bindPanelConversionLiveSync(){
@@ -2945,6 +2994,7 @@ function bindPanelConversionLiveSync(){
   const origenEl = document.getElementById("panelConversionOrigen");
 
   valorEl?.addEventListener("input", aplicarConversionDesdePanel);
+  monedaEl?.addEventListener("input", aplicarConversionDesdePanel);
   monedaEl?.addEventListener("change", aplicarConversionDesdePanel);
   origenEl?.addEventListener("change", aplicarConversionDesdePanel);
 }
@@ -2961,11 +3011,7 @@ function renderPanelConversion(nodo){
   panel.classList.add("activo");
   marcarNodoSeleccionado(nodo);
 
-  let data = { valor: 0, moneda: "USD", origen: "flujo" };
-  try {
-    const raw = nodo.querySelector(".conversion-data")?.value;
-    if(raw) data = { ...data, ...JSON.parse(raw) };
-  } catch(e){ /* ignore */ }
+  const data = leerConversionDataDesdeNodo(nodo);
 
   contenido.innerHTML = `
     <div class="panel-campo">
