@@ -77,7 +77,26 @@ window.MacBotOpenAIAgent = (function () {
   }
 
   function generarRouteId() {
-    return "route_" + Math.random().toString(36).slice(2, 8);
+    return (
+      "route_" +
+      Date.now() +
+      "_" +
+      Math.random().toString(36).slice(2, 8)
+    );
+  }
+
+  function obtenerRouteId(route) {
+    return String(route?.id || route?.handle || route?.routeId || "").trim();
+  }
+
+  function asegurarIdsEnRoutes(cfg) {
+    const lista = obtenerRoutes(cfg).map(function (r) {
+      const id = obtenerRouteId(r) || generarRouteId();
+      return { ...r, id: id };
+    });
+    cfg.caminos = lista;
+    cfg.routes = lista;
+    return lista;
   }
 
   function productDataATexto(pd) {
@@ -119,8 +138,14 @@ window.MacBotOpenAIAgent = (function () {
   }
 
   function asegurarArraysCaminos(cfg) {
-    const lista = obtenerRoutes(cfg).map(function (r) {
-      return { ...r };
+    const routes = Array.isArray(cfg?.routes) ? cfg.routes : [];
+    const caminos = Array.isArray(cfg?.caminos) ? cfg.caminos : [];
+    const base = caminos.length ? caminos : routes.length ? routes : [];
+    const lista = base.map(function (r) {
+      const copia = { ...r };
+      const id = obtenerRouteId(copia) || generarRouteId();
+      copia.id = id;
+      return copia;
     });
     cfg.caminos = lista;
     cfg.routes = lista;
@@ -141,7 +166,7 @@ window.MacBotOpenAIAgent = (function () {
               .filter(Boolean);
         const text = textoCamino(r);
         return {
-          id: String(r.id || generarRouteId()).trim(),
+          id: obtenerRouteId(r) || generarRouteId(),
           text: text,
           nombre: text,
           type: String(r.type || "texto").trim() || "texto",
@@ -385,10 +410,13 @@ window.MacBotOpenAIAgent = (function () {
   }
 
   function syncCaminosDesdeDom() {
-    const rows = document.querySelectorAll(".openai-agent-ruta-row");
+    const wrap = document.getElementById("openaiAgentCaminosLista");
+    const rows = wrap
+      ? wrap.querySelectorAll(".openai-agent-ruta-row")
+      : [];
     const caminos = [];
     rows.forEach(function (row) {
-      const id = row.dataset.routeId;
+      const id = String(row.dataset.routeId || "").trim();
       if (!id) return;
       const text = row.querySelector(".openai-agent-ruta-texto")?.value.trim() || "";
       const synsRaw = row.querySelector(".openai-agent-ruta-sinonimos")?.value || "";
@@ -412,6 +440,41 @@ window.MacBotOpenAIAgent = (function () {
     });
     configActiva.caminos = caminos;
     configActiva.routes = caminos;
+    return caminos;
+  }
+
+  function eliminarRutaPorId(routeId) {
+    const rid = String(routeId || "").trim();
+    if (!rid) return;
+
+    syncCaminosDesdeDom();
+    asegurarArraysCaminos(configActiva);
+
+    const antes = obtenerRoutes(configActiva).map(function (r) {
+      return obtenerRouteId(r);
+    });
+    console.log("[OPENAI_ROUTES] eliminar ruta", { routeId: rid });
+    console.log("[OPENAI_ROUTES] rutas antes", antes);
+
+    const filtrada = obtenerRoutes(configActiva).filter(function (r) {
+      return obtenerRouteId(r) !== rid;
+    });
+    configActiva.caminos = filtrada;
+    configActiva.routes = filtrada;
+
+    console.log(
+      "[OPENAI_ROUTES] rutas después",
+      filtrada.map(function (r) {
+        return obtenerRouteId(r);
+      })
+    );
+
+    if (nodoActivo && typeof window.eliminarConexionesPorHandle === "function") {
+      window.eliminarConexionesPorHandle(nodoActivo.id, rid);
+    }
+
+    renderCaminosEditor();
+    onFormChange();
   }
 
   function syncCamposPanelDraft() {
@@ -438,6 +501,7 @@ window.MacBotOpenAIAgent = (function () {
   function renderCaminosEditor() {
     const wrap = document.getElementById("openaiAgentCaminosLista");
     if (!wrap) return;
+    asegurarIdsEnRoutes(configActiva);
     const routes = obtenerRoutes(configActiva);
     if (!routes.length) {
       wrap.innerHTML =
@@ -466,7 +530,9 @@ window.MacBotOpenAIAgent = (function () {
           '<label class="oai-toggle"><input type="checkbox" class="openai-agent-ruta-enabled"' +
           (route.enabled !== false ? " checked" : "") +
           '><span class="oai-toggle__track" aria-hidden="true"></span><span class="oai-toggle__label">Activo</span></label>' +
-          '<button type="button" class="openai-agent-ruta-del oai-btn oai-btn--danger oai-btn--sm">Eliminar</button>' +
+          '<button type="button" class="openai-agent-ruta-del oai-btn oai-btn--danger oai-btn--sm" data-route-id="' +
+          esc(route.id) +
+          '">Eliminar</button>' +
           "</div></div>" +
           '<div class="oai-route-card__body">' +
           '<div class="panel-campo oai-field"><label>Texto del camino</label><input class="openai-agent-ruta-texto oai-input" value="' +
@@ -490,17 +556,13 @@ window.MacBotOpenAIAgent = (function () {
       .join("");
 
     wrap.querySelectorAll(".openai-agent-ruta-del").forEach(function (btn) {
-      btn.addEventListener("click", function () {
-        const row = btn.closest(".openai-agent-ruta-row");
-        const rid = row?.dataset.routeId;
-        configActiva.caminos = (configActiva.caminos || []).filter(function (r) {
-          return r.id !== rid;
-        });
-        if (nodoActivo && typeof window.eliminarConexionesPorHandle === "function") {
-          window.eliminarConexionesPorHandle(nodoActivo.id, rid);
-        }
-        renderCaminosEditor();
-        onFormChange();
+      btn.addEventListener("click", function (ev) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        const rid =
+          String(btn.dataset.routeId || "").trim() ||
+          String(btn.closest(".openai-agent-ruta-row")?.dataset.routeId || "").trim();
+        eliminarRutaPorId(rid);
       });
     });
     wrap.querySelectorAll("input, textarea").forEach(function (el) {
@@ -532,7 +594,7 @@ window.MacBotOpenAIAgent = (function () {
     if (!nodo) return;
     nodoActivo = nodo;
     configActiva = leerConfigDeNodo(nodo);
-    asegurarArraysCaminos(configActiva);
+    asegurarIdsEnRoutes(configActiva);
     const contenido = document.getElementById("panelNodoContenido");
     if (!contenido) return;
 
