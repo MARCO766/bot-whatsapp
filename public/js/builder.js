@@ -15,6 +15,46 @@ let flujoCargado = MACBOT_BUILDER.flujoCargado || null;
 const activadoresData = MACBOT_BUILDER.activadoresData || [];
 const etiquetasData = MACBOT_BUILDER.etiquetasData || [];
 
+const CONVERSION_MONEDAS = [
+  { v: "USD", l: "Dólar estadounidense" },
+  { v: "MXN", l: "Peso mexicano" },
+  { v: "ARS", l: "Peso argentino" },
+  { v: "BOB", l: "Boliviano" },
+  { v: "CLP", l: "Peso chileno" },
+  { v: "COP", l: "Peso colombiano" },
+  { v: "CRC", l: "Colón costarricense" },
+  { v: "CUP", l: "Peso cubano" },
+  { v: "DOP", l: "Peso dominicano" },
+  { v: "GTQ", l: "Quetzal" },
+  { v: "HNL", l: "Lempira" },
+  { v: "NIO", l: "Córdoba" },
+  { v: "PAB", l: "Balboa" },
+  { v: "PYG", l: "Guaraní" },
+  { v: "PEN", l: "Sol peruano" },
+  { v: "UYU", l: "Peso uruguayo" },
+  { v: "VES", l: "Bolívar venezolano" },
+  { v: "EUR", l: "Euro" },
+  { v: "BRL", l: "Real brasileño" },
+];
+
+function opcionesSelectConversionMoneda(monedaActual, monedaPorDefecto) {
+  const actual =
+    monedaActual != null && monedaActual !== ""
+      ? String(monedaActual).toUpperCase()
+      : "";
+  const def = String(monedaPorDefecto || "USD").toUpperCase();
+  const known = new Set(CONVERSION_MONEDAS.map((m) => m.v));
+  let html = "";
+  if (actual && !known.has(actual)) {
+    html += `<option value="${actual}" selected>${actual}</option>`;
+  }
+  CONVERSION_MONEDAS.forEach(({ v, l }) => {
+    const selected = actual ? actual === v : v === def;
+    html += `<option value="${v}"${selected ? " selected" : ""}>${v} - ${l}</option>`;
+  });
+  return html;
+}
+
 const CANVAS_ZOOM_MIN = 0.25;
 const CANVAS_ZOOM_MAX = 2;
 const CANVAS_ZOOM_STEP = 0.1;
@@ -409,12 +449,7 @@ function agregarNodo(tipo){
       <p class="node-desc conversion-hint">Registra venta real · no usa etiquetas</p>
       <input type="number" class="conversion-valor" min="0" step="0.01" value="0" placeholder="Valor">
       <select class="conversion-moneda node-select">
-        <option value="USD" selected>USD</option>
-        <option value="MXN">MXN</option>
-        <option value="ARS">ARS</option>
-        <option value="COP">COP</option>
-        <option value="EUR">EUR</option>
-        <option value="BRL">BRL</option>
+        ${opcionesSelectConversionMoneda(null, "USD")}
       </select>
       <select class="conversion-origen node-select">
         <option value="flujo" selected>Flujo (automático)</option>
@@ -2770,12 +2805,7 @@ function renderPanelConversion(nodo){
     <div class="panel-campo">
       <label>Moneda</label>
       <select id="panelConversionMoneda">
-        <option value="USD" ${data.moneda === "USD" ? "selected" : ""}>USD</option>
-        <option value="MXN" ${data.moneda === "MXN" ? "selected" : ""}>MXN</option>
-        <option value="ARS" ${data.moneda === "ARS" ? "selected" : ""}>ARS</option>
-        <option value="COP" ${data.moneda === "COP" ? "selected" : ""}>COP</option>
-        <option value="EUR" ${data.moneda === "EUR" ? "selected" : ""}>EUR</option>
-        <option value="BRL" ${data.moneda === "BRL" ? "selected" : ""}>BRL</option>
+        ${opcionesSelectConversionMoneda(data.moneda)}
       </select>
     </div>
     <div class="panel-campo">
