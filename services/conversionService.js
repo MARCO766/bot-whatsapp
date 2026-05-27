@@ -36,6 +36,16 @@ function normalizarValor(valor) {
   return Number.isFinite(n) && n >= 0 ? Math.round(n * 100) / 100 : 0;
 }
 
+function normalizarMonedaISO(raw) {
+  if (raw == null || raw === "") return "USD";
+  const s = String(raw).trim();
+  const isoMatch = s.match(/^([A-Za-z]{3})\b/);
+  if (isoMatch) return isoMatch[1].toUpperCase();
+  const parte = s.split(/\s*-\s*/)[0].trim();
+  if (/^[A-Za-z]{3}$/i.test(parte)) return parte.toUpperCase();
+  return parte.slice(0, 3).toUpperCase() || "USD";
+}
+
 /**
  * @returns {Promise<object|null>} fila creada o null si falla / sin config
  */
@@ -59,13 +69,15 @@ async function registrarConversion({
     nodo_id: nodoId || null,
     cliente_numero: String(clienteNumero).trim(),
     valor: normalizarValor(valor),
-    moneda: String(moneda || "USD").trim().toUpperCase().slice(0, 8) || "USD",
+    moneda: normalizarMonedaISO(moneda),
     origen: normalizarOrigen(origen),
     metadata:
       metadata && typeof metadata === "object" && !Array.isArray(metadata)
         ? metadata
         : {},
   };
+
+  console.log("[CONVERSION] payload", JSON.stringify(payload));
 
   try {
     const res = await axios.post(
@@ -74,18 +86,18 @@ async function registrarConversion({
       { headers: headers() }
     );
     const row = Array.isArray(res.data) ? res.data[0] : res.data;
-    console.log(
-      "[CONVERSION] ✓ Registrada:",
-      payload.cliente_numero,
-      payload.valor,
-      payload.moneda,
-      "| flujo:",
-      payload.flujo_id || "—"
-    );
+    console.log("[CONVERSION] insert ok", {
+      id: row?.id || null,
+      cliente: payload.cliente_numero,
+      valor: payload.valor,
+      moneda: payload.moneda,
+      flujo_id: payload.flujo_id,
+      nodo_id: payload.nodo_id,
+    });
     return row;
   } catch (e) {
     console.error(
-      "[CONVERSION] Error registrando:",
+      "[CONVERSION] insert error",
       e.response?.data || e.message
     );
     return null;
@@ -105,11 +117,12 @@ function parseConversionFromNodo(nodo) {
     try {
       const raw = matchData[1]
         .replace(/&quot;/g, '"')
-        .replace(/&amp;/g, "&");
+        .replace(/&amp;/g, "&")
+        .trim();
       const data = JSON.parse(raw);
-      valor = data.valor;
-      moneda = data.moneda;
-      origen = data.origen;
+      if (data.valor != null) valor = data.valor;
+      if (data.moneda != null) moneda = data.moneda;
+      if (data.origen != null) origen = data.origen;
     } catch {
       /* inputs HTML como fallback */
     }
@@ -124,19 +137,32 @@ function parseConversionFromNodo(nodo) {
   if (matchValor) valor = matchValor[1];
   else if (matchValorInput) valor = matchValorInput[1];
 
-  const matchMoneda = html.match(
+  const matchMonedaSelected = html.match(
     /class="conversion-moneda"[^>]*>[\s\S]*?<option[^>]*selected[^>]*value="([^"]*)"/i
   );
-  if (matchMoneda) moneda = matchMoneda[1];
+  const matchMonedaSelectValue = html.match(
+    /<select[^>]*class="conversion-moneda"[^>]*value="([^"]*)"/i
+  );
+  if (matchMonedaSelected) moneda = matchMonedaSelected[1];
+  else if (matchMonedaSelectValue) moneda = matchMonedaSelectValue[1];
 
   const matchOrigen = html.match(
     /class="conversion-origen"[^>]*>[\s\S]*?<option[^>]*selected[^>]*value="([^"]*)"/i
   );
   if (matchOrigen) origen = matchOrigen[1];
 
+  if (nodo?.data && typeof nodo.data === "object") {
+    if (nodo.data.valor != null) valor = nodo.data.valor;
+    if (nodo.data.valor_venta != null) valor = nodo.data.valor_venta;
+    if (nodo.data.amount != null) valor = nodo.data.amount;
+    if (nodo.data.moneda != null) moneda = nodo.data.moneda;
+    if (nodo.data.currency != null) moneda = nodo.data.currency;
+    if (nodo.data.origen != null) origen = nodo.data.origen;
+  }
+
   return {
     valor: normalizarValor(valor),
-    moneda: String(moneda || "USD").trim().toUpperCase() || "USD",
+    moneda: normalizarMonedaISO(moneda),
     origen: normalizarOrigen(origen),
   };
 }
@@ -145,5 +171,6 @@ module.exports = {
   registrarConversion,
   parseConversionFromNodo,
   normalizarOrigen,
+  normalizarMonedaISO,
   ORIGENES_VALIDOS,
 };

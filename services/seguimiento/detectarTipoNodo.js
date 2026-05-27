@@ -124,11 +124,28 @@ function detectarTipoNodo(nodo) {
   }
 
   if (
+    resolverTipoRaw(nodo) === "conversion" ||
+    nodo.dataset?.tipo === "conversion" ||
+    className.includes("conversion-node") ||
+    className.includes("node-conversion") ||
+    html.includes("conversion-data") ||
+    html.includes("conversion-valor") ||
     html.includes("💰 Conversión") ||
     html.includes("💰 Conversion") ||
-    nodo.dataset?.tipo === "conversion"
+    html.includes('class="conversion-title"')
   ) {
     return "conversion";
+  }
+
+  if (
+    resolverTipoRaw(nodo) === "lector_pago" ||
+    nodo.dataset?.tipo === "lector_pago" ||
+    className.includes("lector-pago-node") ||
+    className.includes("node-lector-pago") ||
+    html.includes("lector-pago-data") ||
+    html.includes("lector_pago-data")
+  ) {
+    return "lector_pago";
   }
 
   if (html.includes("🔗 Conectar flujo")) {

@@ -498,6 +498,42 @@ async function ejecutarFlujo(
     }
   }
 
+  async function ejecutarNodoConversion(nodo, ctx = {}) {
+    const nodoId = nodo?.id || null;
+    const { valor, moneda, origen } = parseConversionFromNodo(nodo);
+    const nodeName =
+      nodo?.data?.label ||
+      nodo?.data?.nombre ||
+      (nodo?.html || "").match(/class="conversion-title"[^>]*>([^<]+)/i)?.[1]?.trim() ||
+      "Conversión";
+
+    console.log("[CONVERSION] nodo detectado", {
+      nodoId,
+      flujoId,
+      cliente_numero: numero,
+      valor,
+      moneda,
+      origen,
+      visitados: ctx.visitados ? Array.from(ctx.visitados) : [],
+    });
+
+    await registrarConversion({
+      usuarioId,
+      flujoId,
+      nodoId,
+      clienteNumero: numero,
+      valor,
+      moneda,
+      origen: origen || "flujo",
+      metadata: {
+        source: "conversion_node",
+        nodeName,
+        flujoNombre: opts.flujoNombre || null,
+        trigger: "nodo_flujo",
+      },
+    });
+  }
+
   async function ejecutarNodo(nodoId, visitados = new Set()) {
     if (!nodoId) return;
 
@@ -577,17 +613,7 @@ async function ejecutarFlujo(
     }
 
     if (tipoNodo === "conversion") {
-      const { valor, moneda, origen } = parseConversionFromNodo(nodo);
-      await registrarConversion({
-        usuarioId,
-        flujoId,
-        nodoId,
-        clienteNumero: numero,
-        valor,
-        moneda,
-        origen,
-        metadata: { trigger: "nodo_flujo" },
-      });
+      await ejecutarNodoConversion(nodo, { visitados });
 
       if (flujoId && usuarioId) {
         try {
