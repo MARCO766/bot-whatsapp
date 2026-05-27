@@ -1,6 +1,10 @@
-import React, { useCallback, useEffect, useRef } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import MessageBubble from "./MessageBubble";
 import ChatComposer from "./ChatComposer";
+import {
+  calcularVentana24h,
+  etiquetaVentanaBadge,
+} from "../../utils/whatsappVentana24h";
 
 export default function ChatWindow({
   chat,
@@ -12,9 +16,22 @@ export default function ChatWindow({
   moverChatArriba,
 }) {
   const scrollRef = useRef(null);
+  const [ventanaTick, setVentanaTick] = useState(0);
   const numero = chat?.numero || chatMeta?.numero;
   const nombre = chatMeta?.nombre || chat?.nombre || numero;
   const bloqueado = chatMeta?.bloqueado ?? chat?.bloqueado;
+
+  const ventana = useMemo(
+    () => calcularVentana24h(mensajes),
+    [mensajes, ventanaTick]
+  );
+  const ventanaAbierta = ventana.abierta;
+
+  useEffect(() => {
+    if (!numero || !ventanaAbierta) return undefined;
+    const id = setInterval(() => setVentanaTick((t) => t + 1), 60_000);
+    return () => clearInterval(id);
+  }, [numero, ventanaAbierta]);
 
   const scrollToBottom = useCallback((instant = false) => {
     const el = scrollRef.current;
@@ -68,6 +85,18 @@ export default function ChatWindow({
             <small className="online">En línea</small>
           </div>
         </div>
+        <span
+          className={`whatsappVentanaBadge ${
+            ventanaAbierta ? "whatsappVentanaBadge--open" : "whatsappVentanaBadge--closed"
+          }`}
+          title={
+            ventanaAbierta
+              ? "Puedes enviar mensajes manuales dentro de la ventana de 24h"
+              : "El lead debe responder para reabrir la ventana de 24h"
+          }
+        >
+          {etiquetaVentanaBadge(ventana)}
+        </span>
       </header>
 
       {bloqueado && (
@@ -98,6 +127,7 @@ export default function ChatWindow({
       <ChatComposer
         numero={numero}
         bloqueado={bloqueado}
+        ventanaAbierta={ventanaAbierta}
         onSent={onSent}
         onPreviewList={(id, patch) => onPatchMensaje(id, patch)}
         moverChatArriba={moverChatArriba}

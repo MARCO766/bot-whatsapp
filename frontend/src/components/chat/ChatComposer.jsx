@@ -5,9 +5,13 @@ import {
 } from "../../services/chatService";
 import { previewKindFromFile, tipoFromFile } from "../../utils/chatMedia";
 
+const AVISO_VENTANA_CERRADA =
+  "No puedes enviar mensajes manuales porque la ventana de 24h está cerrada. El lead debe responder primero.";
+
 export default function ChatComposer({
   numero,
   bloqueado,
+  ventanaAbierta = true,
   onSent,
   onPreviewList,
   moverChatArriba,
@@ -16,9 +20,16 @@ export default function ChatComposer({
   const [archivo, setArchivo] = useState(null);
   const [enviando, setEnviando] = useState(false);
   const [grabando, setGrabando] = useState(false);
+  const [avisoVentana, setAvisoVentana] = useState("");
   const fileRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const chunksRef = useRef([]);
+  const puedeEnviar = !bloqueado && ventanaAbierta;
+
+  function mostrarAvisoVentana() {
+    setAvisoVentana(AVISO_VENTANA_CERRADA);
+    window.setTimeout(() => setAvisoVentana(""), 5000);
+  }
 
   function localPreview(file) {
     if (!file) return null;
@@ -37,6 +48,10 @@ export default function ChatComposer({
 
   async function enviar(texto, file) {
     if (!numero || bloqueado) return;
+    if (!ventanaAbierta) {
+      mostrarAvisoVentana();
+      return;
+    }
     if (!texto?.trim() && !file) return;
 
     const tempId = `temp-${Date.now()}`;
@@ -73,6 +88,10 @@ export default function ChatComposer({
 
   function onSubmit(e) {
     e.preventDefault();
+    if (!ventanaAbierta) {
+      mostrarAvisoVentana();
+      return;
+    }
     const texto = mensaje;
     const file = archivo;
     setMensaje("");
@@ -87,7 +106,10 @@ export default function ChatComposer({
   }
 
   async function toggleAudio() {
-    if (!numero || bloqueado) return;
+    if (!numero || bloqueado || !ventanaAbierta) {
+      if (!ventanaAbierta) mostrarAvisoVentana();
+      return;
+    }
 
     if (!grabando) {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -111,6 +133,8 @@ export default function ChatComposer({
 
   return (
     <footer className="composerDock">
+      {avisoVentana && <div className="ventanaCerradaAviso">{avisoVentana}</div>}
+
       {archivo && (
         <div className="previewBar">
           <span className="previewFile">
@@ -132,7 +156,7 @@ export default function ChatComposer({
         <button
           type="button"
           className="composerBtn attach"
-          disabled={bloqueado || enviando}
+          disabled={!puedeEnviar || enviando}
           onClick={() => fileRef.current?.click()}
           aria-label="Adjuntar archivo"
           title="Adjuntar"
@@ -150,14 +174,24 @@ export default function ChatComposer({
 
         <div className="composerInputWrap">
           <textarea
-            placeholder={bloqueado ? "Contacto bloqueado" : "Escribe un mensaje…"}
-            disabled={bloqueado || enviando}
+            placeholder={
+              bloqueado
+                ? "Contacto bloqueado"
+                : !ventanaAbierta
+                  ? "Ventana cerrada: el lead debe responder para volver a escribir"
+                  : "Escribe un mensaje…"
+            }
+            disabled={!puedeEnviar || enviando}
             value={mensaje}
             rows={1}
             onChange={(e) => setMensaje(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
+                if (!ventanaAbierta) {
+                  mostrarAvisoVentana();
+                  return;
+                }
                 onSubmit(e);
               }
             }}
@@ -167,7 +201,7 @@ export default function ChatComposer({
         <button
           type="button"
           className={`composerBtn audioBtn ${grabando ? "recording" : ""}`}
-          disabled={bloqueado || enviando}
+          disabled={!puedeEnviar || enviando}
           onClick={toggleAudio}
           aria-label={grabando ? "Detener grabación" : "Grabar audio"}
           title="Audio"
@@ -178,7 +212,7 @@ export default function ChatComposer({
         <button
           type="submit"
           className="composerBtn send"
-          disabled={bloqueado || enviando}
+          disabled={!puedeEnviar || enviando}
           aria-label="Enviar"
           title="Enviar"
         >
