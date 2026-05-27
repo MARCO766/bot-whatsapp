@@ -96,8 +96,17 @@
       const nombreTxt = data.nombre_esperado
         ? ` · ${data.nombre_esperado}`
         : "";
-      hint.textContent = `Esperado: ${data.monto_esperado} ${data.moneda_esperada}${nombreTxt}`;
+      hint.textContent = `Esperado · ${data.monto_esperado} ${data.moneda_esperada}${nombreTxt}`;
     }
+
+    const cardMonto = nodo.querySelector(".lector-pago-card-value-monto");
+    const cardMoneda = nodo.querySelector(".lector-pago-card-value-moneda");
+    const cardNombre = nodo.querySelector(".lector-pago-card-value-nombre");
+    const cardTolerancia = nodo.querySelector(".lector-pago-card-value-tolerancia");
+    if (cardMonto) cardMonto.textContent = `${data.monto_esperado} ${data.moneda_esperada || ""}`.trim();
+    if (cardMoneda) cardMoneda.textContent = data.moneda_esperada || "—";
+    if (cardNombre) cardNombre.textContent = data.nombre_esperado || "No definido";
+    if (cardTolerancia) cardTolerancia.textContent = `±${data.tolerancia}`;
 
     return data;
   }
@@ -121,15 +130,43 @@
 
     return `
       <div class="node-actions">
-        <button type="button" class="edit-node" onclick="event.stopPropagation(); editarNodo('${nodoId}')">✎</button>
-        <button type="button" class="delete-node" onclick="event.stopPropagation(); borrarNodo('${nodoId}')">×</button>
+        <button type="button" class="edit-node lector-pago-action-btn lector-pago-action-btn-edit" onclick="event.stopPropagation(); editarNodo('${nodoId}')" aria-label="Editar nodo">
+          <span>✦</span>
+        </button>
+        <button type="button" class="delete-node lector-pago-action-btn lector-pago-action-btn-delete" onclick="event.stopPropagation(); borrarNodo('${nodoId}')" aria-label="Eliminar nodo">
+          <span>✕</span>
+        </button>
       </div>
-      <h3 class="node-title">🧾 Lector Pago</h3>
-      <p class="node-desc lector-pago-hint">Esperado: ${cfg.monto_esperado} ${cfg.moneda_esperada}</p>
-      <input type="number" class="lector-pago-monto" min="0" step="0.01" value="${cfg.monto_esperado}" placeholder="Monto esperado">
-      <input type="text" class="lector-pago-moneda" value="${cfg.moneda_esperada}" placeholder="Moneda (BS, USD…)">
-      <input type="text" class="lector-pago-nombre" value="${cfg.nombre_esperado}" placeholder="Nombre esperado (opcional)">
-      <input type="number" class="lector-pago-tolerancia" min="0" step="0.01" value="${cfg.tolerancia}" placeholder="Tolerancia">
+      <div class="lector-pago-header">
+        <div class="lector-pago-header-main">
+          <span class="lector-pago-icon">📄</span>
+          <h3 class="node-title">Lector Pago</h3>
+        </div>
+        <span class="lector-pago-status-badge"><i></i> ESPERANDO</span>
+      </div>
+      <p class="node-desc lector-pago-hint">Esperado · ${cfg.monto_esperado} ${cfg.moneda_esperada}</p>
+      <div class="lector-pago-cards-grid">
+        <div class="lector-pago-card">
+          <div class="lector-pago-card-title">💵 MONTO</div>
+          <div class="lector-pago-card-value lector-pago-card-value-monto">${cfg.monto_esperado} ${cfg.moneda_esperada}</div>
+        </div>
+        <div class="lector-pago-card">
+          <div class="lector-pago-card-title">🌍 MONEDA</div>
+          <div class="lector-pago-card-value lector-pago-card-value-moneda">${cfg.moneda_esperada || "—"}</div>
+        </div>
+        <div class="lector-pago-card">
+          <div class="lector-pago-card-title">👤 NOMBRE</div>
+          <div class="lector-pago-card-value lector-pago-card-value-nombre">${cfg.nombre_esperado || "No definido"}</div>
+        </div>
+        <div class="lector-pago-card">
+          <div class="lector-pago-card-title">🎯 TOLERANCIA</div>
+          <div class="lector-pago-card-value lector-pago-card-value-tolerancia">±${cfg.tolerancia}</div>
+        </div>
+      </div>
+      <input type="number" class="lector-pago-monto lector-pago-hidden-input" min="0" step="0.01" value="${cfg.monto_esperado}" placeholder="Monto esperado">
+      <input type="text" class="lector-pago-moneda lector-pago-hidden-input" value="${cfg.moneda_esperada}" placeholder="Moneda (BS, USD…)">
+      <input type="text" class="lector-pago-nombre lector-pago-hidden-input" value="${cfg.nombre_esperado}" placeholder="Nombre esperado (opcional)">
+      <input type="number" class="lector-pago-tolerancia lector-pago-hidden-input" min="0" step="0.01" value="${cfg.tolerancia}" placeholder="Tolerancia">
       <textarea class="lector-pago-data" style="display:none;">${json}</textarea>
     `;
   }
@@ -224,44 +261,69 @@
     }
 
     contenido.innerHTML = `
-      <div class="panel-campo">
-        <label>Monto esperado</label>
-        <input id="panelLectorMonto" type="number" min="0" step="0.01" value="${data.monto_esperado}">
+      <div class="lector-pago-panel-wrap">
+        <div class="lector-pago-panel-header">
+          <div>
+            <h3>⚙ Configuración Lector Pago</h3>
+            <p>Valida comprobantes por monto, moneda y nombre</p>
+          </div>
+          <span class="lector-pago-panel-badge"><i></i> OCR ACTIVO</span>
+        </div>
+
+        <section class="lector-pago-panel-section">
+          <div class="lector-pago-panel-section-title">💳 VALIDACIÓN</div>
+          <div class="panel-campo lector-pago-panel-campo">
+            <label>Monto esperado</label>
+            <input id="panelLectorMonto" type="number" min="0" step="0.01" value="${data.monto_esperado}" placeholder="29">
+          </div>
+          <div class="panel-campo lector-pago-panel-campo">
+            <label>Moneda esperada</label>
+            <input id="panelLectorMoneda" type="text" value="${escaparHTML(data.moneda_esperada)}" placeholder="BS, USD, MXN…">
+          </div>
+          <div class="panel-campo lector-pago-panel-campo">
+            <label>Nombre esperado</label>
+            <input id="panelLectorNombre" type="text" value="${escaparHTML(data.nombre_esperado)}" placeholder="Opcional · contains flexible">
+          </div>
+          <div class="panel-campo lector-pago-panel-campo">
+            <label>Tolerancia</label>
+            <input id="panelLectorTolerancia" type="number" min="0" step="0.01" value="${data.tolerancia}" placeholder="0.5">
+          </div>
+        </section>
+
+        <section class="lector-pago-panel-section">
+          <div class="lector-pago-panel-section-title">💬 MENSAJES</div>
+          <div class="panel-campo lector-pago-panel-campo">
+            <label>Mensaje pedir foto</label>
+            <textarea id="panelLectorMsgPedir" rows="3" placeholder="Ej: Envíame la captura de tu comprobante">${escaparHTML(data.mensaje_pedir_foto)}</textarea>
+          </div>
+          <div class="panel-campo lector-pago-panel-campo">
+            <label>Mensaje pago válido</label>
+            <textarea id="panelLectorMsgValido" rows="3" placeholder="Ej: Pago valido. Gracias.">${escaparHTML(data.mensaje_pago_valido)}</textarea>
+          </div>
+          <div class="panel-campo lector-pago-panel-campo">
+            <label>Mensaje pago inválido</label>
+            <textarea id="panelLectorMsgInvalido" rows="3" placeholder="Ej: Pago invalido. Revisa el comprobante.">${escaparHTML(data.mensaje_pago_invalido)}</textarea>
+          </div>
+        </section>
+
+        <section class="lector-pago-panel-section">
+          <div class="lector-pago-panel-section-title">🎁 ENTREGA PRODUCTO</div>
+          <div class="panel-campo lector-pago-panel-campo">
+            <label>Producto texto</label>
+            <textarea id="panelLectorProductoTexto" rows="2" placeholder="Ej: Aquí tienes tu producto 👇">${escaparHTML(data.producto_texto)}</textarea>
+          </div>
+          <div class="panel-campo lector-pago-panel-campo">
+            <label>Producto URL</label>
+            <input id="panelLectorProductoUrl" type="url" value="${escaparHTML(data.producto_url)}" placeholder="https://mi-link.com/producto">
+          </div>
+        </section>
+
+        <p class="panel-hint lector-pago-panel-hint">Diseño premium UI activo. Lógica, OCR y guardado permanecen sin cambios.</p>
+        <button type="button" id="panelLectorSaveBtn" class="panel-btn lector-pago-save-btn" onclick="window.MacBotLectorPago.guardarPanelLectorPago()">
+          <span class="lector-pago-save-btn-label">💾 Guardar configuración</span>
+          <span class="lector-pago-save-btn-spinner" aria-hidden="true"></span>
+        </button>
       </div>
-      <div class="panel-campo">
-        <label>Moneda esperada</label>
-        <input id="panelLectorMoneda" type="text" value="${escaparHTML(data.moneda_esperada)}" placeholder="BS, USD, MXN…">
-      </div>
-      <div class="panel-campo">
-        <label>Nombre esperado</label>
-        <input id="panelLectorNombre" type="text" value="${escaparHTML(data.nombre_esperado)}" placeholder="Opcional · contains flexible">
-      </div>
-      <div class="panel-campo">
-        <label>Tolerancia</label>
-        <input id="panelLectorTolerancia" type="number" min="0" step="0.01" value="${data.tolerancia}">
-      </div>
-      <div class="panel-campo">
-        <label>Mensaje pedir foto</label>
-        <textarea id="panelLectorMsgPedir" rows="3" placeholder="Ej: Envíame la captura de tu comprobante">${escaparHTML(data.mensaje_pedir_foto)}</textarea>
-      </div>
-      <div class="panel-campo">
-        <label>Mensaje pago válido</label>
-        <textarea id="panelLectorMsgValido" rows="3" placeholder="Ej: Pago valido. Gracias.">${escaparHTML(data.mensaje_pago_valido)}</textarea>
-      </div>
-      <div class="panel-campo">
-        <label>Mensaje pago inválido</label>
-        <textarea id="panelLectorMsgInvalido" rows="3" placeholder="Ej: Pago invalido. Revisa el comprobante.">${escaparHTML(data.mensaje_pago_invalido)}</textarea>
-      </div>
-      <div class="panel-campo">
-        <label>Producto texto</label>
-        <textarea id="panelLectorProductoTexto" rows="2" placeholder="Ej: Aquí tienes tu producto 👇">${escaparHTML(data.producto_texto)}</textarea>
-      </div>
-      <div class="panel-campo">
-        <label>Producto URL</label>
-        <input id="panelLectorProductoUrl" type="url" value="${escaparHTML(data.producto_url)}" placeholder="https://mi-link.com/producto">
-      </div>
-      <p class="panel-hint">Si el pago es válido, envía mensaje + producto (texto y URL). Pago inválido no entrega producto.</p>
-      <button type="button" class="panel-btn" onclick="window.MacBotLectorPago.guardarPanelLectorPago()">Guardar Lector Pago</button>
     `;
 
     [
@@ -303,6 +365,14 @@
     });
 
     syncDataToNodo(panelNodoActivo, data);
+
+    const saveBtn = document.getElementById("panelLectorSaveBtn");
+    if (saveBtn) {
+      saveBtn.classList.add("is-loading");
+      setTimeout(() => {
+        saveBtn.classList.remove("is-loading");
+      }, 600);
+    }
   }
 
   window.MacBotLectorPago = {

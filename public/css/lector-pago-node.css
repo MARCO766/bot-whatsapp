@@ -1,48 +1,421 @@
-/* Nodo 🧾 Lector Pago — MacBot builder */
+/* Nodo 🧾 Lector Pago — Ultra Premium Dark UI */
 #builderArea .node.lector-pago-node,
 .lector-pago-node.node {
-  border: 2px solid rgba(52, 211, 153, 0.55);
-  background: linear-gradient(145deg, rgba(10, 35, 28, 0.95), rgba(15, 23, 42, 0.92));
-  box-shadow: 0 0 24px rgba(52, 211, 153, 0.12);
-  min-width: 240px;
+  position: relative;
+  min-width: 318px;
+  border-radius: 24px;
+  border: 1px solid rgba(129, 246, 236, 0.2);
+  background:
+    radial-gradient(circle at 8% 0%, rgba(14, 165, 233, 0.14), transparent 35%),
+    radial-gradient(circle at 92% 100%, rgba(16, 185, 129, 0.12), transparent 34%),
+    linear-gradient(145deg, rgba(9, 14, 28, 0.93), rgba(8, 14, 22, 0.9));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    inset 0 -18px 26px rgba(15, 23, 42, 0.35),
+    0 16px 30px rgba(2, 6, 23, 0.55),
+    0 0 0 1px rgba(15, 23, 42, 0.45);
+  color: #dbe5f5;
+  overflow: hidden;
+  transform: translateZ(0) scale(1);
+  transform-origin: center center;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+#builderArea .node.lector-pago-node::before,
+.lector-pago-node.node::before {
+  content: "";
+  position: absolute;
+  inset: -25% -30% auto;
+  height: 56%;
+  pointer-events: none;
+  background: linear-gradient(100deg, rgba(255, 255, 255, 0.08), transparent 58%);
 }
 
 #builderArea .node.lector-pago-node:hover,
 .lector-pago-node.node:hover {
-  border-color: rgba(52, 211, 153, 0.85);
-  box-shadow: 0 0 32px rgba(52, 211, 153, 0.22);
+  transform: scale(1.01);
+  border-color: rgba(94, 234, 212, 0.38);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 -18px 26px rgba(15, 23, 42, 0.35),
+    0 20px 42px rgba(2, 6, 23, 0.68),
+    0 0 38px rgba(45, 212, 191, 0.14);
 }
 
 #builderArea .node.lector-pago-node.selected {
-  border-color: #34d399;
-  box-shadow: 0 0 0 2px rgba(52, 211, 153, 0.35), 0 12px 40px rgba(0, 0, 0, 0.4);
+  border-color: rgba(45, 212, 191, 0.62);
+  box-shadow:
+    0 0 0 1px rgba(34, 211, 238, 0.33),
+    0 18px 40px rgba(3, 10, 25, 0.72),
+    0 0 46px rgba(34, 211, 238, 0.18);
+}
+
+.lector-pago-node .node-actions {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  display: flex;
+  gap: 8px;
+  z-index: 3;
+}
+
+.lector-pago-action-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  backdrop-filter: blur(6px);
+}
+
+.lector-pago-action-btn span {
+  font-size: 12px;
+  line-height: 1;
+  font-weight: 700;
+}
+
+.lector-pago-action-btn-edit {
+  color: #c9ecff;
+  background: linear-gradient(145deg, rgba(29, 78, 216, 0.34), rgba(30, 64, 175, 0.18));
+  border-color: rgba(56, 189, 248, 0.38);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 3px 10px rgba(56, 189, 248, 0.2);
+}
+
+.lector-pago-action-btn-edit:hover {
+  transform: translateY(-1px);
+  border-color: rgba(56, 189, 248, 0.65);
+  box-shadow: 0 0 16px rgba(56, 189, 248, 0.26);
+}
+
+.lector-pago-action-btn-delete {
+  color: #ffd3d3;
+  background: linear-gradient(145deg, rgba(127, 29, 29, 0.32), rgba(69, 10, 10, 0.28));
+  border-color: rgba(248, 113, 113, 0.28);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 3px 10px rgba(127, 29, 29, 0.24);
+}
+
+.lector-pago-action-btn-delete:hover {
+  transform: translateY(-1px);
+  border-color: rgba(248, 113, 113, 0.48);
+  box-shadow: 0 0 12px rgba(220, 38, 38, 0.2);
+}
+
+.lector-pago-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin: 2px 6px 10px;
+}
+
+.lector-pago-header-main {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.lector-pago-icon {
+  display: inline-flex;
+  width: 26px;
+  height: 26px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: rgba(34, 211, 238, 0.12);
+  border: 1px solid rgba(125, 211, 252, 0.2);
+  font-size: 14px;
 }
 
 .lector-pago-node .node-title {
-  color: #6ee7b7;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #ecfeff;
+}
+
+.lector-pago-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 5px 10px;
+  border-radius: 999px;
+  color: #ccfbf1;
+  border: 1px solid rgba(45, 212, 191, 0.4);
+  background: rgba(15, 118, 110, 0.2);
+}
+
+.lector-pago-status-badge i,
+.lector-pago-panel-badge i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #34d399;
+  box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.55);
+  animation: lectorPagoPulse 2s infinite;
 }
 
 .lector-pago-node .lector-pago-hint,
 .lector-pago-node .node-desc {
+  margin: 2px 8px 12px;
+  color: rgba(203, 213, 225, 0.8);
   font-size: 12px;
-  color: #94a3b8;
-  margin: 4px 0 8px;
+  letter-spacing: 0.01em;
 }
 
-.lector-pago-node .lector-pago-monto,
-.lector-pago-node .lector-pago-moneda,
-.lector-pago-node .lector-pago-nombre,
-.lector-pago-node .lector-pago-tolerancia {
-  width: 100%;
-  margin: 6px 0;
-  box-sizing: border-box;
+.lector-pago-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0 6px 6px;
+}
+
+.lector-pago-card {
+  border-radius: 14px;
+  padding: 10px 11px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: linear-gradient(145deg, rgba(15, 23, 42, 0.7), rgba(2, 6, 23, 0.62));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.lector-pago-card:hover {
+  border-color: rgba(103, 232, 249, 0.35);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 0 18px rgba(22, 163, 74, 0.08);
+  transform: translateY(-1px);
+}
+
+.lector-pago-card-title {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+  color: rgba(148, 163, 184, 0.95);
+  margin-bottom: 6px;
+}
+
+.lector-pago-card-value {
+  font-size: 13px;
+  font-weight: 600;
+  color: #e2e8f0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lector-pago-hidden-input {
+  position: absolute;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.lector-pago-node .port {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(148, 163, 184, 0.75);
+  background: radial-gradient(circle at 40% 35%, #99f6e4, #0f172a 70%);
+  box-shadow: 0 0 10px rgba(45, 212, 191, 0.3);
+  transition: all 0.2s ease;
+  animation: lectorPagoPortPulse 2.2s infinite ease-in-out;
+}
+
+.lector-pago-node .port:hover {
+  border-color: rgba(153, 246, 228, 0.92);
+  box-shadow: 0 0 18px rgba(45, 212, 191, 0.45);
+  transform: scale(1.06);
 }
 
 .menu-nodo-btn-lector-pago {
-  border-color: rgba(52, 211, 153, 0.35);
+  border-color: rgba(56, 189, 248, 0.28);
+  background: linear-gradient(145deg, rgba(8, 47, 73, 0.34), rgba(15, 23, 42, 0.3));
 }
 
 .menu-nodo-btn-lector-pago:hover {
-  border-color: rgba(52, 211, 153, 0.75);
-  box-shadow: 0 0 12px rgba(52, 211, 153, 0.2);
+  border-color: rgba(34, 211, 238, 0.6);
+  box-shadow: 0 0 16px rgba(6, 182, 212, 0.18);
+}
+
+/* Panel premium */
+#panelNodo .lector-pago-panel-wrap {
+  border-radius: 20px;
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  background:
+    radial-gradient(circle at 0% 0%, rgba(56, 189, 248, 0.14), transparent 38%),
+    linear-gradient(155deg, rgba(7, 18, 35, 0.96), rgba(7, 14, 30, 0.94));
+  padding: 16px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 16px 30px rgba(2, 6, 23, 0.45);
+}
+
+.lector-pago-panel-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 14px;
+}
+
+.lector-pago-panel-header h3 {
+  margin: 0;
+  color: #e2e8f0;
+  font-size: 15px;
+  letter-spacing: 0.02em;
+}
+
+.lector-pago-panel-header p {
+  margin: 5px 0 0;
+  color: rgba(148, 163, 184, 0.9);
+  font-size: 12px;
+}
+
+.lector-pago-panel-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  letter-spacing: 0.07em;
+  font-weight: 700;
+  padding: 5px 10px;
+  border-radius: 999px;
+  color: #cffafe;
+  border: 1px solid rgba(45, 212, 191, 0.45);
+  background: rgba(13, 148, 136, 0.18);
+}
+
+.lector-pago-panel-section {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(51, 65, 85, 0.65);
+}
+
+.lector-pago-panel-section-title {
+  color: #cbd5e1;
+  font-size: 11px;
+  letter-spacing: 0.11em;
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+
+#panelNodo .lector-pago-panel-campo {
+  margin-bottom: 10px;
+}
+
+#panelNodo .lector-pago-panel-campo label {
+  display: block;
+  margin-bottom: 6px;
+  color: #cbd5e1;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+#panelNodo .lector-pago-panel-campo input,
+#panelNodo .lector-pago-panel-campo textarea {
+  width: 100%;
+  border-radius: 18px;
+  border: 1px solid rgba(71, 85, 105, 0.85);
+  background: linear-gradient(145deg, rgba(15, 23, 42, 0.8), rgba(2, 6, 23, 0.68));
+  color: #e2e8f0;
+  padding: 12px 14px;
+  font-size: 13px;
+  box-sizing: border-box;
+  box-shadow: inset 0 1px 2px rgba(2, 6, 23, 0.65);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+#panelNodo .lector-pago-panel-campo input::placeholder,
+#panelNodo .lector-pago-panel-campo textarea::placeholder {
+  color: rgba(148, 163, 184, 0.72);
+}
+
+#panelNodo .lector-pago-panel-campo input:focus,
+#panelNodo .lector-pago-panel-campo textarea:focus {
+  outline: none;
+  border-color: rgba(34, 211, 238, 0.7);
+  box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.18), inset 0 1px 2px rgba(2, 6, 23, 0.75);
+  background: linear-gradient(145deg, rgba(15, 23, 42, 0.9), rgba(2, 6, 23, 0.78));
+}
+
+#panelNodo .lector-pago-panel-campo textarea {
+  resize: vertical;
+  min-height: 78px;
+}
+
+.lector-pago-panel-hint {
+  color: rgba(148, 163, 184, 0.85);
+  font-size: 12px;
+  margin: 12px 2px 14px;
+}
+
+#panelNodo .lector-pago-save-btn {
+  width: 100%;
+  border: none;
+  border-radius: 16px;
+  padding: 12px 14px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #ecfdf5;
+  background: linear-gradient(145deg, #10b981, #0891b2);
+  box-shadow: 0 10px 24px rgba(6, 182, 212, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
+}
+
+#panelNodo .lector-pago-save-btn:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.04);
+  box-shadow: 0 14px 30px rgba(6, 182, 212, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+}
+
+.lector-pago-save-btn-spinner {
+  display: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid rgba(236, 253, 245, 0.45);
+  border-top-color: #ecfdf5;
+  animation: spinLectorPago 0.8s linear infinite;
+}
+
+#panelNodo .lector-pago-save-btn.is-loading .lector-pago-save-btn-spinner {
+  display: inline-block;
+}
+
+@keyframes spinLectorPago {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes lectorPagoPulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.5);
+  }
+  70% {
+    box-shadow: 0 0 0 6px rgba(52, 211, 153, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(52, 211, 153, 0);
+  }
+}
+
+@keyframes lectorPagoPortPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 10px rgba(45, 212, 191, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 16px rgba(45, 212, 191, 0.42);
+  }
 }
