@@ -112,7 +112,9 @@
   }
 
   function applyDataToNodo(nodo, data) {
-    return syncDataToNodo(nodo, data);
+    const cfg = normalizarData(data || leerDataDesdeNodo(nodo));
+    renderNodoVisual(nodo, cfg);
+    return syncDataToNodo(nodo, cfg);
   }
 
   function esNodoLectorPago(nodo) {
@@ -171,6 +173,22 @@
     `;
   }
 
+  function renderNodoVisual(nodo, data) {
+    if (!nodo) return null;
+    const cfg = normalizarData(data || leerDataDesdeNodo(nodo));
+    const body = buildNodoHtml(nodo.id, cfg);
+
+    nodo.dataset.tipo = "lector_pago";
+    nodo.classList.add("lector-pago-node", "node-lector-pago");
+
+    nodo.innerHTML =
+      `<div class="port in" data-nodo="${nodo.id}" onmousedown="iniciarConexion(event, '${nodo.id}', 'in')"></div>` +
+      body +
+      `<div class="port out" data-nodo="${nodo.id}" onmousedown="iniciarConexion(event, '${nodo.id}', 'out')"></div>`;
+
+    return nodo;
+  }
+
   function crearNodoEnCanvas() {
     const canvas = document.getElementById("canvasFlujo");
     if (!canvas) {
@@ -191,11 +209,7 @@
     nodo.style.left = 280 + nodoCount * 40 + "px";
     nodo.style.top = 260 + nodoCount * 30 + "px";
 
-    const body = buildNodoHtml(nodo.id, DEFAULT_DATA);
-    nodo.innerHTML =
-      `<div class="port in" data-nodo="${nodo.id}" onmousedown="iniciarConexion(event, '${nodo.id}', 'in')"></div>` +
-      body +
-      `<div class="port out" data-nodo="${nodo.id}" onmousedown="iniciarConexion(event, '${nodo.id}', 'out')"></div>`;
+    renderNodoVisual(nodo, DEFAULT_DATA);
 
     canvas.appendChild(nodo);
 
@@ -208,7 +222,15 @@
   }
 
   function refrescarNodoCargado(nodo) {
-    syncDataToNodo(nodo);
+    const data = leerDataDesdeNodo(nodo);
+    const tieneMarkupPremium = !!nodo.querySelector(".lector-pago-header");
+    if (!tieneMarkupPremium) {
+      renderNodoVisual(nodo, data);
+    } else {
+      nodo.dataset.tipo = "lector_pago";
+      nodo.classList.add("lector-pago-node", "node-lector-pago");
+    }
+    syncDataToNodo(nodo, data);
   }
 
   function getDataFromNodo(nodo) {
