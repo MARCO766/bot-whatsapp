@@ -331,6 +331,14 @@ function cargarFlujoGuardado(){
     }
   });
 
+  document.querySelectorAll(".conversion-node, .node-conversion, [data-tipo='conversion']").forEach((nodo) => {
+    try {
+      initConversionNodeUI(nodo);
+    } catch (e) {
+      console.warn("Conversión: error al refrescar nodo cargado", e);
+    }
+  });
+
   if(flujoCargado.conexiones){
     flujoCargado.conexiones.forEach(c => {
       const desdeId = c.desde || c.from || c.source || c.source_node_id;
@@ -438,28 +446,39 @@ function agregarNodo(tipo){
   }
 
   if(tipo === "conversion"){
-    nodo.classList.add("conversion-node", "node-conversion");
+    nodo.classList.add("conversion-node", "node-conversion", "conversion-node--circular");
 
     contenido = `
       <div class="node-actions">
         <button type="button" class="edit-node" onclick="event.stopPropagation(); editarNodo('${nodo.id}')">✎</button>
         <button type="button" class="delete-node" onclick="event.stopPropagation(); borrarNodo('${nodo.id}')">×</button>
       </div>
-      <h3 class="node-title">💰 Conversión</h3>
-      <p class="node-desc conversion-hint">Registra venta real · no usa etiquetas</p>
-      <input type="number" class="conversion-valor" min="0" step="0.01" value="0" placeholder="Valor">
-      <select class="conversion-moneda node-select">
-        ${opcionesSelectConversionMoneda(null, "USD")}
-      </select>
-      <select class="conversion-origen node-select">
-        <option value="flujo" selected>Flujo (automático)</option>
-        <option value="manual">Manual</option>
-        <option value="hotmart">Hotmart</option>
-        <option value="stripe">Stripe</option>
-        <option value="mercadopago">MercadoPago</option>
-        <option value="qr">QR</option>
-        <option value="webhook">Webhook</option>
-      </select>
+      <div class="conversion-node-shell">
+        <div class="conversion-core-column">
+          <div class="conversion-circle">
+            <span class="conversion-badge-event">EVENTO</span>
+            <div class="conversion-icon" aria-hidden="true">💰</div>
+            <h3 class="conversion-title">Conversión</h3>
+            <p class="conversion-venta conversion-hint">Registra venta real</p>
+            <p class="conversion-footnote">Registra venta real</p>
+          </div>
+        </div>
+      </div>
+      <div class="conversion-node-fields conversion-node-fields--hidden">
+        <input type="number" class="conversion-valor" min="0" step="0.01" value="0" placeholder="Valor" tabindex="-1" aria-hidden="true">
+        <select class="conversion-moneda node-select" tabindex="-1" aria-hidden="true">
+          ${opcionesSelectConversionMoneda(null, "USD")}
+        </select>
+        <select class="conversion-origen node-select" tabindex="-1" aria-hidden="true">
+          <option value="flujo" selected>Flujo (automático)</option>
+          <option value="manual">Manual</option>
+          <option value="hotmart">Hotmart</option>
+          <option value="stripe">Stripe</option>
+          <option value="mercadopago">MercadoPago</option>
+          <option value="qr">QR</option>
+          <option value="webhook">Webhook</option>
+        </select>
+      </div>
       <textarea class="conversion-data" style="display:none;">{"valor":0,"moneda":"USD","origen":"flujo"}</textarea>
     `;
   }
@@ -531,6 +550,10 @@ function agregarNodo(tipo){
 
   if(tipo === "ia" && window.MacBotIA){
     window.MacBotIA.initNodoRecienCreado(nodo);
+  }
+
+  if(tipo === "conversion"){
+    initConversionNodeUI(nodo);
   }
 
   hacerMovible(nodo);
@@ -2762,23 +2785,168 @@ function abrirPanelNodo(nodo){
   document.getElementById("panelTituloNodo")?.addEventListener("input", macbotRecordHistoryDebounced);
 }
 
+function esNodoConversion(nodo){
+  if(!nodo) return false;
+  return (
+    nodo.dataset.tipo === "conversion" ||
+    nodo.classList.contains("conversion-node") ||
+    nodo.classList.contains("node-conversion")
+  );
+}
+
+function leerConversionDataDesdeNodo(nodo){
+  let data = { valor: 0, moneda: "USD", origen: "flujo" };
+
+  try {
+    const raw = nodo.querySelector(".conversion-data")?.value;
+    if(raw) data = { ...data, ...JSON.parse(raw) };
+  } catch(e){ /* ignore */ }
+
+  const inputValor = nodo.querySelector(".conversion-valor");
+  const selMoneda = nodo.querySelector(".conversion-moneda");
+  const selOrigen = nodo.querySelector(".conversion-origen");
+
+  if(inputValor) data.valor = parseFloat(inputValor.value) || 0;
+  if(selMoneda) data.moneda = selMoneda.value || data.moneda;
+  if(selOrigen) data.origen = selOrigen.value || data.origen;
+
+  data.moneda = String(data.moneda || "USD").toUpperCase();
+  return data;
+}
+
+function renderConversionVisual(nodo, data){
+  if(!nodo) return;
+
+  const valor = parseFloat(data?.valor) || 0;
+  const moneda = String(data?.moneda || "USD").toUpperCase();
+  const ventaEl = nodo.querySelector(".conversion-venta");
+
+  if(ventaEl){
+    ventaEl.textContent = `Venta: ${valor} ${moneda}`;
+    ventaEl.classList.toggle("conversion-venta--empty", valor <= 0);
+  }
+}
+
+function ensureConversionFieldsHidden(nodo){
+  let wrap = nodo.querySelector(".conversion-node-fields");
+  if(!wrap){
+    wrap = document.createElement("div");
+    wrap.className = "conversion-node-fields conversion-node-fields--hidden";
+    const portOut = nodo.querySelector(".port.out");
+    if(portOut) nodo.insertBefore(wrap, portOut);
+    else nodo.appendChild(wrap);
+  }
+
+  ["conversion-valor", "conversion-moneda", "conversion-origen"].forEach((cls) => {
+    const el = nodo.querySelector("." + cls);
+    if(el && el.parentElement !== wrap) wrap.appendChild(el);
+  });
+
+  return wrap;
+}
+
+function initConversionNodeUI(nodo){
+  if(!esNodoConversion(nodo)) return;
+
+  nodo.classList.add("conversion-node", "node-conversion", "conversion-node--circular");
+
+  const portIn = nodo.querySelector(".port.in");
+  const portOut = nodo.querySelector(".port.out");
+  const actions = nodo.querySelector(".node-actions");
+  ensureConversionFieldsHidden(nodo);
+
+  let shell = nodo.querySelector(".conversion-node-shell");
+  if(!shell){
+    shell = document.createElement("div");
+    shell.className = "conversion-node-shell";
+
+    const col = document.createElement("div");
+    col.className = "conversion-core-column";
+
+    const circle = document.createElement("div");
+    circle.className = "conversion-circle";
+    circle.innerHTML =
+      '<span class="conversion-badge-event">EVENTO</span>' +
+      '<div class="conversion-icon" aria-hidden="true">💰</div>' +
+      '<h3 class="conversion-title">Conversión</h3>' +
+      '<p class="conversion-venta conversion-hint">Registra venta real</p>' +
+      '<p class="conversion-footnote">Registra venta real</p>';
+
+    col.appendChild(circle);
+    shell.appendChild(col);
+
+    if(portOut) nodo.insertBefore(shell, portOut);
+    else nodo.appendChild(shell);
+  }
+
+  const circle = nodo.querySelector(".conversion-circle");
+  if(!circle) return;
+
+  if(portIn && portIn.parentElement !== circle){
+    circle.insertBefore(portIn, circle.firstChild);
+  }
+
+  if(actions && actions.parentElement !== circle){
+    const badge = circle.querySelector(".conversion-badge-event");
+    if(badge) circle.insertBefore(actions, badge.nextSibling);
+    else circle.appendChild(actions);
+  }
+
+  nodo.querySelectorAll(".node-title").forEach((el) => {
+    if(!circle.contains(el)) el.remove();
+  });
+
+  nodo.querySelectorAll(".node-desc").forEach((el) => {
+    if(
+      !circle.contains(el) &&
+      !el.classList.contains("conversion-venta") &&
+      !el.classList.contains("conversion-footnote")
+    ){
+      el.remove();
+    }
+  });
+
+  syncConversionDataToNodo(nodo);
+}
+
 function syncConversionDataToNodo(nodo){
   if(!nodo) return;
 
-  const valor = parseFloat(nodo.querySelector(".conversion-valor")?.value) || 0;
-  const moneda = nodo.querySelector(".conversion-moneda")?.value || "USD";
-  const origen = nodo.querySelector(".conversion-origen")?.value || "flujo";
-  const data = { valor, moneda, origen };
+  const data = leerConversionDataDesdeNodo(nodo);
 
   const ta = nodo.querySelector(".conversion-data");
   if(ta) ta.value = JSON.stringify(data);
 
-  const hint = nodo.querySelector(".conversion-hint");
-  if(hint){
-    hint.textContent = valor > 0
-      ? `Venta: ${valor} ${moneda} · ${origen}`
-      : "Registra venta real · no usa etiquetas";
-  }
+  renderConversionVisual(nodo, data);
+}
+
+function aplicarConversionDesdePanel(){
+  const nodo = nodoSeleccionadoPanel;
+  if(!nodo || !esNodoConversion(nodo)) return;
+
+  const valor = parseFloat(document.getElementById("panelConversionValor")?.value) || 0;
+  const moneda = document.getElementById("panelConversionMoneda")?.value || "USD";
+  const origen = document.getElementById("panelConversionOrigen")?.value || "flujo";
+
+  const inputValor = nodo.querySelector(".conversion-valor");
+  const selMoneda = nodo.querySelector(".conversion-moneda");
+  const selOrigen = nodo.querySelector(".conversion-origen");
+
+  if(inputValor) inputValor.value = valor;
+  if(selMoneda) selMoneda.value = moneda;
+  if(selOrigen) selOrigen.value = origen;
+
+  syncConversionDataToNodo(nodo);
+}
+
+function bindPanelConversionLiveSync(){
+  const valorEl = document.getElementById("panelConversionValor");
+  const monedaEl = document.getElementById("panelConversionMoneda");
+  const origenEl = document.getElementById("panelConversionOrigen");
+
+  valorEl?.addEventListener("input", aplicarConversionDesdePanel);
+  monedaEl?.addEventListener("change", aplicarConversionDesdePanel);
+  origenEl?.addEventListener("change", aplicarConversionDesdePanel);
 }
 
 function renderPanelConversion(nodo){
@@ -2787,6 +2955,8 @@ function renderPanelConversion(nodo){
   const panel = document.getElementById("panelNodo");
   const contenido = document.getElementById("panelNodoContenido");
   if(!panel || !contenido) return;
+
+  initConversionNodeUI(nodo);
 
   panel.classList.add("activo");
   marcarNodoSeleccionado(nodo);
@@ -2823,26 +2993,16 @@ function renderPanelConversion(nodo){
     <p class="panel-hint">Solo este nodo suma ventas en KPIs. Las etiquetas no cuentan como venta.</p>
     <button class="panel-btn" onclick="guardarPanelConversion()">Guardar conversión</button>
   `;
+
+  bindPanelConversionLiveSync();
+  aplicarConversionDesdePanel();
 }
 
 function guardarPanelConversion(){
   if(!nodoSeleccionadoPanel) return;
 
   registrarHistorialBuilder();
-
-  const valor = parseFloat(document.getElementById("panelConversionValor")?.value) || 0;
-  const moneda = document.getElementById("panelConversionMoneda")?.value || "USD";
-  const origen = document.getElementById("panelConversionOrigen")?.value || "flujo";
-
-  const inputValor = nodoSeleccionadoPanel.querySelector(".conversion-valor");
-  const selMoneda = nodoSeleccionadoPanel.querySelector(".conversion-moneda");
-  const selOrigen = nodoSeleccionadoPanel.querySelector(".conversion-origen");
-
-  if(inputValor) inputValor.value = valor;
-  if(selMoneda) selMoneda.value = moneda;
-  if(selOrigen) selOrigen.value = origen;
-
-  syncConversionDataToNodo(nodoSeleccionadoPanel);
+  aplicarConversionDesdePanel();
 }
 
 function guardarPanelNodo(){
