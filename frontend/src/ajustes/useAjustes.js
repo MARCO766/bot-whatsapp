@@ -3,11 +3,14 @@ import {
   ApiError,
   cambiarPassword,
   desconectarWhatsapp,
+  desconectarWhatsappPorId,
   fetchAjustes,
+  hacerPrincipalWhatsapp,
   guardarConexion,
   patchPerfil,
   probarMeta,
   probarWhatsapp,
+  probarWhatsappPorId,
 } from "./api";
 import { useSocketEvent } from "../hooks/useSocketEvent";
 import { useDebouncedCallback } from "../hooks/useDebouncedCallback";
@@ -76,7 +79,10 @@ export function useAjustes() {
     savePerfil: (body) => run(() => patchPerfil(body), "Perfil guardado"),
     saveConexion: (body) => run(() => guardarConexion(body), "Conexión guardada"),
     desconectar: () => run(() => desconectarWhatsapp(), "WhatsApp desconectado"),
+    desconectarPorId: (id) => run(() => desconectarWhatsappPorId(id), "WhatsApp desconectado"),
     probarWhatsapp: (numero) => run(() => probarWhatsapp(numero), "Prueba enviada"),
+    probarWhatsappPorId: (id, numero) => run(() => probarWhatsappPorId(id, numero), "Prueba enviada"),
+    hacerPrincipal: (id) => run(() => hacerPrincipalWhatsapp(id), "Conexión principal actualizada"),
     probarMetaEvento: () => run(() => probarMeta(), "Evento de prueba enviado"),
     savePassword: (body) => run(() => cambiarPassword(body), "Contraseña actualizada"),
   };

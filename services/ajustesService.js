@@ -6,9 +6,13 @@ const axios = require("axios");
 const bcrypt = require("bcryptjs");
 const {
   getConexionActiva,
+  getConexionesUsuario,
   guardarConexion,
+  hacerPrincipal,
   desconectarWhatsapp,
+  desconectarWhatsappPorId,
   probarWhatsapp,
+  probarWhatsappPorId,
   mapConexionApi,
   maskToken,
 } = require("./conexionesWhatsappService");
@@ -120,13 +124,14 @@ async function getAjustesCompleto(usuarioId, req, sessionUsuario) {
     return buildAjustesVacio(req, sessionUsuario);
   }
 
-  const [usuario, rowActiva] = await Promise.all([
+  const [usuario, rowActiva, conexionesRows] = await Promise.all([
     fetchUsuario(usuarioId, sessionUsuario),
     getConexionActiva(usuarioId),
+    getConexionesUsuario(usuarioId),
   ]);
 
   const conexionApi = mapConexionApi(rowActiva, { includeToken: true });
-  const lista = conexionApi ? [conexionApi] : [];
+  const lista = conexionesRows.map((row) => mapConexionApi(row, { includeToken: true }));
   const metaAds = metaFromConexion(rowActiva);
 
   log("GET ajustes OK", { conectado: Boolean(conexionApi?.conectado) });
@@ -186,8 +191,22 @@ async function desconectarConexionAjustes(usuarioId) {
   return { ok: true };
 }
 
+async function desconectarConexionAjustesPorId(usuarioId, conexionId) {
+  await desconectarWhatsappPorId(usuarioId, conexionId);
+  return { ok: true };
+}
+
 async function probarConexionAjustes(usuarioId, numero) {
   return probarWhatsapp(usuarioId, numero);
+}
+
+async function probarConexionAjustesPorId(usuarioId, conexionId, numero) {
+  return probarWhatsappPorId(usuarioId, conexionId, numero);
+}
+
+async function hacerPrincipalAjustes(usuarioId, conexionId) {
+  const row = await hacerPrincipal(usuarioId, conexionId);
+  return { ok: true, conexionActiva: mapConexionApi(row, { includeToken: true }) };
 }
 
 async function probarMetaEvento(usuarioId) {
@@ -233,7 +252,10 @@ module.exports = {
   patchAjustesGenerales,
   guardarConexionAjustes,
   desconectarConexionAjustes,
+  desconectarConexionAjustesPorId,
   probarConexionAjustes,
+  probarConexionAjustesPorId,
+  hacerPrincipalAjustes,
   probarMetaEvento,
   cambiarPassword,
 };

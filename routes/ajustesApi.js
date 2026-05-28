@@ -10,7 +10,10 @@ const {
   patchAjustesGenerales,
   guardarConexionAjustes,
   desconectarConexionAjustes,
+  desconectarConexionAjustesPorId,
   probarConexionAjustes,
+  probarConexionAjustesPorId,
+  hacerPrincipalAjustes,
   probarMetaEvento,
   cambiarPassword,
 } = require("../services/ajustesService");
@@ -116,6 +119,16 @@ router.post("/api/ajustes/conexion/desconectar", protegerApi, async (req, res) =
   }
 });
 
+router.post("/api/ajustes/conexion/:id/desconectar", protegerApi, async (req, res) => {
+  try {
+    const result = await desconectarConexionAjustesPorId(uid(req), req.params.id);
+    rt.conexionActualizada(req, uid(req), { accion: "desconectada", conexionId: req.params.id });
+    res.json(result);
+  } catch (error) {
+    handleError(res, error, "POST desconectar por id");
+  }
+});
+
 /** Misma lógica que POST /probar-whatsapp */
 router.post("/api/ajustes/conexion/probar", protegerApi, async (req, res) => {
   try {
@@ -123,6 +136,25 @@ router.post("/api/ajustes/conexion/probar", protegerApi, async (req, res) => {
     res.json(await probarConexionAjustes(uid(req), numero));
   } catch (error) {
     handleError(res, error, "POST probar");
+  }
+});
+
+router.post("/api/ajustes/conexion/:id/probar", protegerApi, async (req, res) => {
+  try {
+    const { numero } = req.body || {};
+    res.json(await probarConexionAjustesPorId(uid(req), req.params.id, numero));
+  } catch (error) {
+    handleError(res, error, "POST probar por id");
+  }
+});
+
+router.post("/api/ajustes/conexion/:id/principal", protegerApi, async (req, res) => {
+  try {
+    const result = await hacerPrincipalAjustes(uid(req), req.params.id);
+    rt.conexionActualizada(req, uid(req), { accion: "principal", conexionId: req.params.id });
+    res.json(result);
+  } catch (error) {
+    handleError(res, error, "POST principal");
   }
 });
 

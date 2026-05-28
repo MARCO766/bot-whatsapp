@@ -36,9 +36,26 @@ async function getConexionActiva(usuarioId) {
   }
 }
 
+async function getConexionesUsuario(usuarioId) {
+  if (!usuarioId || !SUPABASE_URL || !SUPABASE_KEY) return [];
+  try {
+    const res = await axios.get(
+      `${SUPABASE_URL}/rest/v1/conexiones_whatsapp?usuario_id=eq.${encodeURIComponent(usuarioId)}&select=*&order=creado_en.desc`,
+      { headers: supabaseHeaders() }
+    );
+    return Array.isArray(res.data) ? res.data : [];
+  } catch (error) {
+    log("getConexionesUsuario error:", error.response?.data || error.message);
+    return [];
+  }
+}
+
 /** Igual que POST /guardar-conexion (si falta token/phone_id, conserva la conexión activa) */
 async function guardarConexion(usuarioId, body) {
-  const existing = await getConexionActiva(usuarioId);
+  const [existing, conexiones] = await Promise.all([
+    getConexionActiva(usuarioId),
+    getConexionesUsuario(usuarioId),
+  ]);
   const {
     nombre,
     numero,
@@ -58,16 +75,7 @@ async function guardarConexion(usuarioId, body) {
     throw err;
   }
 
-  await axios.patch(
-    `${SUPABASE_URL}/rest/v1/conexiones_whatsapp?usuario_id=eq.${encodeURIComponent(usuarioId)}`,
-    { activo: false },
-    {
-      headers: supabaseHeaders({
-        "Content-Type": "application/json",
-        Prefer: "return=minimal",
-      }),
-    }
-  );
+  const esPrimeraConexion = conexiones.length === 0;
 
   await axios.post(
     `${SUPABASE_URL}/rest/v1/conexiones_whatsapp`,
@@ -85,7 +93,7 @@ async function guardarConexion(usuarioId, body) {
         capi_token !== undefined && capi_token !== null
           ? String(capi_token).trim() || null
           : existing?.capi_token || null,
-      activo: true,
+      activo: esPrimeraConexion,
     },
     {
       headers: supabaseHeaders({
@@ -99,6 +107,38 @@ async function guardarConexion(usuarioId, body) {
   return getConexionActiva(usuarioId);
 }
 
+async function hacerPrincipal(usuarioId, conexionId) {
+  if (!usuarioId || !conexionId) {
+    const err = new Error("usuarioId y conexionId son obligatorios");
+    err.status = 400;
+    throw err;
+  }
+
+  await axios.patch(
+    `${SUPABASE_URL}/rest/v1/conexiones_whatsapp?usuario_id=eq.${encodeURIComponent(usuarioId)}`,
+    { activo: false },
+    {
+      headers: supabaseHeaders({
+        "Content-Type": "application/json",
+        Prefer: "return=minimal",
+      }),
+    }
+  );
+
+  await axios.patch(
+    `${SUPABASE_URL}/rest/v1/conexiones_whatsapp?id=eq.${encodeURIComponent(conexionId)}&usuario_id=eq.${encodeURIComponent(usuarioId)}`,
+    { activo: true },
+    {
+      headers: supabaseHeaders({
+        "Content-Type": "application/json",
+        Prefer: "return=minimal",
+      }),
+    }
+  );
+
+  return getConexionActiva(usuarioId);
+}
+
 /** Igual que POST /desconectar-whatsapp */
 async function desconectarWhatsapp(usuarioId) {
   await axios.delete(
@@ -106,6 +146,27 @@ async function desconectarWhatsapp(usuarioId) {
     { headers: supabaseHeaders() }
   );
   log("desconectarWhatsapp OK", { usuarioId });
+  return { ok: true };
+}
+
+async function desconectarWhatsappPorId(usuarioId, conexionId) {
+  if (!usuarioId || !conexionId) {
+    const err = new Error("usuarioId y conexionId son obligatorios");
+    err.status = 400;
+    throw err;
+  }
+  await axios.delete(
+    `${SUPABASE_URL}/rest/v1/conexiones_whatsapp?id=eq.${encodeURIComponent(conexionId)}&usuario_id=eq.${encodeURIComponent(usuarioId)}`,
+    { headers: supabaseHeaders() }
+  );
+
+  const activa = await getConexionActiva(usuarioId);
+  if (!activa) {
+    const restantes = await getConexionesUsuario(usuarioId);
+    if (restantes[0]?.id) {
+      await hacerPrincipal(usuarioId, restantes[0].id);
+    }
+  }
   return { ok: true };
 }
 
@@ -147,6 +208,37 @@ async function probarWhatsapp(usuarioId, numero) {
   return { ok: true, mensaje: "Mensaje de prueba enviado" };
 }
 
+async function probarWhatsappPorId(usuarioId, conexionId, numero) {
+  const conexiones = await getConexionesUsuario(usuarioId);
+  const conexion = conexiones.find((c) => String(c.id) === String(conexionId));
+  if (!conexion?.token || !conexion?.phone_id) {
+    const err = new Error("Conexión inválida para prueba");
+    err.status = 400;
+    throw err;
+  }
+  const to = String(numero || conexion.numero || "").replace(/\D/g, "");
+  if (!to) {
+    const err = new Error("Indica un número de prueba");
+    err.status = 400;
+    throw err;
+  }
+  await axios.post(
+    `https://graph.facebook.com/v19.0/${conexion.phone_id}/messages`,
+    {
+      messaging_product: "whatsapp",
+      to,
+      text: { body: "✅ MacBot conectado correctamente. Esta es una prueba de WhatsApp API." },
+    },
+    {
+      headers: {
+        Authorization: `Bearer ${conexion.token}`,
+        "Content-Type": "application/json",
+      },
+    }
+  );
+  return { ok: true, mensaje: "Mensaje de prueba enviado" };
+}
+
 function maskToken(token) {
   if (!token || typeof token !== "string") return null;
   const t = token.trim();
@@ -178,9 +270,13 @@ function mapConexionApi(row, { includeToken = false } = {}) {
 
 module.exports = {
   getConexionActiva,
+  getConexionesUsuario,
   guardarConexion,
+  hacerPrincipal,
   desconectarWhatsapp,
+  desconectarWhatsappPorId,
   probarWhatsapp,
+  probarWhatsappPorId,
   mapConexionApi,
   maskToken,
 };

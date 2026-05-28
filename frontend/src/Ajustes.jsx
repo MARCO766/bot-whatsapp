@@ -65,8 +65,9 @@ export default function Ajustes() {
     showToast,
     savePerfil,
     saveConexion,
-    desconectar,
-    probarWhatsapp,
+    desconectarPorId,
+    hacerPrincipal,
+    probarWhatsappPorId,
     savePassword,
     probarMetaEvento,
   } = useAjustes();
@@ -131,9 +132,9 @@ export default function Ajustes() {
     if (ok) setMeta((m) => ({ ...m, capiToken: "" }));
   }
 
-  function abrirConfigurar() {
-    const c = conexionActiva;
+  function abrirConfigurar(c = conexionActiva) {
     setConnForm({
+      id: c?.id,
       nombre: c?.nombre || "",
       numero: c?.numero || "",
       token: c?.token || "",
@@ -176,14 +177,18 @@ export default function Ajustes() {
     if (ok) setConnForm(null);
   }
 
-  async function handleDesconectar() {
-    if (!confirm("¿Desconectar WhatsApp? Se eliminarán las credenciales guardadas.")) return;
-    await desconectar();
+  async function handleDesconectarId(id) {
+    if (!confirm("¿Desconectar esta conexión de WhatsApp?")) return;
+    await desconectarPorId(id);
     setConnForm(null);
   }
 
-  async function handleProbar() {
-    await probarWhatsapp(testNumero);
+  async function handleProbarId(id) {
+    await probarWhatsappPorId(id, testNumero);
+  }
+
+  async function handleHacerPrincipal(id) {
+    await hacerPrincipal(id);
   }
 
   async function handlePassword(e) {
@@ -279,23 +284,29 @@ export default function Ajustes() {
               <h2>WhatsApp API</h2>
               <button type="button" className="ajBtn primary" onClick={abrirNuevaConexion}>+ Conectar WhatsApp</button>
             </div>
-            <p className="ajHint">Una conexión activa por cuenta (igual que el panel admin Conexiones).</p>
+            <p className="ajHint">Puedes tener varias conexiones; solo una queda como principal para envíos.</p>
 
-            {!conexionActiva && <p className="ajHint">Sin conexiones. Agrega TOKEN y PHONE_ID de Meta.</p>}
+            {!data?.conexionesWhatsapp?.length && <p className="ajHint">Sin conexiones. Agrega TOKEN y PHONE_ID de Meta.</p>}
 
-            {conexionActiva && [conexionActiva].map((c) => (
+            {(data?.conexionesWhatsapp || []).map((c) => (
               <div key={c.id} className="ajConnCard">
                 <div className="ajConnHead">
                   <div>
                     <strong>{c.nombre || "WhatsApp"}</strong> {estadoBadge(c.estado)}
                     <p className="ajHint">{c.numero || "Sin número"} · PHONE_ID {c.phone_id || c.phoneNumberId}</p>
                     {c.tokenMasked && <p className="ajHint">Token: {c.tokenMasked}</p>}
+                    <p className="ajHint">Estado: {c.activo ? "Principal" : "Secundaria"}</p>
                   </div>
                 </div>
                 <div className="ajBtnRow">
-                  <button type="button" className="ajBtn primary" onClick={abrirConfigurar}>Configurar</button>
-                  <button type="button" className="ajBtn ghost" onClick={handleProbar} disabled={saving}>Probar conexión</button>
-                  <button type="button" className="ajBtn danger" onClick={handleDesconectar}>Desconectar</button>
+                  {!c.activo && (
+                    <button type="button" className="ajBtn ghost" onClick={() => handleHacerPrincipal(c.id)} disabled={saving}>
+                      Hacer principal
+                    </button>
+                  )}
+                  <button type="button" className="ajBtn primary" onClick={() => abrirConfigurar(c)}>Configurar</button>
+                  <button type="button" className="ajBtn ghost" onClick={() => handleProbarId(c.id)} disabled={saving}>Probar conexión</button>
+                  <button type="button" className="ajBtn danger" onClick={() => handleDesconectarId(c.id)}>Desconectar</button>
                 </div>
               </div>
             ))}
@@ -321,15 +332,15 @@ export default function Ajustes() {
               </div>
               <div className="ajField">
                 <label>Phone Number ID</label>
-                <input value={connForm.phoneNumberId} onChange={(e) => setConnForm({ ...connForm, phoneNumberId: e.target.value })} required />
+                <input value={connForm.phone_id} onChange={(e) => setConnForm({ ...connForm, phone_id: e.target.value })} required />
               </div>
               <div className="ajField">
                 <label>Access Token {connForm.id && <span className="ajHint">(dejar vacío para mantener)</span>}</label>
                 <div style={{ display: "flex", gap: 8 }}>
                   <input
                     type={showToken ? "text" : "password"}
-                    value={connForm.accessToken}
-                    onChange={(e) => setConnForm({ ...connForm, accessToken: e.target.value })}
+                    value={connForm.token}
+                    onChange={(e) => setConnForm({ ...connForm, token: e.target.value })}
                     placeholder={connForm.id ? "••••••••" : "EAAxxxx..."}
                     required={!connForm.id}
                     style={{ flex: 1 }}
@@ -339,15 +350,6 @@ export default function Ajustes() {
                   </button>
                 </div>
               </div>
-              <div className="ajField">
-                <label>WABA ID (opcional)</label>
-                <input value={connForm.wabaId} onChange={(e) => setConnForm({ ...connForm, wabaId: e.target.value })} />
-              </div>
-              <SwitchRow
-                label="Conexión principal (activa para envíos)"
-                on={connForm.hacerPrincipal}
-                onToggle={() => setConnForm({ ...connForm, hacerPrincipal: !connForm.hacerPrincipal })}
-              />
               <div className="ajBtnRow">
                 <button type="submit" className="ajBtn primary" disabled={saving}>Guardar conexión</button>
                 <button type="button" className="ajBtn ghost" onClick={() => setConnForm(null)}>Cancelar</button>

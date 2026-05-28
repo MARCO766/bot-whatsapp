@@ -66,11 +66,26 @@ export function desconectarWhatsapp() {
   return request("/api/ajustes/conexion/desconectar", { method: "POST", body: "{}" });
 }
 
+export function desconectarWhatsappPorId(id) {
+  return request(`/api/ajustes/conexion/${id}/desconectar`, { method: "POST", body: "{}" });
+}
+
 export function probarWhatsapp(numero) {
   return request("/api/ajustes/conexion/probar", {
     method: "POST",
     body: JSON.stringify({ numero }),
   });
+}
+
+export function probarWhatsappPorId(id, numero) {
+  return request(`/api/ajustes/conexion/${id}/probar`, {
+    method: "POST",
+    body: JSON.stringify({ numero }),
+  });
+}
+
+export function hacerPrincipalWhatsapp(id) {
+  return request(`/api/ajustes/conexion/${id}/principal`, { method: "POST", body: "{}" });
 }
 
 export function logout() {
