@@ -314,13 +314,16 @@ export function useInbox({ onUnreadChange } = {}) {
       const idx = prev.findIndex((c) => sameChat(c, target));
       const texto = formatPreview(preview);
       if (idx === -1) {
+        const connId = String(conexionWhatsappId || "").trim();
+        if (!connId) return prev;
         return [
           {
-            chatKey: chatListKey(numero, conexionWhatsappId),
+            chatKey: chatListKey(numero, connId),
             numero,
             cliente_numero: numero,
-            conexionWhatsappId,
-            conexion_whatsapp_id: conexionWhatsappId,
+            conexionWhatsappId: connId,
+            conexion_whatsapp_id: connId,
+            conexion_nombre: "",
             nombre: numero,
             bloqueado: false,
             online: true,

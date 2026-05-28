@@ -23,11 +23,11 @@ export function messageChecks(estadoEnvio) {
   return { className: "sent", text: "✓" };
 }
 
-export function chatListKey(numero, conexionWhatsappId, conversacionId = null) {
+/** Misma clave que inboxService.chatCompositeKey: cliente_numero::conexion_whatsapp_id */
+export function chatListKey(numero, conexionWhatsappId) {
   const n = String(numero || "").trim();
   const c = String(conexionWhatsappId || "").trim();
-  const cv = conversacionId != null ? String(conversacionId).trim() : "";
-  return `${n}-${c}${cv ? `-${cv}` : ""}`;
+  return `${n}::${c}`;
 }
 
 export function sameChat(a, b) {

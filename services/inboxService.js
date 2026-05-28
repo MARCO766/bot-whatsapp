@@ -26,6 +26,18 @@ function chatCompositeKey(numero, conexionWhatsappId) {
   return `${n}::${c}`;
 }
 
+function parseChatCompositeKey(key) {
+  const raw = String(key || "");
+  const sep = raw.indexOf("::");
+  if (sep === -1) {
+    return { numero: raw.trim(), conexionWhatsappId: "" };
+  }
+  return {
+    numero: raw.slice(0, sep).trim(),
+    conexionWhatsappId: raw.slice(sep + 2).trim(),
+  };
+}
+
 function horaBolivia(fecha) {
   if (!fecha) return "";
   return new Date(fecha).toLocaleTimeString("es-BO", {
@@ -69,6 +81,7 @@ async function loadInboxData(
     responseColoresEtiquetas,
     responseClientes,
     responseConversaciones,
+    conexionesInbox,
   ] = await Promise.all([
     axios.get(
       `${SUPABASE_URL}/rest/v1/mensajes?usuario_id=eq.${usuarioId}${filtroConexion}&select=*&order=creado_en.desc&limit=200`,
@@ -90,7 +103,18 @@ async function loadInboxData(
       `${SUPABASE_URL}/rest/v1/conversaciones?usuario_id=eq.${usuarioId}${filtroConexion}&select=*`,
       { headers: supabaseHeaders() }
     ),
+    loadConexionesInbox(usuarioId),
   ]);
+
+  const mapaNombreConexion = {};
+  (conexionesInbox || []).forEach((c) => {
+    if (c?.id != null) {
+      mapaNombreConexion[String(c.id)] =
+        (c.nombre && String(c.nombre).trim()) ||
+        (c.numero && String(c.numero).trim()) ||
+        "";
+    }
+  });
 
   const mapaColoresEtiquetas = {};
   (responseColoresEtiquetas.data || []).forEach((e) => {
@@ -111,7 +135,10 @@ async function loadInboxData(
   const mapaUnread = {};
   const mapaConversaciones = {};
   conversacionesDB.forEach((c) => {
-    const key = chatCompositeKey(c.cliente_numero, c.conexion_whatsapp_id);
+    const numero = c.cliente_numero;
+    const connId = c.conexion_whatsapp_id;
+    if (!numero || !connId) return;
+    const key = chatCompositeKey(numero, connId);
     mapaUnread[key] = c.unread_count || 0;
     mapaConversaciones[key] = c;
   });
@@ -125,8 +152,9 @@ async function loadInboxData(
       msg.cliente_numero ||
       msg.numero_de_cliente ||
       msg["número_de_cliente"];
-    if (!numero) return;
-    const key = chatCompositeKey(numero, msg.conexion_whatsapp_id);
+    const connId = msg.conexion_whatsapp_id;
+    if (!numero || !connId) return;
+    const key = chatCompositeKey(numero, connId);
     if (!conversaciones[key]) conversaciones[key] = [];
     conversaciones[key].push(msg);
   });
@@ -137,8 +165,8 @@ async function loadInboxData(
       ...Object.keys(conversaciones),
     ]),
   ].filter((key) => {
-    const conv = mapaConversaciones[key];
-    return key && conv && conv.conexion_whatsapp_id;
+    const { numero, conexionWhatsappId } = parseChatCompositeKey(key);
+    return numero && conexionWhatsappId;
   });
 
   chatKeys.sort((keyA, keyB) => {
@@ -169,10 +197,21 @@ async function loadInboxData(
 
   const chats = chatKeys.map((key) => {
     const conv = mapaConversaciones[key];
-    const numero = conv.cliente_numero;
-    const connId = conv.conexion_whatsapp_id || null;
+    const msgs = conversaciones[key] || [];
+    const lastMsg = msgs[msgs.length - 1];
+    const parsed = parseChatCompositeKey(key);
+    const numero =
+      conv?.cliente_numero || lastMsg?.cliente_numero || parsed.numero;
+    const connId =
+      conv?.conexion_whatsapp_id ||
+      lastMsg?.conexion_whatsapp_id ||
+      parsed.conexionWhatsappId;
     const cliente = mapaClientes[numero];
-    const previewRaw = conv?.ultimo_mensaje || "";
+    const previewRaw =
+      conv?.ultimo_mensaje ||
+      lastMsg?.contenido ||
+      lastMsg?.tipo ||
+      "";
     const tags = etiquetasClientes
       .filter((e) => e.cliente_numero === numero)
       .map((e) => ({
@@ -181,19 +220,20 @@ async function loadInboxData(
       }));
 
     return {
-      chatKey: `${numero}-${connId || "sin-conexion"}`,
+      chatKey: chatCompositeKey(numero, connId),
       numero,
       cliente_numero: numero,
-      conexionWhatsappId: connId,
       conexion_whatsapp_id: connId,
-      conversacionId: conv.id || null,
-      conversacion_id: conv.id || null,
+      conexionWhatsappId: connId,
+      conexion_nombre: mapaNombreConexion[String(connId)] || "",
+      conversacion_id: conv?.id || null,
+      conversacionId: conv?.id || null,
       nombre: cliente?.nombre || numero,
       bloqueado: cliente?.estado === "bloqueado",
       online: true,
       noLeidos: mapaUnread[key] || 0,
       ultimoMensaje: formatPreview(previewRaw),
-      ultimoMensajeEn: conv?.ultimo_mensaje_en || null,
+      ultimoMensajeEn: conv?.ultimo_mensaje_en || lastMsg?.creado_en || null,
       etiquetas: tags,
     };
   });
@@ -273,6 +313,7 @@ module.exports = {
   loadConexionesInbox,
   filtroConexionQuery,
   chatCompositeKey,
+  parseChatCompositeKey,
   horaBolivia,
   formatPreview,
   supabaseHeaders,

@@ -55,13 +55,14 @@ export default function ChatList({
         )}
         {chats.map((c) => (
           <ChatListItem
-            key={c.chatKey || `${c.numero}-${c.conexion_whatsapp_id}`}
+            key={c.chatKey}
             chat={c}
             activo={Boolean(selectedChat && sameChat(c, selectedChat))}
             menuAbierto={menuChatKey === c.chatKey}
             lineaLabel={
               mostrarBadgeLinea
-                ? mapaNombreConexion[
+                ? c.conexion_nombre ||
+                  mapaNombreConexion[
                     c.conexion_whatsapp_id || c.conexionWhatsappId
                   ]
                 : null
