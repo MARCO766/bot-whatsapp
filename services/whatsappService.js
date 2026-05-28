@@ -299,6 +299,7 @@ async function enviarTextoWhatsApp(numero, texto, opciones = {}) {
           texto: textoEnvio,
           wamid,
           tipo: "texto",
+          conexionWhatsappId: opciones.conexionWhatsappId || null,
         });
       }
 
@@ -308,6 +309,7 @@ async function enviarTextoWhatsApp(numero, texto, opciones = {}) {
         texto: textoEnvio,
         wamid,
         tipo: "texto",
+        conexionWhatsappId: opciones.conexionWhatsappId || null,
       });
     } catch (supabaseErr) {
       console.log("ERROR ENVIANDO WHATSAPP (SUPABASE mensajes):", {
@@ -360,28 +362,7 @@ function nombreArchivoDesdeUrl(mediaUrl, fallback = "archivo.pdf") {
 }
 
 async function resolverCredencialesWhatsApp(opciones = {}) {
-  let tokenEnviar = TOKEN;
-  let phoneIdEnviar = PHONE_ID;
-
-  if (opciones.usuarioId) {
-    const responseConexion = await axios.get(
-      `${SUPABASE_URL}/rest/v1/conexiones_whatsapp?usuario_id=eq.${opciones.usuarioId}&activo=eq.true&select=*`,
-      {
-        headers: {
-          apikey: SUPABASE_KEY,
-          Authorization: `Bearer ${SUPABASE_KEY}`,
-        },
-      }
-    );
-
-    const conexion = responseConexion.data?.[0];
-    if (conexion) {
-      tokenEnviar = conexion.token;
-      phoneIdEnviar = conexion.phone_id;
-    }
-  }
-
-  return { tokenEnviar, phoneIdEnviar };
+  return resolverCredencialesEnvio(opciones);
 }
 
 function esUrlPublicaHttps(url) {

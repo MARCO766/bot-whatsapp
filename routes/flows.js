@@ -20,7 +20,6 @@ const upload = multer({
 const { protegerPanel } = require("../middlewares/auth");
 const {
   enviarTextoWhatsApp,
-  registrarMensajeSalienteEnInbox,
   enviarMediaWhatsApp,
 } = require("../services/whatsappService");
 const {
@@ -50,6 +49,15 @@ function finishInbox(req, res, numero) {
   }
   if (numero) return res.redirect("/inbox?numero=" + numero);
   return res.redirect("/inbox");
+}
+
+function leerConexionWhatsappId(req) {
+  const raw =
+    req.body?.conexion_whatsapp_id ??
+    req.body?.conexionWhatsappId ??
+    req.query?.conexion_whatsapp_id;
+  if (raw == null || String(raw).trim() === "") return null;
+  return String(raw).trim();
 }
 
 router.use(seguimientoRoutes);
@@ -272,14 +280,12 @@ const PORT = process.env.PORT || 3000;
 // ✍️ RESPONDER MANUAL
 // =========================
 
-router.post("/inbox/responder", protegerPanel, upload.single("archivo"), async (req, res) => {
+async function handleInboxResponder(req, res) {
 
   try {
 
-    const { numero, respuesta, conexion_whatsapp_id } = req.body;
-    const conexionWhatsappId = conexion_whatsapp_id
-      ? String(conexion_whatsapp_id).trim()
-      : null;
+    const { numero, respuesta } = req.body;
+    const conexionWhatsappId = leerConexionWhatsappId(req);
 
     if (!conexionWhatsappId) {
       if (wantsInboxJson(req)) {
@@ -302,18 +308,8 @@ router.post("/inbox/responder", protegerPanel, upload.single("archivo"), async (
       }
 
       const usuarioIdManual = String(req.session.usuario.id).trim();
-      const meta = await enviarTextoWhatsApp(numero, respuesta, {
+      await enviarTextoWhatsApp(numero, respuesta, {
         usuarioId: usuarioIdManual,
-        conexionWhatsappId,
-        _soloEnvioMeta: true,
-      });
-      const wamid = meta?.messages?.[0]?.id || null;
-      await registrarMensajeSalienteEnInbox({
-        usuarioId: usuarioIdManual,
-        numero,
-        texto: respuesta,
-        wamid,
-        tipo: "text",
         conexionWhatsappId,
       });
 
@@ -578,7 +574,9 @@ else if (mime.startsWith("audio/")) {
 
   }
 
-});
+}
+
+router.post("/inbox/responder", protegerPanel, upload.single("archivo"), handleInboxResponder);
 
 router.post("/guardar-flujo-builder", protegerPanel, async (req, res) => {
   try {
@@ -1301,3 +1299,5 @@ const numero = body.numero;
 });
 
 module.exports = router;
+module.exports.handleInboxResponder = handleInboxResponder;
+module.exports.leerConexionWhatsappId = leerConexionWhatsappId;

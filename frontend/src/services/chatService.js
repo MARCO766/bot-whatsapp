@@ -110,7 +110,7 @@ export async function eliminarChat(numero, conexionWhatsappId) {
 export function sendMessageWithProgress(formData, onProgress) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    xhr.open("POST", resolveApiUrl("/inbox/responder"), true);
+    xhr.open("POST", resolveApiUrl("/api/inbox/responder"), true);
     xhr.setRequestHeader("X-Inbox-Api", "1");
     xhr.withCredentials = true;
 
