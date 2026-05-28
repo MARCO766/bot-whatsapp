@@ -15,6 +15,8 @@ import FlowTimeline from "./FlowTimeline";
 function FlowCard({
   flow,
   listMode,
+  mostrarBadgeLinea = false,
+  conexionWhatsappId,
   openMenuId,
   onMenuOpenChange,
   onToggleEstado,
@@ -53,10 +55,16 @@ function FlowCard({
               ⚡ {flow.activadores?.filter((a) => a.activo).length || 0}/
               {flow.activadores?.length || 0} activadores
             </span>
+            {mostrarBadgeLinea && (
+              <span className="flBadgeLinea" title="Línea WhatsApp del flujo">
+                {flow.conexion_nombre || (flow.conexion_whatsapp_id ? "Línea" : "Sin línea")}
+              </span>
+            )}
           </div>
         </div>
         <FlowActionsMenu
           flow={flow}
+          conexionWhatsappId={conexionWhatsappId}
           isOpen={isMenuOpen}
           onOpenChange={onMenuOpenChange}
           onToggleEstado={onToggleEstado}
@@ -106,12 +114,21 @@ function FlowCard({
         </div>
       </div>
 
-      <FlowTimeline flowId={flow.id} expanded={showTimeline} />
+      <FlowTimeline
+        flowId={flow.id}
+        conexionWhatsappId={conexionWhatsappId}
+        expanded={showTimeline}
+      />
 
       <div className="flCardFooter">
         <span>Modificado: {formatDate(flow.meta?.actualizado_en)}</span>
         <div className="flQuickActions">
-          <a href={builderUrl(flow)} target="_blank" rel="noreferrer" className="flQuickBtn">
+          <a
+            href={builderUrl(flow, conexionWhatsappId)}
+            target="_blank"
+            rel="noreferrer"
+            className="flQuickBtn"
+          >
             Constructor
           </a>
           <button type="button" className="flQuickBtn" onClick={() => onToggleEstado(flow)}>

@@ -12,6 +12,12 @@ const MACBOT_BUILDER = window.MACBOT_BUILDER || {};
 let flujoEditandoId = MACBOT_BUILDER.flujoEditandoId || "";
 let flujoCargado = MACBOT_BUILDER.flujoCargado || null;
 
+function leerConexionWhatsappIdBuilder() {
+  const raw = new URLSearchParams(window.location.search).get("conexion_whatsapp_id");
+  if (raw == null || String(raw).trim() === "") return null;
+  return String(raw).trim();
+}
+
 const activadoresData = MACBOT_BUILDER.activadoresData || [];
 const etiquetasData = MACBOT_BUILDER.etiquetasData || [];
 
@@ -2071,6 +2077,16 @@ async function guardarFlujo(){
   setFlowSaveLoading(true);
   const inicioVisual = Date.now();
 
+  const conexionWhatsappIdGuardar = leerConexionWhatsappIdBuilder();
+  const payloadGuardar = {
+    id: flujoEditandoId,
+    nombre,
+    data,
+  };
+  if (conexionWhatsappIdGuardar) {
+    payloadGuardar.conexion_whatsapp_id = conexionWhatsappIdGuardar;
+  }
+
   let res;
   try {
     res = await fetch("/guardar-flujo-builder", {
@@ -2078,11 +2094,7 @@ async function guardarFlujo(){
       headers: {
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({
-        id: flujoEditandoId,
-        nombre,
-        data
-      })
+      body: JSON.stringify(payloadGuardar)
     });
   } catch (err) {
     console.error("[BUILDER] Error guardando flujo:", err.message);

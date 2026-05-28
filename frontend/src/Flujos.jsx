@@ -10,6 +10,7 @@ import { flujosStyles } from "./flujos/styles";
 import { SORT_OPTIONS } from "./flujos/constants";
 import { useFlujos } from "./flujos/useFlujos";
 import { loginUrl } from "./flujos/api";
+import { CONEXION_TODAS, sameConexionId } from "./utils/conexionesInbox";
 
 export default function Flujos() {
   const {
@@ -44,6 +45,12 @@ export default function Flujos() {
     renombrar,
     updateMeta,
     load,
+    conexionesInbox,
+    conexionSeleccionadaId,
+    seleccionarConexion,
+    puedeEscribir,
+    mostrarBadgeLinea,
+    etiquetaTabConexion,
   } = useFlujos();
 
   const headerStats = useFlujosHeaderStats(true);
@@ -90,14 +97,73 @@ export default function Flujos() {
           </p>
         </div>
         <div className="flTopActions">
-          <button type="button" className="flBtn flBtnGhost" onClick={() => setImportOpen(true)}>
+          <button
+            type="button"
+            className="flBtn flBtnGhost"
+            disabled={!puedeEscribir}
+            title={
+              puedeEscribir
+                ? undefined
+                : "Selecciona una línea WhatsApp (no «Todas las líneas»)"
+            }
+            onClick={() => setImportOpen(true)}
+          >
             Importar flujo
           </button>
-          <button type="button" className="flBtn flBtnPrimary" onClick={() => setNewFlowOpen(true)}>
+          <button
+            type="button"
+            className="flBtn flBtnPrimary"
+            disabled={!puedeEscribir}
+            title={
+              puedeEscribir
+                ? undefined
+                : "Selecciona una línea WhatsApp (no «Todas las líneas»)"
+            }
+            onClick={() => setNewFlowOpen(true)}
+          >
             + Nuevo flujo
           </button>
         </div>
       </div>
+
+      {conexionesInbox.length > 0 && (
+        <div className="flConexionPicker" role="tablist" aria-label="Línea WhatsApp">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={conexionSeleccionadaId === CONEXION_TODAS}
+            className={`flConexionTab ${
+              conexionSeleccionadaId === CONEXION_TODAS ? "flConexionTab--active" : ""
+            }`}
+            onClick={() => seleccionarConexion(CONEXION_TODAS)}
+          >
+            Todas las líneas
+          </button>
+          {conexionesInbox.map((c) => {
+            const activa = sameConexionId(conexionSeleccionadaId, c.id);
+            return (
+              <button
+                key={c.id}
+                type="button"
+                role="tab"
+                aria-selected={activa}
+                className={`flConexionTab ${activa ? "flConexionTab--active" : ""}`}
+                onClick={() => seleccionarConexion(c.id)}
+              >
+                {etiquetaTabConexion(c)}
+                {c.activo && <span className="flConexionPrincipal">principal</span>}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {!puedeEscribir && conexionSeleccionadaId === CONEXION_TODAS && (
+        <p className="flConexionHint">
+          Vista global: los flujos sin línea solo aparecen aquí. Para crear, importar o duplicar,
+          elige un número.
+        </p>
+      )}
 
       {!apiOnline && !loading && apiError && (
         <div className={`flApiBanner ${apiError.code !== "NO_AUTH" ? "error" : ""}`}>
@@ -195,6 +261,8 @@ export default function Flujos() {
         loading={loading}
         viewMode={viewMode}
         apiOnline={apiOnline}
+        mostrarBadgeLinea={mostrarBadgeLinea}
+        conexionWhatsappId={conexionSeleccionadaId}
         onToggleEstado={toggleEstado}
         onDuplicate={duplicar}
         onDelete={(flow) => setConfirmDelete(flow)}

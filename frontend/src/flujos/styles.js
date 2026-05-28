@@ -38,6 +38,73 @@ export const flujosStyles = `
   align-items: center;
 }
 
+.flConexionPicker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.flConexionTab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid #2a3140;
+  background: #11151c;
+  color: #94a3b8;
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+
+.flConexionTab:hover {
+  border-color: #3d4a5c;
+  color: #e2e8f0;
+}
+
+.flConexionTab--active {
+  border-color: #22c55e66;
+  background: #22c55e14;
+  color: #86efac;
+}
+
+.flConexionPrincipal {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.85;
+  color: #22c55e;
+}
+
+.flConexionHint {
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: #1c212c;
+  border: 1px solid #2a3140;
+  color: #94a3b8;
+  font-size: 0.85rem;
+}
+
+.flBadgeLinea {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  background: #0ea5e922;
+  color: #7dd3fc;
+  border: 1px solid #0ea5e944;
+}
+
+.flBtn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .flBtn {
   border: 0;
   border-radius: 14px;

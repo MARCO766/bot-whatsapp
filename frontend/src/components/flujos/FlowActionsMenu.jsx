@@ -7,6 +7,7 @@ const MENU_W = 248;
 
 export default function FlowActionsMenu({
   flow,
+  conexionWhatsappId,
   isOpen,
   onOpenChange,
   onToggleEstado,
@@ -94,7 +95,13 @@ export default function FlowActionsMenu({
         }}
         role="menu"
       >
-        <a href={builderUrl(flow)} target="_blank" rel="noreferrer" role="menuitem" onClick={close}>
+        <a
+          href={builderUrl(flow, conexionWhatsappId)}
+          target="_blank"
+          rel="noreferrer"
+          role="menuitem"
+          onClick={close}
+        >
           <span className="flMenuIcon">🛠️</span>
           <span>Abrir constructor</span>
         </a>

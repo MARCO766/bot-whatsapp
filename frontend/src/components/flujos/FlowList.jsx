@@ -6,6 +6,8 @@ function FlowList({
   flows,
   loading,
   viewMode,
+  mostrarBadgeLinea = false,
+  conexionWhatsappId,
   onToggleEstado,
   onDuplicate,
   onDelete,
@@ -41,6 +43,8 @@ function FlowList({
           key={flow.id}
           flow={flow}
           listMode={listMode}
+          mostrarBadgeLinea={mostrarBadgeLinea}
+          conexionWhatsappId={conexionWhatsappId}
           openMenuId={openMenuId}
           onMenuOpenChange={setOpenMenuId}
           onToggleEstado={onToggleEstado}

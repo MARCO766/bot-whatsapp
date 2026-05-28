@@ -1,4 +1,5 @@
 import { getBackendOrigin, resolveApiUrl } from "./apiBase";
+import { CONEXION_TODAS } from "../utils/conexionesInbox";
 
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
@@ -65,8 +66,25 @@ async function request(path, options = {}) {
   return data;
 }
 
-export function fetchFlows() {
-  return request("/api/flujos");
+function conexionParam(conexionWhatsappId) {
+  const id = conexionWhatsappId || CONEXION_TODAS;
+  return `conexion_whatsapp_id=${encodeURIComponent(id)}`;
+}
+
+function withConexionQuery(path, conexionWhatsappId) {
+  const sep = path.includes("?") ? "&" : "?";
+  return `${path}${sep}${conexionParam(conexionWhatsappId)}`;
+}
+
+function writeConexionBody(payload, conexionWhatsappId) {
+  return {
+    ...payload,
+    conexion_whatsapp_id: conexionWhatsappId,
+  };
+}
+
+export function fetchFlows(conexionWhatsappId) {
+  return request(withConexionQuery("/api/flujos", conexionWhatsappId));
 }
 
 export function fetchFlowStats() {
@@ -81,49 +99,65 @@ export function fetchApiStatus() {
   return request("/api/flujos/status");
 }
 
-export function patchFlowMeta(id, meta) {
-  return request(`/api/flujos/${id}/meta`, {
+export function patchFlowMeta(id, meta, conexionWhatsappId) {
+  return request(withConexionQuery(`/api/flujos/${id}/meta`, conexionWhatsappId), {
     method: "PATCH",
     body: JSON.stringify(meta),
   });
 }
 
-export function patchFlowNombre(id, nombre) {
-  return request(`/api/flujos/${id}/nombre`, {
+export function patchFlowNombre(id, nombre, conexionWhatsappId) {
+  return request(withConexionQuery(`/api/flujos/${id}/nombre`, conexionWhatsappId), {
     method: "PATCH",
     body: JSON.stringify({ nombre }),
   });
 }
 
-export function createFlow(nombre, meta = {}) {
+export function createFlow(nombre, meta = {}, conexionWhatsappId) {
   return request("/api/flujos", {
     method: "POST",
-    body: JSON.stringify({ nombre, meta }),
+    body: JSON.stringify(writeConexionBody({ nombre, meta }, conexionWhatsappId)),
   });
 }
 
-export function importFlowTemplate(templateId) {
+export function importFlowTemplate(templateId, conexionWhatsappId) {
   return request("/api/flujos/import", {
     method: "POST",
-    body: JSON.stringify({ templateId }),
+    body: JSON.stringify(writeConexionBody({ templateId }, conexionWhatsappId)),
   });
 }
 
-export function duplicateFlow(id) {
-  return request(`/api/flujos/${id}/duplicate`, { method: "POST" });
+export function duplicateFlow(id, conexionWhatsappId) {
+  return request(withConexionQuery(`/api/flujos/${id}/duplicate`, conexionWhatsappId), {
+    method: "POST",
+    body: JSON.stringify(writeConexionBody({}, conexionWhatsappId)),
+  });
 }
 
-export function deleteFlow(id) {
-  return request(`/api/flujos/${id}`, { method: "DELETE" });
+export function deleteFlow(id, conexionWhatsappId) {
+  return request(withConexionQuery(`/api/flujos/${id}`, conexionWhatsappId), {
+    method: "DELETE",
+  });
 }
 
-export function fetchFlowTimeline(id) {
-  return request(`/api/flujos/${id}/timeline`);
+export function fetchFlowTimeline(id, conexionWhatsappId) {
+  return request(withConexionQuery(`/api/flujos/${id}/timeline`, conexionWhatsappId));
 }
 
-export function builderUrl(flow) {
+export function builderUrl(flow, conexionWhatsappId) {
   const base = getBackendOrigin();
-  return `${base}/admin?tab=flujos&builder=1&flujo_id=${flow.id}&nombre=${encodeURIComponent(flow.nombre)}`;
+  const params = new URLSearchParams({
+    tab: "flujos",
+    builder: "1",
+    flujo_id: flow.id,
+    nombre: flow.nombre,
+  });
+  const conn =
+    conexionWhatsappId && conexionWhatsappId !== CONEXION_TODAS
+      ? conexionWhatsappId
+      : flow.conexion_whatsapp_id;
+  if (conn) params.set("conexion_whatsapp_id", conn);
+  return `${base}/admin?${params.toString()}`;
 }
 
 export function exportFlowUrl(id) {

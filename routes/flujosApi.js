@@ -28,6 +28,7 @@ const FOLDERS = [
 ];
 
 const ESTADOS = ["activo", "pausado", "borrador", "error"];
+const CONEXION_TODAS = "__todas__";
 
 function log(msg, extra) {
   if (extra !== undefined) console.log(`[flujosApi] ${msg}`, extra);
@@ -45,6 +46,86 @@ function supabaseHeaders(extra = {}) {
     Authorization: `Bearer ${SUPABASE_KEY}`,
     ...extra,
   };
+}
+
+function sameConexionId(a, b) {
+  if (a == null || b == null) return false;
+  return String(a).trim().toLowerCase() === String(b).trim().toLowerCase();
+}
+
+function leerConexionScope(req) {
+  const raw =
+    req.body?.conexion_whatsapp_id ??
+    req.body?.conexionWhatsappId ??
+    req.query?.conexion_whatsapp_id;
+  if (raw == null || String(raw).trim() === "") {
+    return { todas: true, id: null };
+  }
+  const id = String(raw).trim();
+  if (id === CONEXION_TODAS) return { todas: true, id: null };
+  return { todas: false, id };
+}
+
+function requiereConexionEscribir(scope) {
+  if (!scope?.id) {
+    return {
+      error:
+        "Selecciona una línea WhatsApp (no «Todas las líneas») para crear o duplicar flujos",
+    };
+  }
+  return null;
+}
+
+async function fetchConexionesUsuario(usuarioId) {
+  const res = await axios.get(
+    `${SUPABASE_URL}/rest/v1/conexiones_whatsapp?usuario_id=eq.${usuarioId}&select=id,nombre,numero,phone_id,activo&order=creado_en.asc`,
+    { headers: supabaseHeaders() }
+  );
+  return res.data || [];
+}
+
+async function validarConexionUsuario(usuarioId, conexionId) {
+  const res = await axios.get(
+    `${SUPABASE_URL}/rest/v1/conexiones_whatsapp?id=eq.${encodeURIComponent(conexionId)}&usuario_id=eq.${usuarioId}&select=id`,
+    { headers: supabaseHeaders() }
+  );
+  return Boolean(res.data?.[0]);
+}
+
+function etiquetaConexion(c) {
+  const nombre = String(c?.nombre ?? "").trim();
+  if (nombre) return nombre;
+  const numero = String(c?.numero ?? "").trim();
+  if (numero) return numero;
+  const tail = String(c?.phone_id || "").slice(-4);
+  return tail ? `Línea ${tail}` : "Línea";
+}
+
+function buildMapaConexiones(conexiones) {
+  const map = {};
+  (conexiones || []).forEach((c) => {
+    if (c?.id != null) map[String(c.id)] = etiquetaConexion(c);
+  });
+  return map;
+}
+
+async function obtenerFlujoUsuario(usuarioId, flujoId) {
+  const res = await axios.get(
+    `${SUPABASE_URL}/rest/v1/flujos_builder?id=eq.${encodeURIComponent(flujoId)}&usuario_id=eq.${usuarioId}&select=id,conexion_whatsapp_id`,
+    { headers: supabaseHeaders() }
+  );
+  return res.data?.[0] || null;
+}
+
+async function assertFlujoEnScope(usuarioId, flujoId, scope) {
+  const flujo = await obtenerFlujoUsuario(usuarioId, flujoId);
+  if (!flujo) return { ok: false, status: 404, error: "Flujo no encontrado" };
+  if (scope?.id) {
+    if (!flujo.conexion_whatsapp_id || !sameConexionId(flujo.conexion_whatsapp_id, scope.id)) {
+      return { ok: false, status: 403, error: "Flujo no pertenece a esta línea" };
+    }
+  }
+  return { ok: true, flujo };
 }
 
 function extractMeta(data) {
@@ -111,12 +192,52 @@ function searchableText(flow, activadores) {
   return parts.join(" ").toLowerCase();
 }
 
-async function fetchFlujos(usuarioId) {
-  const res = await axios.get(
-    `${SUPABASE_URL}/rest/v1/flujos_builder?select=id,nombre,creado_en,data,usuario_id&usuario_id=eq.${usuarioId}&order=creado_en.desc`,
-    { headers: supabaseHeaders() }
-  );
+async function fetchFlujos(usuarioId, scope) {
+  let url =
+    `${SUPABASE_URL}/rest/v1/flujos_builder?select=id,nombre,creado_en,data,usuario_id,conexion_whatsapp_id` +
+    `&usuario_id=eq.${usuarioId}`;
+  if (scope?.id) {
+    url += `&conexion_whatsapp_id=eq.${encodeURIComponent(scope.id)}`;
+  }
+  url += "&order=creado_en.desc";
+  const res = await axios.get(url, { headers: supabaseHeaders() });
   return res.data || [];
+}
+
+function mapFlowRow(f, activadores, perFlow, mapaConexiones) {
+  const metaRaw = extractMeta(f.data);
+  const acts = activadores.filter((a) => a.flujo_id === f.id);
+  const metricas = { ...metricasVacias(), ...(perFlow[f.id] || {}) };
+
+  if (metaRaw.ultima_ejecucion && !metricas.ultimaEjecucion) {
+    metricas.ultimaEjecucion = metaRaw.ultima_ejecucion;
+  }
+
+  const connId = f.conexion_whatsapp_id || null;
+
+  return {
+    id: f.id,
+    nombre: f.nombre,
+    creado_en: f.creado_en,
+    conexion_whatsapp_id: connId,
+    conexion_nombre: connId ? mapaConexiones[String(connId)] || null : null,
+    meta: {
+      ...metaRaw,
+      actualizado_en: metaRaw.actualizado_en || f.creado_en,
+    },
+    metricas,
+    preview: buildPreview(f.data),
+    activadores: acts.map((a) => ({
+      id: a.id,
+      nombre: a.nombre,
+      frase: a.frase,
+      conexion: a.conexion,
+      activo: !!a.activo,
+    })),
+    nodosCount: (f.data?.nodos || []).length,
+    conexionesCount: (f.data?.conexiones || []).length,
+    searchText: searchableText(f, activadores),
+  };
 }
 
 async function fetchActivadores(usuarioId) {
@@ -143,51 +264,26 @@ router.get("/api/flujos/status", (req, res) => {
   });
 });
 
-// GET /api/flujos
+// GET /api/flujos?conexion_whatsapp_id=<uuid>|__todas__
 router.get("/api/flujos", protegerApi, async (req, res) => {
   const usuario = req.session.usuario;
-  log(`GET /api/flujos usuario=${usuario.id} (${usuario.email || usuario.nombre || "—"})`);
+  const scope = leerConexionScope(req);
+  log(
+    `GET /api/flujos usuario=${usuario.id} conexion=${scope.todas ? CONEXION_TODAS : scope.id}`
+  );
 
   try {
-    const [flujos, activadores] = await Promise.all([
-      fetchFlujos(usuario.id),
+    const [flujos, activadores, conexiones] = await Promise.all([
+      fetchFlujos(usuario.id, scope),
       fetchActivadores(usuario.id),
+      fetchConexionesUsuario(usuario.id),
     ]);
 
+    const mapaConexiones = buildMapaConexiones(conexiones);
     const { perFlow } = await loadFlujosDashboardData(usuario.id, flujos, activadores);
     log(`flujos encontrados=${flujos.length} activadores=${activadores.length}`);
 
-    const flows = flujos.map((f) => {
-      const metaRaw = extractMeta(f.data);
-      const acts = activadores.filter((a) => a.flujo_id === f.id);
-      const metricas = { ...metricasVacias(), ...(perFlow[f.id] || {}) };
-
-      if (metaRaw.ultima_ejecucion && !metricas.ultimaEjecucion) {
-        metricas.ultimaEjecucion = metaRaw.ultima_ejecucion;
-      }
-
-      return {
-        id: f.id,
-        nombre: f.nombre,
-        creado_en: f.creado_en,
-        meta: {
-          ...metaRaw,
-          actualizado_en: metaRaw.actualizado_en || f.creado_en,
-        },
-        metricas,
-        preview: buildPreview(f.data),
-        activadores: acts.map((a) => ({
-          id: a.id,
-          nombre: a.nombre,
-          frase: a.frase,
-          conexion: a.conexion,
-          activo: !!a.activo,
-        })),
-        nodosCount: (f.data?.nodos || []).length,
-        conexionesCount: (f.data?.conexiones || []).length,
-        searchText: searchableText(f, activadores),
-      };
-    });
+    const flows = flujos.map((f) => mapFlowRow(f, activadores, perFlow, mapaConexiones));
 
     res.json({
       ok: true,
@@ -195,6 +291,7 @@ router.get("/api/flujos", protegerApi, async (req, res) => {
       folders: FOLDERS,
       estados: ESTADOS,
       source: "supabase",
+      conexion_whatsapp_id: scope.todas ? CONEXION_TODAS : scope.id,
     });
   } catch (error) {
     log("GET /api/flujos ERROR", error.response?.data || error.message);
@@ -262,6 +359,12 @@ router.patch("/api/flujos/:id/meta", protegerApi, async (req, res) => {
     const { id } = req.params;
     const usuarioId = req.session.usuario.id;
     const patch = req.body || {};
+    const scope = leerConexionScope(req);
+
+    const acceso = await assertFlujoEnScope(usuarioId, id, scope);
+    if (!acceso.ok) {
+      return res.status(acceso.status).json({ ok: false, error: acceso.error });
+    }
 
     const flujoRes = await axios.get(
       `${SUPABASE_URL}/rest/v1/flujos_builder?id=eq.${id}&usuario_id=eq.${usuarioId}&select=id,data`,
@@ -318,6 +421,12 @@ router.patch("/api/flujos/:id/nombre", protegerApi, async (req, res) => {
     const { id } = req.params;
     const nombre = (req.body?.nombre || "").trim();
     const usuarioId = req.session.usuario.id;
+    const scope = leerConexionScope(req);
+
+    const acceso = await assertFlujoEnScope(usuarioId, id, scope);
+    if (!acceso.ok) {
+      return res.status(acceso.status).json({ ok: false, error: acceso.error });
+    }
 
     if (!nombre) return res.status(400).json({ ok: false, error: "Nombre vacío" });
 
@@ -346,6 +455,13 @@ router.post("/api/flujos", protegerApi, async (req, res) => {
     const nombre = (req.body?.nombre || "").trim() || "Nuevo flujo";
     const meta = req.body?.meta || {};
     const usuarioId = req.session.usuario.id;
+    const scope = leerConexionScope(req);
+    const scopeErr = requiereConexionEscribir(scope);
+    if (scopeErr) return res.status(400).json({ ok: false, error: scopeErr.error });
+
+    if (!(await validarConexionUsuario(usuarioId, scope.id))) {
+      return res.status(400).json({ ok: false, error: "Línea WhatsApp no válida" });
+    }
 
     const data = {
       nodos: [],
@@ -361,7 +477,12 @@ router.post("/api/flujos", protegerApi, async (req, res) => {
 
     const created = await axios.post(
       `${SUPABASE_URL}/rest/v1/flujos_builder`,
-      { nombre, usuario_id: usuarioId, data },
+      {
+        nombre,
+        usuario_id: usuarioId,
+        data,
+        conexion_whatsapp_id: scope.id,
+      },
       {
         headers: supabaseHeaders({
           "Content-Type": "application/json",
@@ -396,6 +517,14 @@ router.post("/api/flujos/import", protegerApi, async (req, res) => {
     if (!tpl) return res.status(400).json({ ok: false, error: "Plantilla no válida" });
 
     const usuarioId = req.session.usuario.id;
+    const scope = leerConexionScope(req);
+    const scopeErr = requiereConexionEscribir(scope);
+    if (scopeErr) return res.status(400).json({ ok: false, error: scopeErr.error });
+
+    if (!(await validarConexionUsuario(usuarioId, scope.id))) {
+      return res.status(400).json({ ok: false, error: "Línea WhatsApp no válida" });
+    }
+
     const data = {
       nodos: [],
       conexiones: [],
@@ -411,7 +540,12 @@ router.post("/api/flujos/import", protegerApi, async (req, res) => {
 
     const created = await axios.post(
       `${SUPABASE_URL}/rest/v1/flujos_builder`,
-      { nombre: tpl.nombre, usuario_id: usuarioId, data },
+      {
+        nombre: tpl.nombre,
+        usuario_id: usuarioId,
+        data,
+        conexion_whatsapp_id: scope.id,
+      },
       {
         headers: supabaseHeaders({
           "Content-Type": "application/json",
@@ -433,6 +567,18 @@ router.post("/api/flujos/:id/duplicate", protegerApi, async (req, res) => {
   try {
     const { id } = req.params;
     const usuarioId = req.session.usuario.id;
+    const scope = leerConexionScope(req);
+    const scopeErr = requiereConexionEscribir(scope);
+    if (scopeErr) return res.status(400).json({ ok: false, error: scopeErr.error });
+
+    if (!(await validarConexionUsuario(usuarioId, scope.id))) {
+      return res.status(400).json({ ok: false, error: "Línea WhatsApp no válida" });
+    }
+
+    const acceso = await assertFlujoEnScope(usuarioId, id, scope);
+    if (!acceso.ok) {
+      return res.status(acceso.status).json({ ok: false, error: acceso.error });
+    }
 
     const flujo = await axios.get(
       `${SUPABASE_URL}/rest/v1/flujos_builder?id=eq.${id}&usuario_id=eq.${usuarioId}&select=*`,
@@ -448,6 +594,7 @@ router.post("/api/flujos/:id/duplicate", protegerApi, async (req, res) => {
         nombre: `${original.nombre} - copia`,
         usuario_id: usuarioId,
         data: original.data,
+        conexion_whatsapp_id: scope.id,
       },
       {
         headers: supabaseHeaders({
@@ -469,6 +616,12 @@ router.delete("/api/flujos/:id", protegerApi, async (req, res) => {
   try {
     const { id } = req.params;
     const usuarioId = req.session.usuario.id;
+    const scope = leerConexionScope(req);
+
+    const acceso = await assertFlujoEnScope(usuarioId, id, scope);
+    if (!acceso.ok) {
+      return res.status(acceso.status).json({ ok: false, error: acceso.error });
+    }
 
     await axios.delete(
       `${SUPABASE_URL}/rest/v1/flujos_builder?id=eq.${id}&usuario_id=eq.${usuarioId}`,
@@ -532,13 +685,11 @@ router.get("/api/flujos/:id/timeline", protegerApi, async (req, res) => {
   try {
     const { id } = req.params;
     const usuarioId = req.session.usuario.id;
+    const scope = leerConexionScope(req);
 
-    const owned = await axios.get(
-      `${SUPABASE_URL}/rest/v1/flujos_builder?id=eq.${id}&usuario_id=eq.${usuarioId}&select=id`,
-      { headers: supabaseHeaders() }
-    );
-    if (!owned.data?.[0]) {
-      return res.status(404).json({ ok: false, error: "Flujo no encontrado", events: [] });
+    const acceso = await assertFlujoEnScope(usuarioId, id, scope);
+    if (!acceso.ok) {
+      return res.status(acceso.status).json({ ok: false, error: acceso.error, events: [] });
     }
 
     const [resSeg, resConv] = await Promise.all([

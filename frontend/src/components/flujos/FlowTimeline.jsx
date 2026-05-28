@@ -12,7 +12,7 @@ const DOT_COLORS = {
   conversion_registrada: "#facc15",
 };
 
-export default function FlowTimeline({ flowId, expanded }) {
+export default function FlowTimeline({ flowId, conexionWhatsappId, expanded }) {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(false);
 
@@ -20,7 +20,7 @@ export default function FlowTimeline({ flowId, expanded }) {
     if (!expanded || !flowId) return;
     let cancelled = false;
     setLoading(true);
-    fetchFlowTimeline(flowId)
+    fetchFlowTimeline(flowId, conexionWhatsappId)
       .then((res) => {
         if (!cancelled) setEvents(res.events || []);
       })
@@ -33,7 +33,7 @@ export default function FlowTimeline({ flowId, expanded }) {
     return () => {
       cancelled = true;
     };
-  }, [flowId, expanded]);
+  }, [flowId, conexionWhatsappId, expanded]);
 
   if (!expanded) return null;
 

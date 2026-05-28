@@ -612,13 +612,19 @@ router.post("/guardar-flujo-builder", protegerPanel, async (req, res) => {
       return res.send("✅ Flujo actualizado correctamente");
     }
 
+    const conexionWhatsappId = leerConexionWhatsappId(req);
+    const payloadCreate = {
+      nombre,
+      usuario_id: req.session.usuario.id,
+      data,
+    };
+    if (conexionWhatsappId) {
+      payloadCreate.conexion_whatsapp_id = conexionWhatsappId;
+    }
+
     const createRes = await axios.post(
   `${SUPABASE_URL}/rest/v1/flujos_builder`,
-  {
-    nombre,
-    usuario_id: req.session.usuario.id,
-    data
-  },
+  payloadCreate,
       {
         headers: {
           apikey: SUPABASE_KEY,
