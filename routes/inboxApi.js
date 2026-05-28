@@ -43,8 +43,19 @@ router.get("/api/inbox/conexiones", protegerApi, async (req, res) => {
     const conexiones = await loadConexionesInbox(req.session.usuario.id);
     res.json({ ok: true, conexiones });
   } catch (error) {
+    const pg = error.response?.data;
+    console.error("INBOX CONEXIONES ERROR:", {
+      message: error?.message,
+      details: error?.details ?? pg?.details,
+      hint: error?.hint ?? pg?.hint,
+      code: error?.code ?? pg?.code,
+      stack: error?.stack,
+    });
     log("GET /api/inbox/conexiones ERROR", error.response?.data || error.message);
-    res.status(500).json({ ok: false, error: "Error cargando líneas WhatsApp" });
+    return res.status(500).json({
+      ok: false,
+      error: "Error cargando líneas WhatsApp",
+    });
   }
 });
 
