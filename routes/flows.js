@@ -276,7 +276,20 @@ router.post("/inbox/responder", protegerPanel, upload.single("archivo"), async (
 
   try {
 
-    const { numero, respuesta } = req.body;
+    const { numero, respuesta, conexion_whatsapp_id } = req.body;
+    const conexionWhatsappId = conexion_whatsapp_id
+      ? String(conexion_whatsapp_id).trim()
+      : null;
+
+    if (!conexionWhatsappId) {
+      if (wantsInboxJson(req)) {
+        return res.status(400).json({
+          ok: false,
+          error: "Falta conexion_whatsapp_id",
+        });
+      }
+      return res.send("❌ Falta la línea WhatsApp (conexion_whatsapp_id)");
+    }
 
     // =========================
     // SOLO TEXTO
@@ -291,6 +304,7 @@ router.post("/inbox/responder", protegerPanel, upload.single("archivo"), async (
       const usuarioIdManual = String(req.session.usuario.id).trim();
       const meta = await enviarTextoWhatsApp(numero, respuesta, {
         usuarioId: usuarioIdManual,
+        conexionWhatsappId,
         _soloEnvioMeta: true,
       });
       const wamid = meta?.messages?.[0]?.id || null;
@@ -300,6 +314,7 @@ router.post("/inbox/responder", protegerPanel, upload.single("archivo"), async (
         texto: respuesta,
         wamid,
         tipo: "text",
+        conexionWhatsappId,
       });
 
       return finishInbox(req, res, numero);
@@ -538,29 +553,12 @@ else if (mime.startsWith("audio/")) {
 
       {
 
-        usuarioId: req.session.usuario.id
+        usuarioId: req.session.usuario.id,
+        conexionWhatsappId,
 
       }
 
     );
-
-    await axios.patch(
-  `${SUPABASE_URL}/rest/v1/conversaciones?cliente_numero=eq.${numero}&usuario_id=eq.${req.session.usuario.id}`,
-  {
-    ultimo_mensaje:
-      respuesta && respuesta.trim() !== ""
-        ? respuesta
-        : tipoWhatsApp,
-    ultimo_mensaje_en: new Date().toISOString()
-  },
-  {
-    headers: {
-      apikey: SUPABASE_KEY,
-      Authorization: `Bearer ${SUPABASE_KEY}`,
-      "Content-Type": "application/json"
-    }
-  }
-);
 
     return finishInbox(req, res, numero);
 

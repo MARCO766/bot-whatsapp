@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   fetchInbox,
   fetchSession,
+  fetchConexiones,
   fetchChat,
   marcarLeido,
   guardarEtiqueta,
@@ -10,6 +11,8 @@ import {
   desbloquearChat,
   eliminarChat,
 } from "../services/chatService";
+
+const STORAGE_CONEXION = "macbot_inbox_conexion_id";
 import { formatPreview } from "../utils/chatFormat";
 import { useInboxSocket } from "./useInboxSocket";
 
@@ -29,6 +32,8 @@ export function useInbox({ onUnreadChange } = {}) {
   const [busqueda, setBusqueda] = useState("");
   const [menuChat, setMenuChat] = useState(null);
   const [tagModalNumero, setTagModalNumero] = useState(null);
+  const [conexiones, setConexiones] = useState([]);
+  const [conexionSeleccionada, setConexionSeleccionada] = useState(null);
 
   const totalNoLeidos = useMemo(
     () => chats.reduce((s, c) => s + (c.noLeidos || 0), 0),
@@ -39,54 +44,104 @@ export function useInbox({ onUnreadChange } = {}) {
     onUnreadChange?.(totalNoLeidos);
   }, [totalNoLeidos, onUnreadChange]);
 
-  const loadInbox = useCallback(async (filtro = etiquetaFiltro) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const session = await fetchSession();
-      setUsuarioId(session.usuarioId);
-      const data = await fetchInbox(filtro);
-      setChats(data.chats || []);
-      setEtiquetasUnicas(data.etiquetasUnicas || []);
-      setEtiquetasDisponibles(data.etiquetasDisponibles || []);
-      setMapaColores(data.mapaColoresEtiquetas || {});
-    } catch (err) {
-      setError(err.message || "Error cargando bandeja");
-    } finally {
-      setLoading(false);
-    }
-  }, [etiquetaFiltro]);
+  const loadInbox = useCallback(
+    async (filtro = etiquetaFiltro, conexionId = conexionSeleccionada) => {
+      if (!conexionId) return;
+      setLoading(true);
+      setError(null);
+      try {
+        const data = await fetchInbox(filtro, conexionId);
+        setChats(data.chats || []);
+        setEtiquetasUnicas(data.etiquetasUnicas || []);
+        setEtiquetasDisponibles(data.etiquetasDisponibles || []);
+        setMapaColores(data.mapaColoresEtiquetas || {});
+      } catch (err) {
+        setError(err.message || "Error cargando bandeja");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [etiquetaFiltro, conexionSeleccionada]
+  );
 
   useEffect(() => {
-    loadInbox(etiquetaFiltro);
-  }, [etiquetaFiltro]);
+    let cancelled = false;
 
-  const abrirChat = useCallback(async (numero) => {
-    if (!numero) return;
-    setChatActivo(numero);
-    setMenuChat(null);
-    setCargandoChat(true);
+    async function init() {
+      setLoading(true);
+      setError(null);
+      try {
+        const session = await fetchSession();
+        if (cancelled) return;
+        setUsuarioId(session.usuarioId);
 
-    setChats((prev) =>
-      prev.map((c) => (c.numero === numero ? { ...c, noLeidos: 0 } : c))
-    );
+        const { conexiones: lista } = await fetchConexiones();
+        if (cancelled) return;
 
-    try {
-      await marcarLeido(numero);
-      const data = await fetchChat(numero);
-      setChatMeta({
-        nombre: data.nombre,
-        bloqueado: data.bloqueado,
-        numero: data.numero,
-      });
-      setMensajes(data.mensajes || []);
-    } catch (err) {
-      setError(err.message || "Error cargando chat");
-      setMensajes([]);
-    } finally {
-      setCargandoChat(false);
+        setConexiones(lista || []);
+        if (!lista?.length) {
+          setError(
+            "No hay líneas WhatsApp configuradas. Agrega una en Ajustes."
+          );
+          setConexionSeleccionada(null);
+          return;
+        }
+
+        const saved = sessionStorage.getItem(STORAGE_CONEXION);
+        const pick =
+          lista.find((c) => c.id === saved) || lista[0];
+        setConexionSeleccionada(pick.id);
+        sessionStorage.setItem(STORAGE_CONEXION, pick.id);
+      } catch (err) {
+        if (!cancelled) {
+          setError(err.message || "Error cargando bandeja");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     }
+
+    init();
+    return () => {
+      cancelled = true;
+    };
   }, []);
+
+  useEffect(() => {
+    if (!conexionSeleccionada) return;
+    loadInbox(etiquetaFiltro, conexionSeleccionada);
+  }, [etiquetaFiltro, conexionSeleccionada, loadInbox]);
+
+  const abrirChat = useCallback(
+    async (numero) => {
+      if (!numero || !conexionSeleccionada) return;
+      setChatActivo(numero);
+      setMenuChat(null);
+      setCargandoChat(true);
+
+      setChats((prev) =>
+        prev.map((c) => (c.numero === numero ? { ...c, noLeidos: 0 } : c))
+      );
+
+      try {
+        await marcarLeido(numero, conexionSeleccionada);
+        const data = await fetchChat(numero, conexionSeleccionada);
+        setChatMeta({
+          nombre: data.nombre,
+          bloqueado: data.bloqueado,
+          numero: data.numero,
+          conexionWhatsappId: conexionSeleccionada,
+        });
+        setMensajes(data.mensajes || []);
+      } catch (err) {
+        setError(err.message || "Error cargando chat");
+        setMensajes([]);
+      } finally {
+        setCargandoChat(false);
+      }
+    },
+    [conexionSeleccionada]
+  );
 
   useEffect(() => {
     const pre = sessionStorage.getItem("macbot_inbox_numero");
@@ -137,6 +192,13 @@ export function useInbox({ onUnreadChange } = {}) {
 
   const handleNuevoMensaje = useCallback(
     ({ msg, numero, isActive }) => {
+      if (
+        conexionSeleccionada &&
+        msg.conexion_whatsapp_id &&
+        msg.conexion_whatsapp_id !== conexionSeleccionada
+      ) {
+        return;
+      }
       moverChatArriba(numero, msg.contenido || msg.tipo || "");
       if (!isActive) {
         incrementarNoLeido(numero);
@@ -147,7 +209,7 @@ export function useInbox({ onUnreadChange } = {}) {
         return [...prev, msg];
       });
     },
-    [moverChatArriba, incrementarNoLeido]
+    [moverChatArriba, incrementarNoLeido, conexionSeleccionada]
   );
 
   const handleMensajeEstado = useCallback((data) => {
@@ -177,6 +239,7 @@ export function useInbox({ onUnreadChange } = {}) {
   useInboxSocket({
     usuarioId,
     chatActivo,
+    conexionSeleccionada,
     onNuevoMensaje: handleNuevoMensaje,
     onMensajeEstado: handleMensajeEstado,
     onSeguimientoEstado: handleSeguimientoEstado,
@@ -202,13 +265,24 @@ export function useInbox({ onUnreadChange } = {}) {
     );
   }, [chats, busqueda]);
 
+  const cambiarConexion = useCallback((conexionId) => {
+    if (!conexionId || conexionId === conexionSeleccionada) return;
+    sessionStorage.setItem(STORAGE_CONEXION, conexionId);
+    setConexionSeleccionada(conexionId);
+    setChatActivo(null);
+    setMensajes([]);
+    setChatMeta(null);
+    setEtiquetaFiltro("");
+    setMenuChat(null);
+  }, [conexionSeleccionada]);
+
   const cambiarFiltroEtiqueta = useCallback((etiqueta) => {
     setEtiquetaFiltro(etiqueta);
     setChatActivo(null);
     setMensajes([]);
     setChatMeta(null);
-    loadInbox(etiqueta);
-  }, [loadInbox]);
+    loadInbox(etiqueta, conexionSeleccionada);
+  }, [loadInbox, conexionSeleccionada]);
 
   const aplicarEtiqueta = useCallback(
     async (numero, etiqueta) => {
@@ -256,7 +330,8 @@ export function useInbox({ onUnreadChange } = {}) {
   const eliminarChatHandler = useCallback(
     async (numero) => {
       if (!confirm("¿Eliminar este chat?")) return;
-      await eliminarChat(numero);
+      if (!conexionSeleccionada) return;
+      await eliminarChat(numero, conexionSeleccionada);
       setChats((prev) => prev.filter((c) => c.numero !== numero));
       if (chatActivo === numero) {
         setChatActivo(null);
@@ -265,7 +340,7 @@ export function useInbox({ onUnreadChange } = {}) {
       }
       setMenuChat(null);
     },
-    [chatActivo]
+    [chatActivo, conexionSeleccionada]
   );
 
   const appendMensaje = useCallback((msg) => {
@@ -310,5 +385,8 @@ export function useInbox({ onUnreadChange } = {}) {
     patchMensaje,
     moverChatArriba,
     reload: loadInbox,
+    conexiones,
+    conexionSeleccionada,
+    cambiarConexion,
   };
 }

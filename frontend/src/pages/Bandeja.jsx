@@ -5,10 +5,16 @@ import ChatWindow from "../components/chat/ChatWindow";
 import TagModal from "../components/chat/TagModal";
 import "../styles/bandeja.css";
 
+function etiquetaConexion(c) {
+  if (c.nombre?.trim()) return c.nombre.trim();
+  if (c.numero?.trim()) return c.numero.trim();
+  return `Línea ${String(c.phone_id || "").slice(-4) || "—"}`;
+}
+
 export default function Bandeja({ onUnreadChange }) {
   const inbox = useInbox({ onUnreadChange });
 
-  if (inbox.loading && inbox.chats.length === 0) {
+  if (inbox.loading && inbox.chats.length === 0 && !inbox.conexionSeleccionada) {
     return (
       <div className="bandejaPage">
         <div className="bandejaTop">
@@ -28,6 +34,27 @@ export default function Bandeja({ onUnreadChange }) {
           <h1>Bandeja de entrada</h1>
           <p>Conversaciones en tiempo real · WhatsApp</p>
         </div>
+
+        {inbox.conexiones.length > 0 && (
+          <div className="bandejaConexionPicker" role="tablist" aria-label="Línea WhatsApp">
+            {inbox.conexiones.map((c) => {
+              const activa = inbox.conexionSeleccionada === c.id;
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={activa}
+                  className={`bandejaConexionTab ${activa ? "bandejaConexionTab--active" : ""}`}
+                  onClick={() => inbox.cambiarConexion(c.id)}
+                >
+                  {etiquetaConexion(c)}
+                  {c.activo && <span className="bandejaConexionPrincipal">principal</span>}
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {inbox.error && <div className="bandejaError">{inbox.error}</div>}
@@ -59,6 +86,7 @@ export default function Bandeja({ onUnreadChange }) {
           chatMeta={inbox.chatMeta}
           mensajes={inbox.mensajes}
           cargando={inbox.cargandoChat}
+          conexionWhatsappId={inbox.conexionSeleccionada}
           onSent={inbox.appendMensaje}
           onPatchMensaje={inbox.patchMensaje}
           moverChatArriba={inbox.moverChatArriba}

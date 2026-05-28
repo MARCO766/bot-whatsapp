@@ -5,6 +5,11 @@ const INBOX_HEADERS = {
   "X-Inbox-Api": "1",
 };
 
+function conexionQuery(conexionWhatsappId) {
+  if (!conexionWhatsappId) return "";
+  return `&conexion_whatsapp_id=${encodeURIComponent(conexionWhatsappId)}`;
+}
+
 async function parseJson(res, url) {
   const contentType = res.headers.get("content-type") || "";
   if (!contentType.includes("application/json")) {
@@ -35,21 +40,30 @@ export async function fetchSession() {
   return request("/api/inbox/session");
 }
 
-export async function fetchInbox(etiquetaFiltro = "") {
-  const q = etiquetaFiltro
-    ? `?etiqueta=${encodeURIComponent(etiquetaFiltro)}`
-    : "";
-  return request(`/api/inbox${q}`);
+export async function fetchConexiones() {
+  return request("/api/inbox/conexiones");
 }
 
-export async function fetchChat(numero) {
-  return request(`/api/inbox/chat?numero=${encodeURIComponent(numero)}`);
+export async function fetchInbox(etiquetaFiltro = "", conexionWhatsappId) {
+  const params = new URLSearchParams();
+  params.set("conexion_whatsapp_id", conexionWhatsappId);
+  if (etiquetaFiltro) params.set("etiqueta", etiquetaFiltro);
+  return request(`/api/inbox?${params.toString()}`);
 }
 
-export async function marcarLeido(numero) {
+export async function fetchChat(numero, conexionWhatsappId) {
+  return request(
+    `/api/inbox/chat?numero=${encodeURIComponent(numero)}${conexionQuery(conexionWhatsappId)}`
+  );
+}
+
+export async function marcarLeido(numero, conexionWhatsappId) {
   return request("/api/inbox/marcar-leido", {
     method: "POST",
-    body: JSON.stringify({ numero }),
+    body: JSON.stringify({
+      numero,
+      conexion_whatsapp_id: conexionWhatsappId,
+    }),
   });
 }
 
@@ -81,9 +95,9 @@ export async function desbloquearChat(numero) {
   });
 }
 
-export async function eliminarChat(numero) {
+export async function eliminarChat(numero, conexionWhatsappId) {
   const url = resolveApiUrl(
-    `/api/inbox/chat?numero=${encodeURIComponent(numero)}`
+    `/api/inbox/chat?numero=${encodeURIComponent(numero)}${conexionQuery(conexionWhatsappId)}`
   );
   const res = await fetch(url, {
     method: "DELETE",
@@ -124,9 +138,12 @@ export function sendMessageWithProgress(formData, onProgress) {
   });
 }
 
-export function buildMessageFormData(numero, texto, archivo) {
+export function buildMessageFormData(numero, texto, archivo, conexionWhatsappId) {
   const formData = new FormData();
   formData.append("numero", numero);
+  if (conexionWhatsappId) {
+    formData.append("conexion_whatsapp_id", conexionWhatsappId);
+  }
   if (texto) formData.append("respuesta", texto);
   if (archivo) formData.append("archivo", archivo);
   return formData;

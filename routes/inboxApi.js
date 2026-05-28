@@ -8,6 +8,8 @@ const {
   loadInboxData,
   loadChatMessages,
   marcarLeido,
+  loadConexionesInbox,
+  filtroConexionQuery,
   SUPABASE_URL,
   SUPABASE_KEY,
   supabaseHeaders,
@@ -35,14 +37,36 @@ router.get("/api/inbox/session", protegerApi, (req, res) => {
   });
 });
 
-// GET /api/inbox?etiqueta=
+// GET /api/inbox/conexiones
+router.get("/api/inbox/conexiones", protegerApi, async (req, res) => {
+  try {
+    const conexiones = await loadConexionesInbox(req.session.usuario.id);
+    res.json({ ok: true, conexiones });
+  } catch (error) {
+    log("GET /api/inbox/conexiones ERROR", error.response?.data || error.message);
+    res.status(500).json({ ok: false, error: "Error cargando líneas WhatsApp" });
+  }
+});
+
+// GET /api/inbox?etiqueta=&conexion_whatsapp_id=
 router.get("/api/inbox", protegerApi, async (req, res) => {
   try {
     const etiquetaFiltro = req.query.etiqueta || "";
-    const data = await loadInboxData(req.session.usuario.id, { etiquetaFiltro });
+    const conexionWhatsappId = req.query.conexion_whatsapp_id || null;
+    if (!conexionWhatsappId) {
+      return res.status(400).json({
+        ok: false,
+        error: "Falta conexion_whatsapp_id",
+      });
+    }
+    const data = await loadInboxData(req.session.usuario.id, {
+      etiquetaFiltro,
+      conexionWhatsappId,
+    });
     res.json({
       ok: true,
       usuarioId: req.session.usuario.id,
+      conexionWhatsappId: data.conexionWhatsappId,
       etiquetaFiltro: data.etiquetaFiltro,
       etiquetasUnicas: data.etiquetasUnicas,
       etiquetasDisponibles: data.etiquetasDisponibles,
@@ -56,15 +80,23 @@ router.get("/api/inbox", protegerApi, async (req, res) => {
   }
 });
 
-// GET /api/inbox/chat?numero=
+// GET /api/inbox/chat?numero=&conexion_whatsapp_id=
 router.get("/api/inbox/chat", protegerApi, async (req, res) => {
   try {
     const numero = req.query.numero;
+    const conexionWhatsappId = req.query.conexion_whatsapp_id || null;
     if (!numero) {
       return res.status(400).json({ ok: false, error: "Falta numero" });
     }
-    const chat = await loadChatMessages(req.session.usuario.id, numero);
-    res.json({ ok: true, numero, ...chat });
+    if (!conexionWhatsappId) {
+      return res.status(400).json({ ok: false, error: "Falta conexion_whatsapp_id" });
+    }
+    const chat = await loadChatMessages(
+      req.session.usuario.id,
+      numero,
+      conexionWhatsappId
+    );
+    res.json({ ok: true, numero, conexionWhatsappId, ...chat });
   } catch (error) {
     log("GET /api/inbox/chat ERROR", error.response?.data || error.message);
     res.status(500).json({ ok: false });
@@ -74,9 +106,9 @@ router.get("/api/inbox/chat", protegerApi, async (req, res) => {
 // POST /api/inbox/marcar-leido
 router.post("/api/inbox/marcar-leido", protegerApi, async (req, res) => {
   try {
-    const { numero } = req.body || {};
-    if (!numero) return res.json({ ok: false });
-    await marcarLeido(req.session.usuario.id, numero);
+    const { numero, conexion_whatsapp_id: conexionWhatsappId } = req.body || {};
+    if (!numero || !conexionWhatsappId) return res.json({ ok: false });
+    await marcarLeido(req.session.usuario.id, numero, conexionWhatsappId);
     res.json({ ok: true });
   } catch (error) {
     log("marcar-leido ERROR", error.response?.data || error.message);
@@ -216,12 +248,18 @@ router.post("/api/inbox/desbloquear", protegerApi, async (req, res) => {
 router.delete("/api/inbox/chat", protegerApi, async (req, res) => {
   try {
     const numero = req.query.numero || req.body?.numero;
+    const conexionWhatsappId =
+      req.query.conexion_whatsapp_id || req.body?.conexion_whatsapp_id;
     if (!numero) return res.status(400).json({ ok: false });
+    if (!conexionWhatsappId) {
+      return res.status(400).json({ ok: false, error: "Falta conexion_whatsapp_id" });
+    }
     const usuarioId = req.session.usuario.id;
     const headers = supabaseHeaders();
+    const filtroConexion = filtroConexionQuery(conexionWhatsappId);
 
     await axios.delete(
-      `${SUPABASE_URL}/rest/v1/mensajes?cliente_numero=eq.${numero}&usuario_id=eq.${usuarioId}`,
+      `${SUPABASE_URL}/rest/v1/mensajes?cliente_numero=eq.${encodeURIComponent(numero)}&usuario_id=eq.${usuarioId}${filtroConexion}`,
       { headers }
     );
     await axios.delete(
@@ -229,7 +267,7 @@ router.delete("/api/inbox/chat", protegerApi, async (req, res) => {
       { headers }
     );
     await axios.delete(
-      `${SUPABASE_URL}/rest/v1/conversaciones?cliente_numero=eq.${numero}&usuario_id=eq.${usuarioId}`,
+      `${SUPABASE_URL}/rest/v1/conversaciones?cliente_numero=eq.${encodeURIComponent(numero)}&usuario_id=eq.${usuarioId}${filtroConexion}`,
       { headers }
     );
     await axios.delete(

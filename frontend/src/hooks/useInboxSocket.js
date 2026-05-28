@@ -9,6 +9,7 @@ import { normalizeIncomingMessage } from "../utils/chatFormat";
 export function useInboxSocket({
   usuarioId,
   chatActivo,
+  conexionSeleccionada,
   onNuevoMensaje,
   onMensajeEstado,
   onSeguimientoEstado,
@@ -18,6 +19,13 @@ export function useInboxSocket({
     (msg) => {
       if (!onNuevoMensaje) return;
       const normalized = normalizeIncomingMessage(msg);
+      if (
+        conexionSeleccionada &&
+        normalized.conexion_whatsapp_id &&
+        normalized.conexion_whatsapp_id !== conexionSeleccionada
+      ) {
+        return;
+      }
       const numero = normalized.cliente_numero;
       onNuevoMensaje({
         msg: normalized,
@@ -25,7 +33,7 @@ export function useInboxSocket({
         isActive: numero === chatActivo,
       });
     },
-    Boolean(usuarioId && onNuevoMensaje)
+    Boolean(usuarioId && onNuevoMensaje && conexionSeleccionada)
   );
 
   useSocketEvent(

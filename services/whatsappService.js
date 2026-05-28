@@ -29,23 +29,34 @@ function sanitizarContenidoMensajeSupabase(contenido) {
   return out;
 }
 
-async function actualizarConversacionSaliente(usuarioId, numero, texto) {
+function filtroConexionConversacion(conexionWhatsappId) {
+  if (!conexionWhatsappId) return "";
+  return `&conexion_whatsapp_id=eq.${encodeURIComponent(conexionWhatsappId)}`;
+}
+
+async function actualizarConversacionSaliente(
+  usuarioId,
+  numero,
+  texto,
+  conexionWhatsappId = null
+) {
   if (!usuarioId || !numero || !SUPABASE_URL || !SUPABASE_KEY) return;
 
   const ultimoMensaje = sanitizarContenidoMensajeSupabase(texto);
   const headers = supabaseHeaders({ "Content-Type": "application/json" });
   const ahora = new Date().toISOString();
+  const filtroConexion = filtroConexionConversacion(conexionWhatsappId);
 
   try {
     const res = await axios.get(
-      `${SUPABASE_URL}/rest/v1/conversaciones?cliente_numero=eq.${numero}&usuario_id=eq.${usuarioId}&select=*`,
+      `${SUPABASE_URL}/rest/v1/conversaciones?cliente_numero=eq.${encodeURIComponent(numero)}&usuario_id=eq.${usuarioId}${filtroConexion}&select=*`,
       { headers }
     );
     const conv = res.data?.[0];
 
     if (conv) {
       await axios.patch(
-        `${SUPABASE_URL}/rest/v1/conversaciones?cliente_numero=eq.${numero}&usuario_id=eq.${usuarioId}`,
+        `${SUPABASE_URL}/rest/v1/conversaciones?cliente_numero=eq.${encodeURIComponent(numero)}&usuario_id=eq.${usuarioId}${filtroConexion}`,
         {
           ultimo_mensaje: ultimoMensaje,
           ultimo_mensaje_en: ahora,
@@ -56,16 +67,21 @@ async function actualizarConversacionSaliente(usuarioId, numero, texto) {
       return;
     }
 
+    const nueva = {
+      cliente_numero: numero,
+      usuario_id: usuarioId,
+      ultimo_mensaje: ultimoMensaje,
+      ultimo_mensaje_en: ahora,
+      estado: "abierta",
+      unread_count: 0,
+    };
+    if (conexionWhatsappId) {
+      nueva.conexion_whatsapp_id = conexionWhatsappId;
+    }
+
     await axios.post(
       `${SUPABASE_URL}/rest/v1/conversaciones`,
-      {
-        cliente_numero: numero,
-        usuario_id: usuarioId,
-        ultimo_mensaje: ultimoMensaje,
-        ultimo_mensaje_en: ahora,
-        estado: "abierta",
-        unread_count: 0,
-      },
+      nueva,
       { headers }
     );
   } catch (err) {
@@ -82,6 +98,24 @@ async function actualizarConversacionSaliente(usuarioId, numero, texto) {
 async function resolverCredencialesEnvio(opciones = {}) {
   let tokenEnviar = TOKEN;
   let phoneIdEnviar = PHONE_ID;
+
+  if (opciones.conexionWhatsappId && opciones.usuarioId) {
+    const responseConexion = await axios.get(
+      `${SUPABASE_URL}/rest/v1/conexiones_whatsapp?id=eq.${encodeURIComponent(opciones.conexionWhatsappId)}&usuario_id=eq.${encodeURIComponent(opciones.usuarioId)}&select=*`,
+      {
+        headers: {
+          apikey: SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_KEY}`,
+        },
+      }
+    );
+    const conexion = responseConexion.data?.[0];
+    if (conexion) {
+      tokenEnviar = conexion.token;
+      phoneIdEnviar = conexion.phone_id;
+      return { tokenEnviar, phoneIdEnviar };
+    }
+  }
 
   if (opciones.usuarioId) {
     const responseConexion = await axios.get(
@@ -114,6 +148,7 @@ function normalizarBodyMensajeSupabase({
   wamid,
   tipo,
   imagen_url = null,
+  conexionWhatsappId = null,
 }) {
   const tipoDb = tipo === "text" ? "texto" : tipo || "texto";
   let contenido = texto;
@@ -126,7 +161,7 @@ function normalizarBodyMensajeSupabase({
   }
   const contenidoSeguro = sanitizarContenidoMensajeSupabase(String(contenido ?? ""));
 
-  return {
+  const body = {
     cliente_numero: String(numero || "").trim(),
     usuario_id:
       usuarioId != null && usuarioId !== "" ? String(usuarioId).trim() : null,
@@ -137,6 +172,10 @@ function normalizarBodyMensajeSupabase({
     whatsapp_message_id: wamid != null && wamid !== "" ? String(wamid) : null,
     estado_envio: "sent",
   };
+  if (conexionWhatsappId) {
+    body.conexion_whatsapp_id = String(conexionWhatsappId).trim();
+  }
+  return body;
 }
 
 async function registrarMensajeSalienteEnInbox({
@@ -145,6 +184,7 @@ async function registrarMensajeSalienteEnInbox({
   texto,
   wamid,
   tipo = "texto",
+  conexionWhatsappId = null,
 }) {
   const insertPayload = normalizarBodyMensajeSupabase({
     usuarioId,
@@ -152,6 +192,7 @@ async function registrarMensajeSalienteEnInbox({
     texto,
     wamid,
     tipo,
+    conexionWhatsappId,
   });
 
   let bodyJson = "";
@@ -185,7 +226,8 @@ async function registrarMensajeSalienteEnInbox({
   await actualizarConversacionSaliente(
     usuarioId,
     numero,
-    insertPayload.contenido
+    insertPayload.contenido,
+    conexionWhatsappId
   );
 
   const payloadMensaje = {
@@ -198,12 +240,14 @@ async function registrarMensajeSalienteEnInbox({
     imagen_url: insertPayload.imagen_url,
     whatsapp_message_id: wamid || null,
     estado_envio: "sent",
+    conexion_whatsapp_id: conexionWhatsappId || null,
     creado_en: row?.creado_en || new Date().toISOString(),
   };
 
   rt.nuevoMensaje(null, usuarioId, payloadMensaje);
   rt.conversacionActualizada(null, usuarioId, {
     cliente_numero: numero,
+    conexion_whatsapp_id: conexionWhatsappId || null,
     ultimo_mensaje: insertPayload.contenido,
     ultimo_mensaje_en: payloadMensaje.creado_en,
     direccion: "saliente",
@@ -601,6 +645,7 @@ async function enviarMediaWhatsApp(numero, tipo, mediaUrl, caption = "", opcione
       wamid: whatsappMessageId,
       tipo: tipoApi,
       imagen_url: urlEnvio,
+      conexionWhatsappId: opciones.conexionWhatsappId || null,
     });
 
     const insertRes = await axios.post(
@@ -618,6 +663,13 @@ async function enviarMediaWhatsApp(numero, tipo, mediaUrl, caption = "", opcione
 
     const row = insertRes.data?.[0];
     if (opciones.usuarioId && row) {
+      await actualizarConversacionSaliente(
+        opciones.usuarioId,
+        numeroDestino,
+        insertPayload.contenido,
+        opciones.conexionWhatsappId || null
+      );
+
       rt.nuevoMensaje(null, opciones.usuarioId, {
         id: row.id,
         cliente_numero: numeroDestino,
@@ -628,6 +680,7 @@ async function enviarMediaWhatsApp(numero, tipo, mediaUrl, caption = "", opcione
         imagen_url: urlEnvio,
         whatsapp_message_id: whatsappMessageId,
         estado_envio: "sent",
+        conexion_whatsapp_id: opciones.conexionWhatsappId || null,
         creado_en: row.creado_en || new Date().toISOString(),
       });
     }

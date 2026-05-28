@@ -65,7 +65,7 @@ let conexionWebhook = null;
 
 if (phoneNumberIdWebhook) {
   const responseConexionWebhook = await axios.get(
-    `${SUPABASE_URL}/rest/v1/conexiones_whatsapp?phone_id=eq.${phoneNumberIdWebhook}&activo=eq.true&select=*`,
+    `${SUPABASE_URL}/rest/v1/conexiones_whatsapp?phone_id=eq.${phoneNumberIdWebhook}&select=*`,
     {
       headers: {
         apikey: SUPABASE_KEY,
@@ -406,6 +406,8 @@ if (message.document && message.document.id && conexionWebhook?.token) {
 
 }
 
+const conexionWhatsappId = conexionWebhook?.id || null;
+
 await axios.post(
   `${SUPABASE_URL}/rest/v1/mensajes`,
   
@@ -416,6 +418,7 @@ await axios.post(
     tipo: message.type,
     contenido: text || "",
     imagen_url: mediaUrlFinal || null,
+    ...(conexionWhatsappId ? { conexion_whatsapp_id: conexionWhatsappId } : {}),
   },
   {
     headers: {
@@ -434,16 +437,22 @@ rt.nuevoMensaje(req, usuarioIdWebhook, {
     tipo: message.type,
     contenido: text || "",
     imagen_url: mediaUrlFinal || null,
+    conexion_whatsapp_id: conexionWhatsappId,
     creado_en: creadoEn,
   });
   rt.conversacionActualizada(req, usuarioIdWebhook, {
     cliente_numero: from,
+    conexion_whatsapp_id: conexionWhatsappId,
     ultimo_mensaje: text || "",
     direccion: "entrante",
   });
 
+const filtroConexionConv = conexionWhatsappId
+  ? `&conexion_whatsapp_id=eq.${encodeURIComponent(conexionWhatsappId)}`
+  : "";
+
 const responseConversacionActual = await axios.get(
-  `${SUPABASE_URL}/rest/v1/conversaciones?cliente_numero=eq.${from}&usuario_id=eq.${usuarioIdWebhook}&select=*`,
+  `${SUPABASE_URL}/rest/v1/conversaciones?cliente_numero=eq.${from}&usuario_id=eq.${usuarioIdWebhook}${filtroConexionConv}&select=*`,
   {
     headers: {
       apikey: SUPABASE_KEY,
@@ -459,7 +468,7 @@ if (conversacionActual) {
   const unreadActual = conversacionActual.unread_count || 0;
 
   await axios.patch(
-    `${SUPABASE_URL}/rest/v1/conversaciones?cliente_numero=eq.${from}&usuario_id=eq.${usuarioIdWebhook}`,
+    `${SUPABASE_URL}/rest/v1/conversaciones?cliente_numero=eq.${from}&usuario_id=eq.${usuarioIdWebhook}${filtroConexionConv}`,
     {
       ultimo_mensaje:
   text && text.trim() !== ""
@@ -491,7 +500,8 @@ if (conversacionActual) {
     : message.type,
       ultimo_mensaje_en: new Date().toISOString(),
       estado: "abierta",
-      unread_count: 1
+      unread_count: 1,
+      ...(conexionWhatsappId ? { conexion_whatsapp_id: conexionWhatsappId } : {}),
     },
     {
       headers: {

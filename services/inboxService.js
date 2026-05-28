@@ -15,6 +15,11 @@ function supabaseHeaders(extra = {}) {
   };
 }
 
+function filtroConexionQuery(conexionWhatsappId) {
+  if (!conexionWhatsappId) return "";
+  return `&conexion_whatsapp_id=eq.${encodeURIComponent(conexionWhatsappId)}`;
+}
+
 function horaBolivia(fecha) {
   if (!fecha) return "";
   return new Date(fecha).toLocaleTimeString("es-BO", {
@@ -34,7 +39,20 @@ function formatPreview(texto) {
   return String(texto).substring(0, 35);
 }
 
-async function loadInboxData(usuarioId, { etiquetaFiltro = "" } = {}) {
+async function loadConexionesInbox(usuarioId) {
+  const res = await axios.get(
+    `${SUPABASE_URL}/rest/v1/conexiones_whatsapp?usuario_id=eq.${encodeURIComponent(usuarioId)}&select=id,nombre,numero,phone_id,activo,estado,creado_en&order=creado_en.asc`,
+    { headers: supabaseHeaders() }
+  );
+  return Array.isArray(res.data) ? res.data : [];
+}
+
+async function loadInboxData(
+  usuarioId,
+  { etiquetaFiltro = "", conexionWhatsappId = null } = {}
+) {
+  const filtroConexion = filtroConexionQuery(conexionWhatsappId);
+
   const [
     responseMensajes,
     responseEtiquetas,
@@ -43,7 +61,7 @@ async function loadInboxData(usuarioId, { etiquetaFiltro = "" } = {}) {
     responseConversaciones,
   ] = await Promise.all([
     axios.get(
-      `${SUPABASE_URL}/rest/v1/mensajes?usuario_id=eq.${usuarioId}&select=*&order=creado_en.asc&limit=50`,
+      `${SUPABASE_URL}/rest/v1/mensajes?usuario_id=eq.${usuarioId}${filtroConexion}&select=*&order=creado_en.asc&limit=50`,
       { headers: supabaseHeaders() }
     ),
     axios.get(
@@ -59,7 +77,7 @@ async function loadInboxData(usuarioId, { etiquetaFiltro = "" } = {}) {
       { headers: supabaseHeaders() }
     ),
     axios.get(
-      `${SUPABASE_URL}/rest/v1/conversaciones?usuario_id=eq.${usuarioId}&select=*`,
+      `${SUPABASE_URL}/rest/v1/conversaciones?usuario_id=eq.${usuarioId}${filtroConexion}&select=*`,
       { headers: supabaseHeaders() }
     ),
   ]);
@@ -140,6 +158,7 @@ async function loadInboxData(usuarioId, { etiquetaFiltro = "" } = {}) {
 
     return {
       numero,
+      conexionWhatsappId: conexionWhatsappId || conv?.conexion_whatsapp_id || null,
       nombre: cliente?.nombre || numero,
       bloqueado: cliente?.estado === "bloqueado",
       online: true,
@@ -153,6 +172,7 @@ async function loadInboxData(usuarioId, { etiquetaFiltro = "" } = {}) {
   const totalNoLeidos = chats.reduce((sum, c) => sum + (c.noLeidos || 0), 0);
 
   return {
+    conexionWhatsappId,
     etiquetaFiltro,
     etiquetasUnicas,
     etiquetasDisponibles,
@@ -169,14 +189,16 @@ async function loadInboxData(usuarioId, { etiquetaFiltro = "" } = {}) {
   };
 }
 
-async function loadChatMessages(usuarioId, numero) {
+async function loadChatMessages(usuarioId, numero, conexionWhatsappId = null) {
+  const filtroConexion = filtroConexionQuery(conexionWhatsappId);
+
   const [responseMensajes, responseCliente] = await Promise.all([
     axios.get(
-      `${SUPABASE_URL}/rest/v1/mensajes?usuario_id=eq.${usuarioId}&cliente_numero=eq.${numero}&select=*&order=creado_en.asc&limit=1000`,
+      `${SUPABASE_URL}/rest/v1/mensajes?usuario_id=eq.${usuarioId}&cliente_numero=eq.${encodeURIComponent(numero)}${filtroConexion}&select=*&order=creado_en.asc&limit=1000`,
       { headers: supabaseHeaders() }
     ),
     axios.get(
-      `${SUPABASE_URL}/rest/v1/clientes?usuario_id=eq.${usuarioId}&numero=eq.${numero}&select=*`,
+      `${SUPABASE_URL}/rest/v1/clientes?usuario_id=eq.${usuarioId}&numero=eq.${encodeURIComponent(numero)}&select=*`,
       { headers: supabaseHeaders() }
     ),
   ]);
@@ -185,13 +207,15 @@ async function loadChatMessages(usuarioId, numero) {
   return {
     nombre: cliente?.nombre || numero,
     bloqueado: cliente?.estado === "bloqueado",
+    conexionWhatsappId,
     mensajes: responseMensajes.data || [],
   };
 }
 
-async function marcarLeido(usuarioId, numero) {
+async function marcarLeido(usuarioId, numero, conexionWhatsappId = null) {
+  const filtroConexion = filtroConexionQuery(conexionWhatsappId);
   await axios.patch(
-    `${SUPABASE_URL}/rest/v1/conversaciones?cliente_numero=eq.${numero}&usuario_id=eq.${usuarioId}`,
+    `${SUPABASE_URL}/rest/v1/conversaciones?cliente_numero=eq.${encodeURIComponent(numero)}&usuario_id=eq.${usuarioId}${filtroConexion}`,
     { unread_count: 0 },
     {
       headers: supabaseHeaders({
@@ -205,6 +229,8 @@ module.exports = {
   loadInboxData,
   loadChatMessages,
   marcarLeido,
+  loadConexionesInbox,
+  filtroConexionQuery,
   horaBolivia,
   formatPreview,
   supabaseHeaders,

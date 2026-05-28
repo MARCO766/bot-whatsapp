@@ -11,6 +11,7 @@ export default function ChatWindow({
   chatMeta,
   mensajes,
   cargando,
+  conexionWhatsappId,
   onSent,
   onPatchMensaje,
   moverChatArriba,
@@ -126,6 +127,7 @@ export default function ChatWindow({
 
       <ChatComposer
         numero={numero}
+        conexionWhatsappId={conexionWhatsappId}
         bloqueado={bloqueado}
         ventanaAbierta={ventanaAbierta}
         onSent={onSent}

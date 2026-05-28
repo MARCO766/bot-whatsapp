@@ -10,6 +10,7 @@ const AVISO_VENTANA_CERRADA =
 
 export default function ChatComposer({
   numero,
+  conexionWhatsappId,
   bloqueado,
   ventanaAbierta = true,
   onSent,
@@ -70,7 +71,7 @@ export default function ChatComposer({
     onSent?.(tempMsg);
     moverChatArriba?.(numero, texto || file?.name || "");
 
-    const formData = buildMessageFormData(numero, texto, file);
+    const formData = buildMessageFormData(numero, texto, file, conexionWhatsappId);
     setEnviando(true);
 
     try {
