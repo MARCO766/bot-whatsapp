@@ -27,42 +27,65 @@ export function messageChecks(estadoEnvio) {
 export function chatListKey(numero, conexionWhatsappId) {
   const n = String(numero || "").trim();
   const c = String(conexionWhatsappId || "").trim();
+  if (!n || !c) return "";
   return `${n}::${c}`;
 }
 
-export function sameChat(a, b) {
-  if (!a || !b) return false;
-  const numA = String(a.cliente_numero ?? a.numero ?? "").trim();
-  const numB = String(b.cliente_numero ?? b.numero ?? "").trim();
-  if (!numA || !numB || numA !== numB) return false;
+export function resolveChatKey(entity) {
+  if (!entity) return "";
+  if (entity.chatKey) return String(entity.chatKey);
+  return chatListKey(
+    entity.cliente_numero ?? entity.numero,
+    entity.conexion_whatsapp_id ?? entity.conexionWhatsappId
+  );
+}
 
-  const connA = String(
-    a.conexion_whatsapp_id ?? a.conexionWhatsappId ?? ""
-  ).trim();
-  const connB = String(
-    b.conexion_whatsapp_id ?? b.conexionWhatsappId ?? ""
-  ).trim();
-  return connA === connB;
+export function sameChatKey(a, b) {
+  const keyA = resolveChatKey(a);
+  const keyB = resolveChatKey(b);
+  return Boolean(keyA && keyB && keyA === keyB);
+}
+
+export function sameChat(a, b) {
+  return sameChatKey(a, b);
 }
 
 export function normalizeIncomingMessage(msg) {
+  const cliente_numero = String(
+    msg?.cliente_numero ?? msg?.numero ?? ""
+  ).trim();
+  const conexion_whatsapp_id = String(
+    msg?.conexion_whatsapp_id ?? msg?.conexionWhatsappId ?? ""
+  ).trim();
+  const conversacion_id =
+    msg?.conversacion_id ?? msg?.conversacionId ?? null;
+  const chatKey =
+    msg?.chatKey ||
+    (cliente_numero && conexion_whatsapp_id
+      ? chatListKey(cliente_numero, conexion_whatsapp_id)
+      : null);
+
   return {
-    id: msg.id || `${msg.cliente_numero}-${msg.creado_en}-${Date.now()}`,
-    cliente_numero: msg.cliente_numero,
-    conexion_whatsapp_id: msg.conexion_whatsapp_id || null,
-    conversacion_id: msg.conversacion_id || null,
-    direccion: msg.direccion || "entrante",
-    tipo: msg.tipo,
-    contenido: msg.contenido || "",
-    imagen_url: msg.imagen_url,
-    media_url: msg.media_url,
-    mime_type: msg.mime_type,
-    mimeType: msg.mimeType,
-    mimetype: msg.mimetype,
-    mediaType: msg.mediaType,
-    media_type: msg.media_type,
-    creado_en: msg.creado_en || new Date().toISOString(),
-    whatsapp_message_id: msg.whatsapp_message_id,
-    estado_envio: msg.estado_envio,
+    id:
+      msg?.id ||
+      `${chatKey || cliente_numero}-${msg?.creado_en || "t"}-${Date.now()}`,
+    cliente_numero,
+    conexion_whatsapp_id: conexion_whatsapp_id || null,
+    conversacion_id,
+    conversacionId: conversacion_id,
+    chatKey,
+    direccion: msg?.direccion || "entrante",
+    tipo: msg?.tipo,
+    contenido: msg?.contenido || "",
+    imagen_url: msg?.imagen_url,
+    media_url: msg?.media_url,
+    mime_type: msg?.mime_type,
+    mimeType: msg?.mimeType,
+    mimetype: msg?.mimetype,
+    mediaType: msg?.mediaType,
+    media_type: msg?.media_type,
+    creado_en: msg?.creado_en || new Date().toISOString(),
+    whatsapp_message_id: msg?.whatsapp_message_id,
+    estado_envio: msg?.estado_envio,
   };
 }

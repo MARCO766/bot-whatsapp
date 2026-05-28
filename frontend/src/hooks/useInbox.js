@@ -14,7 +14,9 @@ import {
 import {
   formatPreview,
   sameChat,
+  sameChatKey,
   chatListKey,
+  resolveChatKey,
 } from "../utils/chatFormat";
 import { useInboxSocket } from "./useInboxSocket";
 import {
@@ -46,7 +48,10 @@ function toSelectedChat(chat) {
     chat.conexion_whatsapp_id ?? chat.conexionWhatsappId ?? ""
   ).trim();
   if (!cliente_numero || !conexion_whatsapp_id) return null;
+  const chatKey =
+    chat.chatKey || chatListKey(cliente_numero, conexion_whatsapp_id);
   return {
+    chatKey,
     cliente_numero,
     conexion_whatsapp_id,
     conexionWhatsappId: conexion_whatsapp_id,
@@ -57,6 +62,11 @@ function toSelectedChat(chat) {
 
 function findChatInList(chats, selected) {
   if (!selected) return null;
+  const key = resolveChatKey(selected);
+  if (key) {
+    const byKey = chats.find((c) => c.chatKey === key);
+    if (byKey) return byKey;
+  }
   return chats.find((c) => sameChat(c, selected)) || null;
 }
 
@@ -305,20 +315,21 @@ export function useInbox({ onUnreadChange } = {}) {
     abrirChat(match);
   }, [loading, chats, abrirChat, conexionSeleccionadaId]);
 
-  const moverChatArriba = useCallback((numero, preview, conexionWhatsappId) => {
+  const moverChatArriba = useCallback((chatKey, preview) => {
+    const key = String(chatKey || "").trim();
+    if (!key || !key.includes("::")) return;
+
     setChats((prev) => {
-      const target = {
-        cliente_numero: numero,
-        conexion_whatsapp_id: conexionWhatsappId,
-      };
-      const idx = prev.findIndex((c) => sameChat(c, target));
+      const idx = prev.findIndex((c) => c.chatKey === key);
       const texto = formatPreview(preview);
       if (idx === -1) {
-        const connId = String(conexionWhatsappId || "").trim();
-        if (!connId) return prev;
+        const sep = key.indexOf("::");
+        const numero = key.slice(0, sep);
+        const connId = key.slice(sep + 2);
+        if (!numero || !connId) return prev;
         return [
           {
-            chatKey: chatListKey(numero, connId),
+            chatKey: key,
             numero,
             cliente_numero: numero,
             conexionWhatsappId: connId,
@@ -346,87 +357,91 @@ export function useInbox({ onUnreadChange } = {}) {
     });
   }, []);
 
-  const incrementarNoLeido = useCallback((numero, conexionWhatsappId) => {
-    const target = { cliente_numero: numero, conexion_whatsapp_id: conexionWhatsappId };
+  const incrementarNoLeido = useCallback((chatKey) => {
+    const key = String(chatKey || "").trim();
+    if (!key) return;
     setChats((prev) =>
       prev.map((c) =>
-        sameChat(c, target)
-          ? { ...c, noLeidos: (c.noLeidos || 0) + 1 }
-          : c
+        c.chatKey === key ? { ...c, noLeidos: (c.noLeidos || 0) + 1 } : c
       )
     );
   }, []);
 
   const handleNuevoMensaje = useCallback(
-    ({ msg, numero, conexionWhatsappId, isActive }) => {
+    ({ msg, chatKey, conexionWhatsappId, isActive }) => {
+      const key = String(chatKey || msg?.chatKey || "").trim();
+      if (!key) return;
+
+      const tabId = conexionSeleccionadaIdRef.current;
       if (
-        conexionSeleccionadaId &&
-        conexionSeleccionadaId !== CONEXION_TODAS &&
+        tabId &&
+        tabId !== CONEXION_TODAS &&
         conexionWhatsappId &&
-        !sameConexionId(conexionWhatsappId, conexionSeleccionadaId)
+        !sameConexionId(conexionWhatsappId, tabId)
       ) {
         return;
       }
-      moverChatArriba(numero, msg.contenido || msg.tipo || "", conexionWhatsappId);
 
-      const msgTarget = {
-        cliente_numero: numero,
-        conexion_whatsapp_id: conexionWhatsappId,
-      };
+      moverChatArriba(key, msg.contenido || msg.tipo || "");
+
+      const sel = selectedChatRef.current;
+      const selKey = resolveChatKey(sel);
       const canPaintPanel =
         isActive &&
-        selectedChat &&
-        sameChat(msgTarget, selectedChat) &&
-        selectedChatMatchesTab(selectedChat, conexionSeleccionadaId);
+        selKey &&
+        key === selKey &&
+        selectedChatMatchesTab(sel, tabId);
 
       if (!canPaintPanel) {
-        if (!isActive) incrementarNoLeido(numero, conexionWhatsappId);
+        incrementarNoLeido(key);
         return;
       }
+
       setMensajes((prev) => {
         if (prev.some((m) => m.id === msg.id && msg.id)) return prev;
+        if (msg.chatKey && selKey && msg.chatKey !== selKey) return prev;
         return [...prev, msg];
       });
     },
-    [
-      moverChatArriba,
-      incrementarNoLeido,
-      conexionSeleccionadaId,
-      selectedChat,
-    ]
+    [moverChatArriba, incrementarNoLeido]
   );
 
-  const handleMensajeEstado = useCallback(
-    (data) => {
-      if (!data?.whatsapp_message_id) return;
-      if (!selectedChatMatchesTab(selectedChat, conexionSeleccionadaId)) return;
-      setMensajes((prev) =>
-        prev.map((m) =>
-          m.whatsapp_message_id === data.whatsapp_message_id
-            ? { ...m, estado_envio: data.estado_envio }
-            : m
-        )
-      );
-    },
-    [selectedChat, conexionSeleccionadaId]
-  );
+  const handleMensajeEstado = useCallback((data) => {
+    if (!data?.whatsapp_message_id) return;
+    const sel = selectedChatRef.current;
+    const tabId = conexionSeleccionadaIdRef.current;
+    if (!sel || !selectedChatMatchesTab(sel, tabId)) return;
+    setMensajes((prev) =>
+      prev.map((m) =>
+        m.whatsapp_message_id === data.whatsapp_message_id
+          ? { ...m, estado_envio: data.estado_envio }
+          : m
+      )
+    );
+  }, []);
 
-  const handleSeguimientoEstado = useCallback(
-    (data) => {
-      if (!selectedChatMatchesTab(selectedChat, conexionSeleccionadaId)) return;
-      setMensajes((prev) => [
-        ...prev,
-        {
-          id: `seg-${Date.now()}`,
-          direccion: "sistema",
-          tipo: "texto",
-          contenido: `⏱ Seguimiento paso ${(data.paso_index || 0) + 1}: ${data.estado || "actualizado"}`,
-          creado_en: new Date().toISOString(),
-        },
-      ]);
-    },
-    [selectedChat, conexionSeleccionadaId]
-  );
+  const handleSeguimientoEstado = useCallback((data) => {
+    const sel = selectedChatRef.current;
+    const tabId = conexionSeleccionadaIdRef.current;
+    if (!sel || !selectedChatMatchesTab(sel, tabId)) return;
+    const segKey = resolveChatKey({
+      cliente_numero: data?.cliente_numero,
+      conexion_whatsapp_id: data?.conexion_whatsapp_id,
+      chatKey: data?.chatKey,
+    });
+    if (!sameChatKey(sel, { chatKey: segKey })) return;
+    setMensajes((prev) => [
+      ...prev,
+      {
+        id: `seg-${Date.now()}`,
+        direccion: "sistema",
+        tipo: "texto",
+        contenido: `⏱ Seguimiento paso ${(data.paso_index || 0) + 1}: ${data.estado || "actualizado"}`,
+        creado_en: new Date().toISOString(),
+        chatKey: segKey,
+      },
+    ]);
+  }, []);
 
   const panelActivo = useMemo(
     () => selectedChatMatchesTab(selectedChat, conexionSeleccionadaId),
@@ -453,6 +468,7 @@ export function useInbox({ onUnreadChange } = {}) {
     return {
       ...(fromList || {}),
       ...(chatMeta || {}),
+      chatKey: selectedChat.chatKey,
       numero: selectedChat.cliente_numero,
       cliente_numero: selectedChat.cliente_numero,
       conexionWhatsappId: selectedChat.conexion_whatsapp_id,
@@ -587,23 +603,23 @@ export function useInbox({ onUnreadChange } = {}) {
     [selectedChat]
   );
 
-  const appendMensaje = useCallback(
-    (msg) => {
-      if (!selectedChatMatchesTab(selectedChat, conexionSeleccionadaId)) return;
-      setMensajes((prev) => [...prev, msg]);
-    },
-    [selectedChat, conexionSeleccionadaId]
-  );
+  const appendMensaje = useCallback((msg) => {
+    const sel = selectedChatRef.current;
+    const tabId = conexionSeleccionadaIdRef.current;
+    if (!sel || !selectedChatMatchesTab(sel, tabId)) return;
+    const selKey = resolveChatKey(sel);
+    if (msg?.chatKey && selKey && msg.chatKey !== selKey) return;
+    setMensajes((prev) => [...prev, msg]);
+  }, []);
 
-  const patchMensaje = useCallback(
-    (id, patch) => {
-      if (!selectedChatMatchesTab(selectedChat, conexionSeleccionadaId)) return;
-      setMensajes((prev) =>
-        prev.map((m) => (m.id === id ? { ...m, ...patch } : m))
-      );
-    },
-    [selectedChat, conexionSeleccionadaId]
-  );
+  const patchMensaje = useCallback((id, patch) => {
+    const sel = selectedChatRef.current;
+    const tabId = conexionSeleccionadaIdRef.current;
+    if (!sel || !selectedChatMatchesTab(sel, tabId)) return;
+    setMensajes((prev) =>
+      prev.map((m) => (m.id === id ? { ...m, ...patch } : m))
+    );
+  }, []);
 
   return {
     loading,

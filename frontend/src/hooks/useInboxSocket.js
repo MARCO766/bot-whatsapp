@@ -2,9 +2,14 @@
  * @deprecated Usar useSocketEvent desde SocketProvider global.
  * Mantenido por compatibilidad; delega al socket único de la app.
  */
+import { useRef } from "react";
 import { useSocketEvent } from "./useSocketEvent";
 import { RT } from "../realtime/events";
-import { normalizeIncomingMessage, sameChat } from "../utils/chatFormat";
+import {
+  normalizeIncomingMessage,
+  resolveChatKey,
+  sameChatKey,
+} from "../utils/chatFormat";
 
 export function useInboxSocket({
   usuarioId,
@@ -14,26 +19,46 @@ export function useInboxSocket({
   onMensajeEstado,
   onSeguimientoEstado,
 }) {
+  const selectedChatRef = useRef(selectedChat);
+  const panelActivoRef = useRef(panelActivo);
+  selectedChatRef.current = selectedChat;
+  panelActivoRef.current = panelActivo;
+
   useSocketEvent(
     RT.NUEVO_MENSAJE,
     (msg) => {
       if (!onNuevoMensaje) return;
+
       const normalized = normalizeIncomingMessage(msg);
-      const numero = normalized.cliente_numero;
-      const msgChat = {
-        cliente_numero: numero,
-        conexion_whatsapp_id: normalized.conexion_whatsapp_id,
-        conversacion_id: normalized.conversacion_id,
-      };
+      const { cliente_numero, conexion_whatsapp_id, chatKey, conversacion_id } =
+        normalized;
+
+      const sel = selectedChatRef.current;
+      const selectedChatKey = resolveChatKey(sel);
+
+      console.log("SOCKET NUEVO MENSAJE", {
+        cliente_numero,
+        conexion_whatsapp_id,
+        conversacion_id,
+        chatKey,
+        selectedChatKey,
+      });
+
+      if (!chatKey) return;
+
       const isActive = Boolean(
-        panelActivo &&
-          selectedChat &&
-          sameChat(msgChat, selectedChat)
+        panelActivoRef.current &&
+          sel &&
+          selectedChatKey &&
+          chatKey === selectedChatKey
       );
+
       onNuevoMensaje({
         msg: normalized,
-        numero,
-        conexionWhatsappId: normalized.conexion_whatsapp_id,
+        chatKey,
+        cliente_numero,
+        conexionWhatsappId: conexion_whatsapp_id,
+        conversacion_id,
         isActive,
       });
     },
@@ -49,15 +74,17 @@ export function useInboxSocket({
   useSocketEvent(
     RT.SEGUIMIENTO_ACTUALIZADO,
     (data) => {
-      if (
-        panelActivo &&
-        selectedChat &&
-        data?.cliente_numero === selectedChat.cliente_numero &&
-        String(data?.conexion_whatsapp_id || "") ===
-          String(selectedChat.conexion_whatsapp_id || selectedChat.conexionWhatsappId || "")
-      ) {
-        onSeguimientoEstado?.(data);
-      }
+      const sel = selectedChatRef.current;
+      if (!panelActivoRef.current || !sel) return;
+
+      const segKey = resolveChatKey({
+        cliente_numero: data?.cliente_numero,
+        conexion_whatsapp_id: data?.conexion_whatsapp_id,
+        chatKey: data?.chatKey,
+      });
+      if (!segKey || !sameChatKey(sel, { chatKey: segKey })) return;
+
+      onSeguimientoEstado?.(data);
     },
     Boolean(usuarioId && onSeguimientoEstado)
   );

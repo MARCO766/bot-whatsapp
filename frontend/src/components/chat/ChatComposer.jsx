@@ -4,6 +4,7 @@ import {
   sendMessageWithProgress,
 } from "../../services/chatService";
 import { previewKindFromFile, tipoFromFile } from "../../utils/chatMedia";
+import { chatListKey } from "../../utils/chatFormat";
 
 const AVISO_VENTANA_CERRADA =
   "No puedes enviar mensajes manuales porque la ventana de 24h está cerrada. El lead debe responder primero.";
@@ -69,7 +70,8 @@ export default function ChatComposer({
     };
 
     onSent?.(tempMsg);
-    moverChatArriba?.(numero, texto || file?.name || "", conexionWhatsappId);
+    const key = chatListKey(numero, conexionWhatsappId);
+    if (key) moverChatArriba?.(key, texto || file?.name || "");
 
     const formData = buildMessageFormData(numero, texto, file, conexionWhatsappId);
     setEnviando(true);
