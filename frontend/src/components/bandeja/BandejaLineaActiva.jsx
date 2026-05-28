@@ -1,31 +1,24 @@
 import React from "react";
-import { CONEXION_TODAS } from "../../hooks/useInbox";
+import { CONEXION_TODAS, sameConexionId } from "../../utils/conexionesInbox";
 
-export function etiquetaConexion(c) {
-  const nombre = String(c?.nombre ?? "").trim();
-  if (nombre) return nombre;
-  const numero = String(c?.numero ?? "").trim();
-  if (numero) return numero;
-  return `Línea ${String(c?.phone_id || "").slice(-4) || "—"}`;
-}
-
-function indiceLinea(conexiones, conexionId) {
-  const key = String(conexionId ?? "");
-  const idx = conexiones.findIndex((c) => String(c.id) === key);
-  return idx < 0 ? 0 : idx;
+function variantLinea(conexionesInbox, conexionId) {
+  const idx = (conexionesInbox || []).findIndex((c) =>
+    sameConexionId(c.id, conexionId)
+  );
+  return idx <= 0 ? "0" : "1";
 }
 
 /**
- * Badge de línea activa: solo datos de la conexión resuelta (tab seleccionado).
+ * Badge superior: solo conexionActual de conexiones_whatsapp (tab seleccionado).
  */
 export default function BandejaLineaActiva({
-  conexionSeleccionada,
-  conexionActiva,
-  conexiones,
+  conexionSeleccionadaId,
+  conexionActual,
+  conexionesInbox,
 }) {
-  if (!conexiones?.length || !conexionSeleccionada) return null;
+  if (!conexionesInbox?.length || !conexionSeleccionadaId) return null;
 
-  if (conexionSeleccionada === CONEXION_TODAS) {
+  if (conexionSeleccionadaId === CONEXION_TODAS) {
     return (
       <div className="bandejaLineaActivaWrap">
         <div
@@ -42,14 +35,15 @@ export default function BandejaLineaActiva({
     );
   }
 
-  if (!conexionActiva) return null;
+  if (!conexionActual?.id) return null;
 
-  const lineaIdx = indiceLinea(conexiones, conexionActiva.id);
-  const variant = lineaIdx === 0 ? "0" : "1";
-  const esPrincipal = Boolean(conexionActiva.activo);
+  const nombre = String(conexionActual.nombre ?? "").trim();
+  if (!nombre) return null;
+
+  const esPrincipal = conexionActual.activo === true;
   const rol = esPrincipal ? "PRINCIPAL" : "SECUNDARIA";
-  const nombre = String(conexionActiva.nombre ?? "").trim() || etiquetaConexion(conexionActiva);
-  const pillKey = `${String(conexionActiva.id)}-${esPrincipal ? "p" : "s"}-${nombre}`;
+  const variant = variantLinea(conexionesInbox, conexionActual.id);
+  const pillKey = `${conexionActual.id}-${esPrincipal ? "p" : "s"}`;
 
   return (
     <div className="bandejaLineaActivaWrap">

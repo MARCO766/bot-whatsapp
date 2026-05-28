@@ -17,39 +17,26 @@ import {
   chatListKey,
 } from "../utils/chatFormat";
 import { useInboxSocket } from "./useInboxSocket";
+import {
+  CONEXION_TODAS,
+  sameConexionId,
+  normalizeConexionesInbox,
+  findConexionInbox,
+} from "../utils/conexionesInbox";
 
-const STORAGE_CONEXION = "macbot_inbox_conexion_id";
+export { CONEXION_TODAS };
+
 const STORAGE_INBOX_NUMERO = "macbot_inbox_numero";
 const STORAGE_INBOX_NUMERO_CONEXION = "macbot_inbox_numero_conexion_id";
-export const CONEXION_TODAS = "__todas__";
 
-function conexionIdKey(id) {
-  if (id == null || id === "") return "";
-  if (id === CONEXION_TODAS) return CONEXION_TODAS;
-  return String(id).trim();
-}
-
-export function findConexionPorId(conexiones, conexionId) {
-  const key = conexionIdKey(conexionId);
-  if (!key || key === CONEXION_TODAS) return null;
-  return (conexiones || []).find((c) => conexionIdKey(c.id) === key) ?? null;
-}
-
-function normalizeConexionSeleccionada(conexionId) {
-  if (conexionId === CONEXION_TODAS) return CONEXION_TODAS;
-  const key = conexionIdKey(conexionId);
-  return key || null;
-}
-
-function selectedChatMatchesTab(selectedChat, conexionSeleccionada) {
+function selectedChatMatchesTab(selectedChat, conexionSeleccionadaId) {
   if (!selectedChat) return false;
-  if (!conexionSeleccionada || conexionSeleccionada === CONEXION_TODAS) {
+  if (!conexionSeleccionadaId || conexionSeleccionadaId === CONEXION_TODAS) {
     return true;
   }
-  const conn = String(
-    selectedChat.conexion_whatsapp_id ?? selectedChat.conexionWhatsappId ?? ""
-  ).trim();
-  return conn === String(conexionSeleccionada);
+  const conn =
+    selectedChat.conexion_whatsapp_id ?? selectedChat.conexionWhatsappId ?? "";
+  return sameConexionId(conn, conexionSeleccionadaId);
 }
 
 function toSelectedChat(chat) {
@@ -89,16 +76,21 @@ export function useInbox({ onUnreadChange } = {}) {
   const [busqueda, setBusqueda] = useState("");
   const [menuChatKey, setMenuChatKey] = useState(null);
   const [tagModalNumero, setTagModalNumero] = useState(null);
-  const [conexiones, setConexiones] = useState([]);
-  const [conexionSeleccionada, setConexionSeleccionada] = useState(null);
+  const [conexionesInbox, setConexionesInbox] = useState([]);
+  const [conexionSeleccionadaId, setConexionSeleccionadaId] = useState(null);
 
   const abrirChatSeqRef = useRef(0);
-  const conexionSeleccionadaRef = useRef(null);
+  const conexionSeleccionadaIdRef = useRef(null);
+  const conexionesInboxRef = useRef([]);
   const selectedChatRef = useRef(null);
 
   useEffect(() => {
-    conexionSeleccionadaRef.current = conexionSeleccionada;
-  }, [conexionSeleccionada]);
+    conexionSeleccionadaIdRef.current = conexionSeleccionadaId;
+  }, [conexionSeleccionadaId]);
+
+  useEffect(() => {
+    conexionesInboxRef.current = conexionesInbox;
+  }, [conexionesInbox]);
 
   useEffect(() => {
     selectedChatRef.current = selectedChat;
@@ -125,7 +117,7 @@ export function useInbox({ onUnreadChange } = {}) {
   }, [totalNoLeidos, onUnreadChange]);
 
   const loadInbox = useCallback(
-    async (filtro = etiquetaFiltro, conexionId = conexionSeleccionada) => {
+    async (filtro = etiquetaFiltro, conexionId = conexionSeleccionadaId) => {
       setLoading(true);
       setError(null);
       try {
@@ -142,7 +134,7 @@ export function useInbox({ onUnreadChange } = {}) {
         setLoading(false);
       }
     },
-    [etiquetaFiltro, conexionSeleccionada]
+    [etiquetaFiltro, conexionSeleccionadaId]
   );
 
   useEffect(() => {
@@ -159,25 +151,17 @@ export function useInbox({ onUnreadChange } = {}) {
         const { conexiones: lista } = await fetchConexiones();
         if (cancelled) return;
 
-        setConexiones(lista || []);
-        if (!lista?.length) {
+        const normalizadas = normalizeConexionesInbox(lista);
+        setConexionesInbox(normalizadas);
+        if (!normalizadas.length) {
           setError(
             "No hay líneas WhatsApp configuradas. Agrega una en Ajustes."
           );
-          setConexionSeleccionada(null);
+          setConexionSeleccionadaId(null);
           return;
         }
 
-        const saved = sessionStorage.getItem(STORAGE_CONEXION);
-        let pick = CONEXION_TODAS;
-        if (saved === CONEXION_TODAS) {
-          pick = CONEXION_TODAS;
-        } else if (saved) {
-          const found = lista.find((c) => conexionIdKey(c.id) === conexionIdKey(saved));
-          if (found) pick = conexionIdKey(found.id);
-        }
-        setConexionSeleccionada(pick);
-        sessionStorage.setItem(STORAGE_CONEXION, pick);
+        setConexionSeleccionadaId(CONEXION_TODAS);
       } catch (err) {
         if (!cancelled) {
           setError(err.message || "Error cargando bandeja");
@@ -196,7 +180,13 @@ export function useInbox({ onUnreadChange } = {}) {
   const refreshConexiones = useCallback(async () => {
     try {
       const { conexiones: lista } = await fetchConexiones();
-      setConexiones(lista || []);
+      const normalizadas = normalizeConexionesInbox(lista);
+      setConexionesInbox(normalizadas);
+      setConexionSeleccionadaId((prev) => {
+        if (!prev || prev === CONEXION_TODAS) return prev;
+        const sigue = normalizadas.some((c) => sameConexionId(c.id, prev));
+        return sigue ? prev : CONEXION_TODAS;
+      });
     } catch {
       /* mantener lista actual */
     }
@@ -214,42 +204,42 @@ export function useInbox({ onUnreadChange } = {}) {
     };
   }, [refreshConexiones]);
 
-  const conexionActiva = useMemo(
-    () => findConexionPorId(conexiones, conexionSeleccionada),
-    [conexiones, conexionSeleccionada]
+  const conexionActual = useMemo(
+    () => findConexionInbox(conexionesInbox, conexionSeleccionadaId),
+    [conexionesInbox, conexionSeleccionadaId]
   );
 
   useEffect(() => {
-    if (!conexionSeleccionada) return;
-    loadInbox(etiquetaFiltro, conexionSeleccionada);
-  }, [etiquetaFiltro, conexionSeleccionada, loadInbox]);
+    if (!conexionSeleccionadaId) return;
+    loadInbox(etiquetaFiltro, conexionSeleccionadaId);
+  }, [etiquetaFiltro, conexionSeleccionadaId, loadInbox]);
 
   const prevConexionRef = useRef(undefined);
   useEffect(() => {
-    if (!conexionSeleccionada) return;
+    if (!conexionSeleccionadaId) return;
 
     const prev = prevConexionRef.current;
-    prevConexionRef.current = conexionSeleccionada;
+    prevConexionRef.current = conexionSeleccionadaId;
 
     if (prev === undefined) return;
 
-    if (prev !== conexionSeleccionada) {
+    if (prev !== conexionSeleccionadaId) {
       resetPanelState();
       setChats([]);
     }
-  }, [conexionSeleccionada, resetPanelState]);
+  }, [conexionSeleccionadaId, resetPanelState]);
 
   useEffect(() => {
-    if (!selectedChat || !conexionSeleccionada) return;
-    if (!selectedChatMatchesTab(selectedChat, conexionSeleccionada)) {
+    if (!selectedChat || !conexionSeleccionadaId) return;
+    if (!selectedChatMatchesTab(selectedChat, conexionSeleccionadaId)) {
       resetPanelState();
     }
-  }, [conexionSeleccionada, selectedChat, resetPanelState]);
+  }, [conexionSeleccionadaId, selectedChat, resetPanelState]);
 
   const abrirChat = useCallback(async (chat) => {
     const sel = toSelectedChat(chat);
     if (!sel) return;
-    if (!selectedChatMatchesTab(sel, conexionSeleccionada)) return;
+    if (!selectedChatMatchesTab(sel, conexionSeleccionadaId)) return;
 
     const seq = ++abrirChatSeqRef.current;
     selectedChatRef.current = sel;
@@ -268,7 +258,7 @@ export function useInbox({ onUnreadChange } = {}) {
       const data = await fetchChat(sel.cliente_numero, sel.conexion_whatsapp_id);
       if (seq !== abrirChatSeqRef.current) return;
       if (
-        !selectedChatMatchesTab(sel, conexionSeleccionadaRef.current)
+        !selectedChatMatchesTab(sel, conexionSeleccionadaIdRef.current)
       ) {
         return;
       }
@@ -290,12 +280,12 @@ export function useInbox({ onUnreadChange } = {}) {
     } finally {
       if (seq === abrirChatSeqRef.current) setCargandoChat(false);
     }
-  }, [conexionSeleccionada]);
+  }, [conexionSeleccionadaId]);
 
   useEffect(() => {
     const pre = sessionStorage.getItem(STORAGE_INBOX_NUMERO);
     const preConn = sessionStorage.getItem(STORAGE_INBOX_NUMERO_CONEXION);
-    if (!pre || !preConn || loading || !chats.length || !conexionSeleccionada) {
+    if (!pre || !preConn || loading || !chats.length || !conexionSeleccionadaId) {
       return;
     }
     sessionStorage.removeItem(STORAGE_INBOX_NUMERO);
@@ -304,14 +294,16 @@ export function useInbox({ onUnreadChange } = {}) {
     const match = chats.find(
       (c) =>
         (c.numero === pre || c.cliente_numero === pre) &&
-        String(c.conexion_whatsapp_id || c.conexionWhatsappId || "") ===
-          String(preConn)
+        sameConexionId(
+          c.conexion_whatsapp_id || c.conexionWhatsappId,
+          preConn
+        )
     );
     if (!match) return;
     const sel = toSelectedChat(match);
-    if (!sel || !selectedChatMatchesTab(sel, conexionSeleccionada)) return;
+    if (!sel || !selectedChatMatchesTab(sel, conexionSeleccionadaId)) return;
     abrirChat(match);
-  }, [loading, chats, abrirChat, conexionSeleccionada]);
+  }, [loading, chats, abrirChat, conexionSeleccionadaId]);
 
   const moverChatArriba = useCallback((numero, preview, conexionWhatsappId) => {
     setChats((prev) => {
@@ -365,10 +357,10 @@ export function useInbox({ onUnreadChange } = {}) {
   const handleNuevoMensaje = useCallback(
     ({ msg, numero, conexionWhatsappId, isActive }) => {
       if (
-        conexionSeleccionada &&
-        conexionSeleccionada !== CONEXION_TODAS &&
+        conexionSeleccionadaId &&
+        conexionSeleccionadaId !== CONEXION_TODAS &&
         conexionWhatsappId &&
-        conexionWhatsappId !== conexionSeleccionada
+        !sameConexionId(conexionWhatsappId, conexionSeleccionadaId)
       ) {
         return;
       }
@@ -382,7 +374,7 @@ export function useInbox({ onUnreadChange } = {}) {
         isActive &&
         selectedChat &&
         sameChat(msgTarget, selectedChat) &&
-        selectedChatMatchesTab(selectedChat, conexionSeleccionada);
+        selectedChatMatchesTab(selectedChat, conexionSeleccionadaId);
 
       if (!canPaintPanel) {
         if (!isActive) incrementarNoLeido(numero, conexionWhatsappId);
@@ -396,7 +388,7 @@ export function useInbox({ onUnreadChange } = {}) {
     [
       moverChatArriba,
       incrementarNoLeido,
-      conexionSeleccionada,
+      conexionSeleccionadaId,
       selectedChat,
     ]
   );
@@ -404,7 +396,7 @@ export function useInbox({ onUnreadChange } = {}) {
   const handleMensajeEstado = useCallback(
     (data) => {
       if (!data?.whatsapp_message_id) return;
-      if (!selectedChatMatchesTab(selectedChat, conexionSeleccionada)) return;
+      if (!selectedChatMatchesTab(selectedChat, conexionSeleccionadaId)) return;
       setMensajes((prev) =>
         prev.map((m) =>
           m.whatsapp_message_id === data.whatsapp_message_id
@@ -413,12 +405,12 @@ export function useInbox({ onUnreadChange } = {}) {
         )
       );
     },
-    [selectedChat, conexionSeleccionada]
+    [selectedChat, conexionSeleccionadaId]
   );
 
   const handleSeguimientoEstado = useCallback(
     (data) => {
-      if (!selectedChatMatchesTab(selectedChat, conexionSeleccionada)) return;
+      if (!selectedChatMatchesTab(selectedChat, conexionSeleccionadaId)) return;
       setMensajes((prev) => [
         ...prev,
         {
@@ -430,12 +422,12 @@ export function useInbox({ onUnreadChange } = {}) {
         },
       ]);
     },
-    [selectedChat, conexionSeleccionada]
+    [selectedChat, conexionSeleccionadaId]
   );
 
   const panelActivo = useMemo(
-    () => selectedChatMatchesTab(selectedChat, conexionSeleccionada),
-    [selectedChat, conexionSeleccionada]
+    () => selectedChatMatchesTab(selectedChat, conexionSeleccionadaId),
+    [selectedChat, conexionSeleccionadaId]
   );
 
   const selectedChatUi = useMemo(
@@ -474,11 +466,12 @@ export function useInbox({ onUnreadChange } = {}) {
 
   const chatsFiltrados = useMemo(() => {
     let list = chats;
-    if (conexionSeleccionada && conexionSeleccionada !== CONEXION_TODAS) {
-      list = list.filter(
-        (c) =>
-          String(c.conexion_whatsapp_id || c.conexionWhatsappId) ===
-          String(conexionSeleccionada)
+    if (conexionSeleccionadaId && conexionSeleccionadaId !== CONEXION_TODAS) {
+      list = list.filter((c) =>
+        sameConexionId(
+          c.conexion_whatsapp_id || c.conexionWhatsappId,
+          conexionSeleccionadaId
+        )
       );
     }
     const q = busqueda.trim().toLowerCase();
@@ -489,27 +482,32 @@ export function useInbox({ onUnreadChange } = {}) {
         (c.numero || "").includes(q) ||
         (c.cliente_numero || "").includes(q)
     );
-  }, [chats, busqueda, conexionSeleccionada]);
+  }, [chats, busqueda, conexionSeleccionadaId]);
 
-  const cambiarConexion = useCallback(
-    (conexionId) => {
-      const next = normalizeConexionSeleccionada(conexionId);
-      if (!next || next === conexionSeleccionadaRef.current) return;
-      sessionStorage.setItem(STORAGE_CONEXION, next);
-      abrirChatSeqRef.current += 1;
-      selectedChatRef.current = null;
-      conexionSeleccionadaRef.current = next;
-      setSelectedChat(null);
-      setMensajes([]);
-      setChatMeta(null);
-      setMenuChatKey(null);
-      setTagModalNumero(null);
-      setCargandoChat(false);
-      setChats([]);
-      setConexionSeleccionada(next);
-    },
-    []
-  );
+  const seleccionarConexion = useCallback((rawId) => {
+    let nextId = CONEXION_TODAS;
+
+    if (rawId !== CONEXION_TODAS) {
+      const lista = conexionesInboxRef.current || [];
+      const row = lista.find((c) => sameConexionId(c.id, rawId));
+      if (!row?.id) return;
+      nextId = String(row.id);
+    }
+
+    if (conexionSeleccionadaIdRef.current === nextId) return;
+
+    abrirChatSeqRef.current += 1;
+    selectedChatRef.current = null;
+    conexionSeleccionadaIdRef.current = nextId;
+    setSelectedChat(null);
+    setMensajes([]);
+    setChatMeta(null);
+    setMenuChatKey(null);
+    setTagModalNumero(null);
+    setCargandoChat(false);
+    setChats([]);
+    setConexionSeleccionadaId(nextId);
+  }, []);
 
   const cambiarFiltroEtiqueta = useCallback(
     (etiqueta) => {
@@ -517,9 +515,9 @@ export function useInbox({ onUnreadChange } = {}) {
       setSelectedChat(null);
       setMensajes([]);
       setChatMeta(null);
-      loadInbox(etiqueta, conexionSeleccionada);
+      loadInbox(etiqueta, conexionSeleccionadaId);
     },
-    [loadInbox, conexionSeleccionada]
+    [loadInbox, conexionSeleccionadaId]
   );
 
   const aplicarEtiqueta = useCallback(
@@ -588,20 +586,20 @@ export function useInbox({ onUnreadChange } = {}) {
 
   const appendMensaje = useCallback(
     (msg) => {
-      if (!selectedChatMatchesTab(selectedChat, conexionSeleccionada)) return;
+      if (!selectedChatMatchesTab(selectedChat, conexionSeleccionadaId)) return;
       setMensajes((prev) => [...prev, msg]);
     },
-    [selectedChat, conexionSeleccionada]
+    [selectedChat, conexionSeleccionadaId]
   );
 
   const patchMensaje = useCallback(
     (id, patch) => {
-      if (!selectedChatMatchesTab(selectedChat, conexionSeleccionada)) return;
+      if (!selectedChatMatchesTab(selectedChat, conexionSeleccionadaId)) return;
       setMensajes((prev) =>
         prev.map((m) => (m.id === id ? { ...m, ...patch } : m))
       );
     },
-    [selectedChat, conexionSeleccionada]
+    [selectedChat, conexionSeleccionadaId]
   );
 
   return {
@@ -637,10 +635,10 @@ export function useInbox({ onUnreadChange } = {}) {
     patchMensaje,
     moverChatArriba,
     reload: loadInbox,
-    conexiones,
-    conexionSeleccionada,
-    conexionActiva,
-    cambiarConexion,
+    conexionesInbox,
+    conexionSeleccionadaId,
+    conexionActual,
+    seleccionarConexion,
     refreshConexiones,
     CONEXION_TODAS,
   };

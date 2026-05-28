@@ -1,17 +1,28 @@
 import React from "react";
 import { useInbox, CONEXION_TODAS } from "../hooks/useInbox";
+import { sameConexionId } from "../utils/conexionesInbox";
 import ChatList from "../components/chat/ChatList";
 import ChatWindow from "../components/chat/ChatWindow";
 import TagModal from "../components/chat/TagModal";
-import BandejaLineaActiva, {
-  etiquetaConexion,
-} from "../components/bandeja/BandejaLineaActiva";
+import BandejaLineaActiva from "../components/bandeja/BandejaLineaActiva";
 import "../styles/bandeja.css";
+
+function etiquetaTabConexion(c) {
+  const nombre = String(c?.nombre ?? "").trim();
+  if (nombre) return nombre;
+  const numero = String(c?.numero ?? "").trim();
+  if (numero) return numero;
+  return `Línea ${String(c?.phone_id || "").slice(-4) || "—"}`;
+}
 
 export default function Bandeja({ onUnreadChange }) {
   const inbox = useInbox({ onUnreadChange });
 
-  if (inbox.loading && inbox.chats.length === 0 && !inbox.conexionSeleccionada) {
+  if (
+    inbox.loading &&
+    inbox.chats.length === 0 &&
+    !inbox.conexionSeleccionadaId
+  ) {
     return (
       <div className="bandejaPage">
         <div className="bandejaTop">
@@ -25,8 +36,8 @@ export default function Bandeja({ onUnreadChange }) {
   }
 
   const mapaNombreConexion = {};
-  (inbox.conexiones || []).forEach((c) => {
-    mapaNombreConexion[String(c.id)] = etiquetaConexion(c);
+  (inbox.conexionesInbox || []).forEach((c) => {
+    mapaNombreConexion[String(c.id)] = etiquetaTabConexion(c);
   });
 
   return (
@@ -35,31 +46,33 @@ export default function Bandeja({ onUnreadChange }) {
         <div>
           <h1>Bandeja de entrada</h1>
           <BandejaLineaActiva
-            conexionSeleccionada={inbox.conexionSeleccionada}
-            conexionActiva={inbox.conexionActiva}
-            conexiones={inbox.conexiones}
+            conexionSeleccionadaId={inbox.conexionSeleccionadaId}
+            conexionActual={inbox.conexionActual}
+            conexionesInbox={inbox.conexionesInbox}
           />
           <p>Conversaciones en tiempo real · WhatsApp</p>
         </div>
 
-        {inbox.conexiones.length > 0 && (
+        {inbox.conexionesInbox.length > 0 && (
           <div className="bandejaConexionPicker" role="tablist" aria-label="Línea WhatsApp">
             <button
               type="button"
               role="tab"
-              aria-selected={inbox.conexionSeleccionada === CONEXION_TODAS}
+              aria-selected={inbox.conexionSeleccionadaId === CONEXION_TODAS}
               className={`bandejaConexionTab ${
-                inbox.conexionSeleccionada === CONEXION_TODAS
+                inbox.conexionSeleccionadaId === CONEXION_TODAS
                   ? "bandejaConexionTab--active"
                   : ""
               }`}
-              onClick={() => inbox.cambiarConexion(CONEXION_TODAS)}
+              onClick={() => inbox.seleccionarConexion(CONEXION_TODAS)}
             >
               Todas las líneas
             </button>
-            {inbox.conexiones.map((c) => {
-              const activa =
-                String(inbox.conexionSeleccionada) === String(c.id);
+            {inbox.conexionesInbox.map((c) => {
+              const activa = sameConexionId(
+                inbox.conexionSeleccionadaId,
+                c.id
+              );
               return (
                 <button
                   key={c.id}
@@ -67,9 +80,9 @@ export default function Bandeja({ onUnreadChange }) {
                   role="tab"
                   aria-selected={activa}
                   className={`bandejaConexionTab ${activa ? "bandejaConexionTab--active" : ""}`}
-                  onClick={() => inbox.cambiarConexion(c.id)}
+                  onClick={() => inbox.seleccionarConexion(c.id)}
                 >
-                  {etiquetaConexion(c)}
+                  {etiquetaTabConexion(c)}
                   {c.activo && (
                     <span className="bandejaConexionPrincipal">principal</span>
                   )}
@@ -84,10 +97,10 @@ export default function Bandeja({ onUnreadChange }) {
 
       <div className="bandejaLayout">
         <ChatList
-          key={inbox.conexionSeleccionada || "sin-conexion"}
+          key={inbox.conexionSeleccionadaId || "sin-conexion"}
           chats={inbox.chatsFiltrados}
           selectedChat={inbox.selectedChat}
-          mostrarBadgeLinea={inbox.conexionSeleccionada === CONEXION_TODAS}
+          mostrarBadgeLinea={inbox.conexionSeleccionadaId === CONEXION_TODAS}
           menuChatKey={inbox.menuChatKey}
           mapaNombreConexion={mapaNombreConexion}
           etiquetasUnicas={inbox.etiquetasUnicas}
@@ -110,7 +123,7 @@ export default function Bandeja({ onUnreadChange }) {
         />
 
         <ChatWindow
-          key={`panel-${inbox.conexionSeleccionada || "sin"}-${inbox.selectedChat?.cliente_numero || ""}-${inbox.selectedChat?.conexion_whatsapp_id || ""}`}
+          key={`panel-${inbox.conexionSeleccionadaId || "sin"}-${inbox.selectedChat?.cliente_numero || ""}-${inbox.selectedChat?.conexion_whatsapp_id || ""}`}
           panelActivo={inbox.panelActivo}
           chat={inbox.chat}
           chatMeta={inbox.chatMeta}
@@ -122,7 +135,7 @@ export default function Bandeja({ onUnreadChange }) {
                 inbox.selectedChat?.conexionWhatsappId
               : null
           }
-          conexionSeleccionada={inbox.conexionSeleccionada}
+          conexionSeleccionada={inbox.conexionSeleccionadaId}
           onSent={inbox.appendMensaje}
           onPatchMensaje={inbox.patchMensaje}
           moverChatArriba={inbox.moverChatArriba}
