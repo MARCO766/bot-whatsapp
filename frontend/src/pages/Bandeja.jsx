@@ -3,13 +3,10 @@ import { useInbox, CONEXION_TODAS } from "../hooks/useInbox";
 import ChatList from "../components/chat/ChatList";
 import ChatWindow from "../components/chat/ChatWindow";
 import TagModal from "../components/chat/TagModal";
+import BandejaLineaActiva, {
+  etiquetaConexion,
+} from "../components/bandeja/BandejaLineaActiva";
 import "../styles/bandeja.css";
-
-function etiquetaConexion(c) {
-  if (c.nombre?.trim()) return c.nombre.trim();
-  if (c.numero?.trim()) return c.numero.trim();
-  return `Línea ${String(c.phone_id || "").slice(-4) || "—"}`;
-}
 
 export default function Bandeja({ onUnreadChange }) {
   const inbox = useInbox({ onUnreadChange });
@@ -37,6 +34,10 @@ export default function Bandeja({ onUnreadChange }) {
       <div className="bandejaTop">
         <div>
           <h1>Bandeja de entrada</h1>
+          <BandejaLineaActiva
+            conexionSeleccionada={inbox.conexionSeleccionada}
+            conexiones={inbox.conexiones}
+          />
           <p>Conversaciones en tiempo real · WhatsApp</p>
         </div>
 
