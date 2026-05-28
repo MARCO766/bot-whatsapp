@@ -43,11 +43,23 @@ function SwitchRow({ on, onToggle, label, hint }) {
   );
 }
 
+function abbrPhoneId(id) {
+  if (!id) return "—";
+  const s = String(id);
+  if (s.length <= 12) return s;
+  return `${s.slice(0, 6)}…${s.slice(-4)}`;
+}
+
 function estadoBadge(estado) {
-  if (estado === "conectado") return <span className="badge ok">Conectado</span>;
-  if (estado === "error") return <span className="badge err">Error</span>;
-  if (estado === "inactivo") return <span className="badge muted">Inactivo</span>;
-  return <span className="badge warn">Incompleto</span>;
+  if (estado === "conectado") return <span className="waBadge waBadgeOk">🟢 Conectado</span>;
+  if (estado === "error") return <span className="waBadge waBadgeErr">🔴 Error</span>;
+  if (estado === "inactivo") return <span className="waBadge waBadgeMuted">⚪ Inactivo</span>;
+  return <span className="waBadge waBadgeWarn">🟡 Incompleto</span>;
+}
+
+function rolBadge(activo) {
+  if (activo) return <span className="waBadge waBadgePrincipal">⭐ Principal</span>;
+  return <span className="waBadge waBadgeSecondary">⚪ Secundaria</span>;
 }
 
 function copyText(text, showToast) {
@@ -279,39 +291,89 @@ export default function Ajustes() {
             <button type="button" className="ajBtn ghost" onClick={() => copyText(webhook.verifyToken, showToast)}>Copiar token</button>
           </div>
 
-          <div className="ajCard">
-            <div className="ajConnHead">
-              <h2>WhatsApp API</h2>
-              <button type="button" className="ajBtn primary" onClick={abrirNuevaConexion}>+ Conectar WhatsApp</button>
-            </div>
-            <p className="ajHint">Puedes tener varias conexiones; solo una queda como principal para envíos.</p>
+          <div className="ajCard waConnectionsWrap">
+            <header className="waSectionHead">
+              <h2 className="waSectionTitle">Conexiones WhatsApp</h2>
+              <p className="waSectionSub">Administra varios números desde tu CRM</p>
+            </header>
 
-            {!data?.conexionesWhatsapp?.length && <p className="ajHint">Sin conexiones. Agrega TOKEN y PHONE_ID de Meta.</p>}
+            <div className="waConnGrid">
+              {(data?.conexionesWhatsapp || []).map((c) => (
+                <article key={c.id} className="waConnPremium">
+                  <div className="waConnPremiumInner">
+                    <div className="waConnTop">
+                      <h3 className="waConnName">{c.nombre || "WhatsApp"}</h3>
+                      <div className="waConnBadges">
+                        {estadoBadge(c.estado)}
+                        {rolBadge(c.activo)}
+                      </div>
+                    </div>
 
-            {(data?.conexionesWhatsapp || []).map((c) => (
-              <div key={c.id} className="ajConnCard">
-                <div className="ajConnHead">
-                  <div>
-                    <strong>{c.nombre || "WhatsApp"}</strong> {estadoBadge(c.estado)}
-                    <p className="ajHint">{c.numero || "Sin número"} · PHONE_ID {c.phone_id || c.phoneNumberId}</p>
-                    {c.tokenMasked && <p className="ajHint">Token: {c.tokenMasked}</p>}
-                    <p className="ajHint">Estado: {c.activo ? "Principal" : "Secundaria"}</p>
+                    <div className="waConnMeta">
+                      <div className="waConnMetaRow">
+                        <span className="waConnMetaLabel">Número</span>
+                        <span className="waConnMetaValue">{c.numero || "Sin número"}</span>
+                      </div>
+                      <div className="waConnMetaRow">
+                        <span className="waConnMetaLabel">Phone ID</span>
+                        <span className="waConnMetaValue mono" title={c.phone_id || c.phoneNumberId}>
+                          {abbrPhoneId(c.phone_id || c.phoneNumberId)}
+                        </span>
+                      </div>
+                    </div>
+
+                    {c.tokenMasked && (
+                      <div className="waTokenRow">
+                        <code className="waTokenCode">{c.tokenMasked}</code>
+                        <button
+                          type="button"
+                          className="waBtnCopy"
+                          onClick={() => copyText(c.tokenMasked, showToast)}
+                          title="Copiar token enmascarado"
+                        >
+                          Copiar
+                        </button>
+                      </div>
+                    )}
+
+                    <div className="waConnActions">
+                      <button type="button" className="waBtn waBtnPrimary" onClick={() => abrirConfigurar(c)}>
+                        Configurar
+                      </button>
+                      <button
+                        type="button"
+                        className="waBtn waBtnGhost"
+                        onClick={() => handleProbarId(c.id)}
+                        disabled={saving}
+                      >
+                        Probar conexión
+                      </button>
+                      {!c.activo && (
+                        <button
+                          type="button"
+                          className="waBtn waBtnGhost"
+                          onClick={() => handleHacerPrincipal(c.id)}
+                          disabled={saving}
+                        >
+                          Hacer principal
+                        </button>
+                      )}
+                      <button type="button" className="waBtn waBtnDanger" onClick={() => handleDesconectarId(c.id)}>
+                        Desconectar
+                      </button>
+                    </div>
                   </div>
-                </div>
-                <div className="ajBtnRow">
-                  {!c.activo && (
-                    <button type="button" className="ajBtn ghost" onClick={() => handleHacerPrincipal(c.id)} disabled={saving}>
-                      Hacer principal
-                    </button>
-                  )}
-                  <button type="button" className="ajBtn primary" onClick={() => abrirConfigurar(c)}>Configurar</button>
-                  <button type="button" className="ajBtn ghost" onClick={() => handleProbarId(c.id)} disabled={saving}>Probar conexión</button>
-                  <button type="button" className="ajBtn danger" onClick={() => handleDesconectarId(c.id)}>Desconectar</button>
-                </div>
-              </div>
-            ))}
+                </article>
+              ))}
 
-            <div className="ajField" style={{ marginTop: 12 }}>
+              <button type="button" className="waConnAdd" onClick={abrirNuevaConexion}>
+                <span className="waConnAddIcon">+</span>
+                <span className="waConnAddLabel">Conectar WhatsApp</span>
+                <span className="waConnAddHint">Agrega TOKEN y PHONE_ID de Meta</span>
+              </button>
+            </div>
+
+            <div className="ajField waTestField">
               <label>Número para prueba (código país, sin +)</label>
               <input value={testNumero} onChange={(e) => setTestNumero(e.target.value)} placeholder="59170000000" />
             </div>
