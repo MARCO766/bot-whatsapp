@@ -81,8 +81,10 @@ export default function Bandeja({ onUnreadChange }) {
 
       <div className="bandejaLayout">
         <ChatList
+          key={inbox.conexionSeleccionada || "sin-conexion"}
           chats={inbox.chatsFiltrados}
           selectedChat={inbox.selectedChat}
+          mostrarBadgeLinea={inbox.conexionSeleccionada === CONEXION_TODAS}
           menuChatKey={inbox.menuChatKey}
           mapaNombreConexion={mapaNombreConexion}
           etiquetasUnicas={inbox.etiquetasUnicas}
@@ -105,14 +107,17 @@ export default function Bandeja({ onUnreadChange }) {
         />
 
         <ChatWindow
+          key={`panel-${inbox.conexionSeleccionada || "sin"}-${inbox.selectedChat?.cliente_numero || ""}-${inbox.selectedChat?.conexion_whatsapp_id || ""}`}
           panelActivo={inbox.panelActivo}
           chat={inbox.chat}
           chatMeta={inbox.chatMeta}
           mensajes={inbox.mensajes}
           cargando={inbox.cargandoChat}
           conexionWhatsappId={
-            inbox.selectedChat?.conexion_whatsapp_id ||
-            inbox.selectedChat?.conexionWhatsappId
+            inbox.panelActivo
+              ? inbox.selectedChat?.conexion_whatsapp_id ||
+                inbox.selectedChat?.conexionWhatsappId
+              : null
           }
           conexionSeleccionada={inbox.conexionSeleccionada}
           onSent={inbox.appendMensaje}

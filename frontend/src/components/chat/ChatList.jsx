@@ -5,6 +5,7 @@ import { sameChat } from "../../utils/chatFormat";
 export default function ChatList({
   chats,
   selectedChat,
+  mostrarBadgeLinea = false,
   menuChatKey,
   mapaNombreConexion = {},
   etiquetasUnicas,
@@ -56,10 +57,14 @@ export default function ChatList({
           <ChatListItem
             key={c.chatKey || `${c.numero}-${c.conexion_whatsapp_id}`}
             chat={c}
-            activo={selectedChat ? sameChat(c, selectedChat) : false}
+            activo={Boolean(selectedChat && sameChat(c, selectedChat))}
             menuAbierto={menuChatKey === c.chatKey}
             lineaLabel={
-              mapaNombreConexion[c.conexion_whatsapp_id || c.conexionWhatsappId]
+              mostrarBadgeLinea
+                ? mapaNombreConexion[
+                    c.conexion_whatsapp_id || c.conexionWhatsappId
+                  ]
+                : null
             }
             onSelect={onSelect}
             onToggleMenu={onToggleMenu}

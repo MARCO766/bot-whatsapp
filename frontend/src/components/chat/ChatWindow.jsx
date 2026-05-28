@@ -73,17 +73,14 @@ export default function ChatWindow({
     scrollToBottom(true);
   }, [cargando, numero, scrollToBottom]);
 
-  const conexionChat = String(
-    chat?.conexion_whatsapp_id || chat?.conexionWhatsappId || conexionWhatsappId || ""
-  );
-  const conexionTab = String(conexionSeleccionada || "");
+  const conexionChat = String(conexionWhatsappId || "").trim();
+  const conexionTab = String(conexionSeleccionada || "").trim();
   const conexionCoincide =
     !conexionTab ||
     conexionTab === "__todas__" ||
-    !conexionChat ||
-    conexionChat === conexionTab;
+    (conexionChat && conexionChat === conexionTab);
 
-  if (!panelActivo || !numero || !conexionCoincide) {
+  if (!panelActivo || !numero || !conexionWhatsappId || !conexionCoincide) {
     return (
       <section className="chatWindow">
         <div className="empty">Selecciona un chat</div>

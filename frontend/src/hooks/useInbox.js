@@ -75,9 +75,20 @@ export function useInbox({ onUnreadChange } = {}) {
   const [conexionSeleccionada, setConexionSeleccionada] = useState(null);
 
   const abrirChatSeqRef = useRef(0);
+  const conexionSeleccionadaRef = useRef(null);
+  const selectedChatRef = useRef(null);
+
+  useEffect(() => {
+    conexionSeleccionadaRef.current = conexionSeleccionada;
+  }, [conexionSeleccionada]);
+
+  useEffect(() => {
+    selectedChatRef.current = selectedChat;
+  }, [selectedChat]);
 
   const resetPanelState = useCallback(() => {
     abrirChatSeqRef.current += 1;
+    selectedChatRef.current = null;
     setSelectedChat(null);
     setMensajes([]);
     setChatMeta(null);
@@ -166,14 +177,19 @@ export function useInbox({ onUnreadChange } = {}) {
     loadInbox(etiquetaFiltro, conexionSeleccionada);
   }, [etiquetaFiltro, conexionSeleccionada, loadInbox]);
 
-  const conexionInitRef = useRef(false);
+  const prevConexionRef = useRef(undefined);
   useEffect(() => {
     if (!conexionSeleccionada) return;
-    if (!conexionInitRef.current) {
-      conexionInitRef.current = true;
-      return;
+
+    const prev = prevConexionRef.current;
+    prevConexionRef.current = conexionSeleccionada;
+
+    if (prev === undefined) return;
+
+    if (prev !== conexionSeleccionada) {
+      resetPanelState();
+      setChats([]);
     }
-    resetPanelState();
   }, [conexionSeleccionada, resetPanelState]);
 
   useEffect(() => {
@@ -189,6 +205,7 @@ export function useInbox({ onUnreadChange } = {}) {
     if (!selectedChatMatchesTab(sel, conexionSeleccionada)) return;
 
     const seq = ++abrirChatSeqRef.current;
+    selectedChatRef.current = sel;
     setSelectedChat(sel);
     setMenuChatKey(null);
     setCargandoChat(true);
@@ -203,7 +220,11 @@ export function useInbox({ onUnreadChange } = {}) {
       await marcarLeido(sel.cliente_numero, sel.conexion_whatsapp_id);
       const data = await fetchChat(sel.cliente_numero, sel.conexion_whatsapp_id);
       if (seq !== abrirChatSeqRef.current) return;
-      if (!selectedChatMatchesTab(sel, conexionSeleccionada)) return;
+      if (
+        !selectedChatMatchesTab(sel, conexionSeleccionadaRef.current)
+      ) {
+        return;
+      }
       setChatMeta({
         nombre: data.nombre,
         bloqueado: data.bloqueado,
@@ -370,9 +391,14 @@ export function useInbox({ onUnreadChange } = {}) {
     [selectedChat, conexionSeleccionada]
   );
 
+  const selectedChatUi = useMemo(
+    () => (panelActivo ? selectedChat : null),
+    [panelActivo, selectedChat]
+  );
+
   useInboxSocket({
     usuarioId,
-    selectedChat,
+    selectedChat: selectedChatUi,
     panelActivo,
     onNuevoMensaje: handleNuevoMensaje,
     onMensajeEstado: handleMensajeEstado,
@@ -420,12 +446,21 @@ export function useInbox({ onUnreadChange } = {}) {
 
   const cambiarConexion = useCallback(
     (conexionId) => {
-      if (!conexionId || conexionId === conexionSeleccionada) return;
+      if (!conexionId || conexionId === conexionSeleccionadaRef.current) return;
       sessionStorage.setItem(STORAGE_CONEXION, conexionId);
-      resetPanelState();
+      abrirChatSeqRef.current += 1;
+      selectedChatRef.current = null;
+      conexionSeleccionadaRef.current = conexionId;
+      setSelectedChat(null);
+      setMensajes([]);
+      setChatMeta(null);
+      setMenuChatKey(null);
+      setTagModalNumero(null);
+      setCargandoChat(false);
+      setChats([]);
       setConexionSeleccionada(conexionId);
     },
-    [conexionSeleccionada, resetPanelState]
+    []
   );
 
   const cambiarFiltroEtiqueta = useCallback(
@@ -531,7 +566,7 @@ export function useInbox({ onUnreadChange } = {}) {
     etiquetasDisponibles,
     mapaColores,
     etiquetaFiltro,
-    selectedChat,
+    selectedChat: selectedChatUi,
     panelActivo,
     chat,
     mensajes: mensajesPanel,
