@@ -41,10 +41,14 @@ function formatPreview(texto) {
 
 async function loadConexionesInbox(usuarioId) {
   const res = await axios.get(
-    `${SUPABASE_URL}/rest/v1/conexiones_whatsapp?usuario_id=eq.${encodeURIComponent(usuarioId)}&select=id,nombre,numero,phone_id,activo,estado,creado_en&order=creado_en.asc`,
+    `${SUPABASE_URL}/rest/v1/conexiones_whatsapp?usuario_id=eq.${encodeURIComponent(usuarioId)}&select=id,nombre,numero,phone_id,activo,creado_en&order=creado_en.asc`,
     { headers: supabaseHeaders() }
   );
-  return Array.isArray(res.data) ? res.data : [];
+  const filas = Array.isArray(res.data) ? res.data : [];
+  return filas.map((c) => ({
+    ...c,
+    estado: c.activo ? "principal" : "secundaria",
+  }));
 }
 
 async function loadInboxData(
