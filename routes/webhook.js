@@ -553,6 +553,7 @@ const activadorEjecutado = await procesarMensajeEntrante(
     imageMetaId: message.image?.id || null,
     metaToken: conexionWebhook?.token || null,
     imageUrl: mediaUrlFinal || null,
+    conexionWhatsappId: conexionWhatsappId || null,
   }
 );
 

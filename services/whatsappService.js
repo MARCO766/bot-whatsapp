@@ -95,6 +95,55 @@ async function actualizarConversacionSaliente(
   }
 }
 
+/**
+ * Línea del chat (último mensaje o conversación con conexion_whatsapp_id).
+ * Bandeja y webhook pueden pasar conexionWhatsappId explícito.
+ */
+async function obtenerConexionWhatsappIdDeChat(usuarioId, numero) {
+  if (!usuarioId || !numero || !SUPABASE_URL || !SUPABASE_KEY) return null;
+
+  const headers = supabaseHeaders();
+  const uid = encodeURIComponent(String(usuarioId).trim());
+  const num = encodeURIComponent(String(numero).trim());
+
+  try {
+    const msgRes = await axios.get(
+      `${SUPABASE_URL}/rest/v1/mensajes?usuario_id=eq.${uid}&cliente_numero=eq.${num}&conexion_whatsapp_id=not.is.null&select=conexion_whatsapp_id&order=creado_en.desc&limit=1`,
+      { headers }
+    );
+    const idMsg = msgRes.data?.[0]?.conexion_whatsapp_id;
+    if (idMsg) return String(idMsg).trim();
+  } catch (err) {
+    console.log("[WhatsApp] conexion desde mensajes:", err.response?.data?.message || err.message);
+  }
+
+  try {
+    const convRes = await axios.get(
+      `${SUPABASE_URL}/rest/v1/conversaciones?usuario_id=eq.${uid}&cliente_numero=eq.${num}&conexion_whatsapp_id=not.is.null&select=conexion_whatsapp_id&order=ultimo_mensaje_en.desc&limit=1`,
+      { headers }
+    );
+    const idConv = convRes.data?.[0]?.conexion_whatsapp_id;
+    if (idConv) return String(idConv).trim();
+  } catch (err) {
+    console.log("[WhatsApp] conexion desde conversaciones:", err.response?.data?.message || err.message);
+  }
+
+  return null;
+}
+
+async function completarOpcionesEnvio(opciones = {}, numero) {
+  if (opciones.conexionWhatsappId) return opciones;
+  if (!opciones.usuarioId || !numero) return opciones;
+
+  const conexionWhatsappId = await obtenerConexionWhatsappIdDeChat(
+    opciones.usuarioId,
+    numero
+  );
+  if (!conexionWhatsappId) return opciones;
+
+  return { ...opciones, conexionWhatsappId };
+}
+
 async function resolverCredencialesEnvio(opciones = {}) {
   let tokenEnviar = TOKEN;
   let phoneIdEnviar = PHONE_ID;
@@ -257,6 +306,7 @@ async function registrarMensajeSalienteEnInbox({
 }
 
 async function enviarTextoWhatsApp(numero, texto, opciones = {}) {
+  const opcionesEnvio = await completarOpcionesEnvio(opciones, numero);
   const textoEnvio =
     texto != null && typeof texto !== "string" ? String(texto) : String(texto ?? "");
   const payloadWhatsapp = {
@@ -266,7 +316,7 @@ async function enviarTextoWhatsApp(numero, texto, opciones = {}) {
   };
 
   try {
-    const { tokenEnviar, phoneIdEnviar } = await resolverCredencialesEnvio(opciones);
+    const { tokenEnviar, phoneIdEnviar } = await resolverCredencialesEnvio(opcionesEnvio);
 
     logEmojiDebug("antes enviar whatsapp", textoEnvio);
     console.log("[SEND DEBUG] payload whatsapp:", payloadWhatsapp);
@@ -289,7 +339,7 @@ async function enviarTextoWhatsApp(numero, texto, opciones = {}) {
     }
 
     const wamid = meta?.messages?.[0]?.id || null;
-    const usuarioId = opciones.usuarioId ?? null;
+    const usuarioId = opcionesEnvio.usuarioId ?? null;
 
     try {
       if (usuarioId) {
@@ -299,7 +349,7 @@ async function enviarTextoWhatsApp(numero, texto, opciones = {}) {
           texto: textoEnvio,
           wamid,
           tipo: "texto",
-          conexionWhatsappId: opciones.conexionWhatsappId || null,
+          conexionWhatsappId: opcionesEnvio.conexionWhatsappId || null,
         });
       }
 
@@ -309,7 +359,7 @@ async function enviarTextoWhatsApp(numero, texto, opciones = {}) {
         texto: textoEnvio,
         wamid,
         tipo: "texto",
-        conexionWhatsappId: opciones.conexionWhatsappId || null,
+        conexionWhatsappId: opcionesEnvio.conexionWhatsappId || null,
       });
     } catch (supabaseErr) {
       console.log("ERROR ENVIANDO WHATSAPP (SUPABASE mensajes):", {
@@ -515,9 +565,10 @@ function construirPayloadMediaWhatsApp(numeroDestino, tipoApi, mediaUrl, caption
 }
 
 async function enviarMediaWhatsApp(numero, tipo, mediaUrl, caption = "", opciones = {}) {
+  const numeroDestino = normalizarNumeroWhatsApp(numero);
+  const opcionesEnvio = await completarOpcionesEnvio(opciones, numeroDestino);
   const urlOriginal = String(mediaUrl || "").trim();
   const tipoApi = normalizarTipoMediaWhatsApp(tipo);
-  const numeroDestino = normalizarNumeroWhatsApp(numero);
 
   if (!numeroDestino) {
     console.error("?? N??MERO DESTINO INV?LIDO:", numero);
@@ -544,7 +595,7 @@ async function enviarMediaWhatsApp(numero, tipo, mediaUrl, caption = "", opcione
         return false;
       }
 
-      urlEnvio = await resolverLinkImagenWhatsApp(urlOriginal, opciones);
+      urlEnvio = await resolverLinkImagenWhatsApp(urlOriginal, opcionesEnvio);
 
       if (urlEnvio !== urlOriginal) {
         console.log("????? URL FINAL PARA META (JPEG):", urlEnvio);
@@ -564,7 +615,7 @@ async function enviarMediaWhatsApp(numero, tipo, mediaUrl, caption = "", opcione
       urlEnvio = urlOriginal;
     }
 
-    const { tokenEnviar, phoneIdEnviar } = await resolverCredencialesWhatsApp(opciones);
+    const { tokenEnviar, phoneIdEnviar } = await resolverCredencialesWhatsApp(opcionesEnvio);
 
     if (!tokenEnviar || !phoneIdEnviar) {
       console.error("?? FALTAN CREDENCIALES WHATSAPP (token o phone_id)");
@@ -576,7 +627,7 @@ async function enviarMediaWhatsApp(numero, tipo, mediaUrl, caption = "", opcione
       tipoApi,
       urlEnvio,
       caption,
-      opciones
+      opcionesEnvio
     );
 
     if (!payload) {
@@ -620,13 +671,13 @@ async function enviarMediaWhatsApp(numero, tipo, mediaUrl, caption = "", opcione
     console.log("??? message_id Meta:", whatsappMessageId);
 
     const insertPayload = normalizarBodyMensajeSupabase({
-      usuarioId: opciones.usuarioId,
+      usuarioId: opcionesEnvio.usuarioId,
       numero: numeroDestino,
       texto: caption || urlOriginal,
       wamid: whatsappMessageId,
       tipo: tipoApi,
       imagen_url: urlEnvio,
-      conexionWhatsappId: opciones.conexionWhatsappId || null,
+      conexionWhatsappId: opcionesEnvio.conexionWhatsappId || null,
     });
 
     const insertRes = await axios.post(
@@ -643,25 +694,25 @@ async function enviarMediaWhatsApp(numero, tipo, mediaUrl, caption = "", opcione
     );
 
     const row = insertRes.data?.[0];
-    if (opciones.usuarioId && row) {
+    if (opcionesEnvio.usuarioId && row) {
       await actualizarConversacionSaliente(
-        opciones.usuarioId,
+        opcionesEnvio.usuarioId,
         numeroDestino,
         insertPayload.contenido,
-        opciones.conexionWhatsappId || null
+        opcionesEnvio.conexionWhatsappId || null
       );
 
-      rt.nuevoMensaje(null, opciones.usuarioId, {
+      rt.nuevoMensaje(null, opcionesEnvio.usuarioId, {
         id: row.id,
         cliente_numero: numeroDestino,
-        usuario_id: opciones.usuarioId,
+        usuario_id: opcionesEnvio.usuarioId,
         direccion: "saliente",
         tipo: tipoApi,
         contenido: insertPayload.contenido,
         imagen_url: urlEnvio,
         whatsapp_message_id: whatsappMessageId,
         estado_envio: "sent",
-        conexion_whatsapp_id: opciones.conexionWhatsappId || null,
+        conexion_whatsapp_id: opcionesEnvio.conexionWhatsappId || null,
         creado_en: row.creado_en || new Date().toISOString(),
       });
     }
@@ -679,33 +730,15 @@ async function enviarMediaWhatsApp(numero, tipo, mediaUrl, caption = "", opcione
 
 async function enviarBotonesWhatsApp(numero, texto, botones, opciones = {}) {
   try {
-    let tokenEnviar = TOKEN;
-    let phoneIdEnviar = PHONE_ID;
-
-    if (opciones.usuarioId) {
-      const responseConexion = await axios.get(
-        `${SUPABASE_URL}/rest/v1/conexiones_whatsapp?usuario_id=eq.${opciones.usuarioId}&activo=eq.true&select=*`,
-        {
-          headers: {
-            apikey: SUPABASE_KEY,
-            Authorization: `Bearer ${SUPABASE_KEY}`,
-          },
-        }
-      );
-
-      const conexion = responseConexion.data?.[0];
-      if (conexion) {
-        tokenEnviar = conexion.token;
-        phoneIdEnviar = conexion.phone_id;
-      }
-    }
+    const opcionesEnvio = await completarOpcionesEnvio(opciones, numero);
+    const { tokenEnviar, phoneIdEnviar } = await resolverCredencialesEnvio(opcionesEnvio);
 
     const lista = (botones || []).slice(0, 3).filter(function (b) {
       return b && String(b.texto || "").trim();
     });
 
     if (!lista.length) {
-      await enviarTextoWhatsApp(numero, texto, opciones);
+      await enviarTextoWhatsApp(numero, texto, opcionesEnvio);
       return;
     }
 
@@ -744,11 +777,12 @@ async function enviarBotonesWhatsApp(numero, texto, botones, opciones = {}) {
     const whatsappMessageId = respuestaMeta.data?.messages?.[0]?.id || null;
 
     const insertPayload = normalizarBodyMensajeSupabase({
-      usuarioId: opciones.usuarioId,
+      usuarioId: opcionesEnvio.usuarioId,
       numero,
       texto,
       wamid: whatsappMessageId,
       tipo: "interactive",
+      conexionWhatsappId: opcionesEnvio.conexionWhatsappId || null,
     });
 
     const insertRes = await axios.post(
@@ -765,16 +799,24 @@ async function enviarBotonesWhatsApp(numero, texto, botones, opciones = {}) {
     );
 
     const row = insertRes.data?.[0];
-    if (opciones.usuarioId) {
-      rt.nuevoMensaje(null, opciones.usuarioId, {
+    if (opcionesEnvio.usuarioId) {
+      await actualizarConversacionSaliente(
+        opcionesEnvio.usuarioId,
+        numero,
+        insertPayload.contenido,
+        opcionesEnvio.conexionWhatsappId || null
+      );
+
+      rt.nuevoMensaje(null, opcionesEnvio.usuarioId, {
         id: row?.id,
         cliente_numero: numero,
-        usuario_id: opciones.usuarioId,
+        usuario_id: opcionesEnvio.usuarioId,
         direccion: "saliente",
         tipo: "interactive",
         contenido: insertPayload.contenido,
         whatsapp_message_id: whatsappMessageId,
         estado_envio: "sent",
+        conexion_whatsapp_id: opcionesEnvio.conexionWhatsappId || null,
         creado_en: row?.creado_en || new Date().toISOString(),
       });
     }

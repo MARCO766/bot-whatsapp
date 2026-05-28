@@ -224,7 +224,14 @@ function segundosPausaBloque(bloque) {
   return !isNaN(segundos) && segundos > 0 ? segundos : 0;
 }
 
-async function ejecutarBloqueContenido(numero, bloque, usuarioId) {
+function opcionesEnvioFlujo(usuarioId, conexionWhatsappId) {
+  const op = { usuarioId };
+  if (conexionWhatsappId) op.conexionWhatsappId = conexionWhatsappId;
+  return op;
+}
+
+async function ejecutarBloqueContenido(numero, bloque, usuarioId, conexionWhatsappId = null) {
+  const opEnvio = opcionesEnvioFlujo(usuarioId, conexionWhatsappId);
   const tipo = tipoBloqueContenido(bloque);
   console.log("🧩 EJECUTANDO BLOQUE:", tipo, bloque);
 
@@ -239,7 +246,7 @@ async function ejecutarBloqueContenido(numero, bloque, usuarioId) {
       console.log("⚠️ TEXTO VACÍO, SE OMITE");
       return null;
     }
-    await enviarTextoWhatsApp(numero, mensaje, { usuarioId });
+    await enviarTextoWhatsApp(numero, mensaje, opEnvio);
     console.log("✅ TEXTO ENVIADO");
     return mensaje;
   }
@@ -269,9 +276,7 @@ async function ejecutarBloqueContenido(numero, bloque, usuarioId) {
   if (tipo.includes("imagen") || tipo === "image") {
     const caption = captionMediaBloque(bloque);
     console.log("🖼️ BLOQUE CONTENIDO IMAGEN:", { numero, mediaUrl: media, caption });
-    const enviado = await enviarMediaWhatsApp(numero, "image", media, caption, {
-      usuarioId,
-    });
+    const enviado = await enviarMediaWhatsApp(numero, "image", media, caption, opEnvio);
     if (enviado && enviado.whatsapp_message_id) {
       console.log("✅ IMAGEN ENVIADA A WHATSAPP:", enviado.whatsapp_message_id);
       return caption || media;
@@ -281,16 +286,14 @@ async function ejecutarBloqueContenido(numero, bloque, usuarioId) {
   }
 
   if (tipo.includes("video")) {
-    const enviado = await enviarMediaWhatsApp(numero, "video", media, captionMediaBloque(bloque), {
-      usuarioId,
-    });
+    const enviado = await enviarMediaWhatsApp(numero, "video", media, captionMediaBloque(bloque), opEnvio);
     if (enviado) console.log("✅ VIDEO ENVIADO");
     else console.log("❌ VIDEO NO ENVIADO (Meta o URL inválida)");
     return;
   }
 
   if (tipo.includes("audio")) {
-    const enviado = await enviarMediaWhatsApp(numero, "audio", media, "", { usuarioId });
+    const enviado = await enviarMediaWhatsApp(numero, "audio", media, "", opEnvio);
     if (enviado) console.log("✅ AUDIO ENVIADO");
     else console.log("❌ AUDIO NO ENVIADO (Meta o URL inválida)");
     return;
@@ -298,7 +301,7 @@ async function ejecutarBloqueContenido(numero, bloque, usuarioId) {
 
   if (tipo.includes("pdf") || tipo.includes("doc") || tipo === "document") {
     const enviado = await enviarMediaWhatsApp(numero, "document", media, captionMediaBloque(bloque), {
-      usuarioId,
+      ...opEnvio,
       filename: bloque.nombre || bloque.filename || "archivo.pdf",
     });
     if (enviado) console.log("✅ PDF ENVIADO");
@@ -309,7 +312,7 @@ async function ejecutarBloqueContenido(numero, bloque, usuarioId) {
   console.log("⚠️ TIPO DE BLOQUE NO RECONOCIDO:", tipo);
 }
 
-async function ejecutarContenidoNodo(numero, nodo, usuarioId) {
+async function ejecutarContenidoNodo(numero, nodo, usuarioId, conexionWhatsappId = null) {
   console.log("📦 EJECUTANDO NODO CONTENIDO");
   console.log("📦 DATA NODO:", nodo?.data);
   console.log("🧩 JSON REAL BLOQUES:", extraerJsonVariantesDesdeNodo(nodo) || "(vacío)");
@@ -332,7 +335,7 @@ async function ejecutarContenidoNodo(numero, nodo, usuarioId) {
     let ultimoTextoBot = "";
     for (const bloque of bloques) {
       console.log("📦 BLOQUE ACTUAL:", bloque);
-      const enviado = await ejecutarBloqueContenido(numero, bloque, usuarioId);
+      const enviado = await ejecutarBloqueContenido(numero, bloque, usuarioId, conexionWhatsappId);
       if (enviado && typeof enviado === "string") ultimoTextoBot = enviado;
     }
 
@@ -374,6 +377,11 @@ async function ejecutarFlujo(
 
   flowContext.usuarioId = usuarioId;
   flowContext.numero = flowContext.numero || numero;
+  flowContext.conexionWhatsappId =
+    opts.conexionWhatsappId || flowContext.conexionWhatsappId || null;
+
+  const opEnvioNodo = () =>
+    opcionesEnvioFlujo(usuarioId, flowContext.conexionWhatsappId);
 
   await enriquecerContextoFlujo(flowContext, numero, usuarioId);
 
@@ -670,7 +678,12 @@ async function ejecutarFlujo(
     }
 
     if (tipoNodo === "contenido") {
-      const ejecutado = await ejecutarContenidoNodo(numero, nodo, usuarioId);
+      const ejecutado = await ejecutarContenidoNodo(
+        numero,
+        nodo,
+        usuarioId,
+        flowContext.conexionWhatsappId
+      );
       if (ejecutado?.ok || ejecutado === true) {
         const ultimoTexto =
           typeof ejecutado === "object" ? ejecutado.ultimoTextoBot : "";
@@ -965,9 +978,7 @@ console.log("📦 TODAS LAS ACCIONES DEL NODO:", acciones);
     for (const accion of acciones) {
       if (accion.tipo === "texto") {
         console.log("📤 MENSAJE ENVIADO (nodo):", accion.valor);
-        await enviarTextoWhatsApp(numero, accion.valor, {
-  usuarioId
-});
+        await enviarTextoWhatsApp(numero, accion.valor, opEnvioNodo());
       }
 
       if (accion.tipo === "tiempo") {
@@ -983,17 +994,13 @@ if (accion.tipo === "imagen") {
   const urlImagen = partes[0].trim();
   const captionImagen = partes[1] ? partes[1].trim() : "";
 
-  await enviarMediaWhatsApp(numero, "image", urlImagen, captionImagen, {
-    usuarioId
-  });
+  await enviarMediaWhatsApp(numero, "image", urlImagen, captionImagen, opEnvioNodo());
 }
 
 if (accion.tipo === "audio") {
   console.log("🎧 Nodo audio detectado:", accion.valor);
 
-  await enviarMediaWhatsApp(numero, "audio", accion.valor, "", {
-    usuarioId
-  });
+  await enviarMediaWhatsApp(numero, "audio", accion.valor, "", opEnvioNodo());
 }
 
 if (accion.tipo === "video") {
@@ -1001,17 +1008,13 @@ if (accion.tipo === "video") {
   const urlVideo = partes[0].trim();
   const captionVideo = partes[1] ? partes[1].trim() : "";
 
-  await enviarMediaWhatsApp(numero, "video", urlVideo, captionVideo, {
-    usuarioId
-  });
+  await enviarMediaWhatsApp(numero, "video", urlVideo, captionVideo, opEnvioNodo());
 }
 
 if (accion.tipo === "doc") {
   console.log("📄 Nodo documento detectado:", accion.valor);
 
-  await enviarMediaWhatsApp(numero, "document", accion.valor, "", {
-    usuarioId
-  });
+  await enviarMediaWhatsApp(numero, "document", accion.valor, "", opEnvioNodo());
 }
 
     }
@@ -1202,7 +1205,10 @@ async function procesarMensajeEntrante(
 
     if (lecturaPago?.handled) {
       if (!lecturaPago.enviadoPorServicio && lecturaPago.mensaje) {
-        await enviarTextoWhatsApp(numero, lecturaPago.mensaje, { usuarioId });
+        await enviarTextoWhatsApp(numero, lecturaPago.mensaje, {
+          usuarioId,
+          conexionWhatsappId: opts.conexionWhatsappId || null,
+        });
       }
       if (lecturaPago.valido && lecturaPago.continuarFlujo) {
         await continuarFlujoDesdeLectorPago(numero, usuarioId, lecturaPago);
@@ -1222,7 +1228,8 @@ async function procesarMensajeEntrante(
     numero,
     texto,
     usuarioId,
-    messageId
+    messageId,
+    opts.conexionWhatsappId || null
   );
 
   if (!activadorEjecutado && usuarioId && numero) {
@@ -1295,7 +1302,13 @@ async function registrarUsoActivador(activador) {
   }
 }
 
-async function buscarYEjecutarActivador(numero, textoCliente, usuarioId = null, messageId = null) {
+async function buscarYEjecutarActivador(
+  numero,
+  textoCliente,
+  usuarioId = null,
+  messageId = null,
+  conexionWhatsappId = null
+) {
   if (!textoCliente || !usuarioId) {
     console.log("⚠️ ACTIVADOR — omitido (sin texto o sin usuario_id):", {
       texto: textoCliente,
@@ -1425,6 +1438,7 @@ async function buscarYEjecutarActivador(numero, textoCliente, usuarioId = null, 
   await ejecutarFlujo(numero, flujoDatos, usuarioId, flujo.id, {
     ultimoMensaje: textoCliente,
     flujoNombre: flujo.nombre || null,
+    conexionWhatsappId: conexionWhatsappId || null,
   });
   await registrarUsoActivador(activador);
 
