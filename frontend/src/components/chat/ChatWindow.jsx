@@ -7,20 +7,26 @@ import {
 } from "../../utils/whatsappVentana24h";
 
 export default function ChatWindow({
+  panelActivo = false,
   chat,
   chatMeta,
   mensajes,
   cargando,
   conexionWhatsappId,
+  conexionSeleccionada,
   onSent,
   onPatchMensaje,
   moverChatArriba,
 }) {
   const scrollRef = useRef(null);
   const [ventanaTick, setVentanaTick] = useState(0);
-  const numero = chat?.numero || chatMeta?.numero;
-  const nombre = chatMeta?.nombre || chat?.nombre || numero;
-  const bloqueado = chatMeta?.bloqueado ?? chat?.bloqueado;
+  const numero = panelActivo ? chat?.numero || chat?.cliente_numero : null;
+  const nombre = panelActivo
+    ? chatMeta?.nombre || chat?.nombre || numero
+    : null;
+  const bloqueado = panelActivo
+    ? chatMeta?.bloqueado ?? chat?.bloqueado
+    : false;
 
   const ventana = useMemo(
     () => calcularVentana24h(mensajes),
@@ -67,7 +73,17 @@ export default function ChatWindow({
     scrollToBottom(true);
   }, [cargando, numero, scrollToBottom]);
 
-  if (!numero) {
+  const conexionChat = String(
+    chat?.conexion_whatsapp_id || chat?.conexionWhatsappId || conexionWhatsappId || ""
+  );
+  const conexionTab = String(conexionSeleccionada || "");
+  const conexionCoincide =
+    !conexionTab ||
+    conexionTab === "__todas__" ||
+    !conexionChat ||
+    conexionChat === conexionTab;
+
+  if (!panelActivo || !numero || !conexionCoincide) {
     return (
       <section className="chatWindow">
         <div className="empty">Selecciona un chat</div>

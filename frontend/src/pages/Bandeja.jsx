@@ -105,6 +105,7 @@ export default function Bandeja({ onUnreadChange }) {
         />
 
         <ChatWindow
+          panelActivo={inbox.panelActivo}
           chat={inbox.chat}
           chatMeta={inbox.chatMeta}
           mensajes={inbox.mensajes}
@@ -113,6 +114,7 @@ export default function Bandeja({ onUnreadChange }) {
             inbox.selectedChat?.conexion_whatsapp_id ||
             inbox.selectedChat?.conexionWhatsappId
           }
+          conexionSeleccionada={inbox.conexionSeleccionada}
           onSent={inbox.appendMensaje}
           onPatchMensaje={inbox.patchMensaje}
           moverChatArriba={inbox.moverChatArriba}

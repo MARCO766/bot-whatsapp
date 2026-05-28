@@ -9,6 +9,7 @@ import { normalizeIncomingMessage, sameChat } from "../utils/chatFormat";
 export function useInboxSocket({
   usuarioId,
   selectedChat,
+  panelActivo = false,
   onNuevoMensaje,
   onMensajeEstado,
   onSeguimientoEstado,
@@ -24,11 +25,16 @@ export function useInboxSocket({
         conexion_whatsapp_id: normalized.conexion_whatsapp_id,
         conversacion_id: normalized.conversacion_id,
       };
+      const isActive = Boolean(
+        panelActivo &&
+          selectedChat &&
+          sameChat(msgChat, selectedChat)
+      );
       onNuevoMensaje({
         msg: normalized,
         numero,
         conexionWhatsappId: normalized.conexion_whatsapp_id,
-        isActive: selectedChat ? sameChat(msgChat, selectedChat) : false,
+        isActive,
       });
     },
     Boolean(usuarioId && onNuevoMensaje)
@@ -44,6 +50,7 @@ export function useInboxSocket({
     RT.SEGUIMIENTO_ACTUALIZADO,
     (data) => {
       if (
+        panelActivo &&
         selectedChat &&
         data?.cliente_numero === selectedChat.cliente_numero &&
         String(data?.conexion_whatsapp_id || "") ===
