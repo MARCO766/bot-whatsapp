@@ -26,7 +26,7 @@ export default function Bandeja({ onUnreadChange }) {
 
   const mapaNombreConexion = {};
   (inbox.conexiones || []).forEach((c) => {
-    mapaNombreConexion[c.id] = etiquetaConexion(c);
+    mapaNombreConexion[String(c.id)] = etiquetaConexion(c);
   });
 
   return (
@@ -36,6 +36,7 @@ export default function Bandeja({ onUnreadChange }) {
           <h1>Bandeja de entrada</h1>
           <BandejaLineaActiva
             conexionSeleccionada={inbox.conexionSeleccionada}
+            conexionActiva={inbox.conexionActiva}
             conexiones={inbox.conexiones}
           />
           <p>Conversaciones en tiempo real · WhatsApp</p>
@@ -57,7 +58,8 @@ export default function Bandeja({ onUnreadChange }) {
               Todas las líneas
             </button>
             {inbox.conexiones.map((c) => {
-              const activa = inbox.conexionSeleccionada === c.id;
+              const activa =
+                String(inbox.conexionSeleccionada) === String(c.id);
               return (
                 <button
                   key={c.id}

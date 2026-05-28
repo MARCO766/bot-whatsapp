@@ -23,6 +23,24 @@ const STORAGE_INBOX_NUMERO = "macbot_inbox_numero";
 const STORAGE_INBOX_NUMERO_CONEXION = "macbot_inbox_numero_conexion_id";
 export const CONEXION_TODAS = "__todas__";
 
+function conexionIdKey(id) {
+  if (id == null || id === "") return "";
+  if (id === CONEXION_TODAS) return CONEXION_TODAS;
+  return String(id).trim();
+}
+
+export function findConexionPorId(conexiones, conexionId) {
+  const key = conexionIdKey(conexionId);
+  if (!key || key === CONEXION_TODAS) return null;
+  return (conexiones || []).find((c) => conexionIdKey(c.id) === key) ?? null;
+}
+
+function normalizeConexionSeleccionada(conexionId) {
+  if (conexionId === CONEXION_TODAS) return CONEXION_TODAS;
+  const key = conexionIdKey(conexionId);
+  return key || null;
+}
+
 function selectedChatMatchesTab(selectedChat, conexionSeleccionada) {
   if (!selectedChat) return false;
   if (!conexionSeleccionada || conexionSeleccionada === CONEXION_TODAS) {
@@ -151,10 +169,13 @@ export function useInbox({ onUnreadChange } = {}) {
         }
 
         const saved = sessionStorage.getItem(STORAGE_CONEXION);
-        const pick =
-          saved === CONEXION_TODAS
-            ? CONEXION_TODAS
-            : lista.find((c) => c.id === saved)?.id || CONEXION_TODAS;
+        let pick = CONEXION_TODAS;
+        if (saved === CONEXION_TODAS) {
+          pick = CONEXION_TODAS;
+        } else if (saved) {
+          const found = lista.find((c) => conexionIdKey(c.id) === conexionIdKey(saved));
+          if (found) pick = conexionIdKey(found.id);
+        }
         setConexionSeleccionada(pick);
         sessionStorage.setItem(STORAGE_CONEXION, pick);
       } catch (err) {
@@ -171,6 +192,32 @@ export function useInbox({ onUnreadChange } = {}) {
       cancelled = true;
     };
   }, []);
+
+  const refreshConexiones = useCallback(async () => {
+    try {
+      const { conexiones: lista } = await fetchConexiones();
+      setConexiones(lista || []);
+    } catch {
+      /* mantener lista actual */
+    }
+  }, []);
+
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible") refreshConexiones();
+    };
+    window.addEventListener("focus", refreshConexiones);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.removeEventListener("focus", refreshConexiones);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [refreshConexiones]);
+
+  const conexionActiva = useMemo(
+    () => findConexionPorId(conexiones, conexionSeleccionada),
+    [conexiones, conexionSeleccionada]
+  );
 
   useEffect(() => {
     if (!conexionSeleccionada) return;
@@ -446,11 +493,12 @@ export function useInbox({ onUnreadChange } = {}) {
 
   const cambiarConexion = useCallback(
     (conexionId) => {
-      if (!conexionId || conexionId === conexionSeleccionadaRef.current) return;
-      sessionStorage.setItem(STORAGE_CONEXION, conexionId);
+      const next = normalizeConexionSeleccionada(conexionId);
+      if (!next || next === conexionSeleccionadaRef.current) return;
+      sessionStorage.setItem(STORAGE_CONEXION, next);
       abrirChatSeqRef.current += 1;
       selectedChatRef.current = null;
-      conexionSeleccionadaRef.current = conexionId;
+      conexionSeleccionadaRef.current = next;
       setSelectedChat(null);
       setMensajes([]);
       setChatMeta(null);
@@ -458,7 +506,7 @@ export function useInbox({ onUnreadChange } = {}) {
       setTagModalNumero(null);
       setCargandoChat(false);
       setChats([]);
-      setConexionSeleccionada(conexionId);
+      setConexionSeleccionada(next);
     },
     []
   );
@@ -591,7 +639,9 @@ export function useInbox({ onUnreadChange } = {}) {
     reload: loadInbox,
     conexiones,
     conexionSeleccionada,
+    conexionActiva,
     cambiarConexion,
+    refreshConexiones,
     CONEXION_TODAS,
   };
 }
