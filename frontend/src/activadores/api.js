@@ -1,4 +1,5 @@
 import { resolveApiUrl, getBackendOrigin } from "../flujos/apiBase";
+import { CONEXION_TODAS } from "../utils/conexionesInbox";
 
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
@@ -55,30 +56,51 @@ async function request(path, options = {}) {
   return data;
 }
 
-export function fetchActivadores() {
-  return request("/api/activadores");
+function conexionParam(conexionWhatsappId) {
+  const id = conexionWhatsappId || CONEXION_TODAS;
+  return `conexion_whatsapp_id=${encodeURIComponent(id)}`;
 }
 
-export function createActivador(payload) {
+function withConexionQuery(path, conexionWhatsappId) {
+  const sep = path.includes("?") ? "&" : "?";
+  return `${path}${sep}${conexionParam(conexionWhatsappId)}`;
+}
+
+function writeConexionBody(payload, conexionWhatsappId) {
+  return {
+    ...payload,
+    conexion_whatsapp_id: conexionWhatsappId,
+  };
+}
+
+export function fetchActivadores(conexionWhatsappId) {
+  return request(withConexionQuery("/api/activadores", conexionWhatsappId));
+}
+
+export function createActivador(payload, conexionWhatsappId) {
   return request("/api/activadores", {
     method: "POST",
-    body: JSON.stringify(payload),
+    body: JSON.stringify(writeConexionBody(payload, conexionWhatsappId)),
   });
 }
 
-export function updateActivador(id, payload) {
-  return request(`/api/activadores/${id}`, {
+export function updateActivador(id, payload, conexionWhatsappId) {
+  return request(withConexionQuery(`/api/activadores/${id}`, conexionWhatsappId), {
     method: "PATCH",
-    body: JSON.stringify(payload),
+    body: JSON.stringify(writeConexionBody(payload, conexionWhatsappId)),
   });
 }
 
-export function deleteActivador(id) {
-  return request(`/api/activadores/${id}`, { method: "DELETE" });
+export function deleteActivador(id, conexionWhatsappId) {
+  return request(withConexionQuery(`/api/activadores/${id}`, conexionWhatsappId), {
+    method: "DELETE",
+  });
 }
 
-export function toggleActivador(id) {
-  return request(`/api/activadores/${id}/toggle`, { method: "POST" });
+export function toggleActivador(id, conexionWhatsappId) {
+  return request(withConexionQuery(`/api/activadores/${id}/toggle`, conexionWhatsappId), {
+    method: "POST",
+  });
 }
 
 export function loginUrl() {

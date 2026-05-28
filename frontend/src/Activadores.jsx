@@ -5,6 +5,7 @@ import { activadoresStyles } from "./activadores/styles";
 import { useActivadores } from "./activadores/useActivadores";
 import { loginUrl } from "./activadores/api";
 import { displayActivadorTrigger, labelTipoActivador } from "./activadores/constants";
+import { CONEXION_TODAS, sameConexionId } from "./utils/conexionesInbox";
 
 function formatFecha(iso) {
   if (!iso) return "—";
@@ -39,6 +40,11 @@ export default function Activadores() {
     eliminar,
     toggle,
     load,
+    conexionesInbox,
+    conexionSeleccionadaId,
+    seleccionarConexion,
+    puedeEscribir,
+    etiquetaTabConexion,
   } = useActivadores();
 
   const [modalOpen, setModalOpen] = useState(false);
@@ -81,10 +87,59 @@ export default function Activadores() {
             Palabras clave que disparan flujos automáticamente por WhatsApp.
           </p>
         </div>
-        <button type="button" className="actBtn actBtnPrimary" onClick={openCreate} disabled={!apiOnline}>
+        <button
+          type="button"
+          className="actBtn actBtnPrimary"
+          onClick={openCreate}
+          disabled={!apiOnline || !puedeEscribir}
+          title={
+            puedeEscribir
+              ? undefined
+              : "Selecciona una línea WhatsApp (no «Todas las líneas»)"
+          }
+        >
           + Nuevo activador
         </button>
       </div>
+
+      {conexionesInbox.length > 0 && (
+        <div className="actConexionPicker" role="tablist" aria-label="Línea WhatsApp">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={conexionSeleccionadaId === CONEXION_TODAS}
+            className={`actConexionTab ${
+              conexionSeleccionadaId === CONEXION_TODAS ? "actConexionTab--active" : ""
+            }`}
+            onClick={() => seleccionarConexion(CONEXION_TODAS)}
+          >
+            Todas las líneas
+          </button>
+          {conexionesInbox.map((c) => {
+            const activa = sameConexionId(conexionSeleccionadaId, c.id);
+            return (
+              <button
+                key={c.id}
+                type="button"
+                role="tab"
+                aria-selected={activa}
+                className={`actConexionTab ${activa ? "actConexionTab--active" : ""}`}
+                onClick={() => seleccionarConexion(c.id)}
+              >
+                {etiquetaTabConexion(c)}
+                {c.activo && <span className="actConexionPrincipal">principal</span>}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {!puedeEscribir && conexionSeleccionadaId === CONEXION_TODAS && (
+        <p className="actConexionHint">
+          Vista global: los activadores sin línea solo aparecen aquí. Para crear o editar, elige un
+          número.
+        </p>
+      )}
 
       {apiError && (
         <div className="actApiBanner">
@@ -165,7 +220,12 @@ export default function Activadores() {
             Crea tu primer activador para que un mensaje como &quot;info&quot; ejecute un flujo
             automáticamente.
           </p>
-          <button type="button" className="actBtn actBtnPrimary" onClick={openCreate} disabled={!apiOnline}>
+          <button
+            type="button"
+            className="actBtn actBtnPrimary"
+            onClick={openCreate}
+            disabled={!apiOnline || !puedeEscribir}
+          >
             + Nuevo activador
           </button>
         </div>
@@ -202,7 +262,17 @@ export default function Activadores() {
                 </div>
               </div>
               <div className="actCardActions">
-                <button type="button" className="actBtn actBtnGhost" onClick={() => openEdit(a)}>
+                <button
+                  type="button"
+                  className="actBtn actBtnGhost"
+                  onClick={() => openEdit(a)}
+                  disabled={!puedeEscribir}
+                  title={
+                    puedeEscribir
+                      ? undefined
+                      : "Selecciona una línea WhatsApp para editar"
+                  }
+                >
                   Editar
                 </button>
                 <button type="button" className="actBtn actBtnGhost" onClick={() => toggle(a.id)}>
@@ -225,6 +295,7 @@ export default function Activadores() {
         open={modalOpen}
         activador={editItem}
         flujos={flujos}
+        puedeEscribir={puedeEscribir}
         onSave={guardar}
         onClose={() => {
           setModalOpen(false);

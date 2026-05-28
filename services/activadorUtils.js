@@ -121,7 +121,12 @@ function validateActivadorBody(body) {
   return { ok: true };
 }
 
-function bodyToActivadorFields(body, usuarioId) {
+function sameConexionId(a, b) {
+  if (a == null || b == null) return false;
+  return String(a).trim().toLowerCase() === String(b).trim().toLowerCase();
+}
+
+function bodyToActivadorFields(body, usuarioId, conexionWhatsappId = null) {
   const tipo = body.tipo_activador || TIPOS.PALABRA_UNICA;
   let frase = "";
   let palabras_clave_array = null;
@@ -153,6 +158,12 @@ function bodyToActivadorFields(body, usuarioId) {
         ? false
         : body.activo !== false && body.activo !== "false";
 
+  const connId =
+    conexionWhatsappId ||
+    body.conexion_whatsapp_id ||
+    body.conexionWhatsappId ||
+    null;
+
   const payload = {
     nombre,
     frase,
@@ -163,6 +174,10 @@ function bodyToActivadorFields(body, usuarioId) {
     usuario_id: usuarioId,
     tipo_activador: tipo,
   };
+
+  if (connId) {
+    payload.conexion_whatsapp_id = String(connId).trim();
+  }
 
   if (palabras_clave_array && palabras_clave_array.length) {
     payload.palabras_clave_array = palabras_clave_array;
@@ -206,6 +221,7 @@ function mapActivadorRow(row, flujosById = {}) {
     flujo_id: row.flujo_id,
     flujo_nombre: flujo?.nombre || null,
     conexion: row.conexion || "",
+    conexion_whatsapp_id: row.conexion_whatsapp_id || null,
     estado: row.activo ? "activo" : "pausado",
     activo: Boolean(row.activo),
     repetible: row.repetible !== false,
@@ -234,4 +250,5 @@ module.exports = {
   bodyToActivadorFields,
   mapActivadorRow,
   tipoLabel,
+  sameConexionId,
 };

@@ -10,11 +10,17 @@ const EMPTY = {
   estado: "activo",
   coincidencia: "contiene",
   prioridad: 0,
-  conexion: "WhatsApp",
   repetible: true,
 };
 
-export default function ActivadorModal({ open, activador, flujos, onSave, onClose }) {
+export default function ActivadorModal({
+  open,
+  activador,
+  flujos,
+  puedeEscribir,
+  onSave,
+  onClose,
+}) {
   const [form, setForm] = useState(EMPTY);
   const [saving, setSaving] = useState(false);
 
@@ -38,7 +44,6 @@ export default function ActivadorModal({ open, activador, flujos, onSave, onClos
         estado: activador.estado || (activador.activo ? "activo" : "pausado"),
         coincidencia: activador.coincidencia || "contiene",
         prioridad: activador.prioridad ?? 0,
-        conexion: activador.conexion || "WhatsApp",
         repetible: activador.repetible !== false,
       });
     } else {
@@ -64,7 +69,6 @@ export default function ActivadorModal({ open, activador, flujos, onSave, onClos
       estado: form.estado,
       coincidencia: form.coincidencia,
       prioridad: form.prioridad,
-      conexion: form.conexion,
       repetible: form.repetible,
     };
 
@@ -91,6 +95,7 @@ export default function ActivadorModal({ open, activador, flujos, onSave, onClos
 
   async function handleSubmit(e) {
     e.preventDefault();
+    if (!puedeEscribir) return;
     if (!validate()) return;
     setSaving(true);
     const ok = await onSave(buildPayload(), activador?.id);
@@ -103,7 +108,8 @@ export default function ActivadorModal({ open, activador, flujos, onSave, onClos
       <div className="actModal" onClick={(e) => e.stopPropagation()} role="dialog">
         <h2>{activador ? "Editar activador" : "Nuevo activador"}</h2>
         <p className="sub">
-          Define cómo se dispara el flujo cuando el lead escribe por WhatsApp.
+          Define cómo se dispara el flujo cuando el lead escribe por WhatsApp en la línea
+          seleccionada.
         </p>
 
         <form onSubmit={handleSubmit}>
@@ -174,6 +180,9 @@ export default function ActivadorModal({ open, activador, flujos, onSave, onClos
                 </option>
               ))}
             </select>
+            {!flujos.length && (
+              <p className="actHint">No hay flujos en esta línea. Créalos en la pantalla Flujos.</p>
+            )}
           </div>
 
           {!esCualquier && (
@@ -215,25 +224,15 @@ export default function ActivadorModal({ open, activador, flujos, onSave, onClos
             </div>
           )}
 
-          <div className="actRow2">
-            <div className="actField">
-              <label>Estado</label>
-              <select
-                value={form.estado}
-                onChange={(e) => setField("estado", e.target.value)}
-              >
-                <option value="activo">Activo</option>
-                <option value="pausado">Pausado</option>
-              </select>
-            </div>
-
-            <div className="actField">
-              <label>Conexión</label>
-              <input
-                value={form.conexion}
-                onChange={(e) => setField("conexion", e.target.value)}
-              />
-            </div>
+          <div className="actField">
+            <label>Estado</label>
+            <select
+              value={form.estado}
+              onChange={(e) => setField("estado", e.target.value)}
+            >
+              <option value="activo">Activo</option>
+              <option value="pausado">Pausado</option>
+            </select>
           </div>
 
           <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
@@ -249,7 +248,11 @@ export default function ActivadorModal({ open, activador, flujos, onSave, onClos
             <button type="button" className="actBtn actBtnGhost" onClick={onClose}>
               Cancelar
             </button>
-            <button type="submit" className="actBtn actBtnPrimary" disabled={saving}>
+            <button
+              type="submit"
+              className="actBtn actBtnPrimary"
+              disabled={saving || !puedeEscribir}
+            >
               {saving ? "Guardando…" : activador ? "Guardar" : "Crear activador"}
             </button>
           </div>

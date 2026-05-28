@@ -204,16 +204,24 @@ async function fetchFlujos(usuarioId, scope) {
   return res.data || [];
 }
 
-function mapFlowRow(f, activadores, perFlow, mapaConexiones) {
+function mapFlowRow(f, activadores, perFlow, mapaConexiones, scope) {
   const metaRaw = extractMeta(f.data);
-  const acts = activadores.filter((a) => a.flujo_id === f.id);
+  const connId = f.conexion_whatsapp_id || null;
+  const acts = activadores.filter((a) => {
+    if (a.flujo_id !== f.id) return false;
+    if (scope?.id) {
+      return a.conexion_whatsapp_id && sameConexionId(a.conexion_whatsapp_id, scope.id);
+    }
+    if (connId) {
+      return !a.conexion_whatsapp_id || sameConexionId(a.conexion_whatsapp_id, connId);
+    }
+    return !a.conexion_whatsapp_id;
+  });
   const metricas = { ...metricasVacias(), ...(perFlow[f.id] || {}) };
 
   if (metaRaw.ultima_ejecucion && !metricas.ultimaEjecucion) {
     metricas.ultimaEjecucion = metaRaw.ultima_ejecucion;
   }
-
-  const connId = f.conexion_whatsapp_id || null;
 
   return {
     id: f.id,
@@ -240,12 +248,15 @@ function mapFlowRow(f, activadores, perFlow, mapaConexiones) {
   };
 }
 
-async function fetchActivadores(usuarioId) {
+async function fetchActivadores(usuarioId, scope) {
   try {
-    const res = await axios.get(
-      `${SUPABASE_URL}/rest/v1/activadores?select=id,nombre,flujo_id,conexion,frase,activo,repetible,creado_en&usuario_id=eq.${usuarioId}`,
-      { headers: supabaseHeaders() }
-    );
+    let url =
+      `${SUPABASE_URL}/rest/v1/activadores?select=id,nombre,flujo_id,conexion,conexion_whatsapp_id,frase,activo,repetible,creado_en` +
+      `&usuario_id=eq.${usuarioId}`;
+    if (scope?.id) {
+      url += `&conexion_whatsapp_id=eq.${encodeURIComponent(scope.id)}`;
+    }
+    const res = await axios.get(url, { headers: supabaseHeaders() });
     return res.data || [];
   } catch (e) {
     log("activadores error", e.message);
@@ -275,7 +286,7 @@ router.get("/api/flujos", protegerApi, async (req, res) => {
   try {
     const [flujos, activadores, conexiones] = await Promise.all([
       fetchFlujos(usuario.id, scope),
-      fetchActivadores(usuario.id),
+      fetchActivadores(usuario.id, scope),
       fetchConexionesUsuario(usuario.id),
     ]);
 
@@ -283,7 +294,7 @@ router.get("/api/flujos", protegerApi, async (req, res) => {
     const { perFlow } = await loadFlujosDashboardData(usuario.id, flujos, activadores);
     log(`flujos encontrados=${flujos.length} activadores=${activadores.length}`);
 
-    const flows = flujos.map((f) => mapFlowRow(f, activadores, perFlow, mapaConexiones));
+    const flows = flujos.map((f) => mapFlowRow(f, activadores, perFlow, mapaConexiones, scope));
 
     res.json({
       ok: true,

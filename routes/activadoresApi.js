@@ -1,6 +1,6 @@
 /**
  * API REST para Activadores (React CRM).
- * Tabla Supabase: activadores (frase, activo, …)
+ * Tabla Supabase: activadores (frase, activo, conexion_whatsapp_id, …)
  */
 const express = require("express");
 const router = express.Router();
@@ -9,14 +9,16 @@ const {
   validateActivadorBody,
   bodyToActivadorFields,
   mapActivadorRow,
+  sameConexionId,
 } = require("../services/activadorUtils");
 const rt = require("../services/realtimeService");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
+const CONEXION_TODAS = "__todas__";
 
 const SELECT_BASE =
-  "id,usuario_id,nombre,flujo_id,conexion,frase,activo,repetible,creado_en";
+  "id,usuario_id,nombre,flujo_id,conexion,conexion_whatsapp_id,frase,activo,repetible,creado_en";
 const SELECT_EXTENDED = `${SELECT_BASE},prioridad,coincidencia,veces_usado,ultima_ejecucion,tipo_activador,palabras_clave_array`;
 
 function log(msg, extra) {
@@ -37,34 +39,114 @@ function supabaseHeaders(extra = {}) {
   };
 }
 
+function leerConexionScope(req) {
+  const raw =
+    req.body?.conexion_whatsapp_id ??
+    req.body?.conexionWhatsappId ??
+    req.query?.conexion_whatsapp_id;
+  if (raw == null || String(raw).trim() === "") {
+    return { todas: true, id: null };
+  }
+  const id = String(raw).trim();
+  if (id === CONEXION_TODAS) return { todas: true, id: null };
+  return { todas: false, id };
+}
+
+function requiereConexionEscribir(scope) {
+  if (!scope?.id) {
+    return {
+      error:
+        "Selecciona una línea WhatsApp (no «Todas las líneas») para crear o editar activadores",
+    };
+  }
+  return null;
+}
+
 function stripExtendedFields(payload) {
   const { coincidencia, prioridad, tipo_activador, palabras_clave_array, ...core } = payload;
   return core;
 }
 
-async function fetchActivadoresRaw(usuarioId) {
+async function fetchActivadoresRaw(usuarioId, scope) {
+  let url =
+    `${SUPABASE_URL}/rest/v1/activadores?select=${SELECT_EXTENDED}` +
+    `&usuario_id=eq.${usuarioId}`;
+  if (scope?.id) {
+    url += `&conexion_whatsapp_id=eq.${encodeURIComponent(scope.id)}`;
+  }
+  url += "&order=creado_en.desc";
+
   try {
-    const res = await axios.get(
-      `${SUPABASE_URL}/rest/v1/activadores?select=${SELECT_EXTENDED}&usuario_id=eq.${usuarioId}&order=creado_en.desc`,
-      { headers: supabaseHeaders() }
-    );
+    const res = await axios.get(url, { headers: supabaseHeaders() });
     return res.data || [];
   } catch (e) {
     log("select extended fallback", e.response?.data?.message || e.message);
-    const res = await axios.get(
-      `${SUPABASE_URL}/rest/v1/activadores?select=${SELECT_BASE}&usuario_id=eq.${usuarioId}&order=creado_en.desc`,
-      { headers: supabaseHeaders() }
-    );
+    let fallbackUrl =
+      `${SUPABASE_URL}/rest/v1/activadores?select=${SELECT_BASE}` +
+      `&usuario_id=eq.${usuarioId}`;
+    if (scope?.id) {
+      fallbackUrl += `&conexion_whatsapp_id=eq.${encodeURIComponent(scope.id)}`;
+    }
+    fallbackUrl += "&order=creado_en.desc";
+    const res = await axios.get(fallbackUrl, { headers: supabaseHeaders() });
     return res.data || [];
   }
 }
 
-async function fetchFlujosMini(usuarioId) {
+async function fetchFlujosMini(usuarioId, scope) {
+  let url =
+    `${SUPABASE_URL}/rest/v1/flujos_builder?select=id,nombre,conexion_whatsapp_id` +
+    `&usuario_id=eq.${usuarioId}`;
+  if (scope?.id) {
+    url += `&conexion_whatsapp_id=eq.${encodeURIComponent(scope.id)}`;
+  }
+  url += "&order=nombre.asc";
+  const res = await axios.get(url, { headers: supabaseHeaders() });
+  return res.data || [];
+}
+
+async function obtenerFlujoUsuario(usuarioId, flujoId) {
   const res = await axios.get(
-    `${SUPABASE_URL}/rest/v1/flujos_builder?select=id,nombre&usuario_id=eq.${usuarioId}&order=nombre.asc`,
+    `${SUPABASE_URL}/rest/v1/flujos_builder?id=eq.${encodeURIComponent(flujoId)}&usuario_id=eq.${usuarioId}&select=id,nombre,conexion_whatsapp_id`,
     { headers: supabaseHeaders() }
   );
-  return res.data || [];
+  return res.data?.[0] || null;
+}
+
+async function assertFlujoEnLinea(usuarioId, flujoId, conexionId) {
+  const flujo = await obtenerFlujoUsuario(usuarioId, flujoId);
+  if (!flujo) {
+    return { ok: false, status: 404, error: "Flujo no encontrado" };
+  }
+  if (!flujo.conexion_whatsapp_id || !sameConexionId(flujo.conexion_whatsapp_id, conexionId)) {
+    return {
+      ok: false,
+      status: 403,
+      error: "El flujo no pertenece a esta línea WhatsApp",
+    };
+  }
+  return { ok: true, flujo };
+}
+
+async function obtenerActivadorUsuario(usuarioId, id) {
+  const res = await axios.get(
+    `${SUPABASE_URL}/rest/v1/activadores?select=${SELECT_EXTENDED}&id=eq.${id}&usuario_id=eq.${usuarioId}`,
+    { headers: supabaseHeaders() }
+  );
+  return res.data?.[0] || null;
+}
+
+async function assertActivadorEnScope(usuarioId, id, scope) {
+  const row = await obtenerActivadorUsuario(usuarioId, id);
+  if (!row) {
+    return { ok: false, status: 404, error: "Activador no encontrado" };
+  }
+  if (scope?.id) {
+    if (!row.conexion_whatsapp_id || !sameConexionId(row.conexion_whatsapp_id, scope.id)) {
+      return { ok: false, status: 403, error: "Activador no pertenece a esta línea" };
+    }
+  }
+  return { ok: true, row };
 }
 
 function computeStats(activadores) {
@@ -89,14 +171,6 @@ function computeStats(activadores) {
   };
 }
 
-async function verifyOwnership(id, usuarioId) {
-  const res = await axios.get(
-    `${SUPABASE_URL}/rest/v1/activadores?select=id&id=eq.${id}&usuario_id=eq.${usuarioId}`,
-    { headers: supabaseHeaders() }
-  );
-  return (res.data || []).length > 0;
-}
-
 async function supabaseWrite(method, url, data) {
   const config = {
     method,
@@ -110,13 +184,15 @@ async function supabaseWrite(method, url, data) {
   return axios(config);
 }
 
-// GET /api/activadores
+// GET /api/activadores?conexion_whatsapp_id=<uuid>|__todas__
 router.get("/api/activadores", protegerApi, async (req, res) => {
   const usuario = req.session.usuario;
+  const scope = leerConexionScope(req);
+
   try {
     const [rows, flujos] = await Promise.all([
-      fetchActivadoresRaw(usuario.id),
-      fetchFlujosMini(usuario.id),
+      fetchActivadoresRaw(usuario.id, scope),
+      fetchFlujosMini(usuario.id, scope),
     ]);
     const flujosById = Object.fromEntries(flujos.map((f) => [f.id, f]));
     const activadores = rows.map((r) => mapActivadorRow(r, flujosById));
@@ -125,6 +201,7 @@ router.get("/api/activadores", protegerApi, async (req, res) => {
       activadores,
       stats: computeStats(rows),
       flujos,
+      conexion_whatsapp_id: scope.todas ? CONEXION_TODAS : scope.id,
     });
   } catch (e) {
     log("GET error", e.response?.data || e.message);
@@ -135,14 +212,25 @@ router.get("/api/activadores", protegerApi, async (req, res) => {
 // POST /api/activadores
 router.post("/api/activadores", protegerApi, async (req, res) => {
   const usuario = req.session.usuario;
+  const scope = leerConexionScope(req);
+  const scopeErr = requiereConexionEscribir(scope);
+  if (scopeErr) {
+    return res.status(400).json({ ok: false, error: scopeErr.error });
+  }
+
   const validation = validateActivadorBody(req.body);
   if (!validation.ok) {
     return res.status(400).json({ ok: false, error: validation.error });
   }
 
+  const flujoCheck = await assertFlujoEnLinea(usuario.id, req.body.flujo_id, scope.id);
+  if (!flujoCheck.ok) {
+    return res.status(flujoCheck.status).json({ ok: false, error: flujoCheck.error });
+  }
+
   try {
     const payload = {
-      ...bodyToActivadorFields(req.body, usuario.id),
+      ...bodyToActivadorFields(req.body, usuario.id, scope.id),
       creado_en: new Date().toISOString(),
     };
     let created;
@@ -162,9 +250,11 @@ router.post("/api/activadores", protegerApi, async (req, res) => {
       created = r.data?.[0];
     }
 
-    const flujos = await fetchFlujosMini(usuario.id);
+    const flujos = await fetchFlujosMini(usuario.id, scope);
     const flujosById = Object.fromEntries(flujos.map((f) => [f.id, f]));
-    log(`creado id=${created?.id} tipo=${payload.tipo_activador || "palabra_unica"}`);
+    log(
+      `creado id=${created?.id} tipo=${payload.tipo_activador || "palabra_unica"} conexion=${scope.id}`
+    );
     const activadorMapped = mapActivadorRow(created, flujosById);
     rt.activadorCreado(req, usuario.id, { activador: activadorMapped });
     res.status(201).json({ ok: true, activador: activadorMapped });
@@ -178,10 +268,16 @@ router.post("/api/activadores", protegerApi, async (req, res) => {
 router.patch("/api/activadores/:id", protegerApi, async (req, res) => {
   const usuario = req.session.usuario;
   const { id } = req.params;
+  const scope = leerConexionScope(req);
+  const scopeErr = requiereConexionEscribir(scope);
+  if (scopeErr) {
+    return res.status(400).json({ ok: false, error: scopeErr.error });
+  }
 
   try {
-    if (!(await verifyOwnership(id, usuario.id))) {
-      return res.status(404).json({ ok: false, error: "Activador no encontrado" });
+    const acceso = await assertActivadorEnScope(usuario.id, id, scope);
+    if (!acceso.ok) {
+      return res.status(acceso.status).json({ ok: false, error: acceso.error });
     }
 
     const validation = validateActivadorBody(req.body);
@@ -189,7 +285,12 @@ router.patch("/api/activadores/:id", protegerApi, async (req, res) => {
       return res.status(400).json({ ok: false, error: validation.error });
     }
 
-    const payload = bodyToActivadorFields(req.body, usuario.id);
+    const flujoCheck = await assertFlujoEnLinea(usuario.id, req.body.flujo_id, scope.id);
+    if (!flujoCheck.ok) {
+      return res.status(flujoCheck.status).json({ ok: false, error: flujoCheck.error });
+    }
+
+    const payload = bodyToActivadorFields(req.body, usuario.id, scope.id);
     delete payload.usuario_id;
 
     let updated;
@@ -209,7 +310,7 @@ router.patch("/api/activadores/:id", protegerApi, async (req, res) => {
       updated = r.data?.[0];
     }
 
-    const flujos = await fetchFlujosMini(usuario.id);
+    const flujos = await fetchFlujosMini(usuario.id, scope);
     const flujosById = Object.fromEntries(flujos.map((f) => [f.id, f]));
     const activadorMapped = mapActivadorRow(updated, flujosById);
     rt.activadorActualizado(req, usuario.id, { activador: activadorMapped });
@@ -224,10 +325,12 @@ router.patch("/api/activadores/:id", protegerApi, async (req, res) => {
 router.delete("/api/activadores/:id", protegerApi, async (req, res) => {
   const usuario = req.session.usuario;
   const { id } = req.params;
+  const scope = leerConexionScope(req);
 
   try {
-    if (!(await verifyOwnership(id, usuario.id))) {
-      return res.status(404).json({ ok: false, error: "Activador no encontrado" });
+    const acceso = await assertActivadorEnScope(usuario.id, id, scope);
+    if (!acceso.ok) {
+      return res.status(acceso.status).json({ ok: false, error: acceso.error });
     }
 
     await axios.delete(
@@ -247,17 +350,15 @@ router.delete("/api/activadores/:id", protegerApi, async (req, res) => {
 router.post("/api/activadores/:id/toggle", protegerApi, async (req, res) => {
   const usuario = req.session.usuario;
   const { id } = req.params;
+  const scope = leerConexionScope(req);
 
   try {
-    const rows = await axios.get(
-      `${SUPABASE_URL}/rest/v1/activadores?select=id,activo&usuario_id=eq.${usuario.id}&id=eq.${id}`,
-      { headers: supabaseHeaders() }
-    );
-    const row = rows.data?.[0];
-    if (!row) {
-      return res.status(404).json({ ok: false, error: "Activador no encontrado" });
+    const acceso = await assertActivadorEnScope(usuario.id, id, scope);
+    if (!acceso.ok) {
+      return res.status(acceso.status).json({ ok: false, error: acceso.error });
     }
 
+    const row = acceso.row;
     const nuevoActivo = !row.activo;
     const r = await supabaseWrite(
       "PATCH",
@@ -265,7 +366,7 @@ router.post("/api/activadores/:id/toggle", protegerApi, async (req, res) => {
       { activo: nuevoActivo }
     );
     const updated = r.data?.[0];
-    const flujos = await fetchFlujosMini(usuario.id);
+    const flujos = await fetchFlujosMini(usuario.id, scope);
     const flujosById = Object.fromEntries(flujos.map((f) => [f.id, f]));
     const activadorMapped = mapActivadorRow(updated, flujosById);
     rt.activadorActualizado(req, usuario.id, {

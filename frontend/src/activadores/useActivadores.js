@@ -8,9 +8,25 @@ import {
   toggleActivador,
   updateActivador,
 } from "./api";
+import { fetchConexiones } from "../services/chatService";
+import {
+  CONEXION_TODAS,
+  normalizeConexionesInbox,
+  sameConexionId,
+} from "../utils/conexionesInbox";
 import { useSocketEvent } from "../hooks/useSocketEvent";
 import { useDebouncedCallback } from "../hooks/useDebouncedCallback";
 import { RT } from "../realtime/events";
+
+const STORAGE_CONEXION = "macbot_flujos_conexion";
+
+function etiquetaTabConexion(c) {
+  const nombre = String(c?.nombre ?? "").trim();
+  if (nombre) return nombre;
+  const numero = String(c?.numero ?? "").trim();
+  if (numero) return numero;
+  return `Línea ${String(c?.phone_id || "").slice(-4) || "—"}`;
+}
 
 export function useActivadores() {
   const [activadores, setActivadores] = useState([]);
@@ -21,21 +37,88 @@ export function useActivadores() {
   const [apiError, setApiError] = useState(null);
   const [toast, setToast] = useState(null);
 
+  const [conexionesInbox, setConexionesInbox] = useState([]);
+  const [conexionSeleccionadaId, setConexionSeleccionadaId] = useState(null);
+  const [conexionesLoading, setConexionesLoading] = useState(true);
+
   const [query, setQuery] = useState("");
   const [filtroFlujo, setFiltroFlujo] = useState("all");
   const [filtroEstado, setFiltroEstado] = useState("all");
+
+  const puedeEscribir =
+    Boolean(conexionSeleccionadaId) && conexionSeleccionadaId !== CONEXION_TODAS;
+  const mostrarBadgeLinea = conexionSeleccionadaId === CONEXION_TODAS;
 
   const showToast = useCallback((message, type = "success") => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 2800);
   }, []);
 
+  const requireLineaParaEscribir = useCallback(() => {
+    if (puedeEscribir) return true;
+    showToast("Selecciona una línea WhatsApp (no «Todas las líneas»)", "error");
+    return false;
+  }, [puedeEscribir, showToast]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function initConexiones() {
+      setConexionesLoading(true);
+      try {
+        const { conexiones: lista } = await fetchConexiones();
+        if (cancelled) return;
+
+        const normalizadas = normalizeConexionesInbox(lista);
+        setConexionesInbox(normalizadas);
+
+        if (!normalizadas.length) {
+          setConexionSeleccionadaId(null);
+          return;
+        }
+
+        const guardada = localStorage.getItem(STORAGE_CONEXION);
+        if (guardada === CONEXION_TODAS) {
+          setConexionSeleccionadaId(CONEXION_TODAS);
+          return;
+        }
+        if (guardada && normalizadas.some((c) => sameConexionId(c.id, guardada))) {
+          setConexionSeleccionadaId(guardada);
+          return;
+        }
+        setConexionSeleccionadaId(CONEXION_TODAS);
+      } catch {
+        if (!cancelled) setConexionesInbox([]);
+      } finally {
+        if (!cancelled) setConexionesLoading(false);
+      }
+    }
+
+    initConexiones();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const seleccionarConexion = useCallback((id) => {
+    setConexionSeleccionadaId(id);
+    if (id) localStorage.setItem(STORAGE_CONEXION, id);
+  }, []);
+
   const load = useCallback(async () => {
+    if (!conexionSeleccionadaId) {
+      setLoading(false);
+      setActivadores([]);
+      setFlujos([]);
+      setStats({ total: 0, activos: 0, pausados: 0, usados_hoy: 0 });
+      return;
+    }
+
     setLoading(true);
     setApiError(null);
 
     try {
-      const res = await fetchActivadores();
+      const res = await fetchActivadores(conexionSeleccionadaId);
       setActivadores(res.activadores || []);
       setFlujos(res.flujos || []);
       setStats(res.stats || { total: 0, activos: 0, pausados: 0, usados_hoy: 0 });
@@ -44,6 +127,7 @@ export function useActivadores() {
       const apiErr = err instanceof ApiError ? err : new ApiError(err.message, "SERVER");
       setApiOnline(false);
       setActivadores([]);
+      setFlujos([]);
       setApiError({
         code: apiErr.code,
         message: apiErr.message,
@@ -52,11 +136,11 @@ export function useActivadores() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [conexionSeleccionadaId]);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    if (conexionSeleccionadaId) load();
+  }, [conexionSeleccionadaId, load]);
 
   const reloadLive = useDebouncedCallback(load, 400);
   useSocketEvent(RT.ACTIVADOR_CREADO, reloadLive);
@@ -96,13 +180,14 @@ export function useActivadores() {
 
   const guardar = useCallback(
     async (payload, id) => {
+      if (!requireLineaParaEscribir()) return false;
       if (!apiOnline) return showToast("Sin sesión API", "error");
       try {
         if (id) {
-          await updateActivador(id, payload);
+          await updateActivador(id, payload, conexionSeleccionadaId);
           showToast("Activador actualizado");
         } else {
-          await createActivador(payload);
+          await createActivador(payload, conexionSeleccionadaId);
           showToast("Activador creado");
         }
         await load();
@@ -112,7 +197,7 @@ export function useActivadores() {
         return false;
       }
     },
-    [apiOnline, load, showToast]
+    [apiOnline, conexionSeleccionadaId, load, requireLineaParaEscribir, showToast]
   );
 
   const eliminar = useCallback(
@@ -122,7 +207,7 @@ export function useActivadores() {
         return false;
       }
       try {
-        await deleteActivador(id);
+        await deleteActivador(id, conexionSeleccionadaId);
         showToast("Activador eliminado correctamente");
         await load();
         return true;
@@ -131,21 +216,21 @@ export function useActivadores() {
         return false;
       }
     },
-    [apiOnline, load, showToast]
+    [apiOnline, conexionSeleccionadaId, load, showToast]
   );
 
   const toggle = useCallback(
     async (id) => {
       if (!apiOnline) return showToast("Sin sesión API", "error");
       try {
-        const res = await toggleActivador(id);
+        const res = await toggleActivador(id, conexionSeleccionadaId);
         showToast(res.estado === "activo" ? "Activador activado" : "Activador pausado");
         await load();
       } catch (e) {
         showToast(e.message || "Error al cambiar estado", "error");
       }
     },
-    [apiOnline, load, showToast]
+    [apiOnline, conexionSeleccionadaId, load, showToast]
   );
 
   return {
@@ -153,7 +238,7 @@ export function useActivadores() {
     allActivadores: activadores,
     flujos,
     stats,
-    loading,
+    loading: loading || conexionesLoading,
     apiOnline,
     apiError,
     toast,
@@ -168,5 +253,11 @@ export function useActivadores() {
     eliminar,
     toggle,
     load,
+    conexionesInbox,
+    conexionSeleccionadaId,
+    seleccionarConexion,
+    puedeEscribir,
+    mostrarBadgeLinea,
+    etiquetaTabConexion,
   };
 }

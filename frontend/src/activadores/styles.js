@@ -28,6 +28,56 @@ export const activadoresStyles = `
   background-clip: text;
 }
 
+.actConexionPicker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.actConexionTab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid #2a3140;
+  background: #11151c;
+  color: #94a3b8;
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+
+.actConexionTab:hover {
+  border-color: #3d4a5c;
+  color: #e2e8f0;
+}
+
+.actConexionTab--active {
+  border-color: #22c55e66;
+  background: #22c55e14;
+  color: #86efac;
+}
+
+.actConexionPrincipal {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.85;
+  color: #22c55e;
+}
+
+.actConexionHint {
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: #1c212c;
+  border: 1px solid #2a3140;
+  color: #94a3b8;
+  font-size: 0.85rem;
+}
+
 .actStats {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
