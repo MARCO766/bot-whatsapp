@@ -44,11 +44,12 @@ export async function fetchConexiones() {
   return request("/api/inbox/conexiones");
 }
 
-export async function fetchInbox(etiquetaFiltro = "", conexionWhatsappId) {
+export async function fetchInbox(etiquetaFiltro = "", conexionWhatsappId = null) {
   const params = new URLSearchParams();
-  params.set("conexion_whatsapp_id", conexionWhatsappId);
+  if (conexionWhatsappId) params.set("conexion_whatsapp_id", conexionWhatsappId);
   if (etiquetaFiltro) params.set("etiqueta", etiquetaFiltro);
-  return request(`/api/inbox?${params.toString()}`);
+  const q = params.toString();
+  return request(q ? `/api/inbox?${q}` : "/api/inbox");
 }
 
 export async function fetchChat(numero, conexionWhatsappId) {

@@ -4,12 +4,11 @@
  */
 import { useSocketEvent } from "./useSocketEvent";
 import { RT } from "../realtime/events";
-import { normalizeIncomingMessage } from "../utils/chatFormat";
+import { normalizeIncomingMessage, sameChat } from "../utils/chatFormat";
 
 export function useInboxSocket({
   usuarioId,
-  chatActivo,
-  conexionSeleccionada,
+  selectedChat,
   onNuevoMensaje,
   onMensajeEstado,
   onSeguimientoEstado,
@@ -19,21 +18,20 @@ export function useInboxSocket({
     (msg) => {
       if (!onNuevoMensaje) return;
       const normalized = normalizeIncomingMessage(msg);
-      if (
-        conexionSeleccionada &&
-        normalized.conexion_whatsapp_id &&
-        normalized.conexion_whatsapp_id !== conexionSeleccionada
-      ) {
-        return;
-      }
       const numero = normalized.cliente_numero;
+      const msgChat = {
+        cliente_numero: numero,
+        conexion_whatsapp_id: normalized.conexion_whatsapp_id,
+        conversacion_id: normalized.conversacion_id,
+      };
       onNuevoMensaje({
         msg: normalized,
         numero,
-        isActive: numero === chatActivo,
+        conexionWhatsappId: normalized.conexion_whatsapp_id,
+        isActive: selectedChat ? sameChat(msgChat, selectedChat) : false,
       });
     },
-    Boolean(usuarioId && onNuevoMensaje && conexionSeleccionada)
+    Boolean(usuarioId && onNuevoMensaje)
   );
 
   useSocketEvent(
@@ -45,7 +43,12 @@ export function useInboxSocket({
   useSocketEvent(
     RT.SEGUIMIENTO_ACTUALIZADO,
     (data) => {
-      if (data?.cliente_numero === chatActivo) {
+      if (
+        selectedChat &&
+        data?.cliente_numero === selectedChat.cliente_numero &&
+        String(data?.conexion_whatsapp_id || "") ===
+          String(selectedChat.conexion_whatsapp_id || selectedChat.conexionWhatsappId || "")
+      ) {
         onSeguimientoEstado?.(data);
       }
     },

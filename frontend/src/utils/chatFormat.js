@@ -23,10 +23,34 @@ export function messageChecks(estadoEnvio) {
   return { className: "sent", text: "✓" };
 }
 
+export function chatListKey(numero, conexionWhatsappId, conversacionId = null) {
+  const n = String(numero || "").trim();
+  const c = String(conexionWhatsappId || "").trim();
+  const cv = conversacionId != null ? String(conversacionId).trim() : "";
+  return `${n}-${c}${cv ? `-${cv}` : ""}`;
+}
+
+export function sameChat(a, b) {
+  if (!a || !b) return false;
+  const numA = String(a.cliente_numero ?? a.numero ?? "").trim();
+  const numB = String(b.cliente_numero ?? b.numero ?? "").trim();
+  if (!numA || !numB || numA !== numB) return false;
+
+  const connA = String(
+    a.conexion_whatsapp_id ?? a.conexionWhatsappId ?? ""
+  ).trim();
+  const connB = String(
+    b.conexion_whatsapp_id ?? b.conexionWhatsappId ?? ""
+  ).trim();
+  return connA === connB;
+}
+
 export function normalizeIncomingMessage(msg) {
   return {
     id: msg.id || `${msg.cliente_numero}-${msg.creado_en}-${Date.now()}`,
     cliente_numero: msg.cliente_numero,
+    conexion_whatsapp_id: msg.conexion_whatsapp_id || null,
+    conversacion_id: msg.conversacion_id || null,
     direccion: msg.direccion || "entrante",
     tipo: msg.tipo,
     contenido: msg.contenido || "",

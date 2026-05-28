@@ -5,6 +5,7 @@ export default function ChatListItem({
   chat,
   activo,
   menuAbierto,
+  lineaLabel,
   onSelect,
   onToggleMenu,
   onEtiqueta,
@@ -16,7 +17,7 @@ export default function ChatListItem({
   return (
     <div
       className={`chatItem ${activo ? "active" : ""}`}
-      onClick={() => onSelect(chat.numero)}
+      onClick={() => onSelect(chat)}
     >
       <div className="avatar">{inicial}</div>
 
@@ -32,6 +33,12 @@ export default function ChatListItem({
             )}
           </div>
         </div>
+
+        {lineaLabel && (
+          <span className="chatLineaBadge" title="Línea WhatsApp">
+            {lineaLabel}
+          </span>
+        )}
 
         <p className="preview">{chat.ultimoMensaje || "Sin mensajes"}</p>
 
@@ -57,7 +64,7 @@ export default function ChatListItem({
           className={`dots ${menuAbierto ? "open" : ""}`}
           onClick={(e) => {
             e.stopPropagation();
-            onToggleMenu(chat.numero);
+            onToggleMenu(chat);
           }}
           aria-label="Opciones del chat"
         >
@@ -66,19 +73,19 @@ export default function ChatListItem({
 
         {menuAbierto && (
           <div className="menu" onClick={(e) => e.stopPropagation()}>
-            <button type="button" onClick={() => onEtiqueta(chat.numero)}>
+            <button type="button" onClick={() => onEtiqueta(chat)}>
               🏷️ Etiqueta
             </button>
             <button
               type="button"
-              onClick={() => onBloquear(chat.numero, chat.bloqueado)}
+              onClick={() => onBloquear(chat, chat.bloqueado)}
             >
               {chat.bloqueado ? "Desbloquear" : "Bloquear"}
             </button>
             <button
               type="button"
               className="danger"
-              onClick={() => onEliminar(chat.numero)}
+              onClick={() => onEliminar(chat)}
             >
               Eliminar
             </button>

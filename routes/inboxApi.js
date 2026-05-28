@@ -75,12 +75,6 @@ router.get("/api/inbox", protegerApi, async (req, res) => {
   try {
     const etiquetaFiltro = req.query.etiqueta || "";
     const conexionWhatsappId = req.query.conexion_whatsapp_id || null;
-    if (!conexionWhatsappId) {
-      return res.status(400).json({
-        ok: false,
-        error: "Falta conexion_whatsapp_id",
-      });
-    }
     const data = await loadInboxData(req.session.usuario.id, {
       etiquetaFiltro,
       conexionWhatsappId,

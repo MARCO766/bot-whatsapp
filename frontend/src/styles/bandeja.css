@@ -99,6 +99,23 @@
   font-weight: 600;
 }
 
+.chatLineaBadge {
+  display: inline-block;
+  margin: 2px 0 4px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  background: rgba(59, 130, 246, 0.2);
+  color: #93c5fd;
+  border: 1px solid rgba(59, 130, 246, 0.35);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .bandejaError {
   padding: 14px 18px;
   border-radius: 16px;

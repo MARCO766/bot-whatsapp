@@ -20,6 +20,12 @@ function filtroConexionQuery(conexionWhatsappId) {
   return `&conexion_whatsapp_id=eq.${encodeURIComponent(conexionWhatsappId)}`;
 }
 
+function chatCompositeKey(numero, conexionWhatsappId) {
+  const n = String(numero || "").trim();
+  const c = String(conexionWhatsappId || "").trim();
+  return `${n}::${c}`;
+}
+
 function horaBolivia(fecha) {
   if (!fecha) return "";
   return new Date(fecha).toLocaleTimeString("es-BO", {
@@ -65,7 +71,7 @@ async function loadInboxData(
     responseConversaciones,
   ] = await Promise.all([
     axios.get(
-      `${SUPABASE_URL}/rest/v1/mensajes?usuario_id=eq.${usuarioId}${filtroConexion}&select=*&order=creado_en.asc&limit=50`,
+      `${SUPABASE_URL}/rest/v1/mensajes?usuario_id=eq.${usuarioId}${filtroConexion}&select=*&order=creado_en.desc&limit=200`,
       { headers: supabaseHeaders() }
     ),
     axios.get(
@@ -105,8 +111,9 @@ async function loadInboxData(
   const mapaUnread = {};
   const mapaConversaciones = {};
   conversacionesDB.forEach((c) => {
-    mapaUnread[c.cliente_numero] = c.unread_count || 0;
-    mapaConversaciones[c.cliente_numero] = c;
+    const key = chatCompositeKey(c.cliente_numero, c.conexion_whatsapp_id);
+    mapaUnread[key] = c.unread_count || 0;
+    mapaConversaciones[key] = c;
   });
 
   const conversaciones = {};
@@ -119,39 +126,52 @@ async function loadInboxData(
       msg.numero_de_cliente ||
       msg["número_de_cliente"];
     if (!numero) return;
-    if (!conversaciones[numero]) conversaciones[numero] = [];
-    conversaciones[numero].push(msg);
+    const key = chatCompositeKey(numero, msg.conexion_whatsapp_id);
+    if (!conversaciones[key]) conversaciones[key] = [];
+    conversaciones[key].push(msg);
   });
 
-  let numeros = [
+  let chatKeys = [
     ...new Set([
       ...Object.keys(mapaConversaciones),
       ...Object.keys(conversaciones),
     ]),
-  ].filter((numero) => numero && mapaConversaciones[numero]);
+  ].filter((key) => {
+    const conv = mapaConversaciones[key];
+    return key && conv && conv.conexion_whatsapp_id;
+  });
 
-  numeros.sort((a, b) => {
+  chatKeys.sort((keyA, keyB) => {
+    const convA = mapaConversaciones[keyA];
+    const convB = mapaConversaciones[keyB];
     const fechaA =
-      mapaConversaciones[a]?.ultimo_mensaje_en ||
-      conversaciones[a]?.[conversaciones[a].length - 1]?.creado_en ||
+      convA?.ultimo_mensaje_en ||
+      conversaciones[keyA]?.[conversaciones[keyA].length - 1]?.creado_en ||
       0;
     const fechaB =
-      mapaConversaciones[b]?.ultimo_mensaje_en ||
-      conversaciones[b]?.[conversaciones[b].length - 1]?.creado_en ||
+      convB?.ultimo_mensaje_en ||
+      conversaciones[keyB]?.[conversaciones[keyB].length - 1]?.creado_en ||
       0;
     return new Date(fechaB).getTime() - new Date(fechaA).getTime();
   });
 
   if (etiquetaFiltro) {
-    const numerosConEtiqueta = etiquetasClientes
-      .filter((e) => e.etiqueta === etiquetaFiltro)
-      .map((e) => e.cliente_numero);
-    numeros = numeros.filter((numero) => numerosConEtiqueta.includes(numero));
+    const numerosConEtiqueta = new Set(
+      etiquetasClientes
+        .filter((e) => e.etiqueta === etiquetaFiltro)
+        .map((e) => e.cliente_numero)
+    );
+    chatKeys = chatKeys.filter((key) => {
+      const numero = mapaConversaciones[key]?.cliente_numero;
+      return numero && numerosConEtiqueta.has(numero);
+    });
   }
 
-  const chats = numeros.map((numero) => {
+  const chats = chatKeys.map((key) => {
+    const conv = mapaConversaciones[key];
+    const numero = conv.cliente_numero;
+    const connId = conv.conexion_whatsapp_id || null;
     const cliente = mapaClientes[numero];
-    const conv = mapaConversaciones[numero];
     const previewRaw = conv?.ultimo_mensaje || "";
     const tags = etiquetasClientes
       .filter((e) => e.cliente_numero === numero)
@@ -161,12 +181,17 @@ async function loadInboxData(
       }));
 
     return {
+      chatKey: `${numero}-${connId || "sin-conexion"}`,
       numero,
-      conexionWhatsappId: conexionWhatsappId || conv?.conexion_whatsapp_id || null,
+      cliente_numero: numero,
+      conexionWhatsappId: connId,
+      conexion_whatsapp_id: connId,
+      conversacionId: conv.id || null,
+      conversacion_id: conv.id || null,
       nombre: cliente?.nombre || numero,
       bloqueado: cliente?.estado === "bloqueado",
       online: true,
-      noLeidos: mapaUnread[numero] || 0,
+      noLeidos: mapaUnread[key] || 0,
       ultimoMensaje: formatPreview(previewRaw),
       ultimoMensajeEn: conv?.ultimo_mensaje_en || null,
       etiquetas: tags,
@@ -186,7 +211,7 @@ async function loadInboxData(
     mapaConversaciones,
     mapaClientes,
     mapaUnread,
-    numeros,
+    chatKeys,
     chats,
     totalNoLeidos,
     horaBolivia,
@@ -196,7 +221,7 @@ async function loadInboxData(
 async function loadChatMessages(usuarioId, numero, conexionWhatsappId = null) {
   const filtroConexion = filtroConexionQuery(conexionWhatsappId);
 
-  const [responseMensajes, responseCliente] = await Promise.all([
+  const [responseMensajes, responseCliente, responseConv] = await Promise.all([
     axios.get(
       `${SUPABASE_URL}/rest/v1/mensajes?usuario_id=eq.${usuarioId}&cliente_numero=eq.${encodeURIComponent(numero)}${filtroConexion}&select=*&order=creado_en.asc&limit=1000`,
       { headers: supabaseHeaders() }
@@ -205,13 +230,25 @@ async function loadChatMessages(usuarioId, numero, conexionWhatsappId = null) {
       `${SUPABASE_URL}/rest/v1/clientes?usuario_id=eq.${usuarioId}&numero=eq.${encodeURIComponent(numero)}&select=*`,
       { headers: supabaseHeaders() }
     ),
+    conexionWhatsappId
+      ? axios.get(
+          `${SUPABASE_URL}/rest/v1/conversaciones?usuario_id=eq.${usuarioId}&cliente_numero=eq.${encodeURIComponent(numero)}${filtroConexion}&select=id,conexion_whatsapp_id&limit=1`,
+          { headers: supabaseHeaders() }
+        )
+      : Promise.resolve({ data: [] }),
   ]);
 
   const cliente = responseCliente.data?.[0];
+  const conv = responseConv.data?.[0];
   return {
     nombre: cliente?.nombre || numero,
     bloqueado: cliente?.estado === "bloqueado",
+    numero,
+    cliente_numero: numero,
     conexionWhatsappId,
+    conexion_whatsapp_id: conexionWhatsappId,
+    conversacionId: conv?.id || null,
+    conversacion_id: conv?.id || null,
     mensajes: responseMensajes.data || [],
   };
 }
@@ -235,6 +272,7 @@ module.exports = {
   marcarLeido,
   loadConexionesInbox,
   filtroConexionQuery,
+  chatCompositeKey,
   horaBolivia,
   formatPreview,
   supabaseHeaders,

@@ -69,7 +69,7 @@ export default function ChatComposer({
     };
 
     onSent?.(tempMsg);
-    moverChatArriba?.(numero, texto || file?.name || "");
+    moverChatArriba?.(numero, texto || file?.name || "", conexionWhatsappId);
 
     const formData = buildMessageFormData(numero, texto, file, conexionWhatsappId);
     setEnviando(true);

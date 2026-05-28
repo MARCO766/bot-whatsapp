@@ -11,10 +11,36 @@ import {
   desbloquearChat,
   eliminarChat,
 } from "../services/chatService";
+import {
+  formatPreview,
+  sameChat,
+  chatListKey,
+} from "../utils/chatFormat";
+import { useInboxSocket } from "./useInboxSocket";
 
 const STORAGE_CONEXION = "macbot_inbox_conexion_id";
-import { formatPreview } from "../utils/chatFormat";
-import { useInboxSocket } from "./useInboxSocket";
+export const CONEXION_TODAS = "__todas__";
+
+function toSelectedChat(chat) {
+  if (!chat) return null;
+  const cliente_numero = String(chat.cliente_numero ?? chat.numero ?? "").trim();
+  const conexion_whatsapp_id = String(
+    chat.conexion_whatsapp_id ?? chat.conexionWhatsappId ?? ""
+  ).trim();
+  if (!cliente_numero || !conexion_whatsapp_id) return null;
+  return {
+    cliente_numero,
+    conexion_whatsapp_id,
+    conexionWhatsappId: conexion_whatsapp_id,
+    conversacion_id: chat.conversacion_id ?? chat.conversacionId ?? null,
+    conversacionId: chat.conversacion_id ?? chat.conversacionId ?? null,
+  };
+}
+
+function findChatInList(chats, selected) {
+  if (!selected) return null;
+  return chats.find((c) => sameChat(c, selected)) || null;
+}
 
 export function useInbox({ onUnreadChange } = {}) {
   const [loading, setLoading] = useState(true);
@@ -25,12 +51,12 @@ export function useInbox({ onUnreadChange } = {}) {
   const [etiquetasDisponibles, setEtiquetasDisponibles] = useState([]);
   const [mapaColores, setMapaColores] = useState({});
   const [etiquetaFiltro, setEtiquetaFiltro] = useState("");
-  const [chatActivo, setChatActivo] = useState(null);
+  const [selectedChat, setSelectedChat] = useState(null);
   const [mensajes, setMensajes] = useState([]);
   const [chatMeta, setChatMeta] = useState(null);
   const [cargandoChat, setCargandoChat] = useState(false);
   const [busqueda, setBusqueda] = useState("");
-  const [menuChat, setMenuChat] = useState(null);
+  const [menuChatKey, setMenuChatKey] = useState(null);
   const [tagModalNumero, setTagModalNumero] = useState(null);
   const [conexiones, setConexiones] = useState([]);
   const [conexionSeleccionada, setConexionSeleccionada] = useState(null);
@@ -46,11 +72,12 @@ export function useInbox({ onUnreadChange } = {}) {
 
   const loadInbox = useCallback(
     async (filtro = etiquetaFiltro, conexionId = conexionSeleccionada) => {
-      if (!conexionId) return;
       setLoading(true);
       setError(null);
       try {
-        const data = await fetchInbox(filtro, conexionId);
+        const apiConexion =
+          conexionId && conexionId !== CONEXION_TODAS ? conexionId : null;
+        const data = await fetchInbox(filtro, apiConexion);
         setChats(data.chats || []);
         setEtiquetasUnicas(data.etiquetasUnicas || []);
         setEtiquetasDisponibles(data.etiquetasDisponibles || []);
@@ -89,9 +116,11 @@ export function useInbox({ onUnreadChange } = {}) {
 
         const saved = sessionStorage.getItem(STORAGE_CONEXION);
         const pick =
-          lista.find((c) => c.id === saved) || lista[0];
-        setConexionSeleccionada(pick.id);
-        sessionStorage.setItem(STORAGE_CONEXION, pick.id);
+          saved === CONEXION_TODAS
+            ? CONEXION_TODAS
+            : lista.find((c) => c.id === saved)?.id || CONEXION_TODAS;
+        setConexionSeleccionada(pick);
+        sessionStorage.setItem(STORAGE_CONEXION, pick);
       } catch (err) {
         if (!cancelled) {
           setError(err.message || "Error cargando bandeja");
@@ -112,52 +141,66 @@ export function useInbox({ onUnreadChange } = {}) {
     loadInbox(etiquetaFiltro, conexionSeleccionada);
   }, [etiquetaFiltro, conexionSeleccionada, loadInbox]);
 
-  const abrirChat = useCallback(
-    async (numero) => {
-      if (!numero || !conexionSeleccionada) return;
-      setChatActivo(numero);
-      setMenuChat(null);
-      setCargandoChat(true);
+  const abrirChat = useCallback(async (chat) => {
+    const sel = toSelectedChat(chat);
+    if (!sel) return;
 
-      setChats((prev) =>
-        prev.map((c) => (c.numero === numero ? { ...c, noLeidos: 0 } : c))
-      );
+    setSelectedChat(sel);
+    setMenuChatKey(null);
+    setCargandoChat(true);
 
-      try {
-        await marcarLeido(numero, conexionSeleccionada);
-        const data = await fetchChat(numero, conexionSeleccionada);
-        setChatMeta({
-          nombre: data.nombre,
-          bloqueado: data.bloqueado,
-          numero: data.numero,
-          conexionWhatsappId: conexionSeleccionada,
-        });
-        setMensajes(data.mensajes || []);
-      } catch (err) {
-        setError(err.message || "Error cargando chat");
-        setMensajes([]);
-      } finally {
-        setCargandoChat(false);
-      }
-    },
-    [conexionSeleccionada]
-  );
+    setChats((prev) =>
+      prev.map((c) =>
+        sameChat(c, sel) ? { ...c, noLeidos: 0 } : c
+      )
+    );
+
+    try {
+      await marcarLeido(sel.cliente_numero, sel.conexion_whatsapp_id);
+      const data = await fetchChat(sel.cliente_numero, sel.conexion_whatsapp_id);
+      setChatMeta({
+        nombre: data.nombre,
+        bloqueado: data.bloqueado,
+        numero: data.numero,
+        cliente_numero: data.cliente_numero,
+        conexionWhatsappId: data.conexionWhatsappId,
+        conexion_whatsapp_id: data.conexion_whatsapp_id,
+        conversacionId: data.conversacionId,
+        conversacion_id: data.conversacion_id,
+      });
+      setMensajes(data.mensajes || []);
+    } catch (err) {
+      setError(err.message || "Error cargando chat");
+      setMensajes([]);
+    } finally {
+      setCargandoChat(false);
+    }
+  }, []);
 
   useEffect(() => {
     const pre = sessionStorage.getItem("macbot_inbox_numero");
-    if (!pre || loading) return;
+    if (!pre || loading || !chats.length) return;
     sessionStorage.removeItem("macbot_inbox_numero");
-    abrirChat(pre);
-  }, [loading, chats.length, abrirChat]);
+    const match = chats.find((c) => c.numero === pre || c.cliente_numero === pre);
+    if (match) abrirChat(match);
+  }, [loading, chats, abrirChat]);
 
-  const moverChatArriba = useCallback((numero, preview) => {
+  const moverChatArriba = useCallback((numero, preview, conexionWhatsappId) => {
     setChats((prev) => {
-      const idx = prev.findIndex((c) => c.numero === numero);
+      const target = {
+        cliente_numero: numero,
+        conexion_whatsapp_id: conexionWhatsappId,
+      };
+      const idx = prev.findIndex((c) => sameChat(c, target));
       const texto = formatPreview(preview);
       if (idx === -1) {
         return [
           {
+            chatKey: chatListKey(numero, conexionWhatsappId),
             numero,
+            cliente_numero: numero,
+            conexionWhatsappId,
+            conexion_whatsapp_id: conexionWhatsappId,
             nombre: numero,
             bloqueado: false,
             online: true,
@@ -180,10 +223,11 @@ export function useInbox({ onUnreadChange } = {}) {
     });
   }, []);
 
-  const incrementarNoLeido = useCallback((numero) => {
+  const incrementarNoLeido = useCallback((numero, conexionWhatsappId) => {
+    const target = { cliente_numero: numero, conexion_whatsapp_id: conexionWhatsappId };
     setChats((prev) =>
       prev.map((c) =>
-        c.numero === numero
+        sameChat(c, target)
           ? { ...c, noLeidos: (c.noLeidos || 0) + 1 }
           : c
       )
@@ -191,17 +235,18 @@ export function useInbox({ onUnreadChange } = {}) {
   }, []);
 
   const handleNuevoMensaje = useCallback(
-    ({ msg, numero, isActive }) => {
+    ({ msg, numero, conexionWhatsappId, isActive }) => {
       if (
         conexionSeleccionada &&
-        msg.conexion_whatsapp_id &&
-        msg.conexion_whatsapp_id !== conexionSeleccionada
+        conexionSeleccionada !== CONEXION_TODAS &&
+        conexionWhatsappId &&
+        conexionWhatsappId !== conexionSeleccionada
       ) {
         return;
       }
-      moverChatArriba(numero, msg.contenido || msg.tipo || "");
+      moverChatArriba(numero, msg.contenido || msg.tipo || "", conexionWhatsappId);
       if (!isActive) {
-        incrementarNoLeido(numero);
+        incrementarNoLeido(numero, conexionWhatsappId);
         return;
       }
       setMensajes((prev) => {
@@ -238,51 +283,67 @@ export function useInbox({ onUnreadChange } = {}) {
 
   useInboxSocket({
     usuarioId,
-    chatActivo,
-    conexionSeleccionada,
+    selectedChat,
     onNuevoMensaje: handleNuevoMensaje,
     onMensajeEstado: handleMensajeEstado,
     onSeguimientoEstado: handleSeguimientoEstado,
   });
 
   const chat = useMemo(() => {
-    if (!chatActivo) return null;
-    const fromList = chats.find((c) => c.numero === chatActivo);
+    if (!selectedChat) return null;
+    const fromList = findChatInList(chats, selectedChat);
     return {
-      ...(fromList || { numero: chatActivo }),
+      ...(fromList || {}),
       ...(chatMeta || {}),
-      numero: chatActivo,
+      numero: selectedChat.cliente_numero,
+      cliente_numero: selectedChat.cliente_numero,
+      conexionWhatsappId: selectedChat.conexion_whatsapp_id,
+      conexion_whatsapp_id: selectedChat.conexion_whatsapp_id,
+      conversacionId: selectedChat.conversacion_id,
+      conversacion_id: selectedChat.conversacion_id,
     };
-  }, [chats, chatActivo, chatMeta]);
+  }, [chats, selectedChat, chatMeta]);
 
   const chatsFiltrados = useMemo(() => {
+    let list = chats;
+    if (conexionSeleccionada && conexionSeleccionada !== CONEXION_TODAS) {
+      list = list.filter(
+        (c) =>
+          String(c.conexion_whatsapp_id || c.conexionWhatsappId) ===
+          String(conexionSeleccionada)
+      );
+    }
     const q = busqueda.trim().toLowerCase();
-    if (!q) return chats;
-    return chats.filter(
+    if (!q) return list;
+    return list.filter(
       (c) =>
         (c.nombre || "").toLowerCase().includes(q) ||
-        (c.numero || "").includes(q)
+        (c.numero || "").includes(q) ||
+        (c.cliente_numero || "").includes(q)
     );
-  }, [chats, busqueda]);
+  }, [chats, busqueda, conexionSeleccionada]);
 
   const cambiarConexion = useCallback((conexionId) => {
     if (!conexionId || conexionId === conexionSeleccionada) return;
     sessionStorage.setItem(STORAGE_CONEXION, conexionId);
     setConexionSeleccionada(conexionId);
-    setChatActivo(null);
+    setSelectedChat(null);
     setMensajes([]);
     setChatMeta(null);
     setEtiquetaFiltro("");
-    setMenuChat(null);
+    setMenuChatKey(null);
   }, [conexionSeleccionada]);
 
-  const cambiarFiltroEtiqueta = useCallback((etiqueta) => {
-    setEtiquetaFiltro(etiqueta);
-    setChatActivo(null);
-    setMensajes([]);
-    setChatMeta(null);
-    loadInbox(etiqueta, conexionSeleccionada);
-  }, [loadInbox, conexionSeleccionada]);
+  const cambiarFiltroEtiqueta = useCallback(
+    (etiqueta) => {
+      setEtiquetaFiltro(etiqueta);
+      setSelectedChat(null);
+      setMensajes([]);
+      setChatMeta(null);
+      loadInbox(etiqueta, conexionSeleccionada);
+    },
+    [loadInbox, conexionSeleccionada]
+  );
 
   const aplicarEtiqueta = useCallback(
     async (numero, etiqueta) => {
@@ -290,7 +351,7 @@ export function useInbox({ onUnreadChange } = {}) {
       const color = mapaColores[etiqueta] || "#22c55e";
       setChats((prev) =>
         prev.map((c) =>
-          c.numero === numero
+          c.numero === numero || c.cliente_numero === numero
             ? { ...c, etiquetas: [{ nombre: etiqueta, color }] }
             : c
         )
@@ -304,43 +365,48 @@ export function useInbox({ onUnreadChange } = {}) {
     await quitarEtiqueta(numero);
     setChats((prev) =>
       prev.map((c) =>
-        c.numero === numero ? { ...c, etiquetas: [] } : c
+        c.numero === numero || c.cliente_numero === numero
+          ? { ...c, etiquetas: [] }
+          : c
       )
     );
     setTagModalNumero(null);
   }, []);
 
   const toggleBloqueo = useCallback(
-    async (numero, bloqueado) => {
+    async (chatItem, bloqueado) => {
+      const numero = chatItem.numero || chatItem.cliente_numero;
       if (bloqueado) await desbloquearChat(numero);
       else await bloquearChat(numero);
       setChats((prev) =>
         prev.map((c) =>
-          c.numero === numero ? { ...c, bloqueado: !bloqueado } : c
+          sameChat(c, chatItem) ? { ...c, bloqueado: !bloqueado } : c
         )
       );
-      if (chatActivo === numero) {
+      if (selectedChat && sameChat(selectedChat, chatItem)) {
         setChatMeta((m) => (m ? { ...m, bloqueado: !bloqueado } : m));
       }
-      setMenuChat(null);
+      setMenuChatKey(null);
     },
-    [chatActivo]
+    [selectedChat]
   );
 
   const eliminarChatHandler = useCallback(
-    async (numero) => {
+    async (chatItem) => {
       if (!confirm("¿Eliminar este chat?")) return;
-      if (!conexionSeleccionada) return;
-      await eliminarChat(numero, conexionSeleccionada);
-      setChats((prev) => prev.filter((c) => c.numero !== numero));
-      if (chatActivo === numero) {
-        setChatActivo(null);
+      const numero = chatItem.numero || chatItem.cliente_numero;
+      const conexionId =
+        chatItem.conexion_whatsapp_id || chatItem.conexionWhatsappId;
+      await eliminarChat(numero, conexionId);
+      setChats((prev) => prev.filter((c) => !sameChat(c, chatItem)));
+      if (selectedChat && sameChat(selectedChat, chatItem)) {
+        setSelectedChat(null);
         setMensajes([]);
         setChatMeta(null);
       }
-      setMenuChat(null);
+      setMenuChatKey(null);
     },
-    [chatActivo, conexionSeleccionada]
+    [selectedChat]
   );
 
   const appendMensaje = useCallback((msg) => {
@@ -363,15 +429,15 @@ export function useInbox({ onUnreadChange } = {}) {
     etiquetasDisponibles,
     mapaColores,
     etiquetaFiltro,
-    chatActivo,
+    selectedChat,
     chat,
     mensajes,
     chatMeta,
     cargandoChat,
     busqueda,
     setBusqueda,
-    menuChat,
-    setMenuChat,
+    menuChatKey,
+    setMenuChatKey,
     tagModalNumero,
     setTagModalNumero,
     totalNoLeidos,
@@ -388,5 +454,6 @@ export function useInbox({ onUnreadChange } = {}) {
     conexiones,
     conexionSeleccionada,
     cambiarConexion,
+    CONEXION_TODAS,
   };
 }

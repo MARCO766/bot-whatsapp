@@ -1,10 +1,12 @@
 import React from "react";
 import ChatListItem from "./ChatListItem";
+import { sameChat } from "../../utils/chatFormat";
 
 export default function ChatList({
   chats,
-  chatActivo,
-  menuChat,
+  selectedChat,
+  menuChatKey,
+  mapaNombreConexion = {},
   etiquetasUnicas,
   etiquetaFiltro,
   busqueda,
@@ -52,10 +54,13 @@ export default function ChatList({
         )}
         {chats.map((c) => (
           <ChatListItem
-            key={c.numero}
+            key={c.chatKey || `${c.numero}-${c.conexion_whatsapp_id}`}
             chat={c}
-            activo={chatActivo === c.numero}
-            menuAbierto={menuChat === c.numero}
+            activo={selectedChat ? sameChat(c, selectedChat) : false}
+            menuAbierto={menuChatKey === c.chatKey}
+            lineaLabel={
+              mapaNombreConexion[c.conexion_whatsapp_id || c.conexionWhatsappId]
+            }
             onSelect={onSelect}
             onToggleMenu={onToggleMenu}
             onEtiqueta={onEtiqueta}
