@@ -190,6 +190,29 @@ export function formatMetric(value, { pendiente, emptyLabel = "Sin datos" } = {}
   return formatNumber(value);
 }
 
+/** Ingresos compactos para card de flujo. */
+export function formatFlowIngresos(total, moneda) {
+  const v = Number(total) || 0;
+  if (v <= 0) return "0";
+  const sym = monedaSimbolo(moneda);
+  if (v >= 1000000) return `${sym} ${(v / 1000000).toFixed(1)}M`;
+  if (v >= 10000) return `${sym} ${Math.round(v / 1000)}k`;
+  return `${sym} ${v.toLocaleString("es-BO", { maximumFractionDigits: 0 })}`;
+}
+
+/** Tasa de cierre % para card de flujo. */
+export function formatTasaCierre(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return "0%";
+  return `${n % 1 === 0 ? n : n.toFixed(1)}%`;
+}
+
+/** Timestamp relativo compacto para fila secondary. */
+export function formatMetricTimestamp(iso) {
+  const rel = formatRelativeTime(iso);
+  return rel || "—";
+}
+
 export function sortFlows(flows, sortBy) {
   const list = [...flows];
   switch (sortBy) {
@@ -201,7 +224,9 @@ export function sortFlows(flows, sortBy) {
       );
     case "conversiones":
       return list.sort(
-        (a, b) => (b.metricas?.conversiones ?? 0) - (a.metricas?.conversiones ?? 0)
+        (a, b) =>
+          (b.metricas?.ventas ?? b.metricas?.conversiones ?? 0) -
+          (a.metricas?.ventas ?? a.metricas?.conversiones ?? 0)
       );
     case "usados":
       return list.sort((a, b) => (b.nodosCount || 0) - (a.nodosCount || 0));

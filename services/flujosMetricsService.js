@@ -287,26 +287,69 @@ async function fetchMensajesParaClientes(usuarioId, segRows, conexionWhatsappId 
 function metricasVacias() {
   return {
     clientesEnFlujo: 0,
+    conversaciones: 0,
     leadsHoy: 0,
     respuestas: 0,
     conversiones: 0,
+    ventas: 0,
+    ingresos: 0,
+    ingresosMoneda: "BOB",
     seguimientosActivos: 0,
+    seguimientosPendientes: 0,
+    seguimientosEnviados: 0,
+    tasaCierre: 0,
     ultimaActividad: null,
+    ultimaConversion: null,
     ultimoLead: null,
     ultimaEjecucion: null,
   };
+}
+
+function pctTasaCierre(ventas, conversaciones) {
+  const v = Number(ventas) || 0;
+  const c = Number(conversaciones) || 0;
+  if (c <= 0) return 0;
+  return Math.round((v / c) * 1000) / 10;
+}
+
+function resolverIngresosFlujo(totalesPorMoneda) {
+  const totales = totalesPorMoneda && typeof totalesPorMoneda === "object" ? totalesPorMoneda : {};
+  const monedas = Object.keys(totales);
+  if (!monedas.length) return { ingresos: 0, ingresosMoneda: "BOB" };
+  const ingresosMoneda = monedas.reduce(
+    (best, mon) => ((totales[mon] || 0) > (totales[best] || 0) ? mon : best),
+    monedas[0]
+  );
+  const ingresos = Math.round(
+    Object.values(totales).reduce((acc, val) => acc + (Number(val) || 0), 0) * 100
+  ) / 100;
+  return { ingresos, ingresosMoneda };
 }
 
 function agregarMetricasConversiones(byFlow, conversionesRows) {
   if (!Array.isArray(conversionesRows)) return;
   conversionesRows.forEach((row) => {
     if (!row.flujo_id || !byFlow[row.flujo_id]) return;
-    byFlow[row.flujo_id].conversiones += 1;
+    const m = byFlow[row.flujo_id];
+    m.conversiones += 1;
+    m.ventas += 1;
+
+    const mon = String(row.moneda || "BOB").toUpperCase();
+    const v = parseFloat(row.valor);
+    if (Number.isFinite(v) && v > 0) {
+      if (!m._ingresosPorMoneda) m._ingresosPorMoneda = {};
+      m._ingresosPorMoneda[mon] = (m._ingresosPorMoneda[mon] || 0) + v;
+    }
+
+    if (row.creado_en && (!m.ultimaConversion || row.creado_en > m.ultimaConversion)) {
+      m.ultimaConversion = row.creado_en;
+    }
   });
 }
 
 /**
- * Métricas por card de flujo (5 KPIs + actividad reciente).
+ * Métricas por card de flujo (KPIs premium + actividad reciente).
+ * Conversaciones = proxy: clientes únicos del flujo con mensajes (sin query extra).
  */
 function computePerFlowMetrics(flowIds, segRows, conversionesRows, mensajesRows) {
   const hoy = startOfTodayIso();
@@ -329,6 +372,7 @@ function computePerFlowMetrics(flowIds, segRows, conversionesRows, mensajesRows)
       clientesPorFlujo[fid].add(row.cliente_numero);
     }
     if (row.estado === "pendiente") m.seguimientosActivos += 1;
+    if (row.estado === "enviado") m.seguimientosEnviados += 1;
     if (row.estado === "respondido") {
       if (!m._respuestasSet) m._respuestasSet = new Set();
       if (row.cliente_numero) m._respuestasSet.add(row.cliente_numero);
@@ -357,6 +401,9 @@ function computePerFlowMetrics(flowIds, segRows, conversionesRows, mensajesRows)
         if (!clientesPorFlujo[fid].has(msg.cliente_numero)) return;
         const m = byFlow[fid];
 
+        if (!m._conversacionesSet) m._conversacionesSet = new Set();
+        m._conversacionesSet.add(msg.cliente_numero);
+
         if (msg.creado_en >= hoy) {
           if (!m._hoySet) m._hoySet = new Set();
           m._hoySet.add(msg.cliente_numero);
@@ -382,14 +429,27 @@ function computePerFlowMetrics(flowIds, segRows, conversionesRows, mensajesRows)
   flowIds.forEach((fid) => {
     const m = byFlow[fid];
     m.clientesEnFlujo = clientesPorFlujo[fid].size;
+    m.conversaciones = m._conversacionesSet ? m._conversacionesSet.size : 0;
     m.leadsHoy = m._hoySet ? m._hoySet.size : 0;
     m.respuestas = m._respuestasSet ? m._respuestasSet.size : 0;
+    m.seguimientosPendientes = m.seguimientosActivos;
     delete m._hoySet;
     delete m._respuestasSet;
+    delete m._conversacionesSet;
     delete m._ultimoLeadAt;
   });
 
   agregarMetricasConversiones(byFlow, conversionesRows);
+
+  flowIds.forEach((fid) => {
+    const m = byFlow[fid];
+    const { ingresos, ingresosMoneda } = resolverIngresosFlujo(m._ingresosPorMoneda);
+    m.ingresos = ingresos;
+    m.ingresosMoneda = ingresosMoneda;
+    m.tasaCierre = pctTasaCierre(m.ventas, m.conversaciones);
+    delete m._ingresosPorMoneda;
+  });
+
   return byFlow;
 }
 

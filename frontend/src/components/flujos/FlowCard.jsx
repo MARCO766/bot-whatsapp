@@ -3,9 +3,10 @@ import { builderUrl } from "../../flujos/api";
 import {
   folderLabel,
   formatDate,
+  formatFlowIngresos,
   formatMetric,
-  formatRelativeTime,
-  formatUltimoLead,
+  formatMetricTimestamp,
+  formatTasaCierre,
   resolveFlowCarpetaTheme,
   stateMeta,
 } from "../../flujos/utils";
@@ -13,13 +14,76 @@ import FlowActionsMenu from "./FlowActionsMenu";
 import FlowPreviewMini from "./FlowPreviewMini";
 import FlowTimeline from "./FlowTimeline";
 
-const FLOW_METRICS = [
-  { key: "clientesEnFlujo", label: "En flujo", title: "Clientes únicos en seguimientos de este flujo" },
-  { key: "leadsHoy", label: "Hoy", title: "Actividad real registrada hoy" },
-  { key: "respuestas", label: "Respuestas", title: "Leads que respondieron" },
-  { key: "conversiones", label: "Conversiones", title: "Registros en crm_conversiones", fallback: 0 },
-  { key: "seguimientosActivos", label: "Seg. activos", title: "Seguimientos programados pendientes" },
+const PRIMARY_METRICS = [
+  {
+    key: "ventas",
+    fallbackKey: "conversiones",
+    label: "Ventas",
+    title: "Conversiones registradas en crm_conversiones",
+    accent: "green",
+  },
+  {
+    key: "ingresos",
+    label: "Ingresos",
+    title: "Suma de valor en conversiones del flujo",
+    accent: "cyan",
+    format: (m) => formatFlowIngresos(m.ingresos, m.ingresosMoneda),
+  },
+  {
+    key: "conversaciones",
+    label: "Conversaciones",
+    title: "Clientes del flujo con actividad en mensajes",
+    accent: "violet",
+  },
+  {
+    key: "leadsHoy",
+    label: "Leads hoy",
+    title: "Clientes con actividad registrada hoy",
+    accent: "amber",
+  },
 ];
+
+const SECONDARY_METRICS = [
+  {
+    key: "seguimientosEnviados",
+    label: "Env.",
+    title: "Seguimientos enviados",
+    format: (m) => formatMetric(m.seguimientosEnviados ?? 0),
+  },
+  {
+    key: "seguimientosPendientes",
+    fallbackKey: "seguimientosActivos",
+    label: "Pend.",
+    title: "Seguimientos pendientes",
+    format: (m) => formatMetric(m.seguimientosPendientes ?? m.seguimientosActivos ?? 0),
+  },
+  {
+    key: "tasaCierre",
+    label: "Cierre",
+    title: "Ventas ÷ conversaciones",
+    format: (m) => formatTasaCierre(m.tasaCierre),
+  },
+  {
+    key: "ultimaConversion",
+    label: "Conv.",
+    title: "Última conversión registrada",
+    format: (m) => formatMetricTimestamp(m.ultimaConversion),
+    isTimestamp: true,
+  },
+  {
+    key: "ultimaActividad",
+    label: "Actividad",
+    title: "Última actividad del flujo",
+    format: (m) => formatMetricTimestamp(m.ultimaActividad),
+    isTimestamp: true,
+  },
+];
+
+function metricValue(m, item) {
+  if (item.format) return item.format(m);
+  const raw = m[item.key] ?? (item.fallbackKey ? m[item.fallbackKey] : undefined);
+  return formatMetric(raw ?? 0);
+}
 
 function FlowCard({
   flow,
@@ -50,9 +114,6 @@ function FlowCard({
   const totalActivadores = flow.activadores?.length || 0;
   const isActivo = flow.meta?.estado === "activo";
   const carpetaTheme = resolveFlowCarpetaTheme(flow, carpetas);
-
-  const actividadRel = formatRelativeTime(m.ultimaActividad);
-  const ultimoLeadTxt = formatUltimoLead(m.ultimoLead);
 
   return (
     <article
@@ -133,25 +194,30 @@ function FlowCard({
         <FlowPreviewMini preview={flow.preview} />
       </div>
 
-      <div className="flMetrics flMetricsCompact flMetrics5" draggable={false}>
-        {FLOW_METRICS.map((item) => (
-          <div key={item.key} className="flMetric" title={item.title}>
-            <b>{formatMetric(m[item.key] ?? item.fallback ?? 0)}</b>
-            <span>{item.label}</span>
-          </div>
-        ))}
-      </div>
-
-      <div className="flCardActivity" draggable={false}>
-        <div className="flCardActivityItem">
-          <span className="flCardActivityLabel">Última actividad</span>
-          <span className="flCardActivityValue">{actividadRel || "Sin actividad"}</span>
+      <div className="flDash flDashCompact" draggable={false}>
+        <div className="flDashPrimary">
+          {PRIMARY_METRICS.map((item) => (
+            <div
+              key={item.key}
+              className={`flDashKpi flDashKpi--${item.accent}`}
+              title={item.title}
+            >
+              <b>{metricValue(m, item)}</b>
+              <span>{item.label}</span>
+            </div>
+          ))}
         </div>
-        <div className="flCardActivityItem">
-          <span className="flCardActivityLabel">Último lead</span>
-          <span className="flCardActivityValue flCardActivityLead">
-            {ultimoLeadTxt || "—"}
-          </span>
+        <div className="flDashSecondary">
+          {SECONDARY_METRICS.map((item) => (
+            <div key={item.key} className="flDashChip" title={item.title}>
+              <span className="flDashChipLabel">{item.label}</span>
+              <span
+                className={`flDashChipValue ${item.isTimestamp ? "flDashChipValue--time" : ""}`}
+              >
+                {metricValue(m, item)}
+              </span>
+            </div>
+          ))}
         </div>
       </div>
 

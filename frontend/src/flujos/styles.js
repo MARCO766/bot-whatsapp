@@ -1019,6 +1019,122 @@ export const flujosStyles = `
   grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
+/* Mini dashboard premium por card (Fase 6) */
+.flDash {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  position: relative;
+  z-index: 1;
+}
+
+.flDashCompact {
+  margin-top: 2px;
+}
+
+.flDashPrimary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.flDashKpi {
+  text-align: center;
+  padding: 8px 6px;
+  border-radius: 11px;
+  background: rgba(2, 6, 23, 0.52);
+  border: 1px solid rgba(148, 163, 184, 0.08);
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.flDashKpi:hover {
+  background: rgba(2, 6, 23, 0.68);
+}
+
+.flDashKpi b {
+  display: block;
+  font-size: 1.02rem;
+  font-weight: 800;
+  color: #f1f5f9;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+.flDashKpi span {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.62rem;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.flDashKpi--green { border-color: rgba(34, 197, 94, 0.18); }
+.flDashKpi--green b { color: #86efac; }
+.flDashKpi--cyan { border-color: rgba(34, 211, 238, 0.18); }
+.flDashKpi--cyan b { color: #67e8f9; }
+.flDashKpi--violet { border-color: rgba(168, 85, 247, 0.18); }
+.flDashKpi--violet b { color: #c4b5fd; }
+.flDashKpi--amber { border-color: rgba(245, 158, 11, 0.18); }
+.flDashKpi--amber b { color: #fcd34d; }
+
+.flDashSecondary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  background: rgba(2, 6, 23, 0.42);
+  border: 1px solid rgba(148, 163, 184, 0.08);
+}
+
+.flDashChip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.55);
+  border: 1px solid rgba(148, 163, 184, 0.1);
+  font-size: 0.68rem;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+.flDashChipLabel {
+  color: #64748b;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-size: 0.6rem;
+}
+
+.flDashChipValue {
+  color: #cbd5e1;
+  font-weight: 700;
+}
+
+.flDashChipValue--time {
+  color: #94a3b8;
+  font-weight: 600;
+  font-size: 0.65rem;
+}
+
+@media (max-width: 1100px) {
+  .flDashPrimary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .flDashPrimary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .flDashSecondary {
+    gap: 4px;
+  }
+}
+
 @media (max-width: 1100px) {
   .flMetrics5 {
     grid-template-columns: repeat(3, minmax(0, 1fr));
