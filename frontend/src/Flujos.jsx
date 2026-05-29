@@ -4,6 +4,7 @@ import FlowList from "./components/flujos/FlowList";
 import FlujosHeaderStats from "./components/flujos/FlujosHeaderStats";
 import { useFlujosHeaderStats } from "./flujos/useFlujosHeaderStats";
 import ConfirmModal from "./components/flujos/ConfirmModal";
+import CarpetaModal from "./components/flujos/CarpetaModal";
 import ImportFlowModal from "./components/flujos/ImportFlowModal";
 import FlowVersionsModal from "./components/flujos/FlowVersionsModal";
 import { FLOW_STATES } from "./flujos/constants";
@@ -39,6 +40,10 @@ export default function Flujos() {
     carpetas,
     sinCarpeta,
     carpetasLoading,
+    carpetasMoverMenu,
+    crearCarpetaFlujo,
+    editarCarpetaFlujo,
+    eliminarCarpetaFlujo,
     showToast,
     toggleEstado,
     moveToFolder,
@@ -76,6 +81,9 @@ export default function Flujos() {
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [newFlowOpen, setNewFlowOpen] = useState(false);
   const [newFlowName, setNewFlowName] = useState("");
+  const [carpetaModal, setCarpetaModal] = useState(null);
+  const [carpetaSaving, setCarpetaSaving] = useState(false);
+  const [confirmDeleteCarpeta, setConfirmDeleteCarpeta] = useState(null);
 
   async function handleCreate() {
     if (!newFlowName.trim()) return;
@@ -171,8 +179,8 @@ export default function Flujos() {
 
       {!puedeEscribir && conexionSeleccionadaId === CONEXION_TODAS && (
         <p className="flConexionHint">
-          Vista global: los flujos sin línea solo aparecen aquí. Para crear, importar o duplicar,
-          elige un número.
+          Vista global: los flujos sin línea solo aparecen aquí. Para crear carpetas, mover flujos,
+          importar o duplicar, elige un número.
         </p>
       )}
 
@@ -216,6 +224,28 @@ export default function Flujos() {
         sinCarpeta={sinCarpeta}
         loading={carpetasLoading}
         mostrarLinea={mostrarBadgeLinea}
+        puedeEscribir={puedeEscribir}
+        onCreateCarpeta={() => {
+          if (!puedeEscribir) {
+            showToast("Selecciona una línea WhatsApp (no «Todas las líneas»)", "error");
+            return;
+          }
+          setCarpetaModal({ mode: "create" });
+        }}
+        onEditCarpeta={(c) => {
+          if (!puedeEscribir) {
+            showToast("Selecciona una línea WhatsApp (no «Todas las líneas»)", "error");
+            return;
+          }
+          setCarpetaModal({ mode: "edit", carpeta: c });
+        }}
+        onDeleteCarpeta={(c) => {
+          if (!puedeEscribir) {
+            showToast("Selecciona una línea WhatsApp (no «Todas las líneas»)", "error");
+            return;
+          }
+          setConfirmDeleteCarpeta(c);
+        }}
         conexionesMap={Object.fromEntries(
           conexionesInbox.map((c) => [c.id, etiquetaTabConexion(c)])
         )}
@@ -319,6 +349,8 @@ export default function Flujos() {
         onShowHistory={(flow) => setHistoryFlow(flow)}
         onCreate={() => setNewFlowOpen(true)}
         onImport={() => setImportOpen(true)}
+        carpetas={carpetas}
+        carpetasMover={carpetasMoverMenu}
         puedeEscribir={puedeEscribir}
       />
 
@@ -356,6 +388,47 @@ export default function Flujos() {
         onConfirm={() => {
           eliminar(confirmDelete.id);
           setConfirmDelete(null);
+        }}
+      />
+
+      <ConfirmModal
+        open={!!confirmDeleteCarpeta}
+        title="Eliminar carpeta"
+        message={
+          confirmDeleteCarpeta
+            ? `¿Eliminar la carpeta «${confirmDeleteCarpeta.nombre}»?${
+                (confirmDeleteCarpeta.flujos_count || 0) > 0
+                  ? ` Los ${confirmDeleteCarpeta.flujos_count} flujo(s) pasarán a «Sin carpeta».`
+                  : ""
+              }`
+            : ""
+        }
+        confirmLabel="Eliminar carpeta"
+        danger
+        onCancel={() => setConfirmDeleteCarpeta(null)}
+        onConfirm={async () => {
+          const c = confirmDeleteCarpeta;
+          setConfirmDeleteCarpeta(null);
+          if (c) await eliminarCarpetaFlujo(c);
+        }}
+      />
+
+      <CarpetaModal
+        open={!!carpetaModal}
+        mode={carpetaModal?.mode || "create"}
+        carpeta={carpetaModal?.carpeta}
+        saving={carpetaSaving}
+        onClose={() => setCarpetaModal(null)}
+        onSubmit={async (payload) => {
+          setCarpetaSaving(true);
+          let ok = false;
+          if (carpetaModal?.mode === "edit" && carpetaModal.carpeta?.id) {
+            ok = await editarCarpetaFlujo(carpetaModal.carpeta.id, payload);
+          } else {
+            ok = await crearCarpetaFlujo(payload);
+          }
+          setCarpetaSaving(false);
+          if (ok) setCarpetaModal(null);
         }}
       />
 

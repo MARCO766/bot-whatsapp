@@ -8,6 +8,9 @@ export const FLOW_FOLDERS = [
   { id: "sin_carpeta", label: "Sin carpeta", icon: "📂" },
 ];
 
+/** Categorías visuales para carpetas personalizadas (sin «Sin carpeta»). */
+export const CARPETA_CATEGORIAS = FLOW_FOLDERS.filter((f) => f.id !== "sin_carpeta");
+
 export const FLOW_STATES = [
   { id: "activo", label: "Activo", color: "#22c55e" },
   { id: "pausado", label: "Pausado", color: "#f59e0b" },

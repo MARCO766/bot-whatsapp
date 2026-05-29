@@ -8,6 +8,9 @@ import {
   fetchFlowExport,
   fetchFlows,
   fetchCarpetas,
+  createCarpeta,
+  updateCarpeta,
+  deleteCarpeta,
   importFlowJson,
   importFlowTemplate,
   fetchFlowVersions,
@@ -27,6 +30,7 @@ import {
   countByEstado,
   countByFolder,
   filterFlows,
+  folderLabel,
   sortFlows,
 } from "./utils";
 import { useSocketEvent } from "../hooks/useSocketEvent";
@@ -200,8 +204,12 @@ export function useFlujos() {
   }, [viewMode]);
 
   const filtered = useMemo(
-    () => sortFlows(filterFlows(flows, { query, folder, estado, activador, nodeType }), sortBy),
-    [flows, query, folder, estado, activador, nodeType, sortBy]
+    () =>
+      sortFlows(
+        filterFlows(flows, { query, folder, estado, activador, nodeType, carpetas }),
+        sortBy
+      ),
+    [flows, query, folder, estado, activador, nodeType, sortBy, carpetas]
   );
 
   const folderCounts = useMemo(
@@ -244,24 +252,162 @@ export function useFlujos() {
   );
 
   const moveToFolder = useCallback(
-    async (id, carpetaKey) => {
+    async (id, carpetaKey, destinoNombre) => {
+      if (!requireLineaParaEscribir()) return false;
+      if (!apiOnline) {
+        showToast("Sin sesión API", "error");
+        return false;
+      }
+
+      let patch;
+      let label = destinoNombre;
+
       if (carpetaKey === "sin_carpeta") {
-        await updateMeta(id, { carpeta_id: null, carpeta: "sin_carpeta" });
-        return;
+        patch = { carpeta_id: null, carpeta: "sin_carpeta" };
+        label = label || "Sin carpeta";
+      } else {
+        const esUuid =
+          typeof carpetaKey === "string" &&
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+            carpetaKey
+          );
+        if (esUuid) {
+          const carpeta = carpetas.find((c) => c.id === carpetaKey);
+          patch = { carpeta_id: carpetaKey };
+          label = label || carpeta?.nombre || folderLabel(carpeta?.categoria);
+        } else {
+          patch = { carpeta: carpetaKey };
+          label = label || folderLabel(carpetaKey);
+        }
       }
-      const esUuid =
-        typeof carpetaKey === "string" &&
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-          carpetaKey
+
+      setFlows((prev) =>
+        prev.map((f) => (f.id === id ? { ...f, meta: { ...f.meta, ...patch } } : f))
+      );
+
+      try {
+        const res = await patchFlowMeta(id, patch, conexionSeleccionadaId);
+        setFlows((prev) =>
+          prev.map((f) => (f.id === id ? { ...f, meta: { ...f.meta, ...res.meta } } : f))
         );
-      if (esUuid) {
-        await updateMeta(id, { carpeta_id: carpetaKey });
-        return;
+        showToast(`Flujo movido a «${label || "carpeta"}»`);
+        await load();
+        return true;
+      } catch (err) {
+        const msg = err instanceof ApiError ? err.message : "No se pudo mover el flujo";
+        showToast(msg, "error");
+        await load();
+        return false;
       }
-      await updateMeta(id, { carpeta: carpetaKey });
     },
-    [updateMeta]
+    [apiOnline, carpetas, conexionSeleccionadaId, load, requireLineaParaEscribir, showToast]
   );
+
+  const crearCarpetaFlujo = useCallback(
+    async ({ nombre, categoria }) => {
+      if (!requireLineaParaEscribir()) return false;
+      if (!apiOnline) {
+        showToast("Sin sesión API", "error");
+        return false;
+      }
+      try {
+        await createCarpeta({ nombre, categoria }, conexionSeleccionadaId);
+        showToast(`Carpeta «${nombre}» creada`);
+        await load();
+        return true;
+      } catch (err) {
+        const msg = err instanceof ApiError ? err.message : "No se pudo crear la carpeta";
+        showToast(msg, "error");
+        return false;
+      }
+    },
+    [apiOnline, conexionSeleccionadaId, load, requireLineaParaEscribir, showToast]
+  );
+
+  const editarCarpetaFlujo = useCallback(
+    async (id, patch) => {
+      if (!requireLineaParaEscribir()) return false;
+      if (!apiOnline) {
+        showToast("Sin sesión API", "error");
+        return false;
+      }
+      try {
+        await updateCarpeta(id, patch, conexionSeleccionadaId);
+        showToast("Carpeta actualizada");
+        await load();
+        return true;
+      } catch (err) {
+        const msg = err instanceof ApiError ? err.message : "No se pudo actualizar la carpeta";
+        showToast(msg, "error");
+        return false;
+      }
+    },
+    [apiOnline, conexionSeleccionadaId, load, requireLineaParaEscribir, showToast]
+  );
+
+  const eliminarCarpetaFlujo = useCallback(
+    async (carpeta) => {
+      if (!requireLineaParaEscribir()) return false;
+      if (!apiOnline) {
+        showToast("Sin sesión API", "error");
+        return false;
+      }
+      if (!carpeta?.id || carpeta.es_sistema) {
+        showToast("No se puede eliminar esta carpeta", "error");
+        return false;
+      }
+      try {
+        await deleteCarpeta(carpeta.id, conexionSeleccionadaId);
+        const n = carpeta.flujos_count || 0;
+        showToast(
+          n > 0
+            ? `Carpeta eliminada. ${n} flujo(s) pasaron a «Sin carpeta».`
+            : "Carpeta eliminada"
+        );
+        if (folder === carpeta.id) setFolder("all");
+        await load();
+        return true;
+      } catch (err) {
+        const msg = err instanceof ApiError ? err.message : "No se pudo eliminar la carpeta";
+        showToast(msg, "error");
+        return false;
+      }
+    },
+    [
+      apiOnline,
+      conexionSeleccionadaId,
+      folder,
+      load,
+      requireLineaParaEscribir,
+      showToast,
+    ]
+  );
+
+  const carpetasMoverMenu = useMemo(() => {
+    const list = [];
+    if (sinCarpeta) {
+      list.push({
+        id: "sin_carpeta",
+        nombre: sinCarpeta.nombre || sinCarpeta.label || "Sin carpeta",
+        icon: sinCarpeta.icon || "📂",
+        es_sistema: true,
+      });
+    } else {
+      list.push({ id: "sin_carpeta", nombre: "Sin carpeta", icon: "📂", es_sistema: true });
+    }
+    const ordenadas = [...carpetas].sort((a, b) => (a.orden || 0) - (b.orden || 0));
+    ordenadas.forEach((c) => {
+      list.push({
+        id: c.id,
+        nombre: c.nombre || c.label,
+        icon: c.icon || "📁",
+        es_sistema: !!c.es_sistema,
+        categoria: c.categoria,
+        slug: c.slug,
+      });
+    });
+    return list;
+  }, [carpetas, sinCarpeta]);
 
   const renombrar = useCallback(
     async (id, nombre) => {
@@ -480,8 +626,12 @@ export function useFlujos() {
     folderCounts,
     carpetas,
     sinCarpeta,
+    carpetasMoverMenu,
     carpetasLoading,
     estadoCounts,
+    crearCarpetaFlujo,
+    editarCarpetaFlujo,
+    eliminarCarpetaFlujo,
     load,
     showToast,
     updateMeta,

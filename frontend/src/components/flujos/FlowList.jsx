@@ -18,6 +18,8 @@ function FlowList({
   onCreate,
   onImport,
   apiOnline,
+  carpetas = [],
+  carpetasMover = [],
   puedeEscribir = false,
 }) {
   const [openMenuId, setOpenMenuId] = useState(null);
@@ -57,6 +59,8 @@ function FlowList({
           onMoveFolder={onMoveFolder}
           onEditName={onEditName}
           onShowHistory={onShowHistory}
+          carpetas={carpetas}
+          carpetasMover={carpetasMover}
           puedeEscribir={puedeEscribir}
         />
       ))}

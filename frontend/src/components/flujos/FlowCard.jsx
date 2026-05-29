@@ -34,6 +34,8 @@ function FlowCard({
   onMoveFolder,
   onEditName,
   onShowHistory,
+  carpetas = [],
+  carpetasMover = [],
   puedeEscribir = true,
 }) {
   const [showTimeline, setShowTimeline] = useState(false);
@@ -66,7 +68,7 @@ function FlowCard({
             </span>
             <span className="flMetaChip">
               <span className="flMetaChipIcon" aria-hidden>📁</span>
-              {folderLabel(flow.meta?.carpeta)}
+              {folderLabel(flow, carpetas)}
             </span>
             {mostrarBadgeLinea && (
               <span className="flMetaChip flMetaChipLinea" title="Línea WhatsApp del flujo">
@@ -90,6 +92,8 @@ function FlowCard({
           onMoveFolder={onMoveFolder}
           onEditName={onEditName}
           onShowHistory={onShowHistory}
+          carpetasMover={carpetasMover}
+          carpetas={carpetas}
           puedeEscribir={puedeEscribir}
         />
       </div>

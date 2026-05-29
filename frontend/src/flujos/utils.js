@@ -1,7 +1,22 @@
 import { FLOW_FOLDERS, FLOW_STATES } from "./constants";
 
-export function folderLabel(id) {
-  return FLOW_FOLDERS.find((f) => f.id === id)?.label || "Sin carpeta";
+export function folderLabel(carpetaSlugOrFlow, carpetas = []) {
+  let slug = carpetaSlugOrFlow;
+  let carpetaId = null;
+
+  if (carpetaSlugOrFlow && typeof carpetaSlugOrFlow === "object") {
+    const meta = carpetaSlugOrFlow.meta || carpetaSlugOrFlow;
+    carpetaId = meta?.carpeta_id || null;
+    slug = meta?.carpeta;
+  }
+
+  if (carpetaId && Array.isArray(carpetas)) {
+    const found = carpetas.find((c) => c.id === carpetaId);
+    if (found?.nombre) return found.nombre;
+    if (found?.label) return found.label;
+  }
+
+  return FLOW_FOLDERS.find((f) => f.id === slug)?.label || "Sin carpeta";
 }
 
 export function stateMeta(id) {
@@ -115,10 +130,28 @@ export function flowFolderKey(flow) {
   return slug;
 }
 
-export function filterFlows(flows, { query, folder, estado, activador, nodeType }) {
+export function flowMatchesFolder(flow, folder, carpetas = []) {
+  if (!folder || folder === "all") return true;
+  const key = flowFolderKey(flow);
+  if (key === folder) return true;
+  if (folder === "sin_carpeta") return key === "sin_carpeta";
+
+  const carpeta = carpetas.find((c) => c.id === folder || c.slug === folder);
+  if (carpeta) {
+    if (flow.meta?.carpeta_id === carpeta.id) return true;
+    if (flow.meta?.carpeta === carpeta.slug || flow.meta?.carpeta === carpeta.categoria) {
+      return true;
+    }
+    if (key === carpeta.slug || key === carpeta.categoria) return true;
+  }
+
+  return false;
+}
+
+export function filterFlows(flows, { query, folder, estado, activador, nodeType, carpetas }) {
   const q = (query || "").trim().toLowerCase();
   return flows.filter((f) => {
-    if (folder && folder !== "all" && flowFolderKey(f) !== folder) return false;
+    if (folder && folder !== "all" && !flowMatchesFolder(f, folder, carpetas)) return false;
     if (estado && estado !== "all" && f.meta?.estado !== estado) return false;
     if (activador && activador !== "all") {
       const has = f.activadores?.some((a) =>

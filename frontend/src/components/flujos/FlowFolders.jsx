@@ -14,6 +14,10 @@ export default function FlowFolders({
   loading = false,
   mostrarLinea = false,
   conexionesMap = {},
+  puedeEscribir = false,
+  onCreateCarpeta,
+  onEditCarpeta,
+  onDeleteCarpeta,
 }) {
   const items = useMemo(() => {
     let sinCarpetaItem = null;
@@ -68,7 +72,7 @@ export default function FlowFolders({
     return { sistema, personalizadas, sinCarpetaItem };
   }, [carpetas, sinCarpeta, counts]);
 
-  function renderChip(item, extraClass = "") {
+  function renderChip(item, extraClass = "", showActions = false) {
     const key = item.filterKey || chipKey(item);
     const count =
       item.flujos_count ??
@@ -83,30 +87,59 @@ export default function FlowFolders({
         : null;
 
     return (
-      <button
-        key={`${key}-${item.conexion_whatsapp_id || "global"}`}
-        type="button"
-        className={`flFolderChip ${extraClass} ${isActive ? "active" : ""}`}
-        style={
-          isActive
-            ? {
-                borderColor: accent,
-                boxShadow: `0 4px 18px ${accent}33`,
-              }
-            : undefined
-        }
-        onClick={() => onChange(key)}
-      >
-        <span className="flFolderChipIcon" aria-hidden>
-          {item.icon || "📁"}
-        </span>
-        <span className="flFolderChipLabel">{item.nombre}</span>
-        {lineLabel && <span className="flFolderChipLine">{lineLabel}</span>}
-        {!item.es_sistema && !item.virtual && (
-          <span className="flFolderChipTag">custom</span>
+      <div key={`${key}-${item.conexion_whatsapp_id || "global"}`} className="flFolderChipWrap">
+        <button
+          type="button"
+          className={`flFolderChip ${extraClass} ${isActive ? "active" : ""}`}
+          style={
+            isActive
+              ? {
+                  borderColor: accent,
+                  boxShadow: `0 4px 18px ${accent}33`,
+                }
+              : undefined
+          }
+          onClick={() => onChange(key)}
+        >
+          <span className="flFolderChipIcon" aria-hidden>
+            {item.icon || "📁"}
+          </span>
+          <span className="flFolderChipLabel">{item.nombre}</span>
+          {lineLabel && <span className="flFolderChipLine">{lineLabel}</span>}
+          {!item.es_sistema && !item.virtual && (
+            <span className="flFolderChipTag">custom</span>
+          )}
+          <span className="count">{count}</span>
+        </button>
+        {showActions && puedeEscribir && (
+          <div className="flFolderChipActions">
+            <button
+              type="button"
+              className="flFolderActionBtn"
+              title="Editar carpeta"
+              aria-label={`Editar ${item.nombre}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                onEditCarpeta?.(item);
+              }}
+            >
+              ✎
+            </button>
+            <button
+              type="button"
+              className="flFolderActionBtn flFolderActionBtn--danger"
+              title="Eliminar carpeta"
+              aria-label={`Eliminar ${item.nombre}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                onDeleteCarpeta?.(item);
+              }}
+            >
+              ×
+            </button>
+          </div>
         )}
-        <span className="count">{count}</span>
-      </button>
+      </div>
     );
   }
 
@@ -116,10 +149,27 @@ export default function FlowFolders({
         <div>
           <h2 className="flFoldersPremiumTitle">Carpetas</h2>
           <p className="flFoldersPremiumSub">
-            Organiza flujos por categoría premium y línea WhatsApp.
+            {puedeEscribir
+              ? "Organiza flujos en carpetas de esta línea WhatsApp."
+              : "Vista global: elige una línea para crear o editar carpetas."}
           </p>
         </div>
-        {loading && <span className="flFoldersPremiumLoading">Sincronizando…</span>}
+        <div className="flFoldersPremiumHeadActions">
+          {loading && <span className="flFoldersPremiumLoading">Sincronizando…</span>}
+          <button
+            type="button"
+            className="flBtn flBtnGhost flBtnSm"
+            disabled={!puedeEscribir}
+            title={
+              puedeEscribir
+                ? "Nueva carpeta personalizada"
+                : "Selecciona una línea WhatsApp (no «Todas las líneas»)"
+            }
+            onClick={() => onCreateCarpeta?.()}
+          >
+            + Carpeta
+          </button>
+        </div>
       </div>
 
       <div className="flFolders">
@@ -138,7 +188,9 @@ export default function FlowFolders({
       {items.sistema.length > 0 && (
         <div className="flFoldersGroup">
           <span className="flFoldersGroupLabel">Categorías premium</span>
-          <div className="flFolders">{items.sistema.map((c) => renderChip(c, "flFolderChip--sistema"))}</div>
+          <div className="flFolders">
+            {items.sistema.map((c) => renderChip(c, "flFolderChip--sistema"))}
+          </div>
         </div>
       )}
 
@@ -146,9 +198,17 @@ export default function FlowFolders({
         <div className="flFoldersGroup">
           <span className="flFoldersGroupLabel">Tus carpetas</span>
           <div className="flFolders">
-            {items.personalizadas.map((c) => renderChip(c, "flFolderChip--custom"))}
+            {items.personalizadas.map((c) =>
+              renderChip(c, "flFolderChip--custom", true)
+            )}
           </div>
         </div>
+      )}
+
+      {puedeEscribir && !items.personalizadas.length && !loading && (
+        <p className="flFoldersEmptyHint">
+          Aún no tienes carpetas personalizadas. Usa «+ Carpeta» para crear una.
+        </p>
       )}
     </section>
   );

@@ -562,6 +562,63 @@ export const flujosStyles = `
   gap: 8px;
 }
 
+.flFoldersPremiumHeadActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.flBtnSm {
+  padding: 7px 12px;
+  font-size: 0.78rem;
+}
+
+.flFoldersEmptyHint {
+  margin: 0;
+  font-size: 0.78rem;
+  color: #64748b;
+  padding-left: 2px;
+}
+
+.flFolderChipWrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.flFolderChipActions {
+  display: inline-flex;
+  gap: 2px;
+  margin-left: 2px;
+}
+
+.flFolderActionBtn {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: rgba(15, 23, 42, 0.8);
+  color: #94a3b8;
+  font-size: 0.85rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.flFolderActionBtn:hover {
+  color: #e2e8f0;
+  border-color: rgba(34, 197, 94, 0.4);
+  background: rgba(34, 197, 94, 0.12);
+}
+
+.flFolderActionBtn--danger:hover {
+  border-color: rgba(239, 68, 68, 0.45);
+  background: rgba(239, 68, 68, 0.15);
+  color: #fecaca;
+}
+
 .flFoldersPremiumTitle {
   margin: 0;
   font-size: 0.95rem;
@@ -1480,6 +1537,48 @@ export const flujosStyles = `
   gap: 10px;
   justify-content: flex-end;
   margin-top: 20px;
+}
+
+.flModalCarpeta {
+  max-width: 420px;
+}
+
+.flFormField {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.flFormLabel {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #64748b;
+}
+
+.flSelectFull {
+  width: 100%;
+}
+
+.flMenuHint {
+  margin: 0;
+  padding: 8px 14px;
+  font-size: 0.78rem;
+  color: #64748b;
+}
+
+.flMenuTag {
+  margin-left: auto;
+  font-size: 0.58rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: rgba(148, 163, 184, 0.15);
+  color: #94a3b8;
 }
 
 .flInput {

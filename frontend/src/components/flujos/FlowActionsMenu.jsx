@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { FLOW_FOLDERS } from "../../flujos/constants";
+import { flowMatchesFolder } from "../../flujos/utils";
 
 const MENU_W = 248;
 
@@ -14,6 +14,8 @@ export default function FlowActionsMenu({
   onMoveFolder,
   onEditName,
   onShowHistory,
+  carpetasMover = [],
+  carpetas = [],
   puedeEscribir = true,
 }) {
   const btnRef = useRef(null);
@@ -37,7 +39,7 @@ export default function FlowActionsMenu({
     }
     onDuplicate(flow.id);
     close();
-  }, [close, flow.id, onDuplicate, puedeEscribir]);
+  }, [close, flow.id, onDuplicate, puedeEscribir, showMiniToast]);
 
   const handleExport = useCallback(async () => {
     if (!onExport) return;
@@ -49,6 +51,19 @@ export default function FlowActionsMenu({
       setExporting(false);
     }
   }, [close, flow, onExport]);
+
+  const handleMove = useCallback(
+    (destino) => {
+      if (!puedeEscribir) {
+        showMiniToast("Selecciona una línea WhatsApp");
+        close();
+        return;
+      }
+      onMoveFolder(flow.id, destino.id, destino.nombre);
+      close();
+    },
+    [close, flow.id, onMoveFolder, puedeEscribir, showMiniToast]
+  );
 
   const updatePosition = useCallback(() => {
     const btn = btnRef.current;
@@ -150,21 +165,34 @@ export default function FlowActionsMenu({
         <div className="flMenuSection">Mover carpeta</div>
 
         <div className="flMenuScroll">
-          {FLOW_FOLDERS.map((f) => (
-            <button
-              key={f.id}
-              type="button"
-              role="menuitem"
-              className={flow.meta?.carpeta === f.id ? "active" : ""}
-              onClick={() => {
-                onMoveFolder(flow.id, f.id);
-                close();
-              }}
-            >
-              <span className="flMenuIcon" aria-hidden>{f.icon}</span>
-              <span>{f.label}</span>
-            </button>
-          ))}
+          {carpetasMover.length === 0 && (
+            <p className="flMenuHint">No hay carpetas en esta línea.</p>
+          )}
+          {carpetasMover.map((destino) => {
+            const destKey = destino.id === "sin_carpeta" ? "sin_carpeta" : destino.id;
+            const isActive = flowMatchesFolder(flow, destKey, carpetas);
+            return (
+              <button
+                key={destino.id}
+                type="button"
+                role="menuitem"
+                className={`${isActive ? "active" : ""} ${!puedeEscribir ? "flMenuItemDisabled" : ""}`}
+                title={
+                  puedeEscribir
+                    ? undefined
+                    : "Selecciona una línea WhatsApp (no «Todas las líneas»)"
+                }
+                disabled={!puedeEscribir}
+                onClick={() => handleMove(destino)}
+              >
+                <span className="flMenuIcon" aria-hidden>{destino.icon || "📁"}</span>
+                <span>{destino.nombre}</span>
+                {destino.es_sistema && destino.id !== "sin_carpeta" && (
+                  <span className="flMenuTag">sistema</span>
+                )}
+              </button>
+            );
+          })}
         </div>
 
         <div className="flMenuDivider" />
