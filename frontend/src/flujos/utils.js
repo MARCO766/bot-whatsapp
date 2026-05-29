@@ -122,7 +122,14 @@ export function sortFlows(flows, sortBy) {
   }
 }
 
-/** Clave de carpeta para filtro: id uuid, sin_carpeta o slug legacy. */
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export function isFolderUuid(value) {
+  return typeof value === "string" && UUID_RE.test(value);
+}
+
+/** Clave de carpeta para UI (menú mover, etc.): uuid, sin_carpeta o slug legacy. */
 export function flowFolderKey(flow) {
   if (flow?.meta?.carpeta_id) return flow.meta.carpeta_id;
   const slug = flow?.meta?.carpeta;
@@ -130,22 +137,54 @@ export function flowFolderKey(flow) {
   return slug;
 }
 
-export function flowMatchesFolder(flow, folder, carpetas = []) {
-  if (!folder || folder === "all") return true;
-  const key = flowFolderKey(flow);
-  if (key === folder) return true;
-  if (folder === "sin_carpeta") return key === "sin_carpeta";
+function extractFlowCarpetaMeta(flow) {
+  const meta = flow?.meta || {};
+  const carpeta_id =
+    typeof meta.carpeta_id === "string" && meta.carpeta_id.trim() ? meta.carpeta_id.trim() : null;
+  const carpeta =
+    typeof meta.carpeta === "string" && meta.carpeta.trim() ? meta.carpeta.trim() : null;
+  return { carpeta_id, carpeta };
+}
 
-  const carpeta = carpetas.find((c) => c.id === folder || c.slug === folder);
-  if (carpeta) {
-    if (flow.meta?.carpeta_id === carpeta.id) return true;
-    if (flow.meta?.carpeta === carpeta.slug || flow.meta?.carpeta === carpeta.categoria) {
-      return true;
-    }
-    if (key === carpeta.slug || key === carpeta.categoria) return true;
+/**
+ * Filtro de cards por carpeta seleccionada en el panel.
+ * @param {string} selectedFolder - "all"|"todos"|"sin_carpeta"|slug sistema|uuid carpeta
+ */
+export function flowMatchesFolder(flow, selectedFolder, carpetas = []) {
+  const sel =
+    selectedFolder === "todos" || selectedFolder === "all" || !selectedFolder
+      ? "all"
+      : selectedFolder;
+
+  if (sel === "all") return true;
+
+  const { carpeta_id, carpeta } = extractFlowCarpetaMeta(flow);
+
+  if (sel === "sin_carpeta") {
+    if (carpeta_id) return false;
+    return !carpeta || carpeta === "sin_carpeta";
   }
 
-  return false;
+  if (isFolderUuid(sel)) {
+    if (carpeta_id) return carpeta_id === sel;
+
+    const carpetaRow = carpetas.find((c) => c.id === sel);
+    if (!carpetaRow) return false;
+
+    if (carpetaRow.es_sistema && carpetaRow.slug) {
+      return carpeta === carpetaRow.slug;
+    }
+
+    return false;
+  }
+
+  if (carpeta_id) {
+    const row = carpetas.find((c) => c.id === carpeta_id);
+    if (row?.slug === sel || row?.categoria === sel) return true;
+    return false;
+  }
+
+  return carpeta === sel;
 }
 
 export function filterFlows(flows, { query, folder, estado, activador, nodeType, carpetas }) {
