@@ -147,6 +147,7 @@ async function completarOpcionesEnvio(opciones = {}, numero) {
 async function resolverCredencialesEnvio(opciones = {}) {
   let tokenEnviar = TOKEN;
   let phoneIdEnviar = PHONE_ID;
+  const strictConexion = Boolean(opciones.strictConexionWhatsappId);
 
   if (opciones.conexionWhatsappId && opciones.usuarioId) {
     const responseConexion = await axios.get(
@@ -163,6 +164,9 @@ async function resolverCredencialesEnvio(opciones = {}) {
       tokenEnviar = conexion.token;
       phoneIdEnviar = conexion.phone_id;
       return { tokenEnviar, phoneIdEnviar };
+    }
+    if (strictConexion) {
+      throw new Error("No se encontró la conexión WhatsApp requerida para el seguimiento");
     }
   }
 
@@ -185,6 +189,16 @@ async function resolverCredencialesEnvio(opciones = {}) {
   }
 
   return { tokenEnviar, phoneIdEnviar };
+}
+
+function logSeguimientoEnvio(opcionesEnvio, numero, phoneIdEnviar) {
+  if (opcionesEnvio?.origen !== "seguimiento") return;
+  console.log("[SEGUIMIENTO ENVIO]", {
+    cliente_numero: String(numero || "").trim(),
+    conexion_whatsapp_id: opcionesEnvio.conexionWhatsappId || null,
+    phone_number_id: phoneIdEnviar || null,
+    seguimiento_id: opcionesEnvio.seguimientoId || null,
+  });
 }
 
 /**
@@ -317,6 +331,7 @@ async function enviarTextoWhatsApp(numero, texto, opciones = {}) {
 
   try {
     const { tokenEnviar, phoneIdEnviar } = await resolverCredencialesEnvio(opcionesEnvio);
+    logSeguimientoEnvio(opcionesEnvio, numero, phoneIdEnviar);
 
     logEmojiDebug("antes enviar whatsapp", textoEnvio);
     console.log("[SEND DEBUG] payload whatsapp:", payloadWhatsapp);
@@ -616,6 +631,7 @@ async function enviarMediaWhatsApp(numero, tipo, mediaUrl, caption = "", opcione
     }
 
     const { tokenEnviar, phoneIdEnviar } = await resolverCredencialesWhatsApp(opcionesEnvio);
+    logSeguimientoEnvio(opcionesEnvio, numeroDestino, phoneIdEnviar);
 
     if (!tokenEnviar || !phoneIdEnviar) {
       console.error("?? FALTAN CREDENCIALES WHATSAPP (token o phone_id)");
@@ -732,6 +748,7 @@ async function enviarBotonesWhatsApp(numero, texto, botones, opciones = {}) {
   try {
     const opcionesEnvio = await completarOpcionesEnvio(opciones, numero);
     const { tokenEnviar, phoneIdEnviar } = await resolverCredencialesEnvio(opcionesEnvio);
+    logSeguimientoEnvio(opcionesEnvio, numero, phoneIdEnviar);
 
     const lista = (botones || []).slice(0, 3).filter(function (b) {
       return b && String(b.texto || "").trim();

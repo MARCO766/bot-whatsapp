@@ -39,6 +39,9 @@ async function enviarMensajeSeguimiento(item) {
   const opciones = {
     usuarioId: item.usuario_id,
     conexionWhatsappId: item.conexion_whatsapp_id || null,
+    strictConexionWhatsappId: !!item.conexion_whatsapp_id,
+    origen: "seguimiento",
+    seguimientoId: item.id,
   };
   const botones = Array.isArray(payload.botones) ? payload.botones : [];
 
@@ -54,9 +57,11 @@ async function enviarMensajeSeguimiento(item) {
     const texto = (payload.texto || "").trim();
     if (!texto) throw new Error("Mensaje de texto vacío");
     if (botones.length) {
-      await enviarBotonesWhatsApp(item.cliente_numero, texto, botones, opciones);
+      const res = await enviarBotonesWhatsApp(item.cliente_numero, texto, botones, opciones);
+      if (!res) throw new Error("No se pudo enviar botones de seguimiento");
     } else {
-      await enviarTextoWhatsApp(item.cliente_numero, texto, opciones);
+      const res = await enviarTextoWhatsApp(item.cliente_numero, texto, opciones);
+      if (!res) throw new Error("No se pudo enviar texto de seguimiento");
     }
     return;
   }
@@ -64,46 +69,50 @@ async function enviarMensajeSeguimiento(item) {
   if (tipo === "imagen") {
     const url = (payload.url || "").trim();
     if (!url) throw new Error("URL de imagen vacía");
-    await enviarMediaWhatsApp(
+    const res = await enviarMediaWhatsApp(
       item.cliente_numero,
       "image",
       url,
       payload.caption || "",
       opciones
     );
+    if (!res) throw new Error("No se pudo enviar imagen de seguimiento");
     return;
   }
 
   if (tipo === "audio") {
     const url = (payload.url || "").trim();
     if (!url) throw new Error("URL de audio vacía");
-    await enviarMediaWhatsApp(item.cliente_numero, "audio", url, "", opciones);
+    const res = await enviarMediaWhatsApp(item.cliente_numero, "audio", url, "", opciones);
+    if (!res) throw new Error("No se pudo enviar audio de seguimiento");
     return;
   }
 
   if (tipo === "pdf") {
     const url = (payload.url || "").trim();
     if (!url) throw new Error("URL de PDF vacía");
-    await enviarMediaWhatsApp(
+    const res = await enviarMediaWhatsApp(
       item.cliente_numero,
       "document",
       url,
       payload.caption || "",
       opciones
     );
+    if (!res) throw new Error("No se pudo enviar PDF de seguimiento");
     return;
   }
 
   if (tipo === "video") {
     const url = (payload.url || "").trim();
     if (!url) throw new Error("URL de video vacía");
-    await enviarMediaWhatsApp(
+    const res = await enviarMediaWhatsApp(
       item.cliente_numero,
       "video",
       url,
       payload.caption || "",
       opciones
     );
+    if (!res) throw new Error("No se pudo enviar video de seguimiento");
     return;
   }
 
