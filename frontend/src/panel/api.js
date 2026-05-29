@@ -1,4 +1,5 @@
 import { resolveApiUrl } from "../flujos/apiBase";
+import { CONEXION_TODAS } from "../utils/conexionesInbox";
 
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
@@ -14,7 +15,7 @@ export class PanelApiError extends Error {
 function buildQuery(params = {}) {
   const q = new URLSearchParams();
   Object.entries(params).forEach(([k, v]) => {
-    if (v !== null && v !== undefined && v !== "") q.set(k, v);
+    if (v !== null && v !== undefined && v !== "" && v !== CONEXION_TODAS) q.set(k, v);
   });
   const s = q.toString();
   return s ? `?${s}` : "";

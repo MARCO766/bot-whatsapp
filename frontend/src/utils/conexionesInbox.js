@@ -1,5 +1,16 @@
 export const CONEXION_TODAS = "__todas__";
 
+/**
+ * Valor para query/body API: solo UUID de línea.
+ * "Todas las líneas" (CONEXION_TODAS) → undefined (no enviar param).
+ */
+export function apiConexionWhatsappParam(conexionWhatsappId) {
+  if (conexionWhatsappId == null) return undefined;
+  const raw = String(conexionWhatsappId).trim();
+  if (!raw || raw === CONEXION_TODAS) return undefined;
+  return raw;
+}
+
 /** Comparación estable de UUID / id de conexiones_whatsapp */
 export function sameConexionId(a, b) {
   if (a == null || b == null) return false;

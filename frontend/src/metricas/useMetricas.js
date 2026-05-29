@@ -13,7 +13,7 @@ import { periodoToApi } from "./format";
 import { useSocketEvent } from "../hooks/useSocketEvent";
 import { useDebouncedCallback } from "../hooks/useDebouncedCallback";
 import { RT } from "../realtime/events";
-import { CONEXION_TODAS } from "../utils/conexionesInbox";
+import { apiConexionWhatsappParam } from "../utils/conexionesInbox";
 
 export function useMetricas(
   periodoLabel = "7 días",
@@ -31,14 +31,14 @@ export function useMetricas(
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  const params = {
-    periodo: periodoToApi(periodoLabel),
-    flujo_id: flujoId || undefined,
-    conexion_whatsapp_id: conexionWhatsappId || CONEXION_TODAS,
-  };
-
   const load = useCallback(async () => {
     if (conexionesLoading || conexionWhatsappId == null) return;
+    const conn = apiConexionWhatsappParam(conexionWhatsappId);
+    const params = {
+      periodo: periodoToApi(periodoLabel),
+      flujo_id: flujoId || undefined,
+      ...(conn ? { conexion_whatsapp_id: conn } : {}),
+    };
     setLoading(true);
     setError(null);
     try {
