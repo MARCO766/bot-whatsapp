@@ -174,13 +174,10 @@ function logResolverCredenciales(opciones, conexion, phoneIdEnviar) {
 }
 
 function logMetaSendFinal(opcionesEnvio, numero, phoneIdEnviar) {
-  console.log("[META SEND FINAL]", {
-    to: String(numero || "").trim(),
-    phone_number_id: phoneIdEnviar || null,
-    origin: opcionesEnvio?.origen || null,
-    seguimiento_id: opcionesEnvio?.seguimientoId || null,
-    conexion_whatsapp_id: opcionesEnvio?.conexionWhatsappId || null,
-  });
+  const to = String(numero || "").trim();
+  console.log(
+    `[META SEND FINAL] seguimiento_id=${opcionesEnvio?.seguimientoId ?? null} origin=${opcionesEnvio?.origen ?? null} conexion_whatsapp_id=${opcionesEnvio?.conexionWhatsappId ?? null} phone_number_id=${phoneIdEnviar ?? null} to=${to} url_phone=${phoneIdEnviar ?? null}`
+  );
 }
 
 async function resolverCredencialesEnvio(opciones = {}) {
@@ -259,12 +256,10 @@ async function resolverCredencialesEnvio(opciones = {}) {
 
 function logSeguimientoEnvio(opcionesEnvio, numero, phoneIdEnviar) {
   if (opcionesEnvio?.origen !== "seguimiento") return;
-  console.log("[SEGUIMIENTO ENVIO]", {
-    cliente_numero: String(numero || "").trim(),
-    conexion_whatsapp_id: opcionesEnvio.conexionWhatsappId || null,
-    phone_number_id: phoneIdEnviar || null,
-    seguimiento_id: opcionesEnvio.seguimientoId || null,
-  });
+  const to = String(numero || "").trim();
+  console.log(
+    `[SEGUIMIENTO ENVIO] seguimiento_id=${opcionesEnvio.seguimientoId ?? null} conexion_whatsapp_id=${opcionesEnvio.conexionWhatsappId ?? null} phone_number_id=${phoneIdEnviar ?? null} to=${to} url_phone=${phoneIdEnviar ?? null}`
+  );
 }
 
 /**
