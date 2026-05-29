@@ -732,7 +732,91 @@ async function procesarImagenLectorPago({
   }
 }
 
+async function cancelarEsperaLectorPagoPorResetbot({
+  usuarioId,
+  clienteNumero,
+  conexionWhatsappId,
+}) {
+  const conexion = normalizarConexionId(conexionWhatsappId);
+
+  if (!conexion) {
+    console.log(
+      "[LECTOR_PAGO_MULTI] resetbot omitido sin conexionWhatsappId",
+      { cliente_numero: clienteNumero, usuario_id: usuarioId }
+    );
+    return { ok: false, filasCanceladas: 0 };
+  }
+
+  if (!SUPABASE_URL || !SUPABASE_KEY || !usuarioId || !clienteNumero) {
+    return { ok: false, filasCanceladas: 0 };
+  }
+
+  const ahora = new Date().toISOString();
+  const url =
+    `${SUPABASE_URL}/rest/v1/lector_pagos_estado?usuario_id=eq.${encodeURIComponent(
+      usuarioId
+    )}&cliente_numero=eq.${encodeURIComponent(
+      clienteNumero
+    )}${filtroConexionLector(conexion)}&esperando_pago=eq.true`;
+
+  const patchBody = {
+    esperando_pago: false,
+    estado_pago: "cancelado_resetbot",
+    actualizado_en: ahora,
+  };
+
+  try {
+    const res = await axios.patch(url, patchBody, {
+      headers: supabaseHeaders({
+        "Content-Type": "application/json",
+        Prefer: "return=representation",
+      }),
+    });
+    const filasCanceladas = Array.isArray(res.data) ? res.data.length : 0;
+    console.log("[LECTOR_PAGO_RESETBOT]", {
+      cliente_numero: clienteNumero,
+      conexion_whatsapp_id: conexion,
+      filas_canceladas: filasCanceladas,
+    });
+    return { ok: true, filasCanceladas };
+  } catch (err) {
+    if (err.response?.status === 400 || err.response?.status === 422) {
+      try {
+        const res = await axios.patch(
+          url,
+          { esperando_pago: false, actualizado_en: ahora },
+          {
+            headers: supabaseHeaders({
+              "Content-Type": "application/json",
+              Prefer: "return=representation",
+            }),
+          }
+        );
+        const filasCanceladas = Array.isArray(res.data) ? res.data.length : 0;
+        console.log("[LECTOR_PAGO_RESETBOT]", {
+          cliente_numero: clienteNumero,
+          conexion_whatsapp_id: conexion,
+          filas_canceladas: filasCanceladas,
+        });
+        return { ok: true, filasCanceladas };
+      } catch (errMin) {
+        console.log(
+          "[LECTOR_PAGO_RESETBOT] error:",
+          errMin.response?.data || errMin.message
+        );
+        return { ok: false, filasCanceladas: 0 };
+      }
+    }
+    console.log(
+      "[LECTOR_PAGO_RESETBOT] error:",
+      err.response?.data || err.message
+    );
+    return { ok: false, filasCanceladas: 0 };
+  }
+}
+
 module.exports = {
   iniciarEsperaLectorPago,
   procesarImagenLectorPago,
+  cancelarEsperaLectorPagoPorResetbot,
 };

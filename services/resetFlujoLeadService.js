@@ -13,6 +13,9 @@ const { enviarTextoWhatsApp } = require("./whatsappService");
 const {
   cancelarRemarketing24hPorResetbot,
 } = require("./remarketing24h/remarketing24hService");
+const {
+  cancelarEsperaLectorPagoPorResetbot,
+} = require("./lectorPagoService");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
@@ -175,6 +178,21 @@ async function resetearFlujoLead(numero, usuarioId, conexionWhatsappId = null) {
     } catch (err) {
       console.log(
         "[RESETBOT_RM24H] error:",
+        err.response?.data || err.message
+      );
+    }
+  }
+
+  if (uid) {
+    try {
+      await cancelarEsperaLectorPagoPorResetbot({
+        usuarioId: uid,
+        clienteNumero: num,
+        conexionWhatsappId: conexionId,
+      });
+    } catch (err) {
+      console.log(
+        "[LECTOR_PAGO_RESETBOT] error:",
         err.response?.data || err.message
       );
     }
