@@ -8,6 +8,7 @@ const {
   ESTADOS_REINICIO_RESPUESTA,
 } = require("./constants");
 const repo = require("./remarketing24hRepository");
+const { normalizarConexionId } = repo;
 const { procesarPendientesDisparo } = require("./executeRemarketing24h");
 const { obtenerContenidosRemarketing } = require("./rm24hContenidos");
 const { nowUtc } = require("../seguimiento/timestamps");
@@ -51,12 +52,14 @@ async function resolverFlujoNombreCancelacion({
 async function iniciarRemarketing24h({
   usuario_id,
   cliente_numero,
+  conexion_whatsapp_id,
   flujo_id,
   flujo_nombre,
   config,
 }) {
   if (!usuario_id || !cliente_numero || !flujo_id) return null;
 
+  const conexionId = normalizarConexionId(conexion_whatsapp_id);
   const ahora = nowUtc();
   const horas = clampHorasInactividad(config?.horasInactividad ?? HORAS_INACTIVIDAD);
   const expira_en = calcularExpiraEn(horas);
@@ -76,12 +79,14 @@ async function iniciarRemarketing24h({
   const existente = await repo.buscarAbierto({
     usuario_id,
     cliente_numero,
+    conexion_whatsapp_id: conexionId,
     flujo_id: String(flujo_id),
   });
 
   const payload = {
     usuario_id,
     cliente_numero,
+    conexion_whatsapp_id: conexionId,
     flujo_id: String(flujo_id),
     flujo_nombre: flujo_nombre || null,
     estado: ESTADOS_RM24H.ACTIVO,
@@ -110,6 +115,7 @@ async function iniciarRemarketing24h({
   console.log("[RM24H] iniciado", {
     usuario_id,
     cliente: cliente_numero,
+    conexion_whatsapp_id: conexionId,
     flujo_id,
     expira_en,
     horas,
@@ -121,10 +127,20 @@ async function iniciarRemarketing24h({
 async function resetearRemarketing24h({
   usuario_id,
   cliente_numero,
+  conexion_whatsapp_id,
   flujo_id,
   ultimoNodo,
 }) {
   if (!usuario_id || !cliente_numero) return [];
+
+  const conexionId = normalizarConexionId(conexion_whatsapp_id);
+  if (!conexionId) {
+    console.log(
+      "[RM24H_MULTI] reset omitido — mensaje sin conexion_whatsapp_id (multi-número requiere línea)",
+      { usuario_id, cliente: cliente_numero }
+    );
+    return [];
+  }
 
   const ahora = nowUtc();
   const extraNodo = normalizarUltimoNodo(ultimoNodo);
@@ -135,11 +151,16 @@ async function resetearRemarketing24h({
     const una = await repo.buscarAbierto({
       usuario_id,
       cliente_numero,
+      conexion_whatsapp_id: conexionId,
       flujo_id: String(flujo_id),
     });
     if (una) filas = [una];
   } else {
-    filas = await repo.listarReinicioPorCliente(usuario_id, cliente_numero);
+    filas = await repo.listarReinicioPorCliente(
+      usuario_id,
+      cliente_numero,
+      conexionId
+    );
   }
 
   for (const fila of filas) {
@@ -167,6 +188,7 @@ async function resetearRemarketing24h({
     console.log("[RM24H] reseteado por respuesta lead", {
       usuario_id,
       cliente: cliente_numero,
+      conexion_whatsapp_id: conexionId,
       flujo_id: fila.flujo_id,
       expira_en,
       horas,
@@ -180,16 +202,19 @@ async function resetearRemarketing24h({
 async function cancelarRemarketing24h({
   usuario_id,
   cliente_numero,
+  conexion_whatsapp_id,
   flujo_id,
   motivo,
   flujo_nombre: flujo_nombre_hint,
 }) {
   if (!usuario_id || !cliente_numero || !flujo_id) return null;
 
+  const conexionId = normalizarConexionId(conexion_whatsapp_id);
   const flujoIdStr = String(flujo_id);
   let fila = await repo.buscarAbierto({
     usuario_id,
     cliente_numero,
+    conexion_whatsapp_id: conexionId,
     flujo_id: flujoIdStr,
   });
 
@@ -197,6 +222,7 @@ async function cancelarRemarketing24h({
     fila = await repo.buscarInconsistenteActivoApagado({
       usuario_id,
       cliente_numero,
+      conexion_whatsapp_id: conexionId,
       flujo_id: flujoIdStr,
     });
   }
@@ -242,6 +268,7 @@ async function cancelarRemarketing24h({
     console.log("[RM24H] cancelado conversion", {
       usuario_id,
       cliente: cliente_numero,
+      conexion_whatsapp_id: conexionId,
       flujo_id,
       motivo,
       estado: actualizado?.estado || estado,
@@ -252,6 +279,7 @@ async function cancelarRemarketing24h({
     console.log("[RM24H] cancelado", {
       usuario_id,
       cliente: cliente_numero,
+      conexion_whatsapp_id: conexionId,
       flujo_id,
       motivo,
       estado,
@@ -262,15 +290,33 @@ async function cancelarRemarketing24h({
 }
 
 /** Comando resetbot: cancela RM24H vivo sin reiniciar contador ni crear fila nueva. */
-async function cancelarRemarketing24hPorResetbot({ usuario_id, cliente_numero }) {
+async function cancelarRemarketing24hPorResetbot({
+  usuario_id,
+  cliente_numero,
+  conexion_whatsapp_id,
+}) {
   if (!usuario_id || !cliente_numero) return [];
+
+  const conexionId = normalizarConexionId(conexion_whatsapp_id);
+  if (!conexionId) {
+    console.log(
+      "[RM24H_MULTI] resetbot RM24H omitido — sin conexion_whatsapp_id (multi-número requiere línea)",
+      { usuario_id, cliente: cliente_numero }
+    );
+    return [];
+  }
 
   console.log("[RESETBOT_RM24H] cancelando remarketing activo", {
     usuario_id,
     cliente: cliente_numero,
+    conexion_whatsapp_id: conexionId,
   });
 
-  const filas = await repo.listarReinicioPorCliente(usuario_id, cliente_numero);
+  const filas = await repo.listarReinicioPorCliente(
+    usuario_id,
+    cliente_numero,
+    conexionId
+  );
   const ahora = nowUtc();
   const actualizados = [];
 

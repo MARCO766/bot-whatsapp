@@ -71,22 +71,43 @@ async function limpiarHistorialFlujoLead(numero, usuarioId) {
   }
 }
 
+function normalizarConexionIdReset(conexionWhatsappId) {
+  if (conexionWhatsappId == null || String(conexionWhatsappId).trim() === "") {
+    return null;
+  }
+  return String(conexionWhatsappId).trim();
+}
+
 /**
  * Tras envío exitoso de RM24H: corta automatización sin mensaje WA ni cancelar seguimientos CRM.
  */
-async function finalizarFlujoLeadTrasRemarketing(numero, usuarioId) {
+async function finalizarFlujoLeadTrasRemarketing(
+  numero,
+  usuarioId,
+  conexionWhatsappId = null
+) {
   const num = String(numero || "").trim();
   const uid =
     usuarioId != null && usuarioId !== "" ? String(usuarioId).trim() : null;
+  const conexionId = normalizarConexionIdReset(conexionWhatsappId);
 
   if (!num) return { ok: false, motivo: "sin_numero" };
 
-  limpiarSesionIAPendiente(uid, num);
+  if (conexionId) {
+    limpiarSesionIAPendiente(uid, conexionId, num);
+  } else {
+    console.log(
+      "[RM24H_MULTI] finalizar flujo omitido sesión IA — sin conexion_whatsapp_id",
+      { lead: num, usuario: uid }
+    );
+  }
+
   await limpiarHistorialFlujoLead(num, uid);
 
   console.log("[RM24H] flujo finalizado tras remarketing", {
     lead: num,
     usuario: uid,
+    conexion_whatsapp_id: conexionId,
   });
 
   return { ok: true };
@@ -95,22 +116,35 @@ async function finalizarFlujoLeadTrasRemarketing(numero, usuarioId) {
 /**
  * Limpia solo estado de automatización (memoria IA + seguimientos + historial flujo).
  */
-async function resetearFlujoLead(numero, usuarioId) {
+async function resetearFlujoLead(numero, usuarioId, conexionWhatsappId = null) {
   const num = String(numero || "").trim();
   const uid =
     usuarioId != null && usuarioId !== "" ? String(usuarioId).trim() : null;
+  const conexionId = normalizarConexionIdReset(conexionWhatsappId);
 
   if (!num) return { ok: false, motivo: "sin_numero" };
 
-  console.log("[RESETBOT] detectado", { lead: num, usuario: uid });
+  console.log("[RESETBOT] detectado", {
+    lead: num,
+    usuario: uid,
+    conexion_whatsapp_id: conexionId,
+  });
 
-  limpiarSesionIAPendiente(uid, num);
+  if (conexionId) {
+    limpiarSesionIAPendiente(uid, conexionId, num);
+  } else {
+    console.log(
+      "[RM24H_MULTI] resetbot omitido sesión IA — sin conexion_whatsapp_id",
+      { lead: num, usuario: uid }
+    );
+  }
 
   if (uid) {
     try {
       await cancelarRemarketing24hPorResetbot({
         usuario_id: uid,
         cliente_numero: num,
+        conexion_whatsapp_id: conexionId,
       });
     } catch (err) {
       console.log(
@@ -127,10 +161,12 @@ async function resetearFlujoLead(numero, usuarioId) {
   console.log("[RESETBOT] esperando nuevo activador");
 
   try {
-    await enviarTextoWhatsApp(num, MENSAJE_CONFIRMACION, {
-      usuarioId: uid,
-      _soloEnvioMeta: true,
-    });
+    const opEnvio = { usuarioId: uid, _soloEnvioMeta: true };
+    if (conexionId) {
+      opEnvio.conexionWhatsappId = conexionId;
+      opEnvio.strictConexionWhatsappId = true;
+    }
+    await enviarTextoWhatsApp(num, MENSAJE_CONFIRMACION, opEnvio);
   } catch (err) {
     console.log("[RESETBOT] WhatsApp confirmación:", err.message || err);
   }

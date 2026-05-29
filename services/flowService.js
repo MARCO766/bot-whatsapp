@@ -400,6 +400,8 @@ async function ejecutarFlujo(
       await iniciarRemarketing24h({
         usuario_id: usuarioId,
         cliente_numero: numero,
+        conexion_whatsapp_id:
+          flowContext.conexionWhatsappId ?? conexionLineaEntrante ?? null,
         flujo_id: String(flujoId || ""),
         flujo_nombre: opts.flujoNombre || null,
         config: rm24h.config,
@@ -644,6 +646,8 @@ async function ejecutarFlujo(
           await cancelarRemarketing24h({
             usuario_id: usuarioId,
             cliente_numero: numero,
+            conexion_whatsapp_id:
+              flowContext.conexionWhatsappId ?? conexionLineaEntrante ?? null,
             flujo_id: String(flujoId),
             motivo: "conversion",
             flujo_nombre: opts.flujoNombre || null,
@@ -1244,7 +1248,7 @@ async function procesarMensajeEntrante(
   }
 
   if (esComandoResetFlujo(texto)) {
-    await resetearFlujoLead(numero, usuarioId);
+    await resetearFlujoLead(numero, usuarioId, opts.conexionWhatsappId || null);
     return true;
   }
 
@@ -1301,6 +1305,7 @@ async function procesarMensajeEntrante(
       await resetearRemarketing24h({
         usuario_id: usuarioId,
         cliente_numero: numero,
+        conexion_whatsapp_id: opts.conexionWhatsappId ?? null,
       });
     } catch (err) {
       console.log("[RM24H] error al resetear por respuesta:", err.response?.data || err.message);

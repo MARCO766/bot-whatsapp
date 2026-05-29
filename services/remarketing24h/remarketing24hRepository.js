@@ -25,10 +25,31 @@ function estadosAbiertosFilter() {
   return ESTADOS_ABIERTOS.join(",");
 }
 
-async function buscarAbierto({ usuario_id, cliente_numero, flujo_id }) {
+function normalizarConexionId(conexion_whatsapp_id) {
+  if (conexion_whatsapp_id == null || String(conexion_whatsapp_id).trim() === "") {
+    return null;
+  }
+  return String(conexion_whatsapp_id).trim();
+}
+
+function filtroConexionPostgrest(conexion_whatsapp_id) {
+  const conexion = normalizarConexionId(conexion_whatsapp_id);
+  if (conexion) {
+    return `&conexion_whatsapp_id=eq.${encodeURIComponent(conexion)}`;
+  }
+  return "&conexion_whatsapp_id=is.null";
+}
+
+async function buscarAbierto({
+  usuario_id,
+  cliente_numero,
+  conexion_whatsapp_id,
+  flujo_id,
+}) {
   const response = await axios.get(
     `${SUPABASE_URL}/rest/v1/remarketing_global_24h?usuario_id=eq.${usuario_id}` +
       `&cliente_numero=eq.${encodeURIComponent(cliente_numero)}` +
+      filtroConexionPostgrest(conexion_whatsapp_id) +
       `&flujo_id=eq.${encodeURIComponent(flujo_id)}` +
       `&estado=in.(${estadosAbiertosFilter()})` +
       `&activo=eq.true` +
@@ -42,11 +63,13 @@ async function buscarAbierto({ usuario_id, cliente_numero, flujo_id }) {
 async function buscarInconsistenteActivoApagado({
   usuario_id,
   cliente_numero,
+  conexion_whatsapp_id,
   flujo_id,
 }) {
   const response = await axios.get(
     `${SUPABASE_URL}/rest/v1/remarketing_global_24h?usuario_id=eq.${usuario_id}` +
       `&cliente_numero=eq.${encodeURIComponent(cliente_numero)}` +
+      filtroConexionPostgrest(conexion_whatsapp_id) +
       `&flujo_id=eq.${encodeURIComponent(flujo_id)}` +
       `&estado=eq.${ESTADOS_RM24H.ACTIVO}` +
       `&activo=eq.false` +
@@ -76,10 +99,15 @@ async function actualizarPorId(id, payload, filaActual = {}) {
   return (response.data || [])[0] || null;
 }
 
-async function listarActivosPorCliente(usuario_id, cliente_numero) {
+async function listarActivosPorCliente(
+  usuario_id,
+  cliente_numero,
+  conexion_whatsapp_id
+) {
   const response = await axios.get(
     `${SUPABASE_URL}/rest/v1/remarketing_global_24h?usuario_id=eq.${usuario_id}` +
       `&cliente_numero=eq.${encodeURIComponent(cliente_numero)}` +
+      filtroConexionPostgrest(conexion_whatsapp_id) +
       `&estado=eq.${ESTADOS_RM24H.ACTIVO}` +
       `&activo=eq.true&select=*`,
     { headers: headers() }
@@ -202,7 +230,11 @@ async function obtenerNombreFlujo(usuario_id, flujo_id) {
   return null;
 }
 
-async function listarReinicioPorCliente(usuario_id, cliente_numero) {
+async function listarReinicioPorCliente(
+  usuario_id,
+  cliente_numero,
+  conexion_whatsapp_id
+) {
   const estados = [
     ESTADOS_RM24H.ACTIVO,
     ESTADOS_RM24H.PENDIENTE_DISPARO,
@@ -212,6 +244,7 @@ async function listarReinicioPorCliente(usuario_id, cliente_numero) {
   const response = await axios.get(
     `${SUPABASE_URL}/rest/v1/remarketing_global_24h?usuario_id=eq.${usuario_id}` +
       `&cliente_numero=eq.${encodeURIComponent(cliente_numero)}` +
+      filtroConexionPostgrest(conexion_whatsapp_id) +
       `&estado=in.(${estados})&activo=eq.true&select=*`,
     { headers: headers() }
   );
@@ -219,6 +252,7 @@ async function listarReinicioPorCliente(usuario_id, cliente_numero) {
 }
 
 module.exports = {
+  normalizarConexionId,
   buscarAbierto,
   buscarInconsistenteActivoApagado,
   insertar,

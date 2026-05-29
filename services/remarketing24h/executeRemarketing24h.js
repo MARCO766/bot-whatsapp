@@ -9,6 +9,7 @@ const {
   MAX_INTENTOS,
 } = require("./constants");
 const repo = require("./remarketing24hRepository");
+const { normalizarConexionId } = repo;
 const { finalizarFlujoLeadTrasRemarketing } = require("../resetFlujoLeadService");
 const { nowUtc } = require("../seguimiento/timestamps");
 
@@ -62,6 +63,34 @@ async function marcarExpiradoVentana(fila) {
   });
 }
 
+const MOTIVO_SIN_CONEXION = "sin_conexion_whatsapp_id";
+
+function conexionWhatsappDeFila(fila) {
+  return normalizarConexionId(fila?.conexion_whatsapp_id);
+}
+
+async function cerrarSinConexionWhatsapp(fila) {
+  await repo.actualizarPorId(
+    fila.id,
+    {
+      estado: ESTADOS_RM24H.CERRADO_SIN_RESPUESTA,
+      activo: false,
+      cancelado_en: nowUtc(),
+      motivo_cancelacion: MOTIVO_SIN_CONEXION,
+    },
+    fila
+  );
+  console.log(
+    "[RM24H_MULTI] envío omitido — fila legacy sin conexion_whatsapp_id (no inferir línea, no fallback, no último chat)",
+    {
+      id: fila.id,
+      cliente: fila.cliente_numero,
+      flujo_id: fila.flujo_id,
+      usuario_id: fila.usuario_id,
+    }
+  );
+}
+
 async function cerrarTrasEnvio(fila, nuevosIntentos, ahora) {
   await repo.actualizarPorId(
     fila.id,
@@ -85,7 +114,8 @@ async function cerrarTrasEnvio(fila, nuevosIntentos, ahora) {
   try {
     await finalizarFlujoLeadTrasRemarketing(
       fila.cliente_numero,
-      fila.usuario_id
+      fila.usuario_id,
+      conexionWhatsappDeFila(fila)
     );
   } catch (err) {
     console.log(
@@ -131,16 +161,29 @@ async function procesarPendienteDisparo(fila) {
     return { ok: false, motivo: "mensaje_vacio" };
   }
 
+  const conexionEnvio = conexionWhatsappDeFila(fila);
+  if (!conexionEnvio) {
+    await cerrarSinConexionWhatsapp(fila);
+    return { ok: false, motivo: MOTIVO_SIN_CONEXION };
+  }
+
   const reservado = await repo.reservarParaEnvio(fila.id, fila);
   if (!reservado) {
     console.log("[RM24H] ya reservado por otro worker:", fila.id);
     return { ok: false, motivo: "no_reservado" };
   }
 
+  const conexionReservada = conexionWhatsappDeFila(reservado);
+  if (!conexionReservada) {
+    await cerrarSinConexionWhatsapp(reservado);
+    return { ok: false, motivo: MOTIVO_SIN_CONEXION };
+  }
+
   try {
     console.log("[RM24H_WORKER] enviando", {
       id: reservado.id,
       cliente: reservado.cliente_numero,
+      conexion_whatsapp_id: conexionReservada,
       intento: intentosActuales + 1,
       contenidos: contenidos.length,
       usuario_id: reservado.usuario_id,
@@ -148,12 +191,16 @@ async function procesarPendienteDisparo(fila) {
     console.log("[RM24H] enviando WhatsApp", {
       id: reservado.id,
       cliente: reservado.cliente_numero,
+      conexion_whatsapp_id: conexionReservada,
       intento: intentosActuales + 1,
     });
     console.log("[RM24H] enviando", reservado.cliente_numero);
 
     await enviarContenidosRemarketing(reservado.cliente_numero, contenidos, {
       usuarioId: reservado.usuario_id,
+      conexionWhatsappId: conexionReservada,
+      strictConexionWhatsappId: true,
+      origin: "remarketing24h",
     });
 
     console.log("[RM24H_WORKER] enviado ok", {
