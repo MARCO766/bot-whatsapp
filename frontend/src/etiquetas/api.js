@@ -1,4 +1,5 @@
 import { resolveApiUrl } from "../flujos/apiBase";
+import { CONEXION_TODAS } from "../utils/conexionesInbox";
 
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
@@ -35,20 +36,45 @@ async function request(path, options = {}) {
   return data;
 }
 
-export function fetchEtiquetas() {
-  return request("/api/etiquetas");
+function conexionParam(conexionWhatsappId) {
+  const id = conexionWhatsappId || CONEXION_TODAS;
+  return `conexion_whatsapp_id=${encodeURIComponent(id)}`;
 }
 
-export function createEtiqueta(body) {
-  return request("/api/etiquetas", { method: "POST", body: JSON.stringify(body) });
+function withConexionQuery(path, conexionWhatsappId) {
+  const sep = path.includes("?") ? "&" : "?";
+  return `${path}${sep}${conexionParam(conexionWhatsappId)}`;
 }
 
-export function updateEtiqueta(id, body) {
-  return request(`/api/etiquetas/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+function writeConexionBody(payload, conexionWhatsappId) {
+  return {
+    ...payload,
+    conexion_whatsapp_id: conexionWhatsappId,
+  };
 }
 
-export function deleteEtiqueta(id) {
-  return request(`/api/etiquetas/${id}`, { method: "DELETE" });
+export function fetchEtiquetas(conexionWhatsappId) {
+  return request(withConexionQuery("/api/etiquetas", conexionWhatsappId));
+}
+
+export function createEtiqueta(body, conexionWhatsappId) {
+  return request("/api/etiquetas", {
+    method: "POST",
+    body: JSON.stringify(writeConexionBody(body, conexionWhatsappId)),
+  });
+}
+
+export function updateEtiqueta(id, body, conexionWhatsappId) {
+  return request(withConexionQuery(`/api/etiquetas/${id}`, conexionWhatsappId), {
+    method: "PATCH",
+    body: JSON.stringify(writeConexionBody(body, conexionWhatsappId)),
+  });
+}
+
+export function deleteEtiqueta(id, conexionWhatsappId) {
+  return request(withConexionQuery(`/api/etiquetas/${id}`, conexionWhatsappId), {
+    method: "DELETE",
+  });
 }
 
 export function loginUrl() {

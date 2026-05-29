@@ -2,6 +2,17 @@ import React, { useEffect, useState } from "react";
 import { etiquetasStyles } from "./etiquetas/styles";
 import { useEtiquetas } from "./etiquetas/useEtiquetas";
 import { loginUrl } from "./etiquetas/api";
+import ConexionLineaTabs from "./components/conexion/ConexionLineaTabs";
+import { CONEXION_TODAS } from "./utils/conexionesInbox";
+
+function LineaBadge({ nombre }) {
+  if (!nombre) return null;
+  return (
+    <span className="etqLineaBadge" title="Línea WhatsApp">
+      📱 {nombre}
+    </span>
+  );
+}
 
 function TagModal({ open, title, initial, saving, onClose, onSave }) {
   const [nombre, setNombre] = useState("");
@@ -59,6 +70,14 @@ export default function Etiquetas() {
     crear,
     editar,
     eliminar,
+    conexionesInbox,
+    conexionSeleccionadaId,
+    lineaLabel,
+    seleccionarConexion,
+    puedeEscribir,
+    mostrarBadgeLinea,
+    etiquetaTabConexion,
+    abrirCrear,
   } = useEtiquetas();
 
   const [vista, setVista] = useState("lista");
@@ -78,6 +97,16 @@ export default function Etiquetas() {
     if (ok) setDeleteTarget(null);
   }
 
+  function openCreateModal() {
+    if (!abrirCrear()) return;
+    setModal({ mode: "create" });
+  }
+
+  function openEditModal(item) {
+    if (!puedeEscribir) return;
+    setModal({ mode: "edit", item });
+  }
+
   const totalLeads = etiquetas.reduce((s, t) => s + (t.leadsCount || 0), 0);
 
   return (
@@ -91,17 +120,36 @@ export default function Etiquetas() {
       <div className="etqTopBar">
         <div>
           <h1>🏷️ Etiquetas</h1>
-          <p>Organiza leads y chats sin afectar conversiones</p>
+          <p>
+            Organiza leads y chats sin afectar conversiones
+            {lineaLabel ? ` · Vista: ${lineaLabel}` : ""}
+          </p>
         </div>
         <button
           type="button"
           className="etqBtn etqBtnPrimary"
-          onClick={() => setModal({ mode: "create" })}
-          disabled={!!apiError}
+          onClick={openCreateModal}
+          disabled={!!apiError || !puedeEscribir}
         >
           + Nueva etiqueta
         </button>
       </div>
+
+      {conexionesInbox.length > 0 && (
+        <ConexionLineaTabs
+          conexionesInbox={conexionesInbox}
+          conexionSeleccionadaId={conexionSeleccionadaId}
+          onSeleccionar={seleccionarConexion}
+          etiquetaTabConexion={etiquetaTabConexion}
+        />
+      )}
+
+      {!puedeEscribir && conexionSeleccionadaId === CONEXION_TODAS && (
+        <p className="etqConexionHint">
+          Vista global: todas las etiquetas por línea. Para crear, editar o eliminar, elige un número
+          WhatsApp.
+        </p>
+      )}
 
       <p className="etqNote">
         Las etiquetas son organización. No suman ventas. Las ventas se registran con el nodo Conversión.
@@ -172,27 +220,38 @@ export default function Etiquetas() {
             <p>
               {query
                 ? "No hay etiquetas que coincidan con la búsqueda."
-                : "Aún no tienes etiquetas. Crea la primera."}
+                : conexionSeleccionadaId === CONEXION_TODAS
+                  ? "No hay etiquetas en ninguna línea."
+                  : "Aún no tienes etiquetas en esta línea. Crea la primera."}
             </p>
           </div>
         ) : vista === "tarjetas" ? (
           <div className="etqGrid">
             {etiquetas.map((t) => (
               <div key={t.id} className="etqTagCard" style={{ "--tag-color": t.color }}>
-                <h3>{t.nombre}</h3>
+                <h3>
+                  {t.nombre}
+                  {mostrarBadgeLinea && <LineaBadge nombre={t.conexion_nombre} />}
+                </h3>
                 <p className="leads">{t.leadsCount || 0} leads</p>
-                <div className="actions">
-                  <button
-                    type="button"
-                    className="etqBtn etqBtnGhost"
-                    onClick={() => setModal({ mode: "edit", item: t })}
-                  >
-                    Editar
-                  </button>
-                  <button type="button" className="etqBtn etqBtnDanger" onClick={() => setDeleteTarget(t)}>
-                    Eliminar
-                  </button>
-                </div>
+                {puedeEscribir && (
+                  <div className="actions">
+                    <button
+                      type="button"
+                      className="etqBtn etqBtnGhost"
+                      onClick={() => openEditModal(t)}
+                    >
+                      Editar
+                    </button>
+                    <button
+                      type="button"
+                      className="etqBtn etqBtnDanger"
+                      onClick={() => setDeleteTarget(t)}
+                    >
+                      Eliminar
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -201,9 +260,10 @@ export default function Etiquetas() {
             <thead>
               <tr>
                 <th>Etiqueta</th>
+                {mostrarBadgeLinea && <th>Línea</th>}
                 <th>Color</th>
                 <th>Leads</th>
-                <th>Acciones</th>
+                {puedeEscribir && <th>Acciones</th>}
               </tr>
             </thead>
             <tbody>
@@ -213,22 +273,33 @@ export default function Etiquetas() {
                     <span className="etqDot" style={{ background: t.color }} />
                     {t.nombre}
                   </td>
+                  {mostrarBadgeLinea && (
+                    <td>
+                      <LineaBadge nombre={t.conexion_nombre} />
+                    </td>
+                  )}
                   <td>
                     <code>{t.color}</code>
                   </td>
                   <td>{t.leadsCount || 0}</td>
-                  <td style={{ display: "flex", gap: 8 }}>
-                    <button
-                      type="button"
-                      className="etqBtn etqBtnGhost"
-                      onClick={() => setModal({ mode: "edit", item: t })}
-                    >
-                      Editar
-                    </button>
-                    <button type="button" className="etqBtn etqBtnDanger" onClick={() => setDeleteTarget(t)}>
-                      Eliminar
-                    </button>
-                  </td>
+                  {puedeEscribir && (
+                    <td style={{ display: "flex", gap: 8 }}>
+                      <button
+                        type="button"
+                        className="etqBtn etqBtnGhost"
+                        onClick={() => openEditModal(t)}
+                      >
+                        Editar
+                      </button>
+                      <button
+                        type="button"
+                        className="etqBtn etqBtnDanger"
+                        onClick={() => setDeleteTarget(t)}
+                      >
+                        Eliminar
+                      </button>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -250,8 +321,8 @@ export default function Etiquetas() {
           <div className="etqModal" onClick={(e) => e.stopPropagation()}>
             <h2>¿Eliminar etiqueta?</h2>
             <p style={{ color: "#94a3b8", marginBottom: 16 }}>
-              Se eliminará <strong style={{ color: "#fff" }}>{deleteTarget.nombre}</strong> y sus
-              asignaciones en chats.
+              Se eliminará <strong style={{ color: "#fff" }}>{deleteTarget.nombre}</strong> de esta
+              línea.
             </p>
             <div className="etqModalActions">
               <button type="button" className="etqBtn etqBtnGhost" onClick={() => setDeleteTarget(null)}>

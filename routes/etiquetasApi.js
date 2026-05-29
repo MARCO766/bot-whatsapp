@@ -1,5 +1,5 @@
 /**
- * API JSON — Etiquetas (organización de leads/chats).
+ * API JSON — Etiquetas (organización de leads/chats) por línea WhatsApp.
  */
 const express = require("express");
 const router = express.Router();
@@ -8,6 +8,7 @@ const {
   createEtiqueta,
   updateEtiqueta,
   deleteEtiqueta,
+  parseScope,
 } = require("../services/etiquetasService");
 const rt = require("../services/realtimeService");
 
@@ -20,6 +21,14 @@ function uid(req) {
   return req.session.usuario.id;
 }
 
+function leerConexionScope(req) {
+  const raw =
+    req.body?.conexion_whatsapp_id ??
+    req.body?.conexionWhatsappId ??
+    req.query?.conexion_whatsapp_id;
+  return parseScope(raw);
+}
+
 function handleError(res, error, label) {
   const status = error.status || error.response?.status || 500;
   console.log(`[etiquetasApi] ${label}:`, error.response?.data || error.message);
@@ -29,9 +38,11 @@ function handleError(res, error, label) {
   });
 }
 
+// GET /api/etiquetas?conexion_whatsapp_id=<uuid>|__todas__
 router.get("/api/etiquetas", protegerApi, async (req, res) => {
   try {
-    res.json(await listEtiquetas(uid(req)));
+    const scope = leerConexionScope(req);
+    res.json(await listEtiquetas(uid(req), scope));
   } catch (error) {
     handleError(res, error, "GET");
   }
@@ -39,7 +50,8 @@ router.get("/api/etiquetas", protegerApi, async (req, res) => {
 
 router.post("/api/etiquetas", protegerApi, async (req, res) => {
   try {
-    const result = await createEtiqueta(uid(req), req.body);
+    const scope = leerConexionScope(req);
+    const result = await createEtiqueta(uid(req), req.body, scope);
     rt.etiquetaActualizada(req, uid(req), { accion: "creada", etiqueta: result?.etiqueta || result });
     res.json(result);
   } catch (error) {
@@ -49,8 +61,13 @@ router.post("/api/etiquetas", protegerApi, async (req, res) => {
 
 router.patch("/api/etiquetas/:id", protegerApi, async (req, res) => {
   try {
-    const result = await updateEtiqueta(uid(req), req.params.id, req.body);
-    rt.etiquetaActualizada(req, uid(req), { accion: "actualizada", id: req.params.id, etiqueta: result?.etiqueta || result });
+    const scope = leerConexionScope(req);
+    const result = await updateEtiqueta(uid(req), req.params.id, req.body, scope);
+    rt.etiquetaActualizada(req, uid(req), {
+      accion: "actualizada",
+      id: req.params.id,
+      etiqueta: result?.etiqueta || result,
+    });
     res.json(result);
   } catch (error) {
     handleError(res, error, "PATCH");
@@ -59,7 +76,8 @@ router.patch("/api/etiquetas/:id", protegerApi, async (req, res) => {
 
 router.delete("/api/etiquetas/:id", protegerApi, async (req, res) => {
   try {
-    const result = await deleteEtiqueta(uid(req), req.params.id);
+    const scope = leerConexionScope(req);
+    const result = await deleteEtiqueta(uid(req), req.params.id, scope);
     rt.etiquetaActualizada(req, uid(req), { accion: "eliminada", id: req.params.id });
     res.json(result);
   } catch (error) {

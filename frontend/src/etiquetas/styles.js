@@ -11,6 +11,20 @@ export const etiquetasStyles = `
   border-radius: 14px; padding: 12px 16px; font-size: 13px; color: #bbf7d0;
   margin-bottom: 18px; line-height: 1.5;
 }
+.etqConexionHint {
+  font-size: 13px; color: #94a3b8; margin: -8px 0 14px; line-height: 1.45;
+}
+.etqLineaBadge {
+  display: inline-flex; align-items: center; gap: 4px;
+  margin-left: 8px; padding: 3px 9px; border-radius: 999px;
+  font-size: 11px; font-weight: 700; color: #86efac;
+  background: rgba(34,197,94,.12); border: 1px solid rgba(34,197,94,.25);
+  vertical-align: middle;
+}
+.etqTagCard h3 {
+  margin: 12px 0 6px; font-size: 18px;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+}
 .etqToolbar {
   display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
   margin-bottom: 18px;
@@ -62,7 +76,6 @@ export const etiquetasStyles = `
   content: ""; position: absolute; top: 0; left: 0; right: 0; height: 4px;
   background: var(--tag-color, #22c55e);
 }
-.etqTagCard h3 { margin: 12px 0 6px; font-size: 18px; }
 .etqTagCard .leads { color: #94a3b8; font-size: 13px; margin-bottom: 14px; }
 .etqTagCard .actions { display: flex; gap: 8px; }
 .etqTable { width: 100%; border-collapse: collapse; }
