@@ -1,5 +1,100 @@
 import { FLOW_FOLDERS, FLOW_STATES } from "./constants";
 
+export const FLOW_DRAG_MIME = "application/x-macbot-flow";
+
+export const CARPETA_THEME_MAP = {
+  ventas_automaticas: {
+    icon: "🪙",
+    accent: "#22c55e",
+    glow: "rgba(34, 197, 94, 0.28)",
+    bg: "rgba(34, 197, 94, 0.1)",
+  },
+  lanzamientos: {
+    icon: "🚀",
+    accent: "#a855f7",
+    glow: "rgba(168, 85, 247, 0.26)",
+    bg: "rgba(168, 85, 247, 0.1)",
+  },
+  recuperacion: {
+    icon: "🛒",
+    accent: "#f59e0b",
+    glow: "rgba(245, 158, 11, 0.28)",
+    bg: "rgba(245, 158, 11, 0.1)",
+  },
+  atencion: {
+    icon: "🎧",
+    accent: "#22d3ee",
+    glow: "rgba(34, 211, 238, 0.26)",
+    bg: "rgba(34, 211, 238, 0.09)",
+  },
+  retargeting: {
+    icon: "🎯",
+    accent: "#f43f5e",
+    glow: "rgba(244, 63, 94, 0.26)",
+    bg: "rgba(244, 63, 94, 0.09)",
+  },
+  evergreen: {
+    icon: "∞",
+    accent: "#3b82f6",
+    glow: "rgba(59, 130, 246, 0.26)",
+    bg: "rgba(59, 130, 246, 0.09)",
+  },
+  sin_carpeta: {
+    icon: "📂",
+    accent: "#94a3b8",
+    glow: "rgba(148, 163, 184, 0.22)",
+    bg: "rgba(148, 163, 184, 0.08)",
+  },
+};
+
+export const CARPETA_THEME_CUSTOM = {
+  icon: "✦",
+  accent: "#cbd5e1",
+  glow: "rgba(203, 213, 225, 0.2)",
+  bg: "rgba(148, 163, 184, 0.1)",
+  esCustom: true,
+};
+
+export function getCarpetaTheme(categoria, { esSistema = false, esCustom = false } = {}) {
+  if (esCustom || (!esSistema && categoria && categoria !== "sin_carpeta")) {
+    const tint = CARPETA_THEME_MAP[categoria];
+    return {
+      ...CARPETA_THEME_CUSTOM,
+      ...(tint
+        ? { glow: tint.glow, bg: "rgba(148, 163, 184, 0.12)" }
+        : {}),
+      esCustom: true,
+    };
+  }
+  return CARPETA_THEME_MAP[categoria] || CARPETA_THEME_MAP.sin_carpeta;
+}
+
+export function resolveFlowCarpetaTheme(flow, carpetas = []) {
+  const meta = flow?.meta || {};
+  if (meta.carpeta_id) {
+    const row = carpetas.find((c) => c.id === meta.carpeta_id);
+    if (row) {
+      return getCarpetaTheme(row.categoria || row.slug, {
+        esSistema: row.es_sistema,
+        esCustom: !row.es_sistema,
+      });
+    }
+  }
+  const slug = meta.carpeta || "sin_carpeta";
+  return getCarpetaTheme(slug, { esSistema: true });
+}
+
+export function parseFlowDragPayload(dataTransfer) {
+  if (!dataTransfer) return null;
+  try {
+    const raw = dataTransfer.getData(FLOW_DRAG_MIME);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
 export function folderLabel(carpetaSlugOrFlow, carpetas = []) {
   let slug = carpetaSlugOrFlow;
   let carpetaId = null;

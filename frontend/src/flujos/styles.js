@@ -742,6 +742,130 @@ export const flujosStyles = `
   font-size: 0.75rem;
 }
 
+.flFoldersGroupToggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  margin: 0 0 6px;
+  padding: 4px 2px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: inherit;
+  text-align: left;
+}
+
+.flFoldersGroupToggle:hover .flFoldersGroupLabel {
+  color: #94a3b8;
+}
+
+.flFoldersGroupChevron {
+  font-size: 0.72rem;
+  color: #64748b;
+  margin-left: 8px;
+}
+
+.flFoldersGroup--collapsed .flFolders {
+  display: none;
+}
+
+.flFolderChipDrop {
+  position: relative;
+  border-radius: 999px;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.flFolderChipDrop--active {
+  transform: scale(1.03);
+  z-index: 2;
+}
+
+.flFolderDropHint {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 6px);
+  transform: translateX(-50%);
+  white-space: nowrap;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.92);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+  animation: flDropHintIn 0.2s ease;
+}
+
+@keyframes flDropHintIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(4px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+.flFoldersPremium--dragging {
+  outline: 1px dashed rgba(148, 163, 184, 0.15);
+  outline-offset: 4px;
+}
+
+.flujosPage--dragging .flGrid,
+.flujosPage--dragging .flList {
+  opacity: 0.92;
+}
+
+.flDragHandle {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin-top: 2px;
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(15, 23, 42, 0.65);
+  color: #64748b;
+  font-size: 1rem;
+  line-height: 1;
+  cursor: grab;
+  user-select: none;
+  transition: border-color 0.15s, color 0.15s, box-shadow 0.15s, background 0.15s;
+}
+
+.flDragHandle:hover {
+  color: #94a3b8;
+  border-color: rgba(34, 197, 94, 0.35);
+  background: rgba(34, 197, 94, 0.08);
+}
+
+.flDragHandle:active {
+  cursor: grabbing;
+}
+
+.flDragHandle--disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.flCard--dragging {
+  transform: scale(1.02);
+  z-index: 5;
+  box-shadow:
+    0 4px 6px rgba(0, 0, 0, 0.12),
+    0 16px 40px rgba(0, 0, 0, 0.28),
+    0 0 0 1px rgba(34, 197, 94, 0.2),
+    0 0 24px rgba(34, 197, 94, 0.08);
+  border-color: rgba(34, 197, 94, 0.35) !important;
+  opacity: 0.96;
+}
+
+.flMetaChipCarpeta {
+  transition: border-color 0.15s, background 0.15s;
+}
+
 .flGrid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
@@ -806,7 +930,7 @@ export const flujosStyles = `
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 12px;
+  gap: 8px;
   position: relative;
   z-index: 2;
 }

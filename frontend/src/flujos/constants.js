@@ -1,5 +1,5 @@
 export const FLOW_FOLDERS = [
-  { id: "ventas_automaticas", label: "Ventas automáticas", icon: "💰" },
+  { id: "ventas_automaticas", label: "Ventas automáticas", icon: "🪙" },
   { id: "lanzamientos", label: "Lanzamientos", icon: "🚀" },
   { id: "recuperacion", label: "Recuperación", icon: "🛒" },
   { id: "atencion", label: "Atención", icon: "🎧" },

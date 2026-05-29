@@ -21,6 +21,9 @@ function FlowList({
   carpetas = [],
   carpetasMover = [],
   puedeEscribir = false,
+  draggingFlowId = null,
+  onFlowDragStart,
+  onFlowDragEnd,
 }) {
   const [openMenuId, setOpenMenuId] = useState(null);
 
@@ -62,6 +65,9 @@ function FlowList({
           carpetas={carpetas}
           carpetasMover={carpetasMover}
           puedeEscribir={puedeEscribir}
+          isDragging={draggingFlowId === flow.id}
+          onFlowDragStart={onFlowDragStart}
+          onFlowDragEnd={onFlowDragEnd}
         />
       ))}
     </div>

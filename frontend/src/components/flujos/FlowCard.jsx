@@ -6,6 +6,7 @@ import {
   formatMetric,
   formatRelativeTime,
   formatUltimoLead,
+  resolveFlowCarpetaTheme,
   stateMeta,
 } from "../../flujos/utils";
 import FlowActionsMenu from "./FlowActionsMenu";
@@ -37,6 +38,9 @@ function FlowCard({
   carpetas = [],
   carpetasMover = [],
   puedeEscribir = true,
+  isDragging = false,
+  onFlowDragStart,
+  onFlowDragEnd,
 }) {
   const [showTimeline, setShowTimeline] = useState(false);
   const st = stateMeta(flow.meta?.estado);
@@ -45,13 +49,32 @@ function FlowCard({
   const activos = flow.activadores?.filter((a) => a.activo).length || 0;
   const totalActivadores = flow.activadores?.length || 0;
   const isActivo = flow.meta?.estado === "activo";
+  const carpetaTheme = resolveFlowCarpetaTheme(flow, carpetas);
 
   const actividadRel = formatRelativeTime(m.ultimaActividad);
   const ultimoLeadTxt = formatUltimoLead(m.ultimoLead);
 
   return (
-    <article className={`flCard ${listMode ? "listMode" : ""} ${isMenuOpen ? "flCardMenuOpen" : ""}`}>
+    <article
+      className={`flCard ${listMode ? "listMode" : ""} ${isMenuOpen ? "flCardMenuOpen" : ""} ${
+        isDragging ? "flCard--dragging" : ""
+      }`}
+    >
       <div className="flCardHead">
+        <span
+          className={`flDragHandle ${puedeEscribir ? "" : "flDragHandle--disabled"}`}
+          draggable={puedeEscribir}
+          title={
+            puedeEscribir
+              ? "Arrastrar a una carpeta"
+              : "Selecciona una línea WhatsApp (no «Todas las líneas»)"
+          }
+          aria-label="Arrastrar flujo a carpeta"
+          onDragStart={(e) => onFlowDragStart?.(e, flow)}
+          onDragEnd={onFlowDragEnd}
+        >
+          ⠿
+        </span>
         <div className="flCardHeadMain">
           <h3 className="flCardTitle">{flow.nombre}</h3>
           <div className="flCardMeta">
@@ -66,8 +89,16 @@ function FlowCard({
               <span className="flBadgeDot" style={{ background: st.color }} />
               {st.label}
             </span>
-            <span className="flMetaChip">
-              <span className="flMetaChipIcon" aria-hidden>📁</span>
+            <span
+              className="flMetaChip flMetaChipCarpeta"
+              style={{
+                borderColor: `${carpetaTheme.accent}40`,
+                background: carpetaTheme.bg,
+              }}
+            >
+              <span className="flMetaChipIcon" aria-hidden style={{ color: carpetaTheme.accent }}>
+                {carpetaTheme.icon}
+              </span>
               {folderLabel(flow, carpetas)}
             </span>
             {mostrarBadgeLinea && (
@@ -98,11 +129,11 @@ function FlowCard({
         />
       </div>
 
-      <div className={`flPreviewWrap ${listMode ? "tall" : ""}`}>
+      <div className={`flPreviewWrap ${listMode ? "tall" : ""}`} draggable={false}>
         <FlowPreviewMini preview={flow.preview} />
       </div>
 
-      <div className="flMetrics flMetricsCompact flMetrics5">
+      <div className="flMetrics flMetricsCompact flMetrics5" draggable={false}>
         {FLOW_METRICS.map((item) => (
           <div key={item.key} className="flMetric" title={item.title}>
             <b>{formatMetric(m[item.key] ?? item.fallback ?? 0)}</b>
@@ -111,7 +142,7 @@ function FlowCard({
         ))}
       </div>
 
-      <div className="flCardActivity">
+      <div className="flCardActivity" draggable={false}>
         <div className="flCardActivityItem">
           <span className="flCardActivityLabel">Última actividad</span>
           <span className="flCardActivityValue">{actividadRel || "Sin actividad"}</span>
@@ -130,7 +161,7 @@ function FlowCard({
         expanded={showTimeline}
       />
 
-      <div className="flCardFooter">
+      <div className="flCardFooter" draggable={false}>
         <span className="flCardModified">Modificado {formatDate(flow.meta?.actualizado_en)}</span>
         <div className="flQuickActions">
           <a
@@ -138,17 +169,24 @@ function FlowCard({
             target="_blank"
             rel="noreferrer"
             className="flQuickBtn flQuickBtnPrimary"
+            draggable={false}
           >
             <span className="flQuickBtnIcon" aria-hidden>🛠</span>
             Constructor
           </a>
-          <button type="button" className="flQuickBtn" onClick={() => onToggleEstado(flow)}>
+          <button
+            type="button"
+            className="flQuickBtn"
+            draggable={false}
+            onClick={() => onToggleEstado(flow)}
+          >
             <span className="flQuickBtnIcon" aria-hidden>{isActivo ? "⏸" : "▶"}</span>
             {isActivo ? "Pausar" : "Activar"}
           </button>
           <button
             type="button"
             className={`flQuickBtn ${showTimeline ? "flQuickBtnActive" : ""}`}
+            draggable={false}
             onClick={() => setShowTimeline(!showTimeline)}
           >
             <span className="flQuickBtnIcon" aria-hidden>📊</span>

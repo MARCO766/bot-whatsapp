@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import FlowFolders from "./components/flujos/FlowFolders";
 import FlowList from "./components/flujos/FlowList";
 import FlujosHeaderStats from "./components/flujos/FlujosHeaderStats";
@@ -13,9 +13,27 @@ import { SORT_OPTIONS } from "./flujos/constants";
 import { useFlujos } from "./flujos/useFlujos";
 import { loginUrl } from "./flujos/api";
 import { CONEXION_TODAS, sameConexionId } from "./utils/conexionesInbox";
+import { FLOW_DRAG_MIME, flowMatchesFolder } from "./flujos/utils";
+
+const STORAGE_COLLAPSE = "macbot_flujos_collapse_sections";
+
+function readCollapseSections() {
+  try {
+    const raw = localStorage.getItem(STORAGE_COLLAPSE);
+    if (!raw) return { sistema: true, custom: true };
+    const parsed = JSON.parse(raw);
+    return {
+      sistema: parsed.sistema !== false,
+      custom: parsed.custom !== false,
+    };
+  } catch {
+    return { sistema: true, custom: true };
+  }
+}
 
 export default function Flujos() {
   const {
+    flows,
     filtered,
     loading,
     apiOnline,
@@ -84,6 +102,111 @@ export default function Flujos() {
   const [carpetaModal, setCarpetaModal] = useState(null);
   const [carpetaSaving, setCarpetaSaving] = useState(false);
   const [confirmDeleteCarpeta, setConfirmDeleteCarpeta] = useState(null);
+  const [draggingFlowId, setDraggingFlowId] = useState(null);
+  const [dropTargetKey, setDropTargetKey] = useState(null);
+  const [expandedSections, setExpandedSections] = useState(readCollapseSections);
+
+  const persistCollapse = useCallback((next) => {
+    setExpandedSections(next);
+    localStorage.setItem(STORAGE_COLLAPSE, JSON.stringify(next));
+  }, []);
+
+  const handleToggleSection = useCallback(
+    (key) => {
+      persistCollapse({ ...expandedSections, [key]: !expandedSections[key] });
+    },
+    [expandedSections, persistCollapse]
+  );
+
+  const handleExpandSection = useCallback(
+    (key) => {
+      if (expandedSections[key] === false) {
+        persistCollapse({ ...expandedSections, [key]: true });
+      }
+    },
+    [expandedSections, persistCollapse]
+  );
+
+  const clearDragState = useCallback(() => {
+    setDraggingFlowId(null);
+    setDropTargetKey(null);
+  }, []);
+
+  const handleFlowDragStart = useCallback(
+    (e, flow) => {
+      if (!puedeEscribir) {
+        e.preventDefault();
+        return;
+      }
+      e.stopPropagation();
+      setDraggingFlowId(flow.id);
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData(
+        FLOW_DRAG_MIME,
+        JSON.stringify({
+          flowId: flow.id,
+          conexion_whatsapp_id: flow.conexion_whatsapp_id || null,
+        })
+      );
+    },
+    [puedeEscribir]
+  );
+
+  const handleFlowDragEnd = useCallback(() => {
+    clearDragState();
+  }, [clearDragState]);
+
+  const handleFlowDropOnFolder = useCallback(
+    async (folderKey, folderItem) => {
+      if (!puedeEscribir) {
+        showToast("Selecciona una línea WhatsApp (no «Todas las líneas»)", "error");
+        clearDragState();
+        return;
+      }
+
+      const flow = flows.find((f) => f.id === draggingFlowId);
+      if (!flow) {
+        clearDragState();
+        return;
+      }
+
+      if (
+        flow.conexion_whatsapp_id &&
+        !sameConexionId(flow.conexion_whatsapp_id, conexionSeleccionadaId)
+      ) {
+        showToast("Este flujo pertenece a otra línea WhatsApp", "error");
+        clearDragState();
+        return;
+      }
+
+      if (
+        folderItem?.conexion_whatsapp_id &&
+        !sameConexionId(folderItem.conexion_whatsapp_id, conexionSeleccionadaId)
+      ) {
+        showToast("Esta carpeta pertenece a otra línea WhatsApp", "error");
+        clearDragState();
+        return;
+      }
+
+      if (flowMatchesFolder(flow, folderKey, carpetas)) {
+        clearDragState();
+        return;
+      }
+
+      await moveToFolder(flow.id, folderKey, folderItem?.nombre);
+      clearDragState();
+    },
+    [
+      puedeEscribir,
+      draggingFlowId,
+      flows,
+      conexionSeleccionadaId,
+      carpetas,
+      moveToFolder,
+      showToast,
+      clearDragState,
+    ]
+  );
 
   async function handleCreate() {
     if (!newFlowName.trim()) return;
@@ -99,7 +222,7 @@ export default function Flujos() {
   }
 
   return (
-    <div className="flujosPage">
+    <div className={`flujosPage ${draggingFlowId ? "flujosPage--dragging" : ""}`}>
       <style>{flujosStyles}</style>
 
       {toast && (
@@ -249,6 +372,13 @@ export default function Flujos() {
         conexionesMap={Object.fromEntries(
           conexionesInbox.map((c) => [c.id, etiquetaTabConexion(c)])
         )}
+        draggingFlowId={draggingFlowId}
+        dropTargetKey={dropTargetKey}
+        onDropTargetChange={setDropTargetKey}
+        onFlowDrop={handleFlowDropOnFolder}
+        expandedSections={expandedSections}
+        onToggleSection={handleToggleSection}
+        onExpandSection={handleExpandSection}
       />
 
       <div className="flToolbar">
@@ -352,6 +482,9 @@ export default function Flujos() {
         carpetas={carpetas}
         carpetasMover={carpetasMoverMenu}
         puedeEscribir={puedeEscribir}
+        draggingFlowId={draggingFlowId}
+        onFlowDragStart={handleFlowDragStart}
+        onFlowDragEnd={handleFlowDragEnd}
       />
 
       <FlowVersionsModal
