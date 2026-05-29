@@ -22,14 +22,30 @@ function logFlowKey(usuarioId, conexionWhatsappId, numero) {
 
 function guardarSesionIAPendiente(payload) {
   const { usuarioId, conexionWhatsappId, numero } = payload;
-  const key = claveSesion(usuarioId, conexionWhatsappId, numero);
+  const conexionLinea =
+    conexionWhatsappId != null && String(conexionWhatsappId).trim() !== ""
+      ? String(conexionWhatsappId).trim()
+      : payload.flowContext?.conexionWhatsappId != null &&
+          String(payload.flowContext.conexionWhatsappId).trim() !== ""
+        ? String(payload.flowContext.conexionWhatsappId).trim()
+        : null;
+
+  if (!conexionLinea) {
+    console.log("[IA_MULTI] sesión omitida sin conexionWhatsappId", {
+      usuarioId,
+      numero,
+    });
+    return null;
+  }
+
+  const key = claveSesion(usuarioId, conexionLinea, numero);
   if (!numero || key.endsWith(":")) return null;
 
-  logFlowKey(usuarioId, conexionWhatsappId, numero);
+  logFlowKey(usuarioId, conexionLinea, numero);
 
   const sesion = {
     ...payload,
-    conexionWhatsappId: conexionWhatsappId || payload.flowContext?.conexionWhatsappId || null,
+    conexionWhatsappId: conexionLinea,
     creadoEn: Date.now(),
   };
 

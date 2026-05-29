@@ -5,6 +5,10 @@
 
 const axios = require("axios");
 const { limpiarSesionIAPendiente } = require("./iaFlowSession");
+const { limpiarLastReplies: limpiarLastRepliesPro } = require("./iaProService");
+const {
+  limpiarLastReplies: limpiarLastRepliesOpenAI,
+} = require("./openaiAgentService");
 const { enviarTextoWhatsApp } = require("./whatsappService");
 const {
   cancelarRemarketing24hPorResetbot,
@@ -28,14 +32,27 @@ function esComandoResetFlujo(texto) {
   return String(texto || "").trim().toLowerCase() === "resetbot";
 }
 
-async function cancelarSeguimientosPendientesLead(numero, usuarioId) {
-  if (!SUPABASE_URL || !SUPABASE_KEY || !numero) return;
+async function cancelarSeguimientosPendientesLead(
+  numero,
+  usuarioId,
+  conexionWhatsappId
+) {
+  const conexionId = normalizarConexionIdReset(conexionWhatsappId);
+  if (!SUPABASE_URL || !SUPABASE_KEY || !numero || !usuarioId || !conexionId) {
+    if (numero && usuarioId && !conexionId) {
+      console.log(
+        "[IA_MULTI] resetbot omitido seguimientos — sin conexion_whatsapp_id",
+        { lead: numero, usuario: usuarioId }
+      );
+    }
+    return;
+  }
 
   const ahora = new Date().toISOString();
-  let url = `${SUPABASE_URL}/rest/v1/seguimientos_programados?cliente_numero=eq.${encodeURIComponent(numero)}&estado=eq.pendiente`;
-  if (usuarioId) {
-    url += `&usuario_id=eq.${encodeURIComponent(usuarioId)}`;
-  }
+  let url =
+    `${SUPABASE_URL}/rest/v1/seguimientos_programados?cliente_numero=eq.${encodeURIComponent(numero)}` +
+    `&estado=eq.pendiente&usuario_id=eq.${encodeURIComponent(usuarioId)}` +
+    `&conexion_whatsapp_id=eq.${encodeURIComponent(conexionId)}`;
 
   try {
     await axios.patch(
@@ -58,12 +75,21 @@ async function cancelarSeguimientosPendientesLead(numero, usuarioId) {
   }
 }
 
-async function limpiarHistorialFlujoLead(numero, usuarioId) {
-  if (!SUPABASE_URL || !SUPABASE_KEY || !numero || !usuarioId) return;
+async function limpiarHistorialFlujoLead(numero, usuarioId, conexionWhatsappId) {
+  const conexionId = normalizarConexionIdReset(conexionWhatsappId);
+  if (!SUPABASE_URL || !SUPABASE_KEY || !numero || !usuarioId || !conexionId) {
+    if (numero && usuarioId && !conexionId) {
+      console.log(
+        "[IA_MULTI] resetbot omitido historial flujo — sin conexion_whatsapp_id",
+        { lead: numero, usuario: usuarioId }
+      );
+    }
+    return;
+  }
 
   try {
     await axios.delete(
-      `${SUPABASE_URL}/rest/v1/crm_historial_cliente?cliente_numero=eq.${encodeURIComponent(numero)}&usuario_id=eq.${encodeURIComponent(usuarioId)}&tipo=eq.flujo`,
+      `${SUPABASE_URL}/rest/v1/crm_historial_cliente?cliente_numero=eq.${encodeURIComponent(numero)}&usuario_id=eq.${encodeURIComponent(usuarioId)}&tipo=eq.flujo&conexion_whatsapp_id=eq.${encodeURIComponent(conexionId)}`,
       { headers: supabaseHeaders() }
     );
   } catch (err) {
@@ -102,7 +128,7 @@ async function finalizarFlujoLeadTrasRemarketing(
     );
   }
 
-  await limpiarHistorialFlujoLead(num, uid);
+  await limpiarHistorialFlujoLead(num, uid, conexionId);
 
   console.log("[RM24H] flujo finalizado tras remarketing", {
     lead: num,
@@ -130,6 +156,8 @@ async function resetearFlujoLead(numero, usuarioId, conexionWhatsappId = null) {
 
   if (conexionId) {
     limpiarSesionIAPendiente(uid, conexionId, num);
+    limpiarLastRepliesPro(uid, conexionId, num);
+    limpiarLastRepliesOpenAI(uid, conexionId, num);
   } else {
     console.log(
       "[RM24H_MULTI] resetbot omitido sesión IA — sin conexion_whatsapp_id",
@@ -152,8 +180,8 @@ async function resetearFlujoLead(numero, usuarioId, conexionWhatsappId = null) {
     }
   }
 
-  await cancelarSeguimientosPendientesLead(num, uid);
-  await limpiarHistorialFlujoLead(num, uid);
+  await cancelarSeguimientosPendientesLead(num, uid, conexionId);
+  await limpiarHistorialFlujoLead(num, uid, conexionId);
 
   console.log("[RESETBOT] flujo cancelado");
   console.log("[RESETBOT] esperando nuevo activador");

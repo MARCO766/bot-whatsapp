@@ -752,6 +752,20 @@ async function resolverAnalisisRouter(config, mensajeLead, memoria) {
   return analizarRutaLocal(config, mensajeLead, memoria);
 }
 
+function opcionesEnvioIA(contexto, usuarioId) {
+  const conexionWhatsappId =
+    contexto?.conexionWhatsappId != null &&
+    String(contexto.conexionWhatsappId).trim() !== ""
+      ? String(contexto.conexionWhatsappId).trim()
+      : null;
+  if (!conexionWhatsappId || !usuarioId) return null;
+  return {
+    usuarioId,
+    conexionWhatsappId,
+    strictConexionWhatsappId: true,
+  };
+}
+
 async function ejecutarNodoIARouter(nodo, contexto, opts = {}) {
   const numero = contexto?.numero || contexto?.from || contexto?.telefono;
   const usuarioId = contexto?.usuarioId || null;
@@ -804,9 +818,15 @@ async function ejecutarNodoIARouter(nodo, contexto, opts = {}) {
 
     if (config.comportamiento.responderSiNoCoincide) {
       const fb = interpolarVariables(config.comportamiento.mensajeFallback, contexto).trim();
-      if (fb && numero) {
-        await enviarTextoWhatsApp(numero, fb, { usuarioId });
+      const opEnvio = opcionesEnvioIA(contexto, usuarioId);
+      if (fb && numero && opEnvio) {
+        await enviarTextoWhatsApp(numero, fb, opEnvio);
         contexto.ultimaRespuestaIA = fb;
+      } else if (fb && numero && !opEnvio) {
+        console.log("[IA_MULTI] envío omitido sin conexionWhatsappId", {
+          numero,
+          usuarioId,
+        });
       }
       return {
         ...contexto,
@@ -912,10 +932,16 @@ async function ejecutarIANodo({ numero, nodo, usuarioId, flowContext }) {
     console.log("🤖 Respuesta IA generada:", textoEnviar);
 
     let respuestaEnviada = "";
-    if (textoEnviar && numero) {
-      await enviarTextoWhatsApp(numero, textoEnviar, { usuarioId });
+    const opEnvio = opcionesEnvioIA(ctx, usuarioId);
+    if (textoEnviar && numero && opEnvio) {
+      await enviarTextoWhatsApp(numero, textoEnviar, opEnvio);
       respuestaEnviada = textoEnviar;
       console.log("✅ IA respondió por WhatsApp");
+    } else if (textoEnviar && numero && !opEnvio) {
+      console.log("[IA_MULTI] envío omitido sin conexionWhatsappId", {
+        numero,
+        usuarioId,
+      });
     } else if (!numero) {
       console.error("❌ IA no puede responder porque no hay número:", ctx);
     }
@@ -956,14 +982,20 @@ async function ejecutarIANodo({ numero, nodo, usuarioId, flowContext }) {
     console.log("🤖 Respuesta IA generada (fallback):", textoEnviar);
 
     let respuestaEnviada = "";
-    if (textoEnviar && numero) {
+    const opEnvioFb = opcionesEnvioIA(ctx, usuarioId);
+    if (textoEnviar && numero && opEnvioFb) {
       try {
-        await enviarTextoWhatsApp(numero, textoEnviar, { usuarioId });
+        await enviarTextoWhatsApp(numero, textoEnviar, opEnvioFb);
         respuestaEnviada = textoEnviar;
         console.log("✅ IA respondió por WhatsApp (fallback)");
       } catch (sendErr) {
         console.log("[IA] error enviando fallback:", sendErr.message);
       }
+    } else if (textoEnviar && numero && !opEnvioFb) {
+      console.log("[IA_MULTI] envío omitido sin conexionWhatsappId", {
+        numero,
+        usuarioId,
+      });
     }
 
     if (config.siFalla === "detener") {

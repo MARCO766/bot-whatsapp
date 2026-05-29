@@ -192,6 +192,19 @@ function pushLastReply(usuarioId, conexionWhatsappId, numero, reply) {
   return next;
 }
 
+function limpiarLastReplies(usuarioId, conexionWhatsappId, numero) {
+  if (
+    conexionWhatsappId == null ||
+    String(conexionWhatsappId).trim() === "" ||
+    !numero
+  ) {
+    return;
+  }
+  lastRepliesPorChat.delete(
+    chatKey(usuarioId, String(conexionWhatsappId).trim(), numero)
+  );
+}
+
 function esPreguntaContenido(m) {
   const temas =
     /animal|animales|granja|videojuego|videojuegos|goku|vegeta|dragon|minecraft|personaje|figura|dinosaurio|princesa/;
@@ -651,11 +664,20 @@ async function ejecutarNodoIAPro(nodo, contexto, opts = {}) {
   }
 
   let reply = limpiarReply(String(resultado.reply || "").trim());
-  if (reply && numero) {
-    await enviarTextoWhatsApp(numero, reply, { usuarioId });
+  if (reply && numero && conexionWhatsappId && usuarioId) {
+    await enviarTextoWhatsApp(numero, reply, {
+      usuarioId,
+      conexionWhatsappId,
+      strictConexionWhatsappId: true,
+    });
     contexto.ultimaRespuestaIA = reply;
     chatHistory = appendChatHistory(chatHistory, "assistant", reply);
     pushLastReply(usuarioId, conexionWhatsappId, numero, reply);
+  } else if (reply && numero && !conexionWhatsappId) {
+    console.log("[IA_MULTI] envío IA Pro omitido sin conexionWhatsappId", {
+      numero,
+      usuarioId,
+    });
   }
 
   console.log("⏸️ IA PRO sigue esperando");
@@ -678,4 +700,5 @@ module.exports = {
   ejecutarNodoIAPro,
   trimChatHistory,
   appendChatHistory,
+  limpiarLastReplies,
 };

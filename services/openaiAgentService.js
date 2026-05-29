@@ -202,6 +202,19 @@ function pushLastReply(usuarioId, conexionWhatsappId, numero, reply) {
   return next;
 }
 
+function limpiarLastReplies(usuarioId, conexionWhatsappId, numero) {
+  if (
+    conexionWhatsappId == null ||
+    String(conexionWhatsappId).trim() === "" ||
+    !numero
+  ) {
+    return;
+  }
+  lastRepliesPorChat.delete(
+    chatKey(usuarioId, String(conexionWhatsappId).trim(), numero)
+  );
+}
+
 function normMsg(texto) {
   return String(texto || "")
     .toLowerCase()
@@ -841,12 +854,21 @@ async function generarReply(config, mensajeLead, chatHistory, lastReplies) {
 }
 
 /** Mismo pipeline que IA Pro: envío Meta + guardado en bandeja en un solo paso. */
-async function enviarOpenAIConPipelineManual(numero, reply, usuarioId) {
+async function enviarOpenAIConPipelineManual(
+  numero,
+  reply,
+  usuarioId,
+  conexionWhatsappId
+) {
   const texto =
     reply != null && typeof reply !== "string" ? String(reply) : String(reply || "").trim();
   const numeroCanon = String(numero || "").trim();
   const uid =
     usuarioId != null && usuarioId !== "" ? String(usuarioId).trim() : null;
+  const conexion =
+    conexionWhatsappId != null && String(conexionWhatsappId).trim() !== ""
+      ? String(conexionWhatsappId).trim()
+      : null;
 
   logEmojiDebug("antes enviar whatsapp (openai pipeline)", texto);
   console.log("[SEND DEBUG] enviarOpenAI — numero:", numeroCanon, "| usuarioId:", uid);
@@ -864,7 +886,19 @@ async function enviarOpenAIConPipelineManual(numero, reply, usuarioId) {
     return meta?.messages?.[0]?.id || null;
   }
 
-  const row = await enviarTextoWhatsApp(numeroCanon, texto, { usuarioId: uid });
+  if (!conexion) {
+    console.log("[IA_MULTI] envío OpenAI omitido sin conexionWhatsappId", {
+      numero: numeroCanon,
+      usuarioId: uid,
+    });
+    return null;
+  }
+
+  const row = await enviarTextoWhatsApp(numeroCanon, texto, {
+    usuarioId: uid,
+    conexionWhatsappId: conexion,
+    strictConexionWhatsappId: true,
+  });
   return row?.whatsapp_message_id || null;
 }
 
@@ -995,7 +1029,12 @@ async function ejecutarNodoOpenAIAgent(nodo, contexto, opts = {}) {
       logEmojiDebug("antes enviar (ejecutarNodoOpenAI)", reply);
       const uidEnvio =
         contexto?.usuarioId ?? opts?.usuarioId ?? usuarioId ?? null;
-      await enviarOpenAIConPipelineManual(numero, reply, uidEnvio);
+      await enviarOpenAIConPipelineManual(
+        numero,
+        reply,
+        uidEnvio,
+        conexionWhatsappId
+      );
       contexto.ultimaRespuestaIA = reply;
       chatHistory = appendChatHistory(chatHistory, "assistant", reply);
       pushLastReply(usuarioId, conexionWhatsappId, numero, reply);
@@ -1023,7 +1062,12 @@ async function ejecutarNodoOpenAIAgent(nodo, contexto, opts = {}) {
     if (numero) {
       const uidEnvioFb =
         contexto?.usuarioId ?? opts?.usuarioId ?? usuarioId ?? null;
-      await enviarOpenAIConPipelineManual(numero, reply, uidEnvioFb);
+      await enviarOpenAIConPipelineManual(
+        numero,
+        reply,
+        uidEnvioFb,
+        conexionWhatsappId
+      );
     }
 
     return {
@@ -1043,4 +1087,5 @@ module.exports = {
   ejecutarNodoOpenAIAgent,
   trimChatHistory,
   appendChatHistory,
+  limpiarLastReplies,
 };
