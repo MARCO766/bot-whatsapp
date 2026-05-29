@@ -41,35 +41,49 @@ const {
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
 
-async function agregarEtiquetaCliente(numero, etiqueta, usuarioId = null) {
+async function agregarEtiquetaCliente(
+  numero,
+  etiqueta,
+  usuarioId = null,
+  conexionWhatsappId = null
+) {
   if (!numero || !etiqueta) return;
+  if (!conexionWhatsappId) {
+    console.log(
+      "[FLUJO] agregarEtiquetaCliente omitido — sin conexionWhatsappId",
+      { numero, usuarioId, etiqueta }
+    );
+    return;
+  }
 
   const etiquetaLimpia = etiqueta.trim();
+  const filtroConexion = `&conexion_whatsapp_id=eq.${encodeURIComponent(conexionWhatsappId)}`;
 
   await axios.delete(
-    `${SUPABASE_URL}/rest/v1/clientes_etiquetas?cliente_numero=eq.${numero}&usuario_id=eq.${usuarioId}`,
+    `${SUPABASE_URL}/rest/v1/clientes_etiquetas?cliente_numero=eq.${encodeURIComponent(numero)}&usuario_id=eq.${usuarioId}${filtroConexion}`,
     {
       headers: {
         apikey: SUPABASE_KEY,
-        Authorization: `Bearer ${SUPABASE_KEY}`
-      }
+        Authorization: `Bearer ${SUPABASE_KEY}`,
+      },
     }
   );
 
   await axios.post(
     `${SUPABASE_URL}/rest/v1/clientes_etiquetas`,
     {
-  cliente_numero: numero,
-  etiqueta: etiquetaLimpia,
-  usuario_id: usuarioId
-},
+      cliente_numero: numero,
+      etiqueta: etiquetaLimpia,
+      usuario_id: usuarioId,
+      conexion_whatsapp_id: conexionWhatsappId,
+    },
     {
       headers: {
         apikey: SUPABASE_KEY,
         Authorization: `Bearer ${SUPABASE_KEY}`,
         "Content-Type": "application/json",
-        Prefer: "return=minimal"
-      }
+        Prefer: "return=minimal",
+      },
     }
   );
 }
@@ -1073,7 +1087,14 @@ if (html.includes("🏷️ Etiqueta")) {
   }
 
   if (etiqueta) {
-    await agregarEtiquetaCliente(numero, etiqueta, usuarioId);
+    const conexionParaEtiqueta =
+      flowContext.conexionWhatsappId ?? conexionLineaEntrante ?? null;
+    await agregarEtiquetaCliente(
+      numero,
+      etiqueta,
+      usuarioId,
+      conexionParaEtiqueta
+    );
   }
 }
     await continuarASiguientes(nodoId, visitados, tipoNodo);
