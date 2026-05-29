@@ -127,7 +127,16 @@ async function loadInboxData(
   });
 
   const etiquetasClientes = responseEtiquetas.data || [];
-  const etiquetasUnicas = [...new Set(etiquetasClientes.map((e) => e.etiqueta))];
+  const asignacionesParaChips = conexionWhatsappId
+    ? etiquetasClientes.filter((e) =>
+        sameConexionId(e.conexion_whatsapp_id, conexionWhatsappId)
+      )
+    : etiquetasClientes;
+  const etiquetasUnicas = [
+    ...new Set(
+      asignacionesParaChips.map((e) => e.etiqueta).filter(Boolean)
+    ),
+  ];
   const etiquetasDisponibles = responseColoresEtiquetas.data || [];
 
   const clientes = responseClientes.data || [];
@@ -189,15 +198,21 @@ async function loadInboxData(
   });
 
   if (etiquetaFiltro) {
-    const numerosConEtiqueta = new Set(
+    const keysConEtiqueta = new Set(
       etiquetasClientes
-        .filter((e) => e.etiqueta === etiquetaFiltro)
-        .map((e) => e.cliente_numero)
+        .filter((e) => e.etiqueta === etiquetaFiltro && e.cliente_numero)
+        .filter(
+          (e) =>
+            !conexionWhatsappId ||
+            sameConexionId(e.conexion_whatsapp_id, conexionWhatsappId)
+        )
+        .map((e) => chatCompositeKey(e.cliente_numero, e.conexion_whatsapp_id))
+        .filter((key) => {
+          const { numero, conexionWhatsappId: conn } = parseChatCompositeKey(key);
+          return numero && conn;
+        })
     );
-    chatKeys = chatKeys.filter((key) => {
-      const numero = mapaConversaciones[key]?.cliente_numero;
-      return numero && numerosConEtiqueta.has(numero);
-    });
+    chatKeys = chatKeys.filter((key) => keysConEtiqueta.has(key));
   }
 
   const chats = chatKeys.map((key) => {

@@ -134,6 +134,10 @@ export function useInbox({ onUnreadChange } = {}) {
         const apiConexion =
           conexionId && conexionId !== CONEXION_TODAS ? conexionId : null;
         const data = await fetchInbox(filtro, apiConexion);
+        if (filtro && !(data.etiquetasUnicas || []).includes(filtro)) {
+          setEtiquetaFiltro("");
+          return;
+        }
         setChats(data.chats || []);
         setEtiquetasUnicas(data.etiquetasUnicas || []);
         setEtiquetasDisponibles(data.etiquetasDisponibles || []);
