@@ -38,6 +38,21 @@ function parseScope(raw) {
   return { todas: false, id };
 }
 
+function resolveScope(scopeInput, body) {
+  if (
+    typeof scopeInput === "object" &&
+    scopeInput !== null &&
+    "todas" in scopeInput
+  ) {
+    return scopeInput;
+  }
+  return parseScope(
+    scopeInput ??
+      body?.conexion_whatsapp_id ??
+      body?.conexionWhatsappId
+  );
+}
+
 function requiereConexionEscribir(scope) {
   if (!scope?.id) {
     const err = new Error(
@@ -195,9 +210,7 @@ async function listEtiquetas(usuarioId, scopeInput) {
 }
 
 async function createEtiqueta(usuarioId, body, scopeInput) {
-  const scope = parseScope(
-    scopeInput ?? body?.conexion_whatsapp_id ?? body?.conexionWhatsappId
-  );
+  const scope = resolveScope(scopeInput, body);
   requiereConexionEscribir(scope);
 
   const nombre = String(body?.nombre || "").trim();
@@ -232,9 +245,7 @@ async function createEtiqueta(usuarioId, body, scopeInput) {
 }
 
 async function updateEtiqueta(usuarioId, id, body, scopeInput) {
-  const scope = parseScope(
-    scopeInput ?? body?.conexion_whatsapp_id ?? body?.conexionWhatsappId
-  );
+  const scope = resolveScope(scopeInput, body);
   requiereConexionEscribir(scope);
 
   const existing = await assertEtiquetaEnScope(usuarioId, id, scope);
@@ -272,7 +283,7 @@ async function updateEtiqueta(usuarioId, id, body, scopeInput) {
 }
 
 async function deleteEtiqueta(usuarioId, id, scopeInput) {
-  const scope = parseScope(scopeInput);
+  const scope = resolveScope(scopeInput);
   requiereConexionEscribir(scope);
 
   const tag = await assertEtiquetaEnScope(usuarioId, id, scope);
