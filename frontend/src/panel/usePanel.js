@@ -3,17 +3,21 @@ import { fetchPanelDashboard, PanelApiError } from "./api";
 import { useSocketEvent } from "../hooks/useSocketEvent";
 import { useDebouncedCallback } from "../hooks/useDebouncedCallback";
 import { RT } from "../realtime/events";
+import { CONEXION_TODAS } from "../utils/conexionesInbox";
 
-export function usePanel() {
+export function usePanel(conexionWhatsappId = null, conexionesLoading = false) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   const reload = useCallback(async () => {
+    if (conexionesLoading || conexionWhatsappId == null) return;
     setLoading(true);
     setError(null);
     try {
-      const res = await fetchPanelDashboard();
+      const res = await fetchPanelDashboard({
+        conexion_whatsapp_id: conexionWhatsappId || CONEXION_TODAS,
+      });
       setData(res);
     } catch (e) {
       setError(
@@ -24,7 +28,7 @@ export function usePanel() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [conexionWhatsappId, conexionesLoading]);
 
   const reloadLive = useDebouncedCallback(reload, 500);
 

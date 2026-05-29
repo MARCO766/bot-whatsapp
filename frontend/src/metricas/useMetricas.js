@@ -13,8 +13,14 @@ import { periodoToApi } from "./format";
 import { useSocketEvent } from "../hooks/useSocketEvent";
 import { useDebouncedCallback } from "../hooks/useDebouncedCallback";
 import { RT } from "../realtime/events";
+import { CONEXION_TODAS } from "../utils/conexionesInbox";
 
-export function useMetricas(periodoLabel = "7 días", flujoId = "") {
+export function useMetricas(
+  periodoLabel = "7 días",
+  flujoId = "",
+  conexionWhatsappId = null,
+  conexionesLoading = false
+) {
   const [resumen, setResumen] = useState(null);
   const [funnel, setFunnel] = useState(null);
   const [series, setSeries] = useState(null);
@@ -28,9 +34,11 @@ export function useMetricas(periodoLabel = "7 días", flujoId = "") {
   const params = {
     periodo: periodoToApi(periodoLabel),
     flujo_id: flujoId || undefined,
+    conexion_whatsapp_id: conexionWhatsappId || CONEXION_TODAS,
   };
 
   const load = useCallback(async () => {
+    if (conexionesLoading || conexionWhatsappId == null) return;
     setLoading(true);
     setError(null);
     try {
@@ -63,7 +71,7 @@ export function useMetricas(periodoLabel = "7 días", flujoId = "") {
     } finally {
       setLoading(false);
     }
-  }, [periodoLabel, flujoId]);
+  }, [periodoLabel, flujoId, conexionWhatsappId, conexionesLoading]);
 
   useEffect(() => {
     load();

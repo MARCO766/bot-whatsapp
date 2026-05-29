@@ -2,6 +2,9 @@ import React from "react";
 import { usePanel } from "./panel/usePanel";
 import { panelStyles } from "./panel/styles";
 import { formatNum, formatTendencia } from "./metricas/format";
+import ConexionLineaTabs from "./components/conexion/ConexionLineaTabs";
+import { useMetricasConexion } from "./hooks/useMetricasConexion";
+import { CONEXION_TODAS } from "./utils/conexionesInbox";
 
 function Skel({ className = "" }) {
   return <div className={`skel ${className}`} />;
@@ -57,7 +60,27 @@ function PanelSkeleton() {
 }
 
 export default function Panel({ cambiarVista }) {
-  const { data, loading, error, reload } = usePanel();
+  const {
+    conexionesInbox,
+    conexionSeleccionadaId,
+    conexionesLoading,
+    seleccionarConexion,
+    etiquetaTabConexion,
+  } = useMetricasConexion();
+  const { data, loading, error, reload } = usePanel(
+    conexionSeleccionadaId,
+    conexionesLoading
+  );
+
+  const conexionActiva = conexionesInbox.find(
+    (c) => String(c.id) === String(conexionSeleccionadaId)
+  );
+  const lineaLabel =
+    conexionSeleccionadaId === CONEXION_TODAS
+      ? "Todas las líneas"
+      : conexionActiva
+        ? etiquetaTabConexion(conexionActiva)
+        : null;
 
   const sistema = data?.sistema || {};
   const kpis = data?.kpis || {};
@@ -105,6 +128,7 @@ export default function Panel({ cambiarVista }) {
           <h1>Tu CRM en un vistazo</h1>
           <p>
             KPIs reales de hoy, estado del sistema y actividad reciente. Sin métricas inventadas.
+            {lineaLabel ? ` Vista: ${lineaLabel}.` : ""}
           </p>
         </div>
         <div className="heroMeta">
@@ -119,6 +143,13 @@ export default function Panel({ cambiarVista }) {
           </button>
         </div>
       </section>
+
+      <ConexionLineaTabs
+        conexionesInbox={conexionesInbox}
+        conexionSeleccionadaId={conexionSeleccionadaId}
+        onSeleccionar={seleccionarConexion}
+        etiquetaTabConexion={etiquetaTabConexion}
+      />
 
       {error && (
         <div className="errorBanner">

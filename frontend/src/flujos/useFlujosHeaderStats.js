@@ -15,17 +15,17 @@ const EMPTY = {
   tendenciaVentas: null,
 };
 
-export function useFlujosHeaderStats(enabled = true) {
+export function useFlujosHeaderStats(enabled = true, conexionWhatsappId = null) {
   const [data, setData] = useState(EMPTY);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   const load = useCallback(async () => {
-    if (!enabled) return;
+    if (!enabled || conexionWhatsappId == null) return;
     setLoading(true);
     setError(null);
     try {
-      const res = await fetchHeaderStats();
+      const res = await fetchHeaderStats(conexionWhatsappId);
       setData({
         leadsVivos: res.leadsVivos ?? 0,
         conversaciones: res.conversaciones ?? 0,
@@ -43,7 +43,7 @@ export function useFlujosHeaderStats(enabled = true) {
     } finally {
       setLoading(false);
     }
-  }, [enabled]);
+  }, [enabled, conexionWhatsappId]);
 
   useEffect(() => {
     load();

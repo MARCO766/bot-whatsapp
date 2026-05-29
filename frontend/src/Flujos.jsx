@@ -53,7 +53,7 @@ export default function Flujos() {
     etiquetaTabConexion,
   } = useFlujos();
 
-  const headerStats = useFlujosHeaderStats(true);
+  const headerStats = useFlujosHeaderStats(true, conexionSeleccionadaId);
 
   useEffect(() => {
     const onMsg = (e) => {

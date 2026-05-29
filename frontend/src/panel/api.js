@@ -11,8 +11,17 @@ export class PanelApiError extends Error {
   }
 }
 
-async function request(path) {
-  const url = resolveApiUrl(path);
+function buildQuery(params = {}) {
+  const q = new URLSearchParams();
+  Object.entries(params).forEach(([k, v]) => {
+    if (v !== null && v !== undefined && v !== "") q.set(k, v);
+  });
+  const s = q.toString();
+  return s ? `?${s}` : "";
+}
+
+async function request(path, params = {}) {
+  const url = resolveApiUrl(`${path}${buildQuery(params)}`);
 
   let res;
   try {
@@ -35,6 +44,6 @@ async function request(path) {
   return data;
 }
 
-export function fetchPanelDashboard() {
-  return request("/api/panel/dashboard");
+export function fetchPanelDashboard(params = {}) {
+  return request("/api/panel/dashboard", params);
 }

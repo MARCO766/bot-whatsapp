@@ -91,8 +91,8 @@ export function fetchFlowStats() {
   return request("/api/flujos/stats");
 }
 
-export function fetchHeaderStats() {
-  return request("/api/flujos/header-stats");
+export function fetchHeaderStats(conexionWhatsappId) {
+  return request(withConexionQuery("/api/flujos/header-stats", conexionWhatsappId));
 }
 
 export function fetchApiStatus() {

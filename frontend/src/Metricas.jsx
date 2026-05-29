@@ -2,6 +2,9 @@ import React, { useMemo, useState } from "react";
 import { useMetricas } from "./metricas/useMetricas";
 import { formatMoney, formatNum, formatPct, formatTendencia } from "./metricas/format";
 import FlujoCampanaSelect from "./metricas/FlujoCampanaSelect";
+import ConexionLineaTabs from "./components/conexion/ConexionLineaTabs";
+import { useMetricasConexion } from "./hooks/useMetricasConexion";
+import { CONEXION_TODAS } from "./utils/conexionesInbox";
 
 const PERIODOS = ["Hoy", "7 días", "30 días"];
 
@@ -94,8 +97,15 @@ function MetaMetricCard({ titulo, ayuda }) {
 export default function Metricas() {
   const [periodo, setPeriodo] = useState("7 días");
   const [flujoId, setFlujoId] = useState("");
+  const {
+    conexionesInbox,
+    conexionSeleccionadaId,
+    conexionesLoading,
+    seleccionarConexion,
+    etiquetaTabConexion,
+  } = useMetricasConexion();
   const { resumen, funnel, series, flujos, diagnostico, heatmap, flujosLista, loading, error, reload } =
-    useMetricas(periodo, flujoId);
+    useMetricas(periodo, flujoId, conexionSeleccionadaId, conexionesLoading);
 
   const kpis = resumen?.kpis || {};
   const salud = resumen?.salud || { score: 0, label: "Sin datos" };
@@ -185,6 +195,15 @@ export default function Metricas() {
   ];
 
   const flujoNombre = flujosLista.find((f) => f.id === flujoId)?.nombre;
+  const conexionActiva = conexionesInbox.find(
+    (c) => String(c.id) === String(conexionSeleccionadaId)
+  );
+  const lineaLabel =
+    conexionSeleccionadaId === CONEXION_TODAS
+      ? "Todas las líneas"
+      : conexionActiva
+        ? etiquetaTabConexion(conexionActiva)
+        : null;
 
   if (error && !loading) {
     return (
@@ -211,6 +230,7 @@ export default function Metricas() {
           <h1>Métricas reales de tu embudo WhatsApp</h1>
           <p>
             Leads, conversaciones, ventas e ingresos desde Supabase. Sin datos inventados.
+            {lineaLabel ? ` Vista: ${lineaLabel}.` : ""}
             {flujoNombre ? ` Filtrando: ${flujoNombre}.` : ""}
           </p>
         </div>
@@ -230,6 +250,13 @@ export default function Metricas() {
           )}
         </div>
       </section>
+
+      <ConexionLineaTabs
+        conexionesInbox={conexionesInbox}
+        conexionSeleccionadaId={conexionSeleccionadaId}
+        onSeleccionar={seleccionarConexion}
+        etiquetaTabConexion={etiquetaTabConexion}
+      />
 
       <section className="controlBar">
         <div className="selectorBox">
