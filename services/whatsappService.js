@@ -132,6 +132,7 @@ async function obtenerConexionWhatsappIdDeChat(usuarioId, numero) {
 }
 
 async function completarOpcionesEnvio(opciones = {}, numero) {
+  if (opciones.strictConexionWhatsappId) return opciones;
   if (opciones.conexionWhatsappId) return opciones;
   if (!opciones.usuarioId || !numero) return opciones;
 
@@ -144,29 +145,65 @@ async function completarOpcionesEnvio(opciones = {}, numero) {
   return { ...opciones, conexionWhatsappId };
 }
 
+async function resolverConexionWhatsappPorId(usuarioId, conexionWhatsappId, { soloSeguimientoStrict = false } = {}) {
+  const select = soloSeguimientoStrict
+    ? "id,token,phone_id,activo"
+    : "*";
+  const responseConexion = await axios.get(
+    `${SUPABASE_URL}/rest/v1/conexiones_whatsapp?id=eq.${encodeURIComponent(conexionWhatsappId)}&usuario_id=eq.${encodeURIComponent(usuarioId)}&select=${select}`,
+    {
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`,
+      },
+    }
+  );
+  return responseConexion.data?.[0] || null;
+}
+
 async function resolverCredencialesEnvio(opciones = {}) {
   let tokenEnviar = TOKEN;
   let phoneIdEnviar = PHONE_ID;
   const strictConexion = Boolean(opciones.strictConexionWhatsappId);
 
-  if (opciones.conexionWhatsappId && opciones.usuarioId) {
-    const responseConexion = await axios.get(
-      `${SUPABASE_URL}/rest/v1/conexiones_whatsapp?id=eq.${encodeURIComponent(opciones.conexionWhatsappId)}&usuario_id=eq.${encodeURIComponent(opciones.usuarioId)}&select=*`,
-      {
-        headers: {
-          apikey: SUPABASE_KEY,
-          Authorization: `Bearer ${SUPABASE_KEY}`,
-        },
-      }
+  if (strictConexion) {
+    if (!opciones.conexionWhatsappId || !opciones.usuarioId) {
+      throw new Error("Seguimiento estricto requiere conexion_whatsapp_id y usuario_id");
+    }
+
+    const conexion = await resolverConexionWhatsappPorId(
+      opciones.usuarioId,
+      opciones.conexionWhatsappId,
+      { soloSeguimientoStrict: true }
     );
-    const conexion = responseConexion.data?.[0];
+
+    if (!conexion?.token || !conexion?.phone_id) {
+      throw new Error(
+        "No se encontró la conexión WhatsApp del seguimiento (id + usuario, sin filtro activo)"
+      );
+    }
+
+    console.log("[STRICT CONEXION RESUELTA]", {
+      conexion_whatsapp_id: conexion.id || opciones.conexionWhatsappId,
+      activo: conexion.activo,
+      phone_id: conexion.phone_id,
+    });
+
+    return {
+      tokenEnviar: conexion.token,
+      phoneIdEnviar: conexion.phone_id,
+    };
+  }
+
+  if (opciones.conexionWhatsappId && opciones.usuarioId) {
+    const conexion = await resolverConexionWhatsappPorId(
+      opciones.usuarioId,
+      opciones.conexionWhatsappId
+    );
     if (conexion) {
       tokenEnviar = conexion.token;
       phoneIdEnviar = conexion.phone_id;
       return { tokenEnviar, phoneIdEnviar };
-    }
-    if (strictConexion) {
-      throw new Error("No se encontró la conexión WhatsApp requerida para el seguimiento");
     }
   }
 
