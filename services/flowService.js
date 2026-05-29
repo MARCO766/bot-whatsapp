@@ -601,6 +601,8 @@ async function ejecutarFlujo(
         const resultado = await iniciarEsperaLectorPago({
           usuarioId,
           clienteNumero: numero,
+          conexionWhatsappId:
+            flowContext.conexionWhatsappId ?? conexionLineaEntrante ?? null,
           flujoId,
           nodoId,
           nodo,
@@ -1120,10 +1122,17 @@ async function continuarFlujoDesdeLectorPago(numero, usuarioId, resultado) {
 
   if (!flujoEstaActivo(flujo)) return false;
 
+  const conexionReanudar =
+    resultado?.conexionWhatsappId != null &&
+    String(resultado.conexionWhatsappId).trim() !== ""
+      ? String(resultado.conexionWhatsappId).trim()
+      : null;
+
   await ejecutarFlujo(numero, flujoDatos, usuarioId, flujo.id, {
     lectorContinuarDesdeNodoId: nodoId,
     visitadosLector: [nodoId],
     flujoNombre: flujo.nombre || null,
+    conexionWhatsappId: conexionReanudar,
   });
 
   return true;
@@ -1238,6 +1247,7 @@ async function procesarMensajeEntrante(
     const lecturaPago = await procesarImagenLectorPago({
       usuarioId,
       clienteNumero: numero,
+      conexionWhatsappId: opts.conexionWhatsappId || null,
       imageMetaId: opts.imageMetaId || null,
       metaToken: opts.metaToken || null,
       imagePublicUrl: opts.imageUrl || null,
@@ -1245,10 +1255,14 @@ async function procesarMensajeEntrante(
 
     if (lecturaPago?.handled) {
       if (!lecturaPago.enviadoPorServicio && lecturaPago.mensaje) {
-        await enviarTextoWhatsApp(numero, lecturaPago.mensaje, {
-          usuarioId,
-          conexionWhatsappId: opts.conexionWhatsappId || null,
-        });
+        const conexionEnvio =
+          lecturaPago.conexionWhatsappId || opts.conexionWhatsappId || null;
+        const opEnvio = { usuarioId };
+        if (conexionEnvio) {
+          opEnvio.conexionWhatsappId = conexionEnvio;
+          opEnvio.strictConexionWhatsappId = true;
+        }
+        await enviarTextoWhatsApp(numero, lecturaPago.mensaje, opEnvio);
       }
       if (lecturaPago.valido && lecturaPago.continuarFlujo) {
         await continuarFlujoDesdeLectorPago(numero, usuarioId, lecturaPago);

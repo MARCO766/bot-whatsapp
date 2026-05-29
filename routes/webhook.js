@@ -543,6 +543,14 @@ await enviarEventoMeta(usuarioIdWebhook, "Lead", from);
 
 console.log("🔎 ACTIVADOR — texto:", textoParaActivador, "| usuario:", usuarioIdWebhook);
 
+if (message.type === "image") {
+  console.log("[LECTOR_PAGO_MULTI] imagen entrante", {
+    from,
+    usuario: usuarioIdWebhook,
+    conexion_whatsapp_id: conexionWhatsappId || null,
+  });
+}
+
 const activadorEjecutado = await procesarMensajeEntrante(
   from,
   textoParaActivador,

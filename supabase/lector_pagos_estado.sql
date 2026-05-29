@@ -71,3 +71,31 @@ alter table public.lector_pagos_estado
 
 alter table public.lector_pagos_estado
   add column if not exists pagado_en timestamptz;
+
+-- Multi-número Fase 1: estado de pago por línea WhatsApp (usuario + lead + conexión)
+alter table public.lector_pagos_estado
+  add column if not exists conexion_whatsapp_id uuid;
+
+do $$
+begin
+  if exists (
+    select 1 from information_schema.tables
+    where table_schema = 'public' and table_name = 'conexiones_whatsapp'
+  ) then
+    alter table public.lector_pagos_estado
+      drop constraint if exists lector_pagos_estado_conexion_whatsapp_id_fkey;
+    alter table public.lector_pagos_estado
+      add constraint lector_pagos_estado_conexion_whatsapp_id_fkey
+      foreign key (conexion_whatsapp_id)
+      references public.conexiones_whatsapp (id) on delete set null;
+  end if;
+exception when others then
+  raise notice 'Omitida FK lector_pagos_estado.conexion_whatsapp_id: %', sqlerrm;
+end $$;
+
+create index if not exists idx_lector_pagos_estado_lookup_multi
+  on public.lector_pagos_estado (usuario_id, cliente_numero, conexion_whatsapp_id, esperando_pago)
+  where esperando_pago = true;
+
+comment on column public.lector_pagos_estado.conexion_whatsapp_id is
+  'Línea WhatsApp (conexiones_whatsapp.id). Clave con usuario_id y cliente_numero para multi-número.';

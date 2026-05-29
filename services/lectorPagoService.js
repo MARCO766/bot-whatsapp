@@ -14,6 +14,22 @@ function supabaseHeaders(extra = {}) {
   };
 }
 
+function normalizarConexionId(conexionWhatsappId) {
+  if (conexionWhatsappId == null || String(conexionWhatsappId).trim() === "") {
+    return null;
+  }
+  return String(conexionWhatsappId).trim();
+}
+
+/** Multi-número: misma línea o legacy (ambos null). */
+function filtroConexionLector(conexionWhatsappId) {
+  const conexion = normalizarConexionId(conexionWhatsappId);
+  if (conexion) {
+    return `&conexion_whatsapp_id=eq.${encodeURIComponent(conexion)}`;
+  }
+  return "&conexion_whatsapp_id=is.null";
+}
+
 function decodeHtmlEntities(str) {
   return String(str || "")
     .replace(/&quot;/g, '"')
@@ -150,7 +166,16 @@ function logInsertError(err) {
   console.error("[LECTOR_PAGO_V1] insert error", detalle);
 }
 
-function buildPayloadEstadoLector({ usuarioId, clienteNumero, flujoId, nodoId, cfg, extended }) {
+function buildPayloadEstadoLector({
+  usuarioId,
+  clienteNumero,
+  conexionWhatsappId,
+  flujoId,
+  nodoId,
+  cfg,
+  extended,
+}) {
+  const conexion = normalizarConexionId(conexionWhatsappId);
   const base = {
     usuario_id: usuarioId,
     cliente_numero: clienteNumero,
@@ -162,6 +187,7 @@ function buildPayloadEstadoLector({ usuarioId, clienteNumero, flujoId, nodoId, c
     moneda_esperada: cfg.monedaEsperada,
     nombre_esperado: cfg.nombreEsperado || null,
     tolerancia: cfg.tolerancia,
+    conexion_whatsapp_id: conexion,
   };
 
   if (!extended) return base;
@@ -208,13 +234,20 @@ function armarMensajeEntregaProducto(estado) {
   return partes.join("\n").trim();
 }
 
-async function enviarMensajesWhatsApp(numero, mensajes, usuarioId) {
+async function enviarMensajesWhatsApp(numero, mensajes, usuarioId, conexionWhatsappId) {
   const lista = (Array.isArray(mensajes) ? mensajes : [mensajes])
     .map((m) => String(m || "").trim())
     .filter(Boolean);
 
+  const conexion = normalizarConexionId(conexionWhatsappId);
+  const opEnvio = { usuarioId };
+  if (conexion) {
+    opEnvio.conexionWhatsappId = conexion;
+    opEnvio.strictConexionWhatsappId = true;
+  }
+
   for (const texto of lista) {
-    await enviarTextoWhatsApp(numero, texto, { usuarioId });
+    await enviarTextoWhatsApp(numero, texto, opEnvio);
   }
 
   return lista.length;
@@ -223,13 +256,17 @@ async function enviarMensajesWhatsApp(numero, mensajes, usuarioId) {
 async function iniciarEsperaLectorPago({
   usuarioId,
   clienteNumero,
+  conexionWhatsappId = null,
   flujoId,
   nodoId,
   nodo,
 }) {
+  const conexion = normalizarConexionId(conexionWhatsappId);
+
   console.log("[LECTOR_PAGO_V1] entrando nodo", {
     usuarioId,
     clienteNumero,
+    conexion_whatsapp_id: conexion,
     flujoId,
     nodoId,
   });
@@ -263,7 +300,7 @@ async function iniciarEsperaLectorPago({
     await axios.patch(
       `${SUPABASE_URL}/rest/v1/lector_pagos_estado?usuario_id=eq.${usuarioId}&cliente_numero=eq.${encodeURIComponent(
         clienteNumero
-      )}&esperando_pago=eq.true`,
+      )}${filtroConexionLector(conexion)}&esperando_pago=eq.true`,
       {
         esperando_pago: false,
         actualizado_en: new Date().toISOString(),
@@ -282,7 +319,7 @@ async function iniciarEsperaLectorPago({
     );
   }
 
-  const ctx = { usuarioId, clienteNumero, flujoId, nodoId, cfg };
+  const ctx = { usuarioId, clienteNumero, conexionWhatsappId: conexion, flujoId, nodoId, cfg };
   let estado = null;
 
   const payloadExtendido = buildPayloadEstadoLector({ ...ctx, extended: true });
@@ -321,7 +358,7 @@ async function iniciarEsperaLectorPago({
   const msgPedir = cfg.mensajePedirFoto;
   if (msgPedir) {
     console.log("[LECTOR_PAGO_V1] enviando mensaje pedir foto");
-    await enviarMensajesWhatsApp(clienteNumero, msgPedir, usuarioId);
+    await enviarMensajesWhatsApp(clienteNumero, msgPedir, usuarioId, conexion);
   } else {
     console.log("[LECTOR_PAGO_V1] sin mensaje_pedir_foto configurado");
   }
@@ -333,26 +370,26 @@ async function iniciarEsperaLectorPago({
   };
 }
 
-async function obtenerEstadoPagoActivo({ usuarioId, clienteNumero }) {
+async function obtenerEstadoPagoActivo({ usuarioId, clienteNumero, conexionWhatsappId }) {
   if (!SUPABASE_URL || !SUPABASE_KEY || !usuarioId || !clienteNumero) return null;
 
   const res = await axios.get(
     `${SUPABASE_URL}/rest/v1/lector_pagos_estado?usuario_id=eq.${usuarioId}&cliente_numero=eq.${encodeURIComponent(
       clienteNumero
-    )}&esperando_pago=eq.true&order=actualizado_en.desc&limit=1`,
+    )}${filtroConexionLector(conexionWhatsappId)}&esperando_pago=eq.true&order=actualizado_en.desc&limit=1`,
     { headers: supabaseHeaders() }
   );
 
   return res.data?.[0] || null;
 }
 
-async function obtenerUltimoEstadoLector({ usuarioId, clienteNumero }) {
+async function obtenerUltimoEstadoLector({ usuarioId, clienteNumero, conexionWhatsappId }) {
   if (!SUPABASE_URL || !SUPABASE_KEY || !usuarioId || !clienteNumero) return null;
 
   const res = await axios.get(
     `${SUPABASE_URL}/rest/v1/lector_pagos_estado?usuario_id=eq.${usuarioId}&cliente_numero=eq.${encodeURIComponent(
       clienteNumero
-    )}&order=actualizado_en.desc&limit=1`,
+    )}${filtroConexionLector(conexionWhatsappId)}&order=actualizado_en.desc&limit=1`,
     { headers: supabaseHeaders() }
   );
 
@@ -475,16 +512,27 @@ function compararPago(estado, lectura) {
 async function procesarImagenLectorPago({
   usuarioId,
   clienteNumero,
+  conexionWhatsappId = null,
   imageMetaId,
   metaToken,
   imagePublicUrl,
 }) {
   if (!usuarioId || !clienteNumero) return { handled: false };
 
-  let estado = await obtenerEstadoPagoActivo({ usuarioId, clienteNumero });
+  const conexion = normalizarConexionId(conexionWhatsappId);
+
+  let estado = await obtenerEstadoPagoActivo({
+    usuarioId,
+    clienteNumero,
+    conexionWhatsappId: conexion,
+  });
 
   if (!estado) {
-    const ultimo = await obtenerUltimoEstadoLector({ usuarioId, clienteNumero });
+    const ultimo = await obtenerUltimoEstadoLector({
+      usuarioId,
+      clienteNumero,
+      conexionWhatsappId: conexion,
+    });
     if (productoYaEntregado(ultimo)) {
       console.log("[LECTOR_PAGO_V1] producto ya entregado, ignorando duplicado");
       return {
@@ -538,13 +586,19 @@ async function procesarImagenLectorPago({
         }
       );
 
-      await enviarMensajesWhatsApp(clienteNumero, msgInvalidoDefault, usuarioId);
+      await enviarMensajesWhatsApp(
+        clienteNumero,
+        msgInvalidoDefault,
+        usuarioId,
+        conexion || estado.conexion_whatsapp_id
+      );
       console.log("[LECTOR_PAGO_V1] pago invalido, permanece esperando");
 
       return {
         handled: true,
         valido: false,
         continuarFlujo: false,
+        conexionWhatsappId: conexion || estado.conexion_whatsapp_id || null,
         lectura,
         comparacion,
         confianzaOk,
@@ -586,7 +640,12 @@ async function procesarImagenLectorPago({
     const mensajeEntrega = armarMensajeEntregaProducto(estado);
     if (mensajeEntrega) {
       console.log("[LECTOR_PAGO_V1] enviando producto");
-      await enviarMensajesWhatsApp(clienteNumero, mensajeEntrega, usuarioId);
+      await enviarMensajesWhatsApp(
+        clienteNumero,
+        mensajeEntrega,
+        usuarioId,
+        conexion || estado.conexion_whatsapp_id
+      );
       console.log("[LECTOR_PAGO_V1] producto enviado");
 
       await axios.patch(
@@ -606,7 +665,12 @@ async function procesarImagenLectorPago({
       const msgValido =
         String(estado.mensaje_pago_valido || "").trim() ||
         "Pago valido. Comprobante recibido correctamente.";
-      await enviarMensajesWhatsApp(clienteNumero, msgValido, usuarioId);
+      await enviarMensajesWhatsApp(
+        clienteNumero,
+        msgValido,
+        usuarioId,
+        conexion || estado.conexion_whatsapp_id
+      );
     }
 
     return {
@@ -615,6 +679,8 @@ async function procesarImagenLectorPago({
       continuarFlujo: true,
       flujoId: estado.flujo_id || null,
       nodoId: estado.nodo_id || null,
+      conexionWhatsappId:
+        conexion || normalizarConexionId(estado.conexion_whatsapp_id) || null,
       lectura,
       comparacion,
       mensaje: mensajeEntrega,
@@ -647,13 +713,19 @@ async function procesarImagenLectorPago({
     const msgError =
       String(estado.mensaje_pago_invalido || "").trim() ||
       "Pago invalido. No se pudo validar el comprobante.";
-    await enviarMensajesWhatsApp(clienteNumero, msgError, usuarioId);
+    await enviarMensajesWhatsApp(
+      clienteNumero,
+      msgError,
+      usuarioId,
+      conexion || estado.conexion_whatsapp_id
+    );
     console.log("[LECTOR_PAGO_V1] pago invalido, permanece esperando");
 
     return {
       handled: true,
       valido: false,
       continuarFlujo: false,
+      conexionWhatsappId: conexion || estado.conexion_whatsapp_id || null,
       mensaje: msgError,
       enviadoPorServicio: true,
     };
