@@ -32,17 +32,17 @@ function mensajeEsRespuestaValida(mensajeAt, seguimiento) {
 }
 
 async function cancelarSeguimientosPorRespuesta(numero, usuarioId, io, opts = {}) {
-  if (!numero) return;
+  if (!numero || !usuarioId) return;
 
   const mensajeAt = opts.mensajeAt || new Date().toISOString();
-  const conexionWhatsappId = opts.conexionWhatsappId || null;
+  const conexionWhatsappId =
+    opts.conexionWhatsappId != null && String(opts.conexionWhatsappId).trim() !== ""
+      ? String(opts.conexionWhatsappId).trim()
+      : null;
 
-  console.log("[SEGUIMIENTO_MULTI] cancelar por respuesta — inicio", {
-    usuario_id: usuarioId,
-    cliente_numero: numero,
-    conexion_whatsapp_id: conexionWhatsappId,
-    mensajeAt,
-  });
+  console.log(
+    `[SEGUIMIENTO_MULTI] cancelar inicio cliente_numero=${numero} usuario_id=${usuarioId} conexion_whatsapp_id=${conexionWhatsappId ?? null} mensajeAt=${mensajeAt}`
+  );
 
   const pendientes = await listarPendientesRespondibles(
     numero,
@@ -50,27 +50,20 @@ async function cancelarSeguimientosPorRespuesta(numero, usuarioId, io, opts = {}
     100,
     conexionWhatsappId
   );
-  if (!pendientes.length) {
-    console.log("[SEGUIMIENTO_MULTI] cancelar por respuesta — sin pendientes en esta conexión", {
-      usuario_id: usuarioId,
-      cliente_numero: numero,
-      conexion_whatsapp_id: conexionWhatsappId,
-    });
+
+  const pendientesFiltrados = pendientes.filter((seg) =>
+    mismaConexionWhatsapp(seg.conexion_whatsapp_id, conexionWhatsappId)
+  );
+  if (!pendientesFiltrados.length) {
+    console.log(
+      `[SEGUIMIENTO_MULTI] cancelar sin pendientes cliente_numero=${numero} conexion_whatsapp_id=${conexionWhatsappId ?? null} listados=${pendientes.length}`
+    );
     return;
   }
 
   const campanasCanceladas = new Set();
 
-  for (const seg of pendientes) {
-    if (!mismaConexionWhatsapp(seg.conexion_whatsapp_id, conexionWhatsappId)) {
-      console.log("[SEGUIMIENTO_MULTI] cancelar omitido — otra conexión", {
-        seguimiento_id: seg.id,
-        seguimiento_conexion: seg.conexion_whatsapp_id || null,
-        mensaje_conexion: conexionWhatsappId || null,
-      });
-      continue;
-    }
-
+  for (const seg of pendientesFiltrados) {
     const checkpoint = seg.checkpoint_at || seg.creado_en;
     const esRespuesta = mensajeEsRespuestaValida(mensajeAt, seg);
 
@@ -106,8 +99,9 @@ async function cancelarSeguimientosPorRespuesta(numero, usuarioId, io, opts = {}
 
     if (seg.detener_si_responde && seg.campana_id && !campanasCanceladas.has(seg.campana_id)) {
       campanasCanceladas.add(seg.campana_id);
+      const conexionCampana = seg.conexion_whatsapp_id ?? conexionWhatsappId ?? null;
       await cancelarCampana(seg.campana_id, ESTADOS_SEGUIMIENTO.RESPONDIDO, "Lead respondió", {
-        conexionWhatsappId: seg.conexion_whatsapp_id || conexionWhatsappId || null,
+        conexionWhatsappId: conexionCampana,
       });
     }
   }

@@ -52,9 +52,24 @@ async function insertarProgramados(rows) {
 
 function buildClaveDedupPaso(item) {
   return [
+    item.usuario_id || "",
+    item.cliente_numero || "",
+    item.conexion_whatsapp_id || "",
     item.campana_id || "",
     String(item.paso_index ?? ""),
   ].join("|");
+}
+
+/** Worker: dedup/carrera solo dentro de la misma línea WhatsApp del lead. */
+function filtrosDedupWorker(item) {
+  const partes = [];
+  if (item.usuario_id && item.cliente_numero) {
+    partes.push(filtrosClaveLead(item.cliente_numero, item.usuario_id, item.conexion_whatsapp_id));
+  }
+  if (item.campana_id) {
+    partes.push(filtrosLotePaso(item));
+  }
+  return partes.join("&");
 }
 
 function filtroEqCampo(campo, valor) {
@@ -105,9 +120,8 @@ async function existePasoEnviadoOProcesando(item, excludeId = null) {
   ].join(",");
 
   let url =
-    `${SUPABASE_URL}/rest/v1/seguimientos_programados?campana_id=eq.${item.campana_id}` +
-    `&estado=in.(${estados})` +
-    `&paso_index=eq.${item.paso_index}` +
+    `${SUPABASE_URL}/rest/v1/seguimientos_programados?estado=in.(${estados})` +
+    `&${filtrosDedupWorker(item)}` +
     "&select=id,estado&limit=1";
 
   if (excludeId) {
@@ -125,12 +139,12 @@ function filtrosLotePaso(item) {
   );
 }
 
-/** Tras reservar: solo una fila en "procesando" por lote+paso debe enviar. */
+/** Tras reservar: solo una fila en "procesando" por lead+línea+lote+paso. */
 async function esUnicoProcesandoEnClave(item) {
-  if (!item.campana_id) return true;
+  if (!item.campana_id || !item.usuario_id || !item.cliente_numero) return true;
 
   const response = await axios.get(
-    `${SUPABASE_URL}/rest/v1/seguimientos_programados?estado=eq.${ESTADOS_SEGUIMIENTO.PROCESANDO}&${filtrosLotePaso(item)}&select=id&order=id.asc&limit=1`,
+    `${SUPABASE_URL}/rest/v1/seguimientos_programados?estado=eq.${ESTADOS_SEGUIMIENTO.PROCESANDO}&${filtrosDedupWorker(item)}&select=id&order=id.asc&limit=1`,
     { headers: headers() }
   );
   const primero = (response.data || [])[0];
@@ -138,10 +152,10 @@ async function esUnicoProcesandoEnClave(item) {
 }
 
 async function cancelarPendientesDuplicadosClave(item, exceptId) {
-  if (!item.campana_id) return;
+  if (!item.campana_id || !item.usuario_id || !item.cliente_numero) return;
 
   const url =
-    `${SUPABASE_URL}/rest/v1/seguimientos_programados?estado=eq.${ESTADOS_SEGUIMIENTO.PENDIENTE}&${filtrosLotePaso(item)}&id=neq.${exceptId}`;
+    `${SUPABASE_URL}/rest/v1/seguimientos_programados?estado=eq.${ESTADOS_SEGUIMIENTO.PENDIENTE}&${filtrosDedupWorker(item)}&id=neq.${exceptId}`;
 
   await axios.patch(
     url,
@@ -237,9 +251,7 @@ async function cancelarCampana(campanaId, estado, motivo, opts = {}) {
   let url =
     `${SUPABASE_URL}/rest/v1/seguimientos_programados?campana_id=eq.${campanaId}&estado=in.(${ESTADOS_SEGUIMIENTO.PENDIENTE},${ESTADOS_SEGUIMIENTO.PROCESANDO})`;
 
-  if (opts.conexionWhatsappId !== undefined) {
-    url += filtroConexionWhatsapp(opts.conexionWhatsappId);
-  }
+  url += filtroConexionWhatsapp(opts.conexionWhatsappId ?? null);
 
   await axios.patch(
     url,
@@ -321,6 +333,8 @@ async function listarPendientesRespondibles(
   limite = 100,
   conexionWhatsappId = null
 ) {
+  if (!numero || !usuarioId) return [];
+
   let url =
     `${SUPABASE_URL}/rest/v1/seguimientos_programados?${filtrosClaveLead(numero, usuarioId, conexionWhatsappId)}` +
     `&estado=in.(${ESTADOS_SEGUIMIENTO.PENDIENTE},${ESTADOS_SEGUIMIENTO.PROCESANDO})` +

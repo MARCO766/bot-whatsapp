@@ -167,11 +167,9 @@ async function intentarReservarYEnviarPaso(item, io) {
   await cancelarPendientesDuplicadosClave(reservado, reservado.id);
 
   if (!(await esUnicoProcesandoEnClave(reservado))) {
-    console.log("[SEGUIMIENTO DEBUG] ya enviado, saltando:", {
-      id: reservado.id,
-      clave,
-      motivo: "otra fila en procesando con la misma clave lógica",
-    });
+    console.log(
+      `[SEGUIMIENTO DEBUG] carrera omitida id=${reservado.id} clave=${clave} cliente=${reservado.cliente_numero} conexion=${reservado.conexion_whatsapp_id ?? null}`
+    );
     await actualizarEstado(reservado.id, ESTADOS_SEGUIMIENTO.CANCELADO, {
       error_detalle: "Duplicado: otro paso en procesando (carrera)",
     });
