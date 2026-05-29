@@ -134,6 +134,43 @@ export function duplicateFlow(id, conexionWhatsappId) {
   });
 }
 
+export async function fetchFlowExport(id, conexionWhatsappId) {
+  const data = await request(withConexionQuery(`/api/flujos/${id}/export`, conexionWhatsappId));
+  return {
+    version: data.version ?? 1,
+    nombre: data.nombre,
+    data: data.data,
+    exported_at: data.exported_at,
+  };
+}
+
+export function downloadFlowExportFile(exportPayload) {
+  const safeName = String(exportPayload?.nombre || "flujo")
+    .trim()
+    .replace(/[<>:"/\\|?*]+/g, "")
+    .replace(/\s+/g, " ")
+    .slice(0, 120) || "flujo";
+  const blob = new Blob([JSON.stringify(exportPayload, null, 2)], {
+    type: "application/json;charset=utf-8",
+  });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `${safeName}.json`;
+  anchor.rel = "noopener";
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
+export function importFlowJson(payload, conexionWhatsappId) {
+  return request("/api/flujos/import-json", {
+    method: "POST",
+    body: JSON.stringify(writeConexionBody({ payload }, conexionWhatsappId)),
+  });
+}
+
 export function deleteFlow(id, conexionWhatsappId) {
   return request(withConexionQuery(`/api/flujos/${id}`, conexionWhatsappId), {
     method: "DELETE",

@@ -41,6 +41,8 @@ export default function Flujos() {
     crearFlujo,
     importar,
     duplicar,
+    exportar,
+    importarJson,
     eliminar,
     renombrar,
     updateMeta,
@@ -292,20 +294,25 @@ export default function Flujos() {
         conexionWhatsappId={conexionSeleccionadaId}
         onToggleEstado={toggleEstado}
         onDuplicate={duplicar}
+        onExport={exportar}
         onDelete={(flow) => setConfirmDelete(flow)}
         onMoveFolder={moveToFolder}
         onEditName={handleEditName}
         onCreate={() => setNewFlowOpen(true)}
         onImport={() => setImportOpen(true)}
+        puedeEscribir={puedeEscribir}
       />
 
       <ImportFlowModal
         open={importOpen}
         onClose={() => setImportOpen(false)}
+        puedeEscribir={puedeEscribir}
         onImport={async (id) => {
           await importar(id);
           setImportOpen(false);
         }}
+        onImportJson={importarJson}
+        onJsonParseError={(msg) => showToast(msg, "error")}
       />
 
       <ConfirmModal

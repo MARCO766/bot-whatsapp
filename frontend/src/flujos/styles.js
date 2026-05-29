@@ -1181,6 +1181,79 @@ export const flujosStyles = `
 .flModal h2 { margin: 0 0 8px; color: #f1f5f9; }
 .flModal p.sub { color: #64748b; font-size: 0.9rem; margin: 0 0 20px; }
 
+.flModalWide {
+  width: min(640px, 100%);
+}
+
+.flImportJsonBlock {
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px dashed rgba(34, 197, 94, 0.35);
+  background: rgba(34, 197, 94, 0.06);
+  margin-bottom: 18px;
+}
+
+.flImportJsonHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+  color: #e2e8f0;
+}
+
+.flImportJsonHint {
+  font-size: 0.75rem;
+  color: #64748b;
+}
+
+.flImportJsonWarn {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #fbbf24;
+  line-height: 1.45;
+}
+
+.flImportJsonLabel {
+  display: inline-block;
+  cursor: pointer;
+}
+
+.flImportJsonInput {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+}
+
+.flImportJsonBtn {
+  display: inline-block;
+  pointer-events: none;
+}
+
+.flImportDivider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 8px 0 14px;
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.flImportDivider::before,
+.flImportDivider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: rgba(148, 163, 184, 0.15);
+}
+
 .flTemplateGrid {
   display: grid;
   gap: 10px;

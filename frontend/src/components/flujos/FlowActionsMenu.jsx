@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { exportFlowUrl } from "../../flujos/api";
 import { FLOW_FOLDERS } from "../../flujos/constants";
 
 const MENU_W = 248;
@@ -10,14 +9,17 @@ export default function FlowActionsMenu({
   isOpen,
   onOpenChange,
   onDuplicate,
+  onExport,
   onDelete,
   onMoveFolder,
   onEditName,
+  puedeEscribir = true,
 }) {
   const btnRef = useRef(null);
   const menuRef = useRef(null);
   const [pos, setPos] = useState({ top: 0, left: 0, placement: "bottom" });
   const [miniToast, setMiniToast] = useState(null);
+  const [exporting, setExporting] = useState(false);
 
   const close = useCallback(() => onOpenChange(null), [onOpenChange]);
 
@@ -26,6 +28,28 @@ export default function FlowActionsMenu({
     close();
     window.setTimeout(() => setMiniToast(null), 2800);
   }, [close]);
+
+  const handleDuplicate = useCallback(() => {
+    if (!puedeEscribir) {
+      setMiniToast("Selecciona una línea WhatsApp");
+      window.setTimeout(() => setMiniToast(null), 2800);
+      close();
+      return;
+    }
+    onDuplicate(flow.id);
+    close();
+  }, [close, flow.id, onDuplicate, puedeEscribir]);
+
+  const handleExport = useCallback(async () => {
+    if (!onExport) return;
+    setExporting(true);
+    try {
+      await onExport(flow);
+      close();
+    } finally {
+      setExporting(false);
+    }
+  }, [close, flow, onExport]);
 
   const updatePosition = useCallback(() => {
     const btn = btnRef.current;
@@ -95,14 +119,29 @@ export default function FlowActionsMenu({
         role="menu"
         aria-label="Opciones del flujo"
       >
-        <button type="button" role="menuitem" onClick={() => { onDuplicate(flow.id); close(); }}>
+        <button
+          type="button"
+          role="menuitem"
+          className={!puedeEscribir ? "flMenuItemDisabled" : ""}
+          title={
+            puedeEscribir
+              ? undefined
+              : "Selecciona una línea WhatsApp (no «Todas las líneas»)"
+          }
+          onClick={handleDuplicate}
+        >
           <span className="flMenuIcon" aria-hidden>⎘</span>
           <span>Duplicar flujo</span>
         </button>
-        <a href={exportFlowUrl(flow.id)} target="_blank" rel="noreferrer" role="menuitem" onClick={close}>
+        <button
+          type="button"
+          role="menuitem"
+          disabled={exporting}
+          onClick={handleExport}
+        >
           <span className="flMenuIcon" aria-hidden>↓</span>
-          <span>Exportar JSON</span>
-        </a>
+          <span>{exporting ? "Exportando…" : "Exportar JSON"}</span>
+        </button>
         <button type="button" role="menuitem" onClick={() => { onEditName?.(flow); close(); }}>
           <span className="flMenuIcon" aria-hidden>✎</span>
           <span>Renombrar</span>

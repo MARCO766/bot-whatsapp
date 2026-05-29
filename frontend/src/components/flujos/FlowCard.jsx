@@ -29,9 +29,11 @@ function FlowCard({
   onMenuOpenChange,
   onToggleEstado,
   onDuplicate,
+  onExport,
   onDelete,
   onMoveFolder,
   onEditName,
+  puedeEscribir = true,
 }) {
   const [showTimeline, setShowTimeline] = useState(false);
   const st = stateMeta(flow.meta?.estado);
@@ -82,9 +84,11 @@ function FlowCard({
           isOpen={isMenuOpen}
           onOpenChange={onMenuOpenChange}
           onDuplicate={onDuplicate}
+          onExport={onExport}
           onDelete={onDelete}
           onMoveFolder={onMoveFolder}
           onEditName={onEditName}
+          puedeEscribir={puedeEscribir}
         />
       </div>
 

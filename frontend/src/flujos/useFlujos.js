@@ -3,8 +3,11 @@ import {
   ApiError,
   createFlow,
   deleteFlow,
+  downloadFlowExportFile,
   duplicateFlow,
+  fetchFlowExport,
   fetchFlows,
+  importFlowJson,
   importFlowTemplate,
   patchFlowMeta,
   patchFlowNombre,
@@ -280,11 +283,66 @@ export function useFlujos() {
       if (!apiOnline) return showToast("Sin conexión API", "error");
       try {
         await duplicateFlow(id, conexionSeleccionadaId);
-        showToast("Flujo duplicado");
+        showToast("Flujo duplicado en la línea seleccionada");
         await load();
       } catch (err) {
+        if (err instanceof ApiError && err.status === 403) {
+          showToast(
+            "Este flujo es de otra línea. Cambia a esa línea WhatsApp y vuelve a duplicar.",
+            "error"
+          );
+          return;
+        }
         const msg = err instanceof ApiError ? err.message : "Error al duplicar";
         showToast(msg, "error");
+      }
+    },
+    [apiOnline, conexionSeleccionadaId, load, requireLineaParaEscribir, showToast]
+  );
+
+  const exportar = useCallback(
+    async (flow) => {
+      if (!flow?.id) return;
+      if (!apiOnline) {
+        showToast("Inicia sesión en el panel para exportar", "error");
+        return;
+      }
+      try {
+        const payload = await fetchFlowExport(flow.id, conexionSeleccionadaId);
+        downloadFlowExportFile(payload);
+        showToast(`Exportado: ${payload.nombre || flow.nombre}`);
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 403) {
+          showToast(
+            "Este flujo es de otra línea. Selecciona su línea WhatsApp para exportarlo.",
+            "error"
+          );
+          return;
+        }
+        const msg = err instanceof ApiError ? err.message : "Error al exportar JSON";
+        showToast(msg, "error");
+      }
+    },
+    [apiOnline, conexionSeleccionadaId, showToast]
+  );
+
+  const importarJson = useCallback(
+    async (rawPayload) => {
+      if (!rawPayload) return false;
+      if (!requireLineaParaEscribir()) return false;
+      if (!apiOnline) {
+        showToast("Inicia sesión en el panel para importar", "error");
+        return false;
+      }
+      try {
+        await importFlowJson(rawPayload, conexionSeleccionadaId);
+        showToast("Flujo importado en la línea seleccionada");
+        await load();
+        return true;
+      } catch (err) {
+        const msg = err instanceof ApiError ? err.message : "Error al importar JSON";
+        showToast(msg, "error");
+        return false;
       }
     },
     [apiOnline, conexionSeleccionadaId, load, requireLineaParaEscribir, showToast]
@@ -336,7 +394,9 @@ export function useFlujos() {
     renombrar,
     crearFlujo,
     importar,
+    importarJson,
     duplicar,
+    exportar,
     eliminar,
     conexionesInbox,
     conexionSeleccionadaId,

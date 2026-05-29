@@ -141,6 +141,120 @@ function extractMeta(data) {
   };
 }
 
+const EXPORT_VERSION = 1;
+
+function stripMetaTimestamps(meta) {
+  const m = meta && typeof meta === "object" ? { ...meta } : {};
+  delete m.actualizado_en;
+  delete m.ultima_ejecucion;
+  delete m.creado_en;
+  return m;
+}
+
+function normalizeFlowDataBlock(raw) {
+  const block = raw && typeof raw === "object" ? raw : {};
+  const nodos = Array.isArray(block.nodos) ? block.nodos : [];
+  const conexiones = Array.isArray(block.conexiones) ? block.conexiones : [];
+  const macbot_meta = stripMetaTimestamps(block.macbot_meta);
+  return { nodos, conexiones, macbot_meta };
+}
+
+function buildExportPayload(row) {
+  const nombre = String(row?.nombre || "Flujo").trim() || "Flujo";
+  return {
+    version: EXPORT_VERSION,
+    nombre,
+    data: normalizeFlowDataBlock(row?.data),
+    exported_at: new Date().toISOString(),
+  };
+}
+
+function parseImportBody(body) {
+  let payload = body?.payload ?? body?.flow ?? body;
+  if (typeof payload === "string") {
+    try {
+      payload = JSON.parse(payload);
+    } catch {
+      return { error: "JSON inválido" };
+    }
+  }
+  if (!payload || typeof payload !== "object") {
+    return { error: "Payload vacío o inválido" };
+  }
+  return { payload };
+}
+
+function resolveImportSource(payload) {
+  if (payload.version && payload.data && typeof payload.data === "object") {
+    return {
+      nombre: payload.nombre,
+      data: payload.data,
+    };
+  }
+  if (payload.data && typeof payload.data === "object") {
+    return {
+      nombre: payload.nombre,
+      data: payload.data,
+    };
+  }
+  if (Array.isArray(payload.nodos) || Array.isArray(payload.conexiones)) {
+    return {
+      nombre: payload.nombre,
+      data: payload,
+    };
+  }
+  return { error: "No se encontró data.nodos / data.conexiones en el archivo" };
+}
+
+function prepareImportedFlow(body) {
+  const parsed = parseImportBody(body);
+  if (parsed.error) return parsed;
+
+  const source = resolveImportSource(parsed.payload);
+  if (source.error) return source;
+
+  const data = normalizeFlowDataBlock(source.data);
+  if (!Array.isArray(data.nodos)) {
+    return { error: "data.nodos debe ser un arreglo" };
+  }
+  if (!Array.isArray(data.conexiones)) {
+    return { error: "data.conexiones debe ser un arreglo" };
+  }
+
+  const meta = stripMetaTimestamps(data.macbot_meta);
+  meta.estado = "borrador";
+  meta.actualizado_en = new Date().toISOString();
+  meta.carpeta = FOLDERS.includes(meta.carpeta) ? meta.carpeta : "sin_carpeta";
+  if (!Array.isArray(meta.etiquetas)) meta.etiquetas = [];
+  if (!Array.isArray(meta.campanas)) meta.campanas = [];
+
+  let nombre = String(source.nombre || parsed.payload.nombre || "").trim();
+  if (!nombre) {
+    nombre = `Importado ${new Date().toLocaleDateString("es-BO", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    })}`;
+  }
+  if (nombre.length > 200) nombre = nombre.slice(0, 200);
+
+  return {
+    nombre,
+    data: {
+      nodos: data.nodos,
+      conexiones: data.conexiones,
+      macbot_meta: meta,
+    },
+  };
+}
+
+function scopeErrorMessage(acceso) {
+  if (acceso.status === 403) {
+    return "Este flujo pertenece a otra línea WhatsApp. Selecciona la línea correcta para continuar.";
+  }
+  return acceso.error;
+}
+
 function buildPreview(data) {
   const raw = data && typeof data === "object" ? data : {};
   const nodos = Array.isArray(raw.nodos) ? raw.nodos : [];
@@ -525,6 +639,80 @@ router.post("/api/flujos", protegerApi, async (req, res) => {
   }
 });
 
+// GET /api/flujos/:id/export — JSON limpio para CRM (multi-línea)
+router.get("/api/flujos/:id/export", protegerApi, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const usuarioId = req.session.usuario.id;
+    const scope = leerConexionScope(req);
+
+    const acceso = await assertFlujoEnScope(usuarioId, id, scope);
+    if (!acceso.ok) {
+      return res.status(acceso.status).json({ ok: false, error: scopeErrorMessage(acceso) });
+    }
+
+    const flujo = await axios.get(
+      `${SUPABASE_URL}/rest/v1/flujos_builder?id=eq.${encodeURIComponent(id)}&usuario_id=eq.${usuarioId}&select=nombre,data`,
+      { headers: supabaseHeaders() }
+    );
+
+    const row = flujo.data?.[0];
+    if (!row) return res.status(404).json({ ok: false, error: "Flujo no encontrado" });
+
+    res.json({ ok: true, ...buildExportPayload(row) });
+  } catch (error) {
+    log("GET export ERROR", error.response?.data || error.message);
+    res.status(500).json({ ok: false, error: "No se pudo exportar el flujo" });
+  }
+});
+
+// POST /api/flujos/import-json — importar archivo JSON exportado
+router.post("/api/flujos/import-json", protegerApi, async (req, res) => {
+  try {
+    const usuarioId = req.session.usuario.id;
+    const scope = leerConexionScope(req);
+    const scopeErr = requiereConexionEscribir(scope);
+    if (scopeErr) return res.status(400).json({ ok: false, error: scopeErr.error });
+
+    if (!(await validarConexionUsuario(usuarioId, scope.id))) {
+      return res.status(400).json({ ok: false, error: "Línea WhatsApp no válida" });
+    }
+
+    const prepared = prepareImportedFlow(req.body);
+    if (prepared.error) {
+      return res.status(400).json({ ok: false, error: prepared.error });
+    }
+
+    const created = await axios.post(
+      `${SUPABASE_URL}/rest/v1/flujos_builder`,
+      {
+        nombre: prepared.nombre,
+        usuario_id: usuarioId,
+        data: prepared.data,
+        conexion_whatsapp_id: scope.id,
+      },
+      {
+        headers: supabaseHeaders({
+          "Content-Type": "application/json",
+          Prefer: "return=representation",
+        }),
+      }
+    );
+
+    const row = Array.isArray(created.data) ? created.data[0] : created.data;
+    rt.flujoGuardado(req, usuarioId, {
+      id: row?.id,
+      nombre: prepared.nombre,
+      accion: "importado_json",
+      flow: row,
+    });
+    res.json({ ok: true, flow: row });
+  } catch (error) {
+    log("import-json ERROR", error.message);
+    res.status(500).json({ ok: false, error: "No se pudo importar el JSON" });
+  }
+});
+
 // POST /api/flujos/import
 router.post("/api/flujos/import", protegerApi, async (req, res) => {
   try {
@@ -602,7 +790,7 @@ router.post("/api/flujos/:id/duplicate", protegerApi, async (req, res) => {
 
     const acceso = await assertFlujoEnScope(usuarioId, id, scope);
     if (!acceso.ok) {
-      return res.status(acceso.status).json({ ok: false, error: acceso.error });
+      return res.status(acceso.status).json({ ok: false, error: scopeErrorMessage(acceso) });
     }
 
     const flujo = await axios.get(
@@ -630,6 +818,12 @@ router.post("/api/flujos/:id/duplicate", protegerApi, async (req, res) => {
     );
 
     const row = Array.isArray(created.data) ? created.data[0] : created.data;
+    rt.flujoGuardado(req, usuarioId, {
+      id: row?.id,
+      nombre: row?.nombre,
+      accion: "duplicado",
+      flow: row,
+    });
     res.json({ ok: true, flow: row });
   } catch (error) {
     res.status(500).json({ ok: false, error: "Error duplicando" });

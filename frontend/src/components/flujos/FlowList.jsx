@@ -10,12 +10,14 @@ function FlowList({
   conexionWhatsappId,
   onToggleEstado,
   onDuplicate,
+  onExport,
   onDelete,
   onMoveFolder,
   onEditName,
   onCreate,
   onImport,
   apiOnline,
+  puedeEscribir = false,
 }) {
   const [openMenuId, setOpenMenuId] = useState(null);
 
@@ -49,9 +51,11 @@ function FlowList({
           onMenuOpenChange={setOpenMenuId}
           onToggleEstado={onToggleEstado}
           onDuplicate={onDuplicate}
+          onExport={onExport}
           onDelete={onDelete}
           onMoveFolder={onMoveFolder}
           onEditName={onEditName}
+          puedeEscribir={puedeEscribir}
         />
       ))}
     </div>
