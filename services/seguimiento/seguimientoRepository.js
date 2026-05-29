@@ -79,12 +79,29 @@ function filtroEqCampo(campo, valor) {
   return `${campo}=eq.${encodeURIComponent(valor)}`;
 }
 
+function normalizarConexionId(conexionWhatsappId) {
+  if (conexionWhatsappId == null || String(conexionWhatsappId).trim() === "") {
+    return null;
+  }
+  return String(conexionWhatsappId).trim();
+}
+
 /** Multi-número: misma línea o legacy (ambos null). Nunca mezclar A con B. */
 function filtroConexionWhatsapp(conexionWhatsappId) {
-  if (conexionWhatsappId) {
-    return `&conexion_whatsapp_id=eq.${encodeURIComponent(conexionWhatsappId)}`;
+  const conexion = normalizarConexionId(conexionWhatsappId);
+  if (conexion) {
+    return `&conexion_whatsapp_id=eq.${encodeURIComponent(conexion)}`;
   }
   return "&conexion_whatsapp_id=is.null";
+}
+
+function mensajeCoincideConexion(row, conexionWhatsappId) {
+  const conexion = normalizarConexionId(conexionWhatsappId);
+  const msgConn = row?.conexion_whatsapp_id
+    ? String(row.conexion_whatsapp_id).trim()
+    : null;
+  if (conexion) return msgConn === conexion;
+  return !msgConn;
 }
 
 function filtrosClaveLead(numero, usuarioId, conexionWhatsappId) {
@@ -304,25 +321,23 @@ async function clienteRespondioDespues(
   conexionWhatsappId = null
 ) {
   const umbral = checkpointAt || fallbackAt;
-  if (!umbral) return false;
+  if (!umbral || !numero || !usuarioId) return false;
 
+  const conexion = normalizarConexionId(conexionWhatsappId);
   const checkpointEncoded = encodeTimestampFilter(umbral);
 
-  let url =
-    `${SUPABASE_URL}/rest/v1/mensajes?${filtrosClaveLead(numero, usuarioId, conexionWhatsappId)}` +
-    `&direccion=eq.entrante&creado_en=gt.${checkpointEncoded}&select=id,creado_en,conexion_whatsapp_id&limit=1`;
+  const url =
+    `${SUPABASE_URL}/rest/v1/mensajes?${filtrosClaveLead(numero, usuarioId, conexion)}` +
+    `&direccion=eq.entrante&creado_en=gt.${checkpointEncoded}&select=id,creado_en,conexion_whatsapp_id&order=creado_en.asc&limit=5`;
 
   const response = await axios.get(url, { headers: headers() });
-  const hay = (response.data || []).length > 0;
+  const filas = response.data || [];
+  const mensaje = filas.find((row) => mensajeCoincideConexion(row, conexion)) || null;
+  const hay = Boolean(mensaje);
 
-  console.log("[SEGUIMIENTO_MULTI] respuesta después del checkpoint", {
-    usuario_id: usuarioId,
-    cliente_numero: numero,
-    conexion_whatsapp_id: conexionWhatsappId || null,
-    checkpoint_at: umbral,
-    hay_respuesta: hay,
-    mensaje: response.data?.[0] || null,
-  });
+  console.log(
+    `[SEGUIMIENTO_MULTI] clienteRespondioDespues cliente_numero=${numero} usuario_id=${usuarioId} conexion_whatsapp_id=${conexion ?? null} checkpoint_at=${umbral} hay_respuesta=${hay} mensaje_id=${mensaje?.id ?? null} mensaje_conexion=${mensaje?.conexion_whatsapp_id ?? null}`
+  );
 
   return hay;
 }
@@ -342,13 +357,17 @@ async function listarPendientesRespondibles(
     `&order=creado_en.asc&limit=${limite}&select=*`;
 
   const response = await axios.get(url, { headers: headers() });
-  const rows = response.data || [];
+  const rows = (response.data || []).filter((row) =>
+    mensajeCoincideConexion(
+      { conexion_whatsapp_id: row.conexion_whatsapp_id },
+      conexionWhatsappId
+    )
+  );
 
   if (rows.length) {
-    console.log("[WORKER LISTAR PENDIENTES] respondibles total:", rows.length, {
-      cliente_numero: numero,
-      conexion_whatsapp_id: conexionWhatsappId || null,
-    });
+    console.log(
+      `[WORKER LISTAR PENDIENTES] respondibles total=${rows.length} cliente_numero=${numero} conexion_whatsapp_id=${normalizarConexionId(conexionWhatsappId) ?? null}`
+    );
     rows.forEach((row) => logPendienteSeguimiento("RESPONDIBLES", row));
   }
 

@@ -2,6 +2,7 @@ const {
   listarPendientesRespondibles,
   actualizarEstado,
   cancelarCampana,
+  clienteRespondioDespues,
 } = require("./seguimientoRepository");
 const { ESTADOS_SEGUIMIENTO } = require("./constants");
 const rt = require("../realtimeService");
@@ -64,22 +65,21 @@ async function cancelarSeguimientosPorRespuesta(numero, usuarioId, io, opts = {}
   const campanasCanceladas = new Set();
 
   for (const seg of pendientesFiltrados) {
-    const checkpoint = seg.checkpoint_at || seg.creado_en;
-    const esRespuesta = mensajeEsRespuestaValida(mensajeAt, seg);
+    const conexionSeg = seg.conexion_whatsapp_id ?? conexionWhatsappId ?? null;
 
-    console.log("[SEGUIMIENTO_FIX] mensaje > checkpoint_at ?", {
-      mensajeAt,
-      checkpoint_at: checkpoint,
-      lote_id: seg.campana_id,
-      seguimiento_id: seg.id,
-      resultado: esRespuesta,
-    });
+    const respondio = await clienteRespondioDespues(
+      numero,
+      usuarioId,
+      seg.checkpoint_at,
+      seg.creado_en,
+      conexionSeg
+    );
 
-    if (!esRespuesta) {
-      console.log("[SEGUIMIENTO_FIX] activador ignorado como respuesta", {
-        seguimiento_id: seg.id,
-        lote_id: seg.campana_id,
-      });
+    console.log(
+      `[SEGUIMIENTO_MULTI] cancelar eval respondio=${respondio} seguimiento_id=${seg.id} conexion_whatsapp_id=${conexionSeg ?? null} checkpoint_at=${seg.checkpoint_at ?? null} mensaje_webhook_at=${mensajeAt}`
+    );
+
+    if (!respondio) {
       continue;
     }
 

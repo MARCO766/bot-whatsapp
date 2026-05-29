@@ -220,12 +220,17 @@ async function procesarSeguimientoItem(item, io) {
   });
 
   if (item.solo_si_no_respondio) {
+    const conexionSeg =
+      item.conexion_whatsapp_id != null && String(item.conexion_whatsapp_id).trim() !== ""
+        ? String(item.conexion_whatsapp_id).trim()
+        : null;
+
     const respondio = await clienteRespondioDespues(
       item.cliente_numero,
       item.usuario_id,
       item.checkpoint_at,
       item.creado_en,
-      item.conexion_whatsapp_id || null
+      conexionSeg
     );
 
     if (respondio) {
