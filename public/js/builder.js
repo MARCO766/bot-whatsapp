@@ -20,6 +20,49 @@ function leerConexionWhatsappIdBuilder() {
 
 const activadoresData = MACBOT_BUILDER.activadoresData || [];
 const etiquetasData = MACBOT_BUILDER.etiquetasData || [];
+const CONEXION_TODAS = "__todas__";
+
+function sameConexionId(a, b) {
+  if (a == null || b == null) return false;
+  return String(a).trim().toLowerCase() === String(b).trim().toLowerCase();
+}
+
+function etiquetasParaBuilderLinea() {
+  const connId = leerConexionWhatsappIdBuilder();
+  if (!connId || connId === CONEXION_TODAS) return etiquetasData;
+  return etiquetasData.filter((e) =>
+    sameConexionId(e.conexion_whatsapp_id, connId)
+  );
+}
+
+function opcionesHtmlSelectEtiquetas(selectedValue) {
+  const selected =
+    selectedValue != null ? String(selectedValue).trim() : "";
+  const scoped = etiquetasParaBuilderLinea();
+  let html = '<option value="">Selecciona una etiqueta</option>';
+  scoped.forEach((e) => {
+    const nombre = String(e.nombre || "").trim();
+    if (!nombre) return;
+    const sel = selected && selected === nombre ? " selected" : "";
+    html += `<option value="${nombre.replace(/"/g, "&quot;")}"${sel}>${nombre.replace(/</g, "&lt;")}</option>`;
+  });
+  return html;
+}
+
+function refrescarSelectsEtiquetaNodos() {
+  document.querySelectorAll(".node-etiqueta select.node-select").forEach((select) => {
+    const selected = String(select.value || "").trim();
+    select.innerHTML = opcionesHtmlSelectEtiquetas("");
+    if (
+      selected &&
+      Array.from(select.options).some((opt) => opt.value === selected)
+    ) {
+      select.value = selected;
+    } else {
+      select.value = "";
+    }
+  });
+}
 
 const CONVERSION_MONEDAS = [
   { v: "USD", l: "Dólar estadounidense" },
@@ -373,6 +416,7 @@ function cargarFlujoGuardado(){
   actualizarHandlersPuertosCanvas();
   actualizarLineas();
   resizeWorldSurface();
+  refrescarSelectsEtiquetaNodos();
 }
 
 /* =========================
@@ -505,10 +549,6 @@ function agregarNodo(tipo){
   if(tipo === "etiqueta"){
     nodo.classList.add("node-etiqueta");
 
-    const opcionesEtiquetas = etiquetasData.map(e => {
-      return `<option value="${e.nombre}">${e.nombre}</option>`;
-    }).join("");
-
     contenido = `
       <div class="node-actions">
         <button type="button" class="edit-node" onclick="event.stopPropagation(); editarNodo('${nodo.id}')">✎</button>
@@ -516,8 +556,7 @@ function agregarNodo(tipo){
       </div>
       <h3 class="node-title">🏷️ Etiqueta</h3>
       <select class="node-select" style="width:100%;background:#0f1117;border:2px solid #333;padding:15px;border-radius:14px;color:white;margin:10px 0;font-size:16px;">
-        <option value="">Selecciona una etiqueta</option>
-        ${opcionesEtiquetas}
+        ${opcionesHtmlSelectEtiquetas("")}
       </select>
     `;
   }
@@ -3355,6 +3394,7 @@ function restaurarSnapshotBuilder(snapshot){
 
   actualizarLineas();
   resizeWorldSurface();
+  refrescarSelectsEtiquetaNodos();
   builderHistorial.restaurando = false;
   actualizarBotonesHistorialBuilder();
 }
