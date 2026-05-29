@@ -535,7 +535,10 @@ const textoParaActivador =
     : text;
 
 if (esComandoResetFlujo(textoParaActivador)) {
-  await resetearFlujoLead(from, usuarioIdWebhook);
+  console.log(
+    `[RESETBOT_IN] numero=${from} usuarioId=${usuarioIdWebhook} conexionWhatsappId=${conexionWhatsappId}`
+  );
+  await resetearFlujoLead(from, usuarioIdWebhook, conexionWhatsappId);
   return res.sendStatus(200);
 }
 

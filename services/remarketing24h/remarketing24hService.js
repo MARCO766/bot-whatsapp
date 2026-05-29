@@ -306,12 +306,6 @@ async function cancelarRemarketing24hPorResetbot({
     return [];
   }
 
-  console.log("[RESETBOT_RM24H] cancelando remarketing activo", {
-    usuario_id,
-    cliente: cliente_numero,
-    conexion_whatsapp_id: conexionId,
-  });
-
   const filas = await repo.listarReinicioPorCliente(
     usuario_id,
     cliente_numero,
@@ -336,11 +330,11 @@ async function cancelarRemarketing24hPorResetbot({
       fila
     );
     if (actualizado) actualizados.push(actualizado);
-    console.log("[RESETBOT_RM24H] estado=cancelado_resetbot activo=false", {
-      id: fila.id,
-      flujo_id: fila.flujo_id,
-    });
   }
+
+  console.log(
+    `[RM24H_RESETBOT] conexion_whatsapp_id=${conexionId} filas_canceladas=${actualizados.length}`
+  );
 
   return actualizados;
 }

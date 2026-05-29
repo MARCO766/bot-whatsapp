@@ -124,11 +124,9 @@ async function resetearFlujoLead(numero, usuarioId, conexionWhatsappId = null) {
 
   if (!num) return { ok: false, motivo: "sin_numero" };
 
-  console.log("[RESETBOT] detectado", {
-    lead: num,
-    usuario: uid,
-    conexion_whatsapp_id: conexionId,
-  });
+  console.log(
+    `[RESET_FLUJO_LEAD] numero=${num} usuarioId=${uid} conexionWhatsappId=${conexionId}`
+  );
 
   if (conexionId) {
     limpiarSesionIAPendiente(uid, conexionId, num);
