@@ -10,6 +10,23 @@ const { loadInboxData, formatPreview } = require("./inboxService");
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
 
+const CONEXION_TODAS = "__todas__";
+
+function buildConexionFilter(conexionWhatsappId) {
+  const raw = conexionWhatsappId == null ? "" : String(conexionWhatsappId).trim();
+  if (!raw || raw === CONEXION_TODAS) return "";
+  return `&conexion_whatsapp_id=eq.${encodeURIComponent(raw)}`;
+}
+
+function logMetricasMulti(conexionWhatsappId, ctx = "") {
+  const raw = conexionWhatsappId == null ? "" : String(conexionWhatsappId).trim();
+  const scope = !raw || raw === CONEXION_TODAS ? "todas" : "uuid";
+  const id = scope === "uuid" ? raw : "";
+  console.log(
+    `[METRICAS_MULTI]${ctx ? ` ${ctx}` : ""} conexion_whatsapp_id=${id || "(none)"} scope=${scope}`
+  );
+}
+
 function headers(extra = {}) {
   return {
     apikey: SUPABASE_KEY,
@@ -182,8 +199,9 @@ function buildActividadEventos(mensajes, seguimientos, conversiones, flujosMap) 
     .slice(0, 20);
 }
 
-async function fetchActividadReciente(usuarioId, flujos) {
+async function fetchActividadReciente(usuarioId, flujos, conexionWhatsappId = null) {
   const uid = encodeURIComponent(usuarioId);
+  const connF = buildConexionFilter(conexionWhatsappId);
   const flujosMap = {};
   (flujos || []).forEach((f) => {
     flujosMap[f.id] = f.nombre;
@@ -192,19 +210,19 @@ async function fetchActividadReciente(usuarioId, flujos) {
   const [mensajes, seguimientos, conversiones] = await Promise.all([
     supabaseSelect(
       "mensajes",
-      `usuario_id=eq.${uid}&direccion=eq.entrante&order=creado_en.desc`,
+      `usuario_id=eq.${uid}${connF}&direccion=eq.entrante&order=creado_en.desc`,
       "cliente_numero,direccion,tipo,contenido,creado_en",
       12
     ),
     supabaseSelect(
       "seguimientos_programados",
-      `usuario_id=eq.${uid}&order=creado_en.desc`,
+      `usuario_id=eq.${uid}${connF}&order=creado_en.desc`,
       "estado,cliente_numero,flujo_id,creado_en,actualizado_en,enviado_en,mensaje_tipo",
       12
     ),
     supabaseSelect(
       "crm_conversiones",
-      `usuario_id=eq.${uid}&order=creado_en.desc`,
+      `usuario_id=eq.${uid}${connF}&order=creado_en.desc`,
       "cliente_numero,valor,moneda,creado_en",
       8
     ),
@@ -218,8 +236,8 @@ async function fetchActividadReciente(usuarioId, flujos) {
   );
 }
 
-async function buildLeadsSinRespuesta(usuarioId) {
-  const inbox = await loadInboxData(usuarioId);
+async function buildLeadsSinRespuesta(usuarioId, conexionWhatsappId = null) {
+  const inbox = await loadInboxData(usuarioId, { conexionWhatsappId });
   const pendientes = (inbox.chats || [])
     .filter((c) => !c.bloqueado && (c.noLeidos || 0) > 0)
     .sort((a, b) => {
@@ -259,15 +277,18 @@ function embudoDesdeMetricas(kpis) {
   };
 }
 
-async function computePanelDashboard(usuarioId) {
+async function computePanelDashboard(usuarioId, opts = {}) {
+  const conexionWhatsappId =
+    opts.conexionWhatsappId ?? opts.conexion_whatsapp_id ?? null;
+  logMetricasMulti(conexionWhatsappId, "computePanelDashboard");
   const flujos = await fetchFlujosList(usuarioId);
 
   const [sistema, resumenHoy, headerStats, actividad, leadsSinRespuesta] = await Promise.all([
     buildSistema(usuarioId),
-    computeResumen(usuarioId, { periodo: "hoy" }),
-    computeHeaderStats(usuarioId, flujos),
-    fetchActividadReciente(usuarioId, flujos),
-    buildLeadsSinRespuesta(usuarioId),
+    computeResumen(usuarioId, { periodo: "hoy", conexion_whatsapp_id: conexionWhatsappId }),
+    computeHeaderStats(usuarioId, flujos, conexionWhatsappId),
+    fetchActividadReciente(usuarioId, flujos, conexionWhatsappId),
+    buildLeadsSinRespuesta(usuarioId, conexionWhatsappId),
   ]);
 
   const kpisHoy = resumenHoy?.kpis || {};

@@ -13,7 +13,9 @@ function protegerApi(req, res, next) {
 // GET /api/panel/dashboard
 router.get("/api/panel/dashboard", protegerApi, async (req, res) => {
   try {
-    const data = await computePanelDashboard(req.session.usuario.id);
+    const data = await computePanelDashboard(req.session.usuario.id, {
+      conexionWhatsappId: req.query.conexion_whatsapp_id || null,
+    });
     res.json(data);
   } catch (error) {
     console.log("[panelApi] dashboard:", error.message);

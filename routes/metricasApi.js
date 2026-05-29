@@ -25,6 +25,7 @@ function queryOpts(req) {
     desde: req.query.desde,
     hasta: req.query.hasta,
     flujo_id: req.query.flujo_id || req.query.flujoId || null,
+    conexion_whatsapp_id: req.query.conexion_whatsapp_id || null,
   };
 }
 

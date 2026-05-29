@@ -291,7 +291,13 @@ router.get("/api/flujos", protegerApi, async (req, res) => {
     ]);
 
     const mapaConexiones = buildMapaConexiones(conexiones);
-    const { perFlow } = await loadFlujosDashboardData(usuario.id, flujos, activadores);
+    const conexionScope = scope.todas ? null : scope.id;
+    const { perFlow } = await loadFlujosDashboardData(
+      usuario.id,
+      flujos,
+      activadores,
+      conexionScope
+    );
     log(`flujos encontrados=${flujos.length} activadores=${activadores.length}`);
 
     const flows = flujos.map((f) => mapFlowRow(f, activadores, perFlow, mapaConexiones, scope));
@@ -317,11 +323,15 @@ router.get("/api/flujos", protegerApi, async (req, res) => {
 // GET /api/flujos/header-stats — KPIs superiores (header Flujos)
 router.get("/api/flujos/header-stats", protegerApi, async (req, res) => {
   const usuario = req.session.usuario;
-  log(`GET /api/flujos/header-stats usuario=${usuario.id}`);
+  const scope = leerConexionScope(req);
+  log(
+    `GET /api/flujos/header-stats usuario=${usuario.id} conexion=${scope.todas ? CONEXION_TODAS : scope.id}`
+  );
 
   try {
-    const flujos = await fetchFlujos(usuario.id);
-    const data = await computeHeaderStats(usuario.id, flujos);
+    const flujos = await fetchFlujos(usuario.id, scope);
+    const conexionScope = scope.todas ? null : scope.id;
+    const data = await computeHeaderStats(usuario.id, flujos, conexionScope);
     res.json({ ok: true, ...data });
   } catch (error) {
     log("GET header-stats ERROR", error.response?.data || error.message);
@@ -343,16 +353,20 @@ router.get("/api/flujos/header-stats", protegerApi, async (req, res) => {
 // GET /api/flujos/stats
 router.get("/api/flujos/stats", protegerApi, async (req, res) => {
   const usuario = req.session.usuario;
-  log(`GET /api/flujos/stats usuario=${usuario.id}`);
+  const scope = leerConexionScope(req);
+  log(
+    `GET /api/flujos/stats usuario=${usuario.id} conexion=${scope.todas ? CONEXION_TODAS : scope.id}`
+  );
 
   try {
     const [flujos, activadores] = await Promise.all([
-      fetchFlujos(usuario.id),
-      fetchActivadores(usuario.id),
+      fetchFlujos(usuario.id, scope),
+      fetchActivadores(usuario.id, scope),
     ]);
 
-    await loadFlujosDashboardData(usuario.id, flujos, activadores);
-    const stats = await computeHeaderStats(usuario.id, flujos);
+    const conexionScope = scope.todas ? null : scope.id;
+    await loadFlujosDashboardData(usuario.id, flujos, activadores, conexionScope);
+    const stats = await computeHeaderStats(usuario.id, flujos, conexionScope);
     res.json({ ok: true, stats });
   } catch (error) {
     log("GET stats ERROR", error.response?.data || error.message);

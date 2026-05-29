@@ -15,6 +15,23 @@ function headers(extra = {}) {
   };
 }
 
+const CONEXION_TODAS = "__todas__";
+
+function buildConexionFilter(conexionWhatsappId) {
+  const raw = conexionWhatsappId == null ? "" : String(conexionWhatsappId).trim();
+  if (!raw || raw === CONEXION_TODAS) return "";
+  return `&conexion_whatsapp_id=eq.${encodeURIComponent(raw)}`;
+}
+
+function logMetricasMulti(conexionWhatsappId, ctx = "") {
+  const raw = conexionWhatsappId == null ? "" : String(conexionWhatsappId).trim();
+  const scope = !raw || raw === CONEXION_TODAS ? "todas" : "uuid";
+  const id = scope === "uuid" ? raw : "";
+  console.log(
+    `[METRICAS_MULTI]${ctx ? ` ${ctx}` : ""} conexion_whatsapp_id=${id || "(none)"} scope=${scope}`
+  );
+}
+
 function startOfTodayIso() {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
@@ -101,30 +118,32 @@ function countFlujosActivos(flujos) {
   return n;
 }
 
-async function countConversacionesReales(usuarioId) {
+async function countConversacionesReales(usuarioId, conexionWhatsappId = null) {
   const uid = encodeURIComponent(usuarioId);
-  const desdeTabla = await supabaseCount("conversaciones", `usuario_id=eq.${uid}`);
+  const connF = buildConexionFilter(conexionWhatsappId);
+  const desdeTabla = await supabaseCount("conversaciones", `usuario_id=eq.${uid}${connF}`);
   if (desdeTabla !== null) return desdeTabla;
 
-  const rows = await supabaseSelect("mensajes", `usuario_id=eq.${uid}`, "cliente_numero");
+  const rows = await supabaseSelect("mensajes", `usuario_id=eq.${uid}${connF}`, "cliente_numero");
   if (!Array.isArray(rows)) return 0;
   return new Set(rows.map((r) => r.cliente_numero).filter(Boolean)).size;
 }
 
-async function countConversacionesEnRango(usuarioId, desdeIso, hastaIso) {
+async function countConversacionesEnRango(usuarioId, desdeIso, hastaIso, conexionWhatsappId = null) {
   const uid = encodeURIComponent(usuarioId);
   const desde = encodeURIComponent(desdeIso);
   const hasta = encodeURIComponent(hastaIso);
+  const connF = buildConexionFilter(conexionWhatsappId);
 
   const desdeTabla = await supabaseCount(
     "conversaciones",
-    `usuario_id=eq.${uid}&creado_en=gte.${desde}&creado_en=lt.${hasta}`
+    `usuario_id=eq.${uid}${connF}&creado_en=gte.${desde}&creado_en=lt.${hasta}`
   );
   if (desdeTabla !== null) return desdeTabla;
 
   const rows = await supabaseSelect(
     "mensajes",
-    `usuario_id=eq.${uid}&creado_en=gte.${desde}&creado_en=lt.${hasta}`,
+    `usuario_id=eq.${uid}${connF}&creado_en=gte.${desde}&creado_en=lt.${hasta}`,
     "cliente_numero"
   );
   if (!Array.isArray(rows)) return 0;
@@ -147,30 +166,33 @@ async function sumarVentasEnRango(usuarioId, desdeIso, hastaIso) {
   return totales[monedas[0]];
 }
 
-async function fetchSeguimientosRows(usuarioId) {
+async function fetchSeguimientosRows(usuarioId, conexionWhatsappId = null) {
   const uid = encodeURIComponent(usuarioId);
+  const connF = buildConexionFilter(conexionWhatsappId);
   return (
     (await supabaseSelect(
       "seguimientos_programados",
-      `usuario_id=eq.${uid}`,
+      `usuario_id=eq.${uid}${connF}`,
       "flujo_id,estado,cliente_numero,creado_en,actualizado_en,enviado_en,respondido_en"
     )) || []
   );
 }
 
-async function fetchConversionesRows(usuarioId) {
+async function fetchConversionesRows(usuarioId, conexionWhatsappId = null) {
   const uid = encodeURIComponent(usuarioId);
+  const connF = buildConexionFilter(conexionWhatsappId);
   const rows = await supabaseSelect(
     "crm_conversiones",
-    `usuario_id=eq.${uid}&order=creado_en.desc`,
+    `usuario_id=eq.${uid}${connF}&order=creado_en.desc`,
     "flujo_id,valor,moneda,cliente_numero,creado_en,origen"
   );
   if (rows === null) return [];
   return rows;
 }
 
-async function fetchMensajesParaClientes(usuarioId, segRows) {
+async function fetchMensajesParaClientes(usuarioId, segRows, conexionWhatsappId = null) {
   const uid = encodeURIComponent(usuarioId);
+  const connF = buildConexionFilter(conexionWhatsappId);
   const numeros = [...new Set(segRows.map((r) => r.cliente_numero).filter(Boolean))];
   if (!numeros.length) return [];
 
@@ -180,7 +202,7 @@ async function fetchMensajesParaClientes(usuarioId, segRows) {
     const inList = chunk.map((n) => encodeURIComponent(n)).join(",");
     const rows = await supabaseSelect(
       "mensajes",
-      `usuario_id=eq.${uid}&cliente_numero=in.(${inList})&order=creado_en.desc`,
+      `usuario_id=eq.${uid}${connF}&cliente_numero=in.(${inList})&order=creado_en.desc`,
       "cliente_numero,direccion,creado_en"
     );
     if (Array.isArray(rows)) all.push(...rows);
@@ -297,8 +319,10 @@ function computePerFlowMetrics(flowIds, segRows, conversionesRows, mensajesRows)
   return byFlow;
 }
 
-async function computeHeaderStats(usuarioId, flujos = []) {
+async function computeHeaderStats(usuarioId, flujos = [], conexionWhatsappId = null) {
+  logMetricasMulti(conexionWhatsappId, "computeHeaderStats");
   const uid = encodeURIComponent(usuarioId);
+  const connF = buildConexionFilter(conexionWhatsappId);
   const hoy = startOfTodayIso();
   const ayer = startOfYesterdayIso();
 
@@ -315,24 +339,24 @@ async function computeHeaderStats(usuarioId, flujos = []) {
     conversionesRows,
   ] = await Promise.all([
     supabaseCount("clientes", `usuario_id=eq.${uid}&estado=neq.bloqueado`),
-    countConversacionesReales(usuarioId),
+    countConversacionesReales(usuarioId, conexionWhatsappId),
     supabaseCount("clientes", `usuario_id=eq.${uid}&creado_en=gte.${encodeURIComponent(hoy)}`),
     supabaseCount(
       "clientes",
       `usuario_id=eq.${uid}&creado_en=gte.${encodeURIComponent(ayer)}&creado_en=lt.${encodeURIComponent(hoy)}`
     ),
-    countConversacionesEnRango(usuarioId, hoy, new Date().toISOString()),
-    countConversacionesEnRango(usuarioId, ayer, hoy),
-    supabaseCount("crm_conversiones", `usuario_id=eq.${uid}`),
+    countConversacionesEnRango(usuarioId, hoy, new Date().toISOString(), conexionWhatsappId),
+    countConversacionesEnRango(usuarioId, ayer, hoy, conexionWhatsappId),
+    supabaseCount("crm_conversiones", `usuario_id=eq.${uid}${connF}`),
     supabaseCount(
       "crm_conversiones",
-      `usuario_id=eq.${uid}&creado_en=gte.${encodeURIComponent(hoy)}`
+      `usuario_id=eq.${uid}${connF}&creado_en=gte.${encodeURIComponent(hoy)}`
     ),
     supabaseCount(
       "crm_conversiones",
-      `usuario_id=eq.${uid}&creado_en=gte.${encodeURIComponent(ayer)}&creado_en=lt.${encodeURIComponent(hoy)}`
+      `usuario_id=eq.${uid}${connF}&creado_en=gte.${encodeURIComponent(ayer)}&creado_en=lt.${encodeURIComponent(hoy)}`
     ),
-    fetchConversionesRows(usuarioId),
+    fetchConversionesRows(usuarioId, conexionWhatsappId),
   ]);
 
   let ventasMonto = 0;
@@ -360,14 +384,15 @@ async function computeHeaderStats(usuarioId, flujos = []) {
   };
 }
 
-async function loadFlujosDashboardData(usuarioId, flujos, activadores) {
+async function loadFlujosDashboardData(usuarioId, flujos, activadores, conexionWhatsappId = null) {
+  logMetricasMulti(conexionWhatsappId, "loadFlujosDashboardData");
   const flowIds = flujos.map((f) => f.id);
   const [segRows, conversionesRows] = await Promise.all([
-    fetchSeguimientosRows(usuarioId),
-    fetchConversionesRows(usuarioId),
+    fetchSeguimientosRows(usuarioId, conexionWhatsappId),
+    fetchConversionesRows(usuarioId, conexionWhatsappId),
   ]);
 
-  const mensajesRows = await fetchMensajesParaClientes(usuarioId, segRows || []);
+  const mensajesRows = await fetchMensajesParaClientes(usuarioId, segRows || [], conexionWhatsappId);
   const perFlow = computePerFlowMetrics(
     flowIds,
     segRows || [],
