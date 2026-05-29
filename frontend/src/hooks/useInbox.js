@@ -85,7 +85,7 @@ export function useInbox({ onUnreadChange } = {}) {
   const [cargandoChat, setCargandoChat] = useState(false);
   const [busqueda, setBusqueda] = useState("");
   const [menuChatKey, setMenuChatKey] = useState(null);
-  const [tagModalNumero, setTagModalNumero] = useState(null);
+  const [tagModalTarget, setTagModalTarget] = useState(null);
   const [conexionesInbox, setConexionesInbox] = useState([]);
   const [conexionSeleccionadaId, setConexionSeleccionadaId] = useState(null);
 
@@ -113,7 +113,7 @@ export function useInbox({ onUnreadChange } = {}) {
     setMensajes([]);
     setChatMeta(null);
     setMenuChatKey(null);
-    setTagModalNumero(null);
+    setTagModalTarget(null);
     setCargandoChat(false);
   }, []);
 
@@ -522,10 +522,36 @@ export function useInbox({ onUnreadChange } = {}) {
     setMensajes([]);
     setChatMeta(null);
     setMenuChatKey(null);
-    setTagModalNumero(null);
+    setTagModalTarget(null);
     setCargandoChat(false);
     setChats([]);
     setConexionSeleccionadaId(nextId);
+  }, []);
+
+  const etiquetasModal = useMemo(() => {
+    const connId = tagModalTarget?.conexion_whatsapp_id;
+    if (!connId) return [];
+    return etiquetasDisponibles.filter((e) =>
+      sameConexionId(e.conexion_whatsapp_id ?? e.conexionWhatsappId, connId)
+    );
+  }, [etiquetasDisponibles, tagModalTarget]);
+
+  const openTagModal = useCallback((chat) => {
+    const numero = String(chat.cliente_numero ?? chat.numero ?? "").trim();
+    const conexion_whatsapp_id = String(
+      chat.conexion_whatsapp_id ?? chat.conexionWhatsappId ?? ""
+    ).trim();
+    if (!numero || !conexion_whatsapp_id) return;
+    setTagModalTarget({
+      numero,
+      conexion_whatsapp_id,
+      chatKey:
+        chat.chatKey || chatListKey(numero, conexion_whatsapp_id),
+    });
+  }, []);
+
+  const closeTagModal = useCallback(() => {
+    setTagModalTarget(null);
   }, []);
 
   const cambiarFiltroEtiqueta = useCallback(
@@ -541,31 +567,35 @@ export function useInbox({ onUnreadChange } = {}) {
 
   const aplicarEtiqueta = useCallback(
     async (numero, etiqueta) => {
-      await guardarEtiqueta(numero, etiqueta);
+      const target = tagModalTarget;
+      if (!target?.conexion_whatsapp_id) return;
+
+      await guardarEtiqueta(numero, etiqueta, target.conexion_whatsapp_id);
       const color = mapaColores[etiqueta] || "#22c55e";
       setChats((prev) =>
         prev.map((c) =>
-          c.numero === numero || c.cliente_numero === numero
+          c.chatKey === target.chatKey
             ? { ...c, etiquetas: [{ nombre: etiqueta, color }] }
             : c
         )
       );
-      setTagModalNumero(null);
+      setTagModalTarget(null);
     },
-    [mapaColores]
+    [mapaColores, tagModalTarget]
   );
 
   const quitarEtiquetaChat = useCallback(async (numero) => {
-    await quitarEtiqueta(numero);
+    const target = tagModalTarget;
+    if (!target?.conexion_whatsapp_id) return;
+
+    await quitarEtiqueta(numero, target.conexion_whatsapp_id);
     setChats((prev) =>
       prev.map((c) =>
-        c.numero === numero || c.cliente_numero === numero
-          ? { ...c, etiquetas: [] }
-          : c
+        c.chatKey === target.chatKey ? { ...c, etiquetas: [] } : c
       )
     );
-    setTagModalNumero(null);
-  }, []);
+    setTagModalTarget(null);
+  }, [tagModalTarget]);
 
   const toggleBloqueo = useCallback(
     async (chatItem, bloqueado) => {
@@ -641,8 +671,10 @@ export function useInbox({ onUnreadChange } = {}) {
     setBusqueda,
     menuChatKey,
     setMenuChatKey,
-    tagModalNumero,
-    setTagModalNumero,
+    tagModalTarget,
+    etiquetasModal,
+    openTagModal,
+    closeTagModal,
     totalNoLeidos,
     abrirChat,
     cambiarFiltroEtiqueta,

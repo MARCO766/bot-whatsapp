@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 
 export default function TagModal({
   numero,
@@ -12,7 +12,13 @@ export default function TagModal({
     etiquetasDisponibles[0]?.nombre || ""
   );
 
+  useEffect(() => {
+    setEtiqueta(etiquetasDisponibles[0]?.nombre || "");
+  }, [numero, etiquetasDisponibles]);
+
   if (!numero) return null;
+
+  const sinEtiquetas = etiquetasDisponibles.length === 0;
 
   return (
     <div className="tagModalOverlay" onClick={onCerrar}>
@@ -23,20 +29,27 @@ export default function TagModal({
         <h3>🏷️ Etiquetar chat</h3>
         <p className="tagModalNum">{numero}</p>
 
-        <select
-          value={etiqueta}
-          onChange={(e) => setEtiqueta(e.target.value)}
-        >
-          {etiquetasDisponibles.map((et) => (
-            <option key={et.nombre} value={et.nombre}>
-              {et.nombre}
-            </option>
-          ))}
-        </select>
+        {sinEtiquetas ? (
+          <p className="tagModalEmpty">
+            No hay etiquetas en esta línea. Créalas en la sección Etiquetas.
+          </p>
+        ) : (
+          <select
+            value={etiqueta}
+            onChange={(e) => setEtiqueta(e.target.value)}
+          >
+            {etiquetasDisponibles.map((et) => (
+              <option key={et.nombre} value={et.nombre}>
+                {et.nombre}
+              </option>
+            ))}
+          </select>
+        )}
 
         <button
           type="button"
           className="tagSave"
+          disabled={sinEtiquetas || !etiqueta}
           style={{
             background:
               mapaColores[etiqueta] ||

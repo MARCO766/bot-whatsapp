@@ -135,14 +135,19 @@ router.post("/api/inbox/marcar-leido", protegerApi, async (req, res) => {
 // POST /api/inbox/etiqueta
 router.post("/api/inbox/etiqueta", protegerApi, async (req, res) => {
   try {
-    const { numero, etiqueta } = req.body || {};
-    if (!numero || !etiqueta) {
+    const {
+      numero,
+      etiqueta,
+      conexion_whatsapp_id: conexionWhatsappId,
+    } = req.body || {};
+    if (!numero || !etiqueta || !conexionWhatsappId) {
       return res.status(400).json({ ok: false, error: "Datos incompletos" });
     }
     const usuarioId = req.session.usuario.id;
+    const filtroConexion = filtroConexionQuery(conexionWhatsappId);
 
     await axios.delete(
-      `${SUPABASE_URL}/rest/v1/clientes_etiquetas?cliente_numero=eq.${encodeURIComponent(numero)}&usuario_id=eq.${usuarioId}`,
+      `${SUPABASE_URL}/rest/v1/clientes_etiquetas?cliente_numero=eq.${encodeURIComponent(numero)}&usuario_id=eq.${usuarioId}${filtroConexion}`,
       { headers: supabaseHeaders() }
     );
 
@@ -152,6 +157,7 @@ router.post("/api/inbox/etiqueta", protegerApi, async (req, res) => {
         cliente_numero: numero,
         usuario_id: usuarioId,
         etiqueta,
+        conexion_whatsapp_id: conexionWhatsappId,
       },
       {
         headers: supabaseHeaders({
@@ -161,9 +167,14 @@ router.post("/api/inbox/etiqueta", protegerApi, async (req, res) => {
       }
     );
 
-    rt.etiquetaActualizada(req, usuarioId, { numero, etiqueta, accion: "asignada" });
+    rt.etiquetaActualizada(req, usuarioId, {
+      numero,
+      etiqueta,
+      conexion_whatsapp_id: conexionWhatsappId,
+      accion: "asignada",
+    });
     rt.clienteActualizado(req, usuarioId, { numero, etiquetas: [etiqueta] });
-    res.json({ ok: true, numero, etiqueta });
+    res.json({ ok: true, numero, etiqueta, conexion_whatsapp_id: conexionWhatsappId });
   } catch (error) {
     log("etiqueta ERROR", error.response?.data || error.message);
     res.status(500).json({ ok: false });
@@ -173,19 +184,23 @@ router.post("/api/inbox/etiqueta", protegerApi, async (req, res) => {
 // POST /api/inbox/quitar-etiqueta
 router.post("/api/inbox/quitar-etiqueta", protegerApi, async (req, res) => {
   try {
-    const { numero } = req.body || {};
-    if (!numero) return res.status(400).json({ ok: false });
+    const { numero, conexion_whatsapp_id: conexionWhatsappId } = req.body || {};
+    if (!numero || !conexionWhatsappId) {
+      return res.status(400).json({ ok: false, error: "Datos incompletos" });
+    }
+    const filtroConexion = filtroConexionQuery(conexionWhatsappId);
 
     await axios.delete(
-      `${SUPABASE_URL}/rest/v1/clientes_etiquetas?cliente_numero=eq.${numero}&usuario_id=eq.${req.session.usuario.id}`,
+      `${SUPABASE_URL}/rest/v1/clientes_etiquetas?cliente_numero=eq.${encodeURIComponent(numero)}&usuario_id=eq.${req.session.usuario.id}${filtroConexion}`,
       { headers: supabaseHeaders() }
     );
 
     rt.etiquetaActualizada(req, req.session.usuario.id, {
       numero,
+      conexion_whatsapp_id: conexionWhatsappId,
       accion: "quitada",
     });
-    res.json({ ok: true, numero });
+    res.json({ ok: true, numero, conexion_whatsapp_id: conexionWhatsappId });
   } catch (error) {
     log("quitar-etiqueta ERROR", error.response?.data || error.message);
     res.status(500).json({ ok: false });
@@ -279,7 +294,7 @@ router.delete("/api/inbox/chat", protegerApi, async (req, res) => {
       { headers }
     );
     await axios.delete(
-      `${SUPABASE_URL}/rest/v1/clientes_etiquetas?cliente_numero=eq.${numero}&usuario_id=eq.${usuarioId}`,
+      `${SUPABASE_URL}/rest/v1/clientes_etiquetas?cliente_numero=eq.${encodeURIComponent(numero)}&usuario_id=eq.${usuarioId}${filtroConexion}`,
       { headers }
     );
     await axios.delete(

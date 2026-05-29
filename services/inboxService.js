@@ -20,6 +20,11 @@ function filtroConexionQuery(conexionWhatsappId) {
   return `&conexion_whatsapp_id=eq.${encodeURIComponent(conexionWhatsappId)}`;
 }
 
+function sameConexionId(a, b) {
+  if (a == null || b == null) return false;
+  return String(a).trim().toLowerCase() === String(b).trim().toLowerCase();
+}
+
 function chatCompositeKey(numero, conexionWhatsappId) {
   const n = String(numero || "").trim();
   const c = String(conexionWhatsappId || "").trim();
@@ -92,7 +97,7 @@ async function loadInboxData(
       { headers: supabaseHeaders() }
     ),
     axios.get(
-      `${SUPABASE_URL}/rest/v1/etiquetas?usuario_id=eq.${usuarioId}&select=nombre,color`,
+      `${SUPABASE_URL}/rest/v1/etiquetas?usuario_id=eq.${usuarioId}&select=nombre,color,conexion_whatsapp_id`,
       { headers: supabaseHeaders() }
     ),
     axios.get(
@@ -213,7 +218,11 @@ async function loadInboxData(
       lastMsg?.tipo ||
       "";
     const tags = etiquetasClientes
-      .filter((e) => e.cliente_numero === numero)
+      .filter(
+        (e) =>
+          e.cliente_numero === numero &&
+          sameConexionId(e.conexion_whatsapp_id, connId)
+      )
       .map((e) => ({
         nombre: e.etiqueta,
         color: mapaColoresEtiquetas[e.etiqueta] || "#25d366",

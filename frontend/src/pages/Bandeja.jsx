@@ -114,7 +114,7 @@ export default function Bandeja({ onUnreadChange }) {
             )
           }
           onEtiqueta={(chat) => {
-            inbox.setTagModalNumero(chat.numero || chat.cliente_numero);
+            inbox.openTagModal(chat);
             inbox.setMenuChatKey(null);
           }}
           onBloquear={inbox.toggleBloqueo}
@@ -143,12 +143,12 @@ export default function Bandeja({ onUnreadChange }) {
       </div>
 
       <TagModal
-        numero={inbox.tagModalNumero}
-        etiquetasDisponibles={inbox.etiquetasDisponibles}
+        numero={inbox.tagModalTarget?.numero}
+        etiquetasDisponibles={inbox.etiquetasModal}
         mapaColores={inbox.mapaColores}
         onGuardar={inbox.aplicarEtiqueta}
         onQuitar={inbox.quitarEtiquetaChat}
-        onCerrar={() => inbox.setTagModalNumero(null)}
+        onCerrar={inbox.closeTagModal}
       />
     </div>
   );

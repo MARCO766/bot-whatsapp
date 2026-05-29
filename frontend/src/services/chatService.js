@@ -68,17 +68,24 @@ export async function marcarLeido(numero, conexionWhatsappId) {
   });
 }
 
-export async function guardarEtiqueta(numero, etiqueta) {
+export async function guardarEtiqueta(numero, etiqueta, conexionWhatsappId) {
   return request("/api/inbox/etiqueta", {
     method: "POST",
-    body: JSON.stringify({ numero, etiqueta }),
+    body: JSON.stringify({
+      numero,
+      etiqueta,
+      conexion_whatsapp_id: conexionWhatsappId,
+    }),
   });
 }
 
-export async function quitarEtiqueta(numero) {
+export async function quitarEtiqueta(numero, conexionWhatsappId) {
   return request("/api/inbox/quitar-etiqueta", {
     method: "POST",
-    body: JSON.stringify({ numero }),
+    body: JSON.stringify({
+      numero,
+      conexion_whatsapp_id: conexionWhatsappId,
+    }),
   });
 }
 
