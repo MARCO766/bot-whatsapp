@@ -28,15 +28,29 @@ async function cancelarSeguimientosPorRespuesta(numero, usuarioId, io, opts = {}
   if (!numero) return;
 
   const mensajeAt = opts.mensajeAt || new Date().toISOString();
+  const conexionWhatsappId = opts.conexionWhatsappId || null;
 
-  console.log("[SEGUIMIENTO_FIX] cancelOnReply evaluando", {
-    numero,
-    usuarioId,
+  console.log("[SEGUIMIENTO_MULTI] cancelar por respuesta — inicio", {
+    usuario_id: usuarioId,
+    cliente_numero: numero,
+    conexion_whatsapp_id: conexionWhatsappId,
     mensajeAt,
   });
 
-  const pendientes = await listarPendientesRespondibles(numero, usuarioId);
-  if (!pendientes.length) return;
+  const pendientes = await listarPendientesRespondibles(
+    numero,
+    usuarioId,
+    100,
+    conexionWhatsappId
+  );
+  if (!pendientes.length) {
+    console.log("[SEGUIMIENTO_MULTI] cancelar por respuesta — sin pendientes en esta conexión", {
+      usuario_id: usuarioId,
+      cliente_numero: numero,
+      conexion_whatsapp_id: conexionWhatsappId,
+    });
+    return;
+  }
 
   const campanasCanceladas = new Set();
 
@@ -59,6 +73,14 @@ async function cancelarSeguimientosPorRespuesta(numero, usuarioId, io, opts = {}
       });
       continue;
     }
+
+    console.log("[SEGUIMIENTO_MULTI] cancelar por respuesta — aplicando", {
+      seguimiento_id: seg.id,
+      campana_id: seg.campana_id,
+      usuario_id: usuarioId,
+      cliente_numero: numero,
+      conexion_whatsapp_id: seg.conexion_whatsapp_id || conexionWhatsappId || null,
+    });
 
     await actualizarEstado(seg.id, ESTADOS_SEGUIMIENTO.RESPONDIDO, {
       error_detalle: "Lead respondió",

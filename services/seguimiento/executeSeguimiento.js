@@ -36,8 +36,19 @@ function emitirEstadoSeguimiento(io, item, estado) {
 async function enviarMensajeSeguimiento(item) {
   const payload = item.mensaje_payload || {};
   const tipo = (item.mensaje_tipo || payload.tipo || "texto").toLowerCase();
-  const opciones = { usuarioId: item.usuario_id };
+  const opciones = {
+    usuarioId: item.usuario_id,
+    conexionWhatsappId: item.conexion_whatsapp_id || null,
+  };
   const botones = Array.isArray(payload.botones) ? payload.botones : [];
+
+  console.log("[SEGUIMIENTO_MULTI] enviando mensaje de seguimiento", {
+    seguimiento_id: item.id,
+    usuario_id: item.usuario_id,
+    cliente_numero: item.cliente_numero,
+    conexion_whatsapp_id: item.conexion_whatsapp_id || null,
+    paso_index: item.paso_index,
+  });
 
   if (tipo === "texto") {
     const texto = (payload.texto || "").trim();
@@ -159,10 +170,12 @@ async function intentarReservarYEnviarPaso(item, io) {
   }
 
   try {
-    console.log("[SEGUIMIENTO_WORKER] enviando seguimiento", {
+    console.log("[SEGUIMIENTO_MULTI] ejecutando seguimiento", {
       id: reservado.id,
       lote_id: reservado.campana_id,
-      cliente: reservado.cliente_numero,
+      usuario_id: reservado.usuario_id,
+      cliente_numero: reservado.cliente_numero,
+      conexion_whatsapp_id: reservado.conexion_whatsapp_id || null,
       paso_index: reservado.paso_index,
     });
     await enviarMensajeSeguimiento(reservado);
@@ -196,10 +209,17 @@ async function procesarSeguimientoItem(item, io) {
       item.cliente_numero,
       item.usuario_id,
       item.checkpoint_at,
-      item.creado_en
+      item.creado_en,
+      item.conexion_whatsapp_id || null
     );
 
     if (respondio) {
+      console.log("[SEGUIMIENTO_MULTI] seguimiento omitido — lead respondió en esta conexión", {
+        id: item.id,
+        usuario_id: item.usuario_id,
+        cliente_numero: item.cliente_numero,
+        conexion_whatsapp_id: item.conexion_whatsapp_id || null,
+      });
       await actualizarEstado(item.id, ESTADOS_SEGUIMIENTO.RESPONDIDO, {
         error_detalle: "Lead respondió antes del envío",
       });

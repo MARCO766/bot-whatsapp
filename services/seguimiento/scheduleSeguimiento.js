@@ -15,6 +15,7 @@ async function programarSeguimientoNodo({
   flujoId,
   nodoId,
   html,
+  conexionWhatsappId = null,
 }) {
   const config = parseSeguimientoFromHtml(html);
 
@@ -31,9 +32,11 @@ async function programarSeguimientoNodo({
   console.log("[SEGUIMIENTO_FIX] checkpoint_at", checkpointAt);
   console.log("[SEGUIMIENTO_FIX] lote_id", campanaId);
 
-  console.log("[SEGUIMIENTO] programando pasos", {
+  console.log("[SEGUIMIENTO_MULTI] programando seguimiento", {
     nodoId,
-    cliente: numero,
+    usuario_id: usuarioId,
+    cliente_numero: numero,
+    conexion_whatsapp_id: conexionWhatsappId || null,
     pasos: config.pasos.length,
     checkpoint_at: checkpointAt,
     lote_id: campanaId,
@@ -44,7 +47,7 @@ async function programarSeguimientoNodo({
     acumuladoSegundos += paso.segundos;
     const runAt = toTimestamptzUtc(Date.now() + acumuladoSegundos * 1000);
 
-    rows.push({
+    const row = {
       campana_id: campanaId,
       usuario_id: usuarioId || null,
       cliente_numero: numero,
@@ -62,19 +65,22 @@ async function programarSeguimientoNodo({
       detener_si_responde: config.detenerSiResponde,
       checkpoint_at: checkpointAt,
       estado: ESTADOS_SEGUIMIENTO.PENDIENTE,
-    });
+    };
+    if (conexionWhatsappId) {
+      row.conexion_whatsapp_id = conexionWhatsappId;
+    }
+    rows.push(row);
   });
 
   const insertados = await insertarProgramados(rows);
 
-  console.log(
-    "[SEGUIMIENTO] Programados:",
-    insertados.length,
-    "paso(s) | cliente:",
-    numero,
-    "| campaña:",
-    campanaId
-  );
+  console.log("[SEGUIMIENTO_MULTI] seguimiento programado OK", {
+    programados: insertados.length,
+    usuario_id: usuarioId,
+    cliente_numero: numero,
+    conexion_whatsapp_id: conexionWhatsappId || null,
+    campana_id: campanaId,
+  });
 
   return { campanaId, programados: insertados.length, items: insertados };
 }

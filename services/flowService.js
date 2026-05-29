@@ -668,6 +668,7 @@ async function ejecutarFlujo(
           flujoId,
           nodoId,
           nodo,
+          conexionWhatsappId: flowContext.conexionWhatsappId || null,
         });
       } catch (err) {
         console.error(

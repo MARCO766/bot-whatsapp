@@ -564,6 +564,7 @@ if (!activadorEjecutado) {
 try {
   await cancelarSeguimientosPorRespuesta(from, usuarioIdWebhook, req, {
     mensajeAt: creadoEn,
+    conexionWhatsappId: conexionWhatsappId || null,
   });
 } catch (cancelErr) {
   console.log("[WEBHOOK] cancelar seguimientos:", cancelErr.message);

@@ -7,6 +7,7 @@ async function ejecutarSeguimientoEnFlujo({
   flujoId,
   nodoId,
   nodo,
+  conexionWhatsappId = null,
 }) {
   const html = nodo.html || "";
   const className = nodo.className || "";
@@ -16,7 +17,16 @@ async function ejecutarSeguimientoEnFlujo({
   console.log("[SEGUIMIENTO] Nodo actual:", nodoId);
   console.log("[SEGUIMIENTO] Tipo detectado: seguimiento");
   console.log("[SEGUIMIENTO] className:", className);
-  console.log("[SEGUIMIENTO] cliente:", numero, "| usuario:", usuarioId, "| flujo:", flujoId);
+  console.log(
+    "[SEGUIMIENTO] cliente:",
+    numero,
+    "| usuario:",
+    usuarioId,
+    "| flujo:",
+    flujoId,
+    "| conexion:",
+    conexionWhatsappId || "(legacy)"
+  );
 
   const config = parseSeguimientoFromHtml(html);
 
@@ -49,6 +59,7 @@ async function ejecutarSeguimientoEnFlujo({
     flujoId,
     nodoId,
     html,
+    conexionWhatsappId,
   });
 
   console.log("[SEGUIMIENTO] insert seguimiento", {

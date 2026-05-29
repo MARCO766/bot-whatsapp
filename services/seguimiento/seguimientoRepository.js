@@ -64,6 +64,12 @@ function filtroEqCampo(campo, valor) {
   return `${campo}=eq.${encodeURIComponent(valor)}`;
 }
 
+/** Multi-número: filtra por línea WhatsApp; sin id = comportamiento legacy (sin filtro). */
+function filtroConexionWhatsapp(conexionWhatsappId) {
+  if (!conexionWhatsappId) return "";
+  return `&conexion_whatsapp_id=eq.${encodeURIComponent(conexionWhatsappId)}`;
+}
+
 /** Deduplicación solo dentro del mismo lote (campana_id). */
 async function existePasoEnviadoOProcesando(item, excludeId = null) {
   if (!item.campana_id) return null;
@@ -232,6 +238,8 @@ async function cancelarPendientesCliente(
     url += `&creado_en=lt.${encodeTimestampFilter(opts.creadoAntesDe)}`;
   }
 
+  url += filtroConexionWhatsapp(opts.conexionWhatsappId);
+
   await axios.patch(
     url,
     {
@@ -244,23 +252,34 @@ async function cancelarPendientesCliente(
   );
 }
 
-async function clienteRespondioDespues(numero, usuarioId, checkpointAt, fallbackAt = null) {
+async function clienteRespondioDespues(
+  numero,
+  usuarioId,
+  checkpointAt,
+  fallbackAt = null,
+  conexionWhatsappId = null
+) {
   const umbral = checkpointAt || fallbackAt;
   if (!umbral) return false;
 
   const checkpointEncoded = encodeTimestampFilter(umbral);
 
   let url =
-    `${SUPABASE_URL}/rest/v1/mensajes?cliente_numero=eq.${encodeURIComponent(numero)}&direccion=eq.entrante&creado_en=gt.${checkpointEncoded}&select=id,creado_en&limit=1`;
+    `${SUPABASE_URL}/rest/v1/mensajes?cliente_numero=eq.${encodeURIComponent(numero)}&direccion=eq.entrante&creado_en=gt.${checkpointEncoded}&select=id,creado_en,conexion_whatsapp_id&limit=1`;
 
   if (usuarioId) {
     url += `&usuario_id=eq.${encodeURIComponent(usuarioId)}`;
   }
 
+  url += filtroConexionWhatsapp(conexionWhatsappId);
+
   const response = await axios.get(url, { headers: headers() });
   const hay = (response.data || []).length > 0;
 
-  console.log("[SEGUIMIENTO_FIX] mensaje > checkpoint_at ?", {
+  console.log("[SEGUIMIENTO_MULTI] respuesta después del checkpoint", {
+    usuario_id: usuarioId,
+    cliente_numero: numero,
+    conexion_whatsapp_id: conexionWhatsappId || null,
     checkpoint_at: umbral,
     hay_respuesta: hay,
     mensaje: response.data?.[0] || null,
@@ -269,7 +288,12 @@ async function clienteRespondioDespues(numero, usuarioId, checkpointAt, fallback
   return hay;
 }
 
-async function listarPendientesRespondibles(numero, usuarioId, limite = 100) {
+async function listarPendientesRespondibles(
+  numero,
+  usuarioId,
+  limite = 100,
+  conexionWhatsappId = null
+) {
   let url =
     `${SUPABASE_URL}/rest/v1/seguimientos_programados?cliente_numero=eq.${encodeURIComponent(numero)}` +
     `&estado=in.(${ESTADOS_SEGUIMIENTO.PENDIENTE},${ESTADOS_SEGUIMIENTO.PROCESANDO})` +
@@ -279,6 +303,8 @@ async function listarPendientesRespondibles(numero, usuarioId, limite = 100) {
   if (usuarioId) {
     url += `&usuario_id=eq.${encodeURIComponent(usuarioId)}`;
   }
+
+  url += filtroConexionWhatsapp(conexionWhatsappId);
 
   const response = await axios.get(url, { headers: headers() });
   return response.data || [];
