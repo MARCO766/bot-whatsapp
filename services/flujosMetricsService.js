@@ -150,6 +150,80 @@ async function countConversacionesEnRango(usuarioId, desdeIso, hastaIso, conexio
   return new Set(rows.map((r) => r.cliente_numero).filter(Boolean)).size;
 }
 
+/** Números con actividad en una línea (conversaciones → fallback mensajes). */
+async function fetchNumerosEnLinea(usuarioId, conexionWhatsappId) {
+  const uid = encodeURIComponent(usuarioId);
+  const connF = buildConexionFilter(conexionWhatsappId);
+  if (!connF) return null;
+
+  const rows = await supabaseSelect(
+    "conversaciones",
+    `usuario_id=eq.${uid}${connF}`,
+    "cliente_numero"
+  );
+  if (Array.isArray(rows) && rows.length) {
+    return [...new Set(rows.map((r) => r.cliente_numero).filter(Boolean))];
+  }
+
+  const msgRows = await supabaseSelect(
+    "mensajes",
+    `usuario_id=eq.${uid}${connF}`,
+    "cliente_numero"
+  );
+  if (!Array.isArray(msgRows)) return [];
+  return [...new Set(msgRows.map((r) => r.cliente_numero).filter(Boolean))];
+}
+
+async function countClientesActivosPorNumeros(usuarioId, numeros) {
+  if (!numeros?.length) return 0;
+  const uid = encodeURIComponent(usuarioId);
+  let total = 0;
+  for (let i = 0; i < numeros.length; i += 80) {
+    const chunk = numeros.slice(i, i + 80);
+    const inList = chunk.map((n) => encodeURIComponent(n)).join(",");
+    const n = await supabaseCount(
+      "clientes",
+      `usuario_id=eq.${uid}&estado=neq.bloqueado&numero=in.(${inList})`
+    );
+    if (n === null) return null;
+    total += n;
+  }
+  return total;
+}
+
+/**
+ * Leads vivos header: global = clientes no bloqueados.
+ * Por línea (sin clientes.conexion_whatsapp_id): clientes activos con conversación/mensaje en esa línea.
+ */
+async function countLeadsVivos(usuarioId, conexionWhatsappId = null) {
+  const uid = encodeURIComponent(usuarioId);
+  const connF = buildConexionFilter(conexionWhatsappId);
+  if (!connF) {
+    return supabaseCount("clientes", `usuario_id=eq.${uid}&estado=neq.bloqueado`);
+  }
+  const numeros = await fetchNumerosEnLinea(usuarioId, conexionWhatsappId);
+  const n = await countClientesActivosPorNumeros(usuarioId, numeros);
+  return n ?? 0;
+}
+
+/**
+ * Tendencia leads header: global = altas en clientes por creado_en.
+ * Por línea: conversaciones (o mensajes) nuevas en el rango con conexion_whatsapp_id.
+ */
+async function countLeadsNuevosEnRango(usuarioId, desdeIso, hastaIso, conexionWhatsappId = null) {
+  const uid = encodeURIComponent(usuarioId);
+  const connF = buildConexionFilter(conexionWhatsappId);
+  const desde = encodeURIComponent(desdeIso);
+  const hasta = encodeURIComponent(hastaIso);
+  if (!connF) {
+    return supabaseCount(
+      "clientes",
+      `usuario_id=eq.${uid}&creado_en=gte.${desde}&creado_en=lt.${hasta}`
+    );
+  }
+  return countConversacionesEnRango(usuarioId, desdeIso, hastaIso, conexionWhatsappId);
+}
+
 async function sumarVentasEnRango(usuarioId, desdeIso, hastaIso) {
   const uid = encodeURIComponent(usuarioId);
   const desde = encodeURIComponent(desdeIso);
@@ -338,13 +412,10 @@ async function computeHeaderStats(usuarioId, flujos = [], conexionWhatsappId = n
     conversionesCountAyer,
     conversionesRows,
   ] = await Promise.all([
-    supabaseCount("clientes", `usuario_id=eq.${uid}&estado=neq.bloqueado`),
+    countLeadsVivos(usuarioId, conexionWhatsappId),
     countConversacionesReales(usuarioId, conexionWhatsappId),
-    supabaseCount("clientes", `usuario_id=eq.${uid}&creado_en=gte.${encodeURIComponent(hoy)}`),
-    supabaseCount(
-      "clientes",
-      `usuario_id=eq.${uid}&creado_en=gte.${encodeURIComponent(ayer)}&creado_en=lt.${encodeURIComponent(hoy)}`
-    ),
+    countLeadsNuevosEnRango(usuarioId, hoy, new Date().toISOString(), conexionWhatsappId),
+    countLeadsNuevosEnRango(usuarioId, ayer, hoy, conexionWhatsappId),
     countConversacionesEnRango(usuarioId, hoy, new Date().toISOString(), conexionWhatsappId),
     countConversacionesEnRango(usuarioId, ayer, hoy, conexionWhatsappId),
     supabaseCount("crm_conversiones", `usuario_id=eq.${uid}${connF}`),
