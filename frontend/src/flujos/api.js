@@ -171,6 +171,20 @@ export function importFlowJson(payload, conexionWhatsappId) {
   });
 }
 
+export function fetchFlowVersions(id, conexionWhatsappId) {
+  return request(withConexionQuery(`/api/flujos/${id}/versiones`, conexionWhatsappId));
+}
+
+export function restoreFlowVersion(flujoId, versionId, conexionWhatsappId) {
+  return request(
+    withConexionQuery(`/api/flujos/${flujoId}/versiones/${versionId}/restore`, conexionWhatsappId),
+    {
+      method: "POST",
+      body: JSON.stringify(writeConexionBody({}, conexionWhatsappId)),
+    }
+  );
+}
+
 export function deleteFlow(id, conexionWhatsappId) {
   return request(withConexionQuery(`/api/flujos/${id}`, conexionWhatsappId), {
     method: "DELETE",

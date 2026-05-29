@@ -13,6 +13,7 @@ export default function FlowActionsMenu({
   onDelete,
   onMoveFolder,
   onEditName,
+  onShowHistory,
   puedeEscribir = true,
 }) {
   const btnRef = useRef(null);
@@ -23,16 +24,14 @@ export default function FlowActionsMenu({
 
   const close = useCallback(() => onOpenChange(null), [onOpenChange]);
 
-  const showComingSoon = useCallback(() => {
-    setMiniToast("Próximamente");
-    close();
+  const showMiniToast = useCallback((msg) => {
+    setMiniToast(msg);
     window.setTimeout(() => setMiniToast(null), 2800);
-  }, [close]);
+  }, []);
 
   const handleDuplicate = useCallback(() => {
     if (!puedeEscribir) {
-      setMiniToast("Selecciona una línea WhatsApp");
-      window.setTimeout(() => setMiniToast(null), 2800);
+      showMiniToast("Selecciona una línea WhatsApp");
       close();
       return;
     }
@@ -172,14 +171,13 @@ export default function FlowActionsMenu({
         <button
           type="button"
           role="menuitem"
-          className="flMenuItemDisabled"
-          aria-disabled="true"
-          title="Próximamente"
-          onClick={showComingSoon}
+          onClick={() => {
+            onShowHistory?.(flow);
+            close();
+          }}
         >
           <span className="flMenuIcon" aria-hidden>🕐</span>
           <span>Ver historial</span>
-          <span className="flMenuSoon">Próximamente</span>
         </button>
 
         <div className="flMenuDivider" />

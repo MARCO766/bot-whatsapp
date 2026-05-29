@@ -32,6 +32,10 @@ const { subirArchivoRm24hMedia } = require("../services/rm24hMediaStorage");
 const MAX_IMAGEN_NODO_FLUJO = 2 * 1024 * 1024;
 const seguimientoRoutes = require("./seguimiento");
 const rt = require("../services/realtimeService");
+const {
+  mergeFlowDataForSave,
+  createVersionSafe,
+} = require("../services/flujosVersionService");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
@@ -581,30 +585,56 @@ router.post("/inbox/responder", protegerPanel, upload.single("archivo"), handleI
 router.post("/guardar-flujo-builder", protegerPanel, async (req, res) => {
   try {
     const { id, nombre, data } = req.body;
+    const usuarioId = req.session.usuario.id;
 
     if (!nombre || !data) {
       return res.status(400).send("Falta nombre o data del flujo");
     }
 
     if(id){
-      await axios.patch(
-        `${SUPABASE_URL}/rest/v1/flujos_builder?id=eq.${id}`,
+      const flujoRes = await axios.get(
+        `${SUPABASE_URL}/rest/v1/flujos_builder?id=eq.${encodeURIComponent(id)}&usuario_id=eq.${usuarioId}&select=id,nombre,data,conexion_whatsapp_id`,
         {
-  nombre,
-  usuario_id: req.session.usuario.id,
-  data
-},
+          headers: {
+            apikey: SUPABASE_KEY,
+            Authorization: `Bearer ${SUPABASE_KEY}`,
+          },
+        }
+      );
+
+      const existing = flujoRes.data?.[0];
+      if (!existing) {
+        return res.status(404).send("Flujo no encontrado");
+      }
+
+      const mergedData = mergeFlowDataForSave(existing.data, data);
+
+      await createVersionSafe({
+        flujoId: id,
+        usuarioId,
+        conexionWhatsappId: existing.conexion_whatsapp_id,
+        nombre: nombre || existing.nombre,
+        dataSnapshot: mergedData,
+        motivo: "guardado_builder",
+      });
+
+      await axios.patch(
+        `${SUPABASE_URL}/rest/v1/flujos_builder?id=eq.${encodeURIComponent(id)}&usuario_id=eq.${usuarioId}`,
+        {
+          nombre,
+          data: mergedData,
+        },
         {
           headers: {
             apikey: SUPABASE_KEY,
             Authorization: `Bearer ${SUPABASE_KEY}`,
             "Content-Type": "application/json",
-            Prefer: "return=minimal"
-          }
+            Prefer: "return=minimal",
+          },
         }
       );
 
-      rt.flujoGuardado(req, req.session.usuario.id, {
+      rt.flujoGuardado(req, usuarioId, {
         id,
         nombre,
         accion: "actualizado",

@@ -12,6 +12,10 @@ const {
   computeHeaderStats,
 } = require("../services/flujosMetricsService");
 const { registrarConversion } = require("../services/conversionService");
+const {
+  listVersions,
+  restoreVersion,
+} = require("../services/flujosVersionService");
 const rt = require("../services/realtimeService");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -636,6 +640,68 @@ router.post("/api/flujos", protegerApi, async (req, res) => {
   } catch (error) {
     log("POST flujo ERROR", error.response?.data || error.message);
     res.status(500).json({ ok: false, error: "No se pudo crear el flujo" });
+  }
+});
+
+// GET /api/flujos/:id/versiones — historial de snapshots del diseño
+router.get("/api/flujos/:id/versiones", protegerApi, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const usuarioId = req.session.usuario.id;
+    const scope = leerConexionScope(req);
+
+    const acceso = await assertFlujoEnScope(usuarioId, id, scope);
+    if (!acceso.ok) {
+      return res.status(acceso.status).json({
+        ok: false,
+        error: scopeErrorMessage(acceso),
+        versiones: [],
+      });
+    }
+
+    const versiones = await listVersions(usuarioId, id);
+    res.json({ ok: true, versiones });
+  } catch (error) {
+    log("GET versiones ERROR", error.response?.data || error.message);
+    res.status(500).json({ ok: false, error: "No se pudo cargar el historial", versiones: [] });
+  }
+});
+
+// POST /api/flujos/:id/versiones/:versionId/restore
+router.post("/api/flujos/:id/versiones/:versionId/restore", protegerApi, async (req, res) => {
+  try {
+    const { id, versionId } = req.params;
+    const usuarioId = req.session.usuario.id;
+    const scope = leerConexionScope(req);
+    const scopeErr = requiereConexionEscribir(scope);
+    if (scopeErr) {
+      return res.status(400).json({ ok: false, error: scopeErr.error });
+    }
+
+    if (!(await validarConexionUsuario(usuarioId, scope.id))) {
+      return res.status(400).json({ ok: false, error: "Línea WhatsApp no válida" });
+    }
+
+    const acceso = await assertFlujoEnScope(usuarioId, id, scope);
+    if (!acceso.ok) {
+      return res.status(acceso.status).json({ ok: false, error: scopeErrorMessage(acceso) });
+    }
+
+    const result = await restoreVersion(usuarioId, id, versionId);
+    if (!result.ok) {
+      return res.status(result.status || 500).json({ ok: false, error: result.error });
+    }
+
+    rt.flujoGuardado(req, usuarioId, {
+      id,
+      accion: "restaurado",
+      version_id: versionId,
+    });
+
+    res.json({ ok: true, flow: result.flujo });
+  } catch (error) {
+    log("POST restore version ERROR", error.response?.data || error.message);
+    res.status(500).json({ ok: false, error: "No se pudo restaurar la versión" });
   }
 });
 

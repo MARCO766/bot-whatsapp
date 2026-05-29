@@ -33,6 +33,7 @@ function FlowCard({
   onDelete,
   onMoveFolder,
   onEditName,
+  onShowHistory,
   puedeEscribir = true,
 }) {
   const [showTimeline, setShowTimeline] = useState(false);
@@ -88,6 +89,7 @@ function FlowCard({
           onDelete={onDelete}
           onMoveFolder={onMoveFolder}
           onEditName={onEditName}
+          onShowHistory={onShowHistory}
           puedeEscribir={puedeEscribir}
         />
       </div>

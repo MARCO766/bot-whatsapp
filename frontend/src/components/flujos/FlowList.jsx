@@ -14,6 +14,7 @@ function FlowList({
   onDelete,
   onMoveFolder,
   onEditName,
+  onShowHistory,
   onCreate,
   onImport,
   apiOnline,
@@ -55,6 +56,7 @@ function FlowList({
           onDelete={onDelete}
           onMoveFolder={onMoveFolder}
           onEditName={onEditName}
+          onShowHistory={onShowHistory}
           puedeEscribir={puedeEscribir}
         />
       ))}

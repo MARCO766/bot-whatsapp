@@ -5,6 +5,7 @@ import FlujosHeaderStats from "./components/flujos/FlujosHeaderStats";
 import { useFlujosHeaderStats } from "./flujos/useFlujosHeaderStats";
 import ConfirmModal from "./components/flujos/ConfirmModal";
 import ImportFlowModal from "./components/flujos/ImportFlowModal";
+import FlowVersionsModal from "./components/flujos/FlowVersionsModal";
 import { FLOW_STATES } from "./flujos/constants";
 import { flujosStyles } from "./flujos/styles";
 import { SORT_OPTIONS } from "./flujos/constants";
@@ -43,6 +44,8 @@ export default function Flujos() {
     duplicar,
     exportar,
     importarJson,
+    cargarVersiones,
+    restaurarVersion,
     eliminar,
     renombrar,
     updateMeta,
@@ -66,6 +69,7 @@ export default function Flujos() {
   }, [load]);
 
   const [importOpen, setImportOpen] = useState(false);
+  const [historyFlow, setHistoryFlow] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [newFlowOpen, setNewFlowOpen] = useState(false);
   const [newFlowName, setNewFlowName] = useState("");
@@ -298,8 +302,21 @@ export default function Flujos() {
         onDelete={(flow) => setConfirmDelete(flow)}
         onMoveFolder={moveToFolder}
         onEditName={handleEditName}
+        onShowHistory={(flow) => setHistoryFlow(flow)}
         onCreate={() => setNewFlowOpen(true)}
         onImport={() => setImportOpen(true)}
+        puedeEscribir={puedeEscribir}
+      />
+
+      <FlowVersionsModal
+        open={!!historyFlow}
+        flow={historyFlow}
+        onClose={() => setHistoryFlow(null)}
+        onLoadVersions={cargarVersiones}
+        onRestore={restaurarVersion}
+        onRestoreBlocked={() =>
+          showToast("Selecciona una línea para restaurar una versión", "error")
+        }
         puedeEscribir={puedeEscribir}
       />
 

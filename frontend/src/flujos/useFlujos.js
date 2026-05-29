@@ -9,6 +9,8 @@ import {
   fetchFlows,
   importFlowJson,
   importFlowTemplate,
+  fetchFlowVersions,
+  restoreFlowVersion,
   patchFlowMeta,
   patchFlowNombre,
   resolveApiUrl,
@@ -348,6 +350,59 @@ export function useFlujos() {
     [apiOnline, conexionSeleccionadaId, load, requireLineaParaEscribir, showToast]
   );
 
+  const cargarVersiones = useCallback(
+    async (flujoId) => {
+      if (!flujoId || !apiOnline) return [];
+      try {
+        const res = await fetchFlowVersions(flujoId, conexionSeleccionadaId);
+        return res.versiones || [];
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 403) {
+          showToast(
+            "Este flujo es de otra línea. Cambia a la línea correcta para ver el historial.",
+            "error"
+          );
+        } else {
+          const msg = err instanceof ApiError ? err.message : "No se pudo cargar el historial";
+          showToast(msg, "error");
+        }
+        return [];
+      }
+    },
+    [apiOnline, conexionSeleccionadaId, showToast]
+  );
+
+  const restaurarVersion = useCallback(
+    async (flujoId, versionId) => {
+      if (!puedeEscribir) {
+        showToast("Selecciona una línea para restaurar una versión", "error");
+        return false;
+      }
+      if (!apiOnline) {
+        showToast("Sin conexión API", "error");
+        return false;
+      }
+      try {
+        await restoreFlowVersion(flujoId, versionId, conexionSeleccionadaId);
+        showToast("Versión restaurada. Abre el constructor para revisar el grafo.");
+        await load();
+        return true;
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 403) {
+          showToast(
+            "Este flujo es de otra línea. Selecciona la línea correcta para restaurar.",
+            "error"
+          );
+          return false;
+        }
+        const msg = err instanceof ApiError ? err.message : "No se pudo restaurar la versión";
+        showToast(msg, "error");
+        return false;
+      }
+    },
+    [apiOnline, conexionSeleccionadaId, load, puedeEscribir, showToast]
+  );
+
   const eliminar = useCallback(
     async (id) => {
       if (!apiOnline) return showToast("Sin conexión API", "error");
@@ -397,6 +452,8 @@ export function useFlujos() {
     importarJson,
     duplicar,
     exportar,
+    cargarVersiones,
+    restaurarVersion,
     eliminar,
     conexionesInbox,
     conexionSeleccionadaId,

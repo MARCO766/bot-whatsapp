@@ -1254,6 +1254,72 @@ export const flujosStyles = `
   background: rgba(148, 163, 184, 0.15);
 }
 
+.flVersionsModal .flVersionsList {
+  list-style: none;
+  margin: 0 0 16px;
+  padding: 0;
+  max-height: min(52vh, 420px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.flVersionRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  background: rgba(2, 6, 23, 0.45);
+}
+
+.flVersionMotivo {
+  display: block;
+  font-weight: 700;
+  color: #e2e8f0;
+  font-size: 0.88rem;
+}
+
+.flVersionMeta {
+  display: block;
+  font-size: 0.78rem;
+  color: #64748b;
+  margin-top: 2px;
+}
+
+.flVersionDate {
+  display: block;
+  font-size: 0.72rem;
+  color: #94a3b8;
+  margin-top: 4px;
+}
+
+.flVersionActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.flVersionsEmpty {
+  margin: 0 0 16px;
+  padding: 24px;
+  text-align: center;
+  color: #64748b;
+  font-size: 0.88rem;
+  border-radius: 14px;
+  border: 1px dashed rgba(148, 163, 184, 0.2);
+}
+
+.flBtnMuted {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .flTemplateGrid {
   display: grid;
   gap: 10px;
