@@ -378,8 +378,14 @@ async function ejecutarFlujo(
 
   flowContext.usuarioId = usuarioId;
   flowContext.numero = flowContext.numero || numero;
+
+  const conexionLineaEntrante =
+    opts.conexionWhatsappId != null && String(opts.conexionWhatsappId).trim() !== ""
+      ? String(opts.conexionWhatsappId).trim()
+      : null;
+
   flowContext.conexionWhatsappId =
-    opts.conexionWhatsappId || flowContext.conexionWhatsappId || null;
+    conexionLineaEntrante ?? flowContext.conexionWhatsappId ?? null;
 
   logFlowKey(usuarioId, flowContext.conexionWhatsappId, numero);
 
@@ -662,13 +668,20 @@ async function ejecutarFlujo(
         numero,
       });
       try {
+        const conexionParaSeguimiento =
+          conexionLineaEntrante ?? flowContext.conexionWhatsappId ?? null;
+
+        console.log(
+          `[FLUJO SEGUIMIENTO CONTEXT] cliente_numero=${numero} flowContext.conexionWhatsappId=${flowContext.conexionWhatsappId ?? null} conexionLineaEntrante=${conexionLineaEntrante ?? null} conexionWhatsappId_pasada_a_seguimiento=${conexionParaSeguimiento ?? null}`
+        );
+
         await ejecutarSeguimientoEnFlujo({
           numero,
           usuarioId,
           flujoId,
           nodoId,
           nodo,
-          conexionWhatsappId: flowContext.conexionWhatsappId || null,
+          conexionWhatsappId: conexionParaSeguimiento,
         });
       } catch (err) {
         console.error(

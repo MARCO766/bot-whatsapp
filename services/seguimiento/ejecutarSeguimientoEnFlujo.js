@@ -53,6 +53,10 @@ async function ejecutarSeguimientoEnFlujo({
     );
   });
 
+  console.log(
+    `[EJECUTAR SEGUIMIENTO FLUJO] cliente_numero=${numero} flujo_id=${flujoId ?? null} nodo_id=${nodoId} conexionWhatsappId=${conexionWhatsappId ?? null}`
+  );
+
   const result = await programarSeguimientoNodo({
     numero,
     usuarioId,

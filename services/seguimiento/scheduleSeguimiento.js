@@ -72,6 +72,13 @@ async function programarSeguimientoNodo({
     rows.push(row);
   });
 
+  const conexionInsertada =
+    rows[0]?.conexion_whatsapp_id ?? conexionWhatsappId ?? null;
+
+  console.log(
+    `[SCHEDULE SEGUIMIENTO] cliente_numero=${numero} flujo_id=${flujoId ?? null} nodo_id=${nodoId} conexionWhatsappId_recibida=${conexionWhatsappId ?? null} conexion_whatsapp_id_insertada=${conexionInsertada ?? null}`
+  );
+
   const insertados = await insertarProgramados(rows);
 
   console.log("[SEGUIMIENTO_MULTI] seguimiento programado OK", {
