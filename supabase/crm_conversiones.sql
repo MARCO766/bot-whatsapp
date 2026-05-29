@@ -9,6 +9,7 @@ create table if not exists public.crm_conversiones (
   flujo_id uuid null,
   nodo_id text null,
   cliente_numero text not null,
+  conexion_whatsapp_id uuid null,
   valor numeric(14, 2) not null default 0,
   moneda text not null default 'USD',
   origen text not null default 'flujo',
@@ -44,6 +45,33 @@ create index if not exists idx_crm_conversiones_flujo
 
 create index if not exists idx_crm_conversiones_cliente
   on public.crm_conversiones (usuario_id, cliente_numero, creado_en desc);
+
+-- Multi-número Fase 1: conversión por línea (usuario + lead + conexión)
+alter table public.crm_conversiones
+  add column if not exists conexion_whatsapp_id uuid;
+
+do $$
+begin
+  if exists (
+    select 1 from information_schema.tables
+    where table_schema = 'public' and table_name = 'conexiones_whatsapp'
+  ) then
+    alter table public.crm_conversiones
+      drop constraint if exists crm_conversiones_conexion_whatsapp_id_fkey;
+    alter table public.crm_conversiones
+      add constraint crm_conversiones_conexion_whatsapp_id_fkey
+      foreign key (conexion_whatsapp_id)
+      references public.conexiones_whatsapp (id) on delete set null;
+  end if;
+exception when others then
+  raise notice 'Omitida FK crm_conversiones.conexion_whatsapp_id: %', sqlerrm;
+end $$;
+
+create index if not exists idx_crm_conversiones_cliente_conexion
+  on public.crm_conversiones (usuario_id, cliente_numero, conexion_whatsapp_id, creado_en desc);
+
+comment on column public.crm_conversiones.conexion_whatsapp_id is
+  'Línea WhatsApp (conexiones_whatsapp.id). Clave con usuario_id y cliente_numero para multi-número.';
 
 do $$ begin
   alter table public.crm_conversiones

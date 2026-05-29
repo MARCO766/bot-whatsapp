@@ -524,10 +524,14 @@ async function ejecutarFlujo(
       (nodo?.html || "").match(/class="conversion-title"[^>]*>([^<]+)/i)?.[1]?.trim() ||
       "Conversión";
 
+    const conexionParaConversion =
+      flowContext.conexionWhatsappId ?? conexionLineaEntrante ?? null;
+
     console.log("[CONVERSION] nodo detectado", {
       nodoId,
       flujoId,
       cliente_numero: numero,
+      conexion_whatsapp_id: conexionParaConversion,
       valor,
       moneda,
       origen,
@@ -539,6 +543,7 @@ async function ejecutarFlujo(
       flujoId,
       nodoId,
       clienteNumero: numero,
+      conexionWhatsappId: conexionParaConversion,
       valor,
       moneda,
       origen: origen || "flujo",

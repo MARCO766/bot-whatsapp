@@ -36,6 +36,13 @@ function normalizarValor(valor) {
   return Number.isFinite(n) && n >= 0 ? Math.round(n * 100) / 100 : 0;
 }
 
+function normalizarConexionId(conexionWhatsappId) {
+  if (conexionWhatsappId == null || String(conexionWhatsappId).trim() === "") {
+    return null;
+  }
+  return String(conexionWhatsappId).trim();
+}
+
 function normalizarMonedaISO(raw) {
   if (raw == null || raw === "") return "USD";
   const s = String(raw).trim();
@@ -54,6 +61,7 @@ async function registrarConversion({
   flujoId = null,
   nodoId = null,
   clienteNumero,
+  conexionWhatsappId = null,
   valor = 0,
   moneda = "USD",
   origen = "flujo",
@@ -68,6 +76,7 @@ async function registrarConversion({
     flujo_id: flujoId || null,
     nodo_id: nodoId || null,
     cliente_numero: String(clienteNumero).trim(),
+    conexion_whatsapp_id: normalizarConexionId(conexionWhatsappId),
     valor: normalizarValor(valor),
     moneda: normalizarMonedaISO(moneda),
     origen: normalizarOrigen(origen),
@@ -89,6 +98,7 @@ async function registrarConversion({
     console.log("[CONVERSION] insert ok", {
       id: row?.id || null,
       cliente: payload.cliente_numero,
+      conexion_whatsapp_id: payload.conexion_whatsapp_id,
       valor: payload.valor,
       moneda: payload.moneda,
       flujo_id: payload.flujo_id,
