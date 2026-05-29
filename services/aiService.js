@@ -1089,10 +1089,15 @@ async function enriquecerContextoFlujo(flowContext, numero, usuarioId) {
 
   try {
     if (!flowContext.ultimo_mensaje) {
-      const resMsg = await axios.get(
-        `${SUPABASE_URL}/rest/v1/mensajes?usuario_id=eq.${usuarioId}&cliente_numero=eq.${encodeURIComponent(numero)}&direccion=eq.entrante&select=contenido&order=creado_en.desc&limit=1`,
-        { headers, timeout: 8000 }
-      );
+      const conexionWhatsappId = flowContext?.conexionWhatsappId || null;
+      let msgUrl =
+        `${SUPABASE_URL}/rest/v1/mensajes?usuario_id=eq.${usuarioId}` +
+        `&cliente_numero=eq.${encodeURIComponent(numero)}` +
+        `&direccion=eq.entrante&select=contenido&order=creado_en.desc&limit=1`;
+      if (conexionWhatsappId) {
+        msgUrl += `&conexion_whatsapp_id=eq.${encodeURIComponent(conexionWhatsappId)}`;
+      }
+      const resMsg = await axios.get(msgUrl, { headers, timeout: 8000 });
       const msg = resMsg.data?.[0];
       if (msg?.contenido) flowContext.ultimo_mensaje = msg.contenido;
     }

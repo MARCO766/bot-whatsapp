@@ -20,6 +20,7 @@ const {
   guardarSesionIAPendiente,
   obtenerSesionIAPendiente,
   limpiarSesionIAPendiente,
+  logFlowKey,
 } = require("./iaFlowSession");
 const {
   esComandoResetFlujo,
@@ -379,6 +380,8 @@ async function ejecutarFlujo(
   flowContext.numero = flowContext.numero || numero;
   flowContext.conexionWhatsappId =
     opts.conexionWhatsappId || flowContext.conexionWhatsappId || null;
+
+  logFlowKey(usuarioId, flowContext.conexionWhatsappId, numero);
 
   const opEnvioNodo = () =>
     opcionesEnvioFlujo(usuarioId, flowContext.conexionWhatsappId);
@@ -746,6 +749,7 @@ async function ejecutarFlujo(
       if (flowContext.openaiAgentPausar && !resumeIA) {
         guardarSesionIAPendiente({
           usuarioId,
+          conexionWhatsappId: flowContext.conexionWhatsappId,
           numero,
           flujoId,
           nodoId,
@@ -771,14 +775,14 @@ async function ejecutarFlujo(
       }
 
       if (resumeIA && routeHandle) {
-        limpiarSesionIAPendiente(usuarioId, numero);
+        limpiarSesionIAPendiente(usuarioId, flowContext.conexionWhatsappId, numero);
         logConexionesSalientes(nodoId, "OpenAI");
         await continuarASiguientes(nodoId, visitados, "openai_agent", routeHandle);
         return;
       }
 
       if (resumeIA) {
-        limpiarSesionIAPendiente(usuarioId, numero);
+        limpiarSesionIAPendiente(usuarioId, flowContext.conexionWhatsappId, numero);
       }
       return;
     }
@@ -820,6 +824,7 @@ async function ejecutarFlujo(
       if (flowContext.iaProPausar && !resumeIA) {
         guardarSesionIAPendiente({
           usuarioId,
+          conexionWhatsappId: flowContext.conexionWhatsappId,
           numero,
           flujoId,
           nodoId,
@@ -845,14 +850,14 @@ async function ejecutarFlujo(
       }
 
       if (resumeIA && routeHandle) {
-        limpiarSesionIAPendiente(usuarioId, numero);
+        limpiarSesionIAPendiente(usuarioId, flowContext.conexionWhatsappId, numero);
         logConexionesSalientes(nodoId, "IA Pro");
         await continuarASiguientes(nodoId, visitados, "ia_pro", routeHandle);
         return;
       }
 
       if (resumeIA) {
-        limpiarSesionIAPendiente(usuarioId, numero);
+        limpiarSesionIAPendiente(usuarioId, flowContext.conexionWhatsappId, numero);
       }
       return;
     }
@@ -906,6 +911,7 @@ async function ejecutarFlujo(
       if (esRouter && flowContext.iaPausar && !resumeIA) {
         guardarSesionIAPendiente({
           usuarioId,
+          conexionWhatsappId: flowContext.conexionWhatsappId,
           numero,
           flujoId,
           nodoId,
@@ -933,7 +939,7 @@ async function ejecutarFlujo(
       }
 
       if (esRouter && resumeIA) {
-        limpiarSesionIAPendiente(usuarioId, numero);
+        limpiarSesionIAPendiente(usuarioId, flowContext.conexionWhatsappId, numero);
       }
 
       logConexionesSalientes(nodoId, "IA");
@@ -1109,8 +1115,15 @@ async function continuarFlujoDesdeLectorPago(numero, usuarioId, resultado) {
   return true;
 }
 
-async function reanudarFlujoIAPendiente(numero, mensaje, usuarioId) {
-  const sesion = obtenerSesionIAPendiente(usuarioId, numero);
+async function reanudarFlujoIAPendiente(numero, mensaje, usuarioId, conexionWhatsappId) {
+  logFlowKey(usuarioId, conexionWhatsappId, numero);
+
+  if (!conexionWhatsappId) {
+    console.log("[FLUJO] reanudar IA omitido — sin conexionWhatsappId");
+    return false;
+  }
+
+  const sesion = obtenerSesionIAPendiente(usuarioId, conexionWhatsappId, numero);
   if (!sesion?.flujoId || !sesion?.nodoId) return false;
 
   if (!SUPABASE_URL || !SUPABASE_KEY) return false;
@@ -1123,12 +1136,12 @@ async function reanudarFlujoIAPendiente(numero, mensaje, usuarioId) {
   const flujo = responseFlujo.data?.[0];
   const flujoDatos = obtenerDatosFlujo(flujo);
   if (!flujo || !flujoDatos) {
-    limpiarSesionIAPendiente(usuarioId, numero);
+    limpiarSesionIAPendiente(usuarioId, conexionWhatsappId, numero);
     return false;
   }
 
   if (!flujoEstaActivo(flujo)) {
-    limpiarSesionIAPendiente(usuarioId, numero);
+    limpiarSesionIAPendiente(usuarioId, conexionWhatsappId, numero);
     return false;
   }
 
@@ -1137,16 +1150,24 @@ async function reanudarFlujoIAPendiente(numero, mensaje, usuarioId) {
 
   console.log("[FLUJO] Reanudando IA pendiente | nodo:", sesion.nodoId, "| tipo:", tipoPendiente);
 
+  const sesionConexion =
+    conexionWhatsappId ||
+    sesion.conexionWhatsappId ||
+    sesion.flowContext?.conexionWhatsappId ||
+    null;
+
   await ejecutarFlujo(numero, flujoDatos, usuarioId, sesion.flujoId, {
     iaResume: true,
     nodoResumeId: sesion.nodoId,
     visitadosResume: new Set(sesion.visitados || []),
     flowContextResume: {
       ...(sesion.flowContext || {}),
+      conexionWhatsappId: sesionConexion,
       ultimo_mensaje: mensaje,
       ultimoMensaje: mensaje,
     },
     mensajeResume: mensaje,
+    conexionWhatsappId: sesionConexion,
   });
 
   return true;
@@ -1182,9 +1203,12 @@ async function procesarMensajeEntrante(
   console.log("[FLUJO] procesarMensajeEntrante", {
     numero,
     usuarioId,
+    conexionWhatsappId: opts.conexionWhatsappId || null,
     texto: String(texto || "").slice(0, 60),
     messageId: messageId || null,
   });
+
+  logFlowKey(usuarioId, opts.conexionWhatsappId || null, numero);
 
   if (mensajeEntranteYaProcesado(messageId)) {
     console.log("[FLUJO] mensaje duplicado ignorado (webhook):", messageId);
@@ -1219,7 +1243,12 @@ async function procesarMensajeEntrante(
     }
   }
 
-  const reanudado = await reanudarFlujoIAPendiente(numero, texto, usuarioId);
+  const reanudado = await reanudarFlujoIAPendiente(
+    numero,
+    texto,
+    usuarioId,
+    opts.conexionWhatsappId || null
+  );
   if (reanudado) {
     console.log("[FLUJO] reanudado IA/OpenAI pendiente OK");
     return true;

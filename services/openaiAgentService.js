@@ -181,18 +181,21 @@ function appendChatHistory(history, role, text) {
   return next.slice(-MAX_CHAT_HISTORY);
 }
 
-function chatKey(usuarioId, numero) {
-  return `${usuarioId || "0"}:${numero || ""}`;
+function chatKey(usuarioId, conexionWhatsappId, numero) {
+  return `${usuarioId || "0"}:${conexionWhatsappId || ""}:${numero || ""}`;
 }
 
-function getLastReplies(usuarioId, numero) {
-  const list = lastRepliesPorChat.get(chatKey(usuarioId, numero));
+function getLastReplies(usuarioId, conexionWhatsappId, numero) {
+  const list = lastRepliesPorChat.get(chatKey(usuarioId, conexionWhatsappId, numero));
   return Array.isArray(list) ? list.slice(-MAX_LAST_REPLIES) : [];
 }
 
-function pushLastReply(usuarioId, numero, reply) {
-  const key = chatKey(usuarioId, numero);
-  const next = [...getLastReplies(usuarioId, numero), String(reply || "").trim()]
+function pushLastReply(usuarioId, conexionWhatsappId, numero, reply) {
+  const key = chatKey(usuarioId, conexionWhatsappId, numero);
+  const next = [
+    ...getLastReplies(usuarioId, conexionWhatsappId, numero),
+    String(reply || "").trim(),
+  ]
     .filter(Boolean)
     .slice(-MAX_LAST_REPLIES);
   lastRepliesPorChat.set(key, next);
@@ -904,6 +907,7 @@ async function ejecutarNodoOpenAIAgent(nodo, contexto, opts = {}) {
   const nodoId = opts?.nodoId || nodo?.id || null;
   const numero = contexto?.numero || contexto?.from || contexto?.telefono;
   const usuarioId = contexto?.usuarioId || opts?.usuarioId || null;
+  const conexionWhatsappId = contexto?.conexionWhatsappId || null;
 
   const mensajeLead = String(
     contexto?.mensaje ||
@@ -940,7 +944,7 @@ async function ejecutarNodoOpenAIAgent(nodo, contexto, opts = {}) {
       chatHistory = appendChatHistory(chatHistory, "user", mensajeLead);
     }
 
-    const lastReplies = getLastReplies(usuarioId, numero);
+    const lastReplies = getLastReplies(usuarioId, conexionWhatsappId, numero);
     const memoria = contexto.memoriaIA || {};
 
     const resultado = await resolverAnalisisOpenAI(
@@ -994,7 +998,7 @@ async function ejecutarNodoOpenAIAgent(nodo, contexto, opts = {}) {
       await enviarOpenAIConPipelineManual(numero, reply, uidEnvio);
       contexto.ultimaRespuestaIA = reply;
       chatHistory = appendChatHistory(chatHistory, "assistant", reply);
-      pushLastReply(usuarioId, numero, reply);
+      pushLastReply(usuarioId, conexionWhatsappId, numero, reply);
     }
 
     return {

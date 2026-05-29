@@ -174,19 +174,19 @@ function esBonosConfirmacion(m) {
   );
 }
 
-function chatKey(usuarioId, numero) {
-  return `${usuarioId || "0"}:${numero || ""}`;
+function chatKey(usuarioId, conexionWhatsappId, numero) {
+  return `${usuarioId || "0"}:${conexionWhatsappId || ""}:${numero || ""}`;
 }
 
-function getLastReplies(usuarioId, numero) {
-  const key = chatKey(usuarioId, numero);
+function getLastReplies(usuarioId, conexionWhatsappId, numero) {
+  const key = chatKey(usuarioId, conexionWhatsappId, numero);
   const list = lastRepliesPorChat.get(key);
   return Array.isArray(list) ? list.slice(-MAX_LAST_REPLIES) : [];
 }
 
-function pushLastReply(usuarioId, numero, reply) {
-  const key = chatKey(usuarioId, numero);
-  const prev = getLastReplies(usuarioId, numero);
+function pushLastReply(usuarioId, conexionWhatsappId, numero, reply) {
+  const key = chatKey(usuarioId, conexionWhatsappId, numero);
+  const prev = getLastReplies(usuarioId, conexionWhatsappId, numero);
   const next = [...prev, String(reply || "").trim()].filter(Boolean).slice(-MAX_LAST_REPLIES);
   lastRepliesPorChat.set(key, next);
   return next;
@@ -582,6 +582,7 @@ async function resolverAnalisisPro(
 async function ejecutarNodoIAPro(nodo, contexto, opts = {}) {
   const numero = contexto?.numero || contexto?.from || contexto?.telefono;
   const usuarioId = contexto?.usuarioId || null;
+  const conexionWhatsappId = contexto?.conexionWhatsappId || null;
   const config = parseIAProFromNodo(nodo);
 
   if (!opts.resume) {
@@ -609,7 +610,7 @@ async function ejecutarNodoIAPro(nodo, contexto, opts = {}) {
     chatHistory = appendChatHistory(chatHistory, "user", mensajeLead);
   }
 
-  const lastReplies = getLastReplies(usuarioId, numero);
+  const lastReplies = getLastReplies(usuarioId, conexionWhatsappId, numero);
   const memoria = {
     ultimaPregunta:
       contexto.ultimaSalidaBot ||
@@ -654,7 +655,7 @@ async function ejecutarNodoIAPro(nodo, contexto, opts = {}) {
     await enviarTextoWhatsApp(numero, reply, { usuarioId });
     contexto.ultimaRespuestaIA = reply;
     chatHistory = appendChatHistory(chatHistory, "assistant", reply);
-    pushLastReply(usuarioId, numero, reply);
+    pushLastReply(usuarioId, conexionWhatsappId, numero, reply);
   }
 
   console.log("⏸️ IA PRO sigue esperando");
