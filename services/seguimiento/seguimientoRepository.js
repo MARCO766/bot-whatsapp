@@ -97,11 +97,17 @@ function filtroConexionWhatsapp(conexionWhatsappId) {
 
 function mensajeCoincideConexion(row, conexionWhatsappId) {
   const conexion = normalizarConexionId(conexionWhatsappId);
-  const msgConn = row?.conexion_whatsapp_id
-    ? String(row.conexion_whatsapp_id).trim()
-    : null;
+  const msgConn = normalizarConexionId(row?.conexion_whatsapp_id);
   if (conexion) return msgConn === conexion;
   return !msgConn;
+}
+
+/** Seguimiento y contexto deben compartir la misma conexion_whatsapp_id (sin mezclar líneas). */
+function seguimientoMismaConexion(seguimiento, conexionContexto) {
+  const segConn = normalizarConexionId(seguimiento?.conexion_whatsapp_id);
+  const ctxConn = normalizarConexionId(conexionContexto);
+  if (!segConn || !ctxConn) return false;
+  return segConn === ctxConn;
 }
 
 function filtrosClaveLead(numero, usuarioId, conexionWhatsappId) {
@@ -268,7 +274,11 @@ async function cancelarCampana(campanaId, estado, motivo, opts = {}) {
   let url =
     `${SUPABASE_URL}/rest/v1/seguimientos_programados?campana_id=eq.${campanaId}&estado=in.(${ESTADOS_SEGUIMIENTO.PENDIENTE},${ESTADOS_SEGUIMIENTO.PROCESANDO})`;
 
-  url += filtroConexionWhatsapp(opts.conexionWhatsappId ?? null);
+  if (opts.usuarioId && opts.clienteNumero) {
+    url += `&${filtrosClaveLead(opts.clienteNumero, opts.usuarioId, opts.conexionWhatsappId ?? null)}`;
+  } else {
+    url += filtroConexionWhatsapp(opts.conexionWhatsappId ?? null);
+  }
 
   await axios.patch(
     url,
@@ -324,6 +334,13 @@ async function clienteRespondioDespues(
   if (!umbral || !numero || !usuarioId) return false;
 
   const conexion = normalizarConexionId(conexionWhatsappId);
+  if (!conexion) {
+    console.log(
+      `[SEGUIMIENTO_MULTI] clienteRespondioDespues omitido (sin conexion_whatsapp_id) cliente_numero=${numero}`
+    );
+    return false;
+  }
+
   const checkpointEncoded = encodeTimestampFilter(umbral);
 
   const url =
@@ -336,10 +353,33 @@ async function clienteRespondioDespues(
   const hay = Boolean(mensaje);
 
   console.log(
-    `[SEGUIMIENTO_MULTI] clienteRespondioDespues cliente_numero=${numero} usuario_id=${usuarioId} conexion_whatsapp_id=${conexion ?? null} checkpoint_at=${umbral} hay_respuesta=${hay} mensaje_id=${mensaje?.id ?? null} mensaje_conexion=${mensaje?.conexion_whatsapp_id ?? null}`
+    `[SEGUIMIENTO_MULTI] clienteRespondioDespues cliente_numero=${numero} usuario_id=${usuarioId} conexion_whatsapp_id=${conexion} checkpoint_at=${umbral} hay_respuesta=${hay} mensaje_id=${mensaje?.id ?? null} mensaje_conexion=${mensaje?.conexion_whatsapp_id ?? null}`
   );
 
   return hay;
+}
+
+/** Cancelación: solo mensajes de la misma línea que el seguimiento programado. */
+async function leadRespondioParaSeguimiento(seguimiento, conexionMensajeEntrante = null) {
+  if (!seguimiento?.cliente_numero || !seguimiento?.usuario_id) return false;
+
+  if (!seguimientoMismaConexion(seguimiento, conexionMensajeEntrante)) {
+    console.log(
+      `[SEGUIMIENTO_MULTI] leadRespondioParaSeguimiento omitido seguimiento_id=${seguimiento.id} seg_conexion=${seguimiento.conexion_whatsapp_id ?? null} mensaje_conexion=${conexionMensajeEntrante ?? null}`
+    );
+    return false;
+  }
+
+  const conexionSeg = normalizarConexionId(seguimiento.conexion_whatsapp_id);
+  if (!conexionSeg) return false;
+
+  return clienteRespondioDespues(
+    seguimiento.cliente_numero,
+    seguimiento.usuario_id,
+    seguimiento.checkpoint_at,
+    seguimiento.creado_en,
+    conexionSeg
+  );
 }
 
 async function listarPendientesRespondibles(
@@ -358,10 +398,7 @@ async function listarPendientesRespondibles(
 
   const response = await axios.get(url, { headers: headers() });
   const rows = (response.data || []).filter((row) =>
-    mensajeCoincideConexion(
-      { conexion_whatsapp_id: row.conexion_whatsapp_id },
-      conexionWhatsappId
-    )
+    seguimientoMismaConexion(row, conexionWhatsappId)
   );
 
   if (rows.length) {
@@ -393,6 +430,8 @@ async function listarPorNodo(flujoId, nodoId, usuarioId, limite = 30) {
 }
 
 module.exports = {
+  normalizarConexionId,
+  seguimientoMismaConexion,
   insertarProgramados,
   buildClaveDedupPaso,
   existePasoEnviadoOProcesando,
@@ -404,6 +443,7 @@ module.exports = {
   cancelarCampana,
   cancelarPendientesCliente,
   clienteRespondioDespues,
+  leadRespondioParaSeguimiento,
   listarPendientesRespondibles,
   listarPorCliente,
   listarPorNodo,
