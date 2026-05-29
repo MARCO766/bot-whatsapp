@@ -213,6 +213,14 @@ async function intentarReservarYEnviarPaso(item, io) {
 }
 
 async function procesarSeguimientoItem(item, io) {
+  console.log("[EXECUTE SEGUIMIENTO START]", {
+    id: item.id,
+    cliente_numero: item.cliente_numero,
+    conexion_whatsapp_id: item.conexion_whatsapp_id || null,
+    mensaje_tipo: item.mensaje_tipo || null,
+    estado: item.estado || null,
+  });
+
   if (item.solo_si_no_respondio) {
     const respondio = await clienteRespondioDespues(
       item.cliente_numero,
@@ -237,7 +245,8 @@ async function procesarSeguimientoItem(item, io) {
         await cancelarCampana(
           item.campana_id,
           ESTADOS_SEGUIMIENTO.RESPONDIDO,
-          "Lead respondió"
+          "Lead respondió",
+          { conexionWhatsappId: item.conexion_whatsapp_id || null }
         );
       }
 

@@ -12,6 +12,13 @@ function parseTs(value) {
   return Number.isNaN(t) ? null : t;
 }
 
+function mismaConexionWhatsapp(segConexion, mensajeConexion) {
+  const seg = segConexion ? String(segConexion).trim() : null;
+  const msg = mensajeConexion ? String(mensajeConexion).trim() : null;
+  if (msg) return seg === msg;
+  return !seg;
+}
+
 /** Respuesta válida solo si el mensaje entrante es estrictamente posterior al checkpoint. */
 function mensajeEsRespuestaValida(mensajeAt, seguimiento) {
   const mensajeTs = parseTs(mensajeAt);
@@ -55,6 +62,15 @@ async function cancelarSeguimientosPorRespuesta(numero, usuarioId, io, opts = {}
   const campanasCanceladas = new Set();
 
   for (const seg of pendientes) {
+    if (!mismaConexionWhatsapp(seg.conexion_whatsapp_id, conexionWhatsappId)) {
+      console.log("[SEGUIMIENTO_MULTI] cancelar omitido — otra conexión", {
+        seguimiento_id: seg.id,
+        seguimiento_conexion: seg.conexion_whatsapp_id || null,
+        mensaje_conexion: conexionWhatsappId || null,
+      });
+      continue;
+    }
+
     const checkpoint = seg.checkpoint_at || seg.creado_en;
     const esRespuesta = mensajeEsRespuestaValida(mensajeAt, seg);
 
@@ -90,7 +106,9 @@ async function cancelarSeguimientosPorRespuesta(numero, usuarioId, io, opts = {}
 
     if (seg.detener_si_responde && seg.campana_id && !campanasCanceladas.has(seg.campana_id)) {
       campanasCanceladas.add(seg.campana_id);
-      await cancelarCampana(seg.campana_id, ESTADOS_SEGUIMIENTO.RESPONDIDO, "Lead respondió");
+      await cancelarCampana(seg.campana_id, ESTADOS_SEGUIMIENTO.RESPONDIDO, "Lead respondió", {
+        conexionWhatsappId: seg.conexion_whatsapp_id || conexionWhatsappId || null,
+      });
     }
   }
 }

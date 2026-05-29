@@ -147,7 +147,7 @@ async function completarOpcionesEnvio(opciones = {}, numero) {
 
 async function resolverConexionWhatsappPorId(usuarioId, conexionWhatsappId, { soloSeguimientoStrict = false } = {}) {
   const select = soloSeguimientoStrict
-    ? "id,token,phone_id,activo"
+    ? "id,token,phone_id,activo,nombre"
     : "*";
   const responseConexion = await axios.get(
     `${SUPABASE_URL}/rest/v1/conexiones_whatsapp?id=eq.${encodeURIComponent(conexionWhatsappId)}&usuario_id=eq.${encodeURIComponent(usuarioId)}&select=${select}`,
@@ -161,9 +161,32 @@ async function resolverConexionWhatsappPorId(usuarioId, conexionWhatsappId, { so
   return responseConexion.data?.[0] || null;
 }
 
+function logResolverCredenciales(opciones, conexion, phoneIdEnviar) {
+  console.log("[RESOLVER CREDENCIALES]", {
+    origin: opciones.origen || null,
+    strictConexionWhatsappId: Boolean(opciones.strictConexionWhatsappId),
+    conexionWhatsappId_solicitada: opciones.conexionWhatsappId || null,
+    conexion_encontrada_id: conexion?.id || null,
+    conexion_encontrada_nombre: conexion?.nombre || null,
+    conexion_encontrada_activo: conexion?.activo ?? null,
+    phone_id_usado: phoneIdEnviar || null,
+  });
+}
+
+function logMetaSendFinal(opcionesEnvio, numero, phoneIdEnviar) {
+  console.log("[META SEND FINAL]", {
+    to: String(numero || "").trim(),
+    phone_number_id: phoneIdEnviar || null,
+    origin: opcionesEnvio?.origen || null,
+    seguimiento_id: opcionesEnvio?.seguimientoId || null,
+    conexion_whatsapp_id: opcionesEnvio?.conexionWhatsappId || null,
+  });
+}
+
 async function resolverCredencialesEnvio(opciones = {}) {
   let tokenEnviar = TOKEN;
   let phoneIdEnviar = PHONE_ID;
+  let conexionUsada = null;
   const strictConexion = Boolean(opciones.strictConexionWhatsappId);
 
   if (strictConexion) {
@@ -189,6 +212,8 @@ async function resolverCredencialesEnvio(opciones = {}) {
       phone_id: conexion.phone_id,
     });
 
+    logResolverCredenciales(opciones, conexion, conexion.phone_id);
+
     return {
       tokenEnviar: conexion.token,
       phoneIdEnviar: conexion.phone_id,
@@ -201,8 +226,10 @@ async function resolverCredencialesEnvio(opciones = {}) {
       opciones.conexionWhatsappId
     );
     if (conexion) {
+      conexionUsada = conexion;
       tokenEnviar = conexion.token;
       phoneIdEnviar = conexion.phone_id;
+      logResolverCredenciales(opciones, conexionUsada, phoneIdEnviar);
       return { tokenEnviar, phoneIdEnviar };
     }
   }
@@ -220,11 +247,13 @@ async function resolverCredencialesEnvio(opciones = {}) {
 
     const conexion = responseConexion.data?.[0];
     if (conexion) {
+      conexionUsada = conexion;
       tokenEnviar = conexion.token;
       phoneIdEnviar = conexion.phone_id;
     }
   }
 
+  logResolverCredenciales(opciones, conexionUsada, phoneIdEnviar);
   return { tokenEnviar, phoneIdEnviar };
 }
 
@@ -372,6 +401,7 @@ async function enviarTextoWhatsApp(numero, texto, opciones = {}) {
 
     logEmojiDebug("antes enviar whatsapp", textoEnvio);
     console.log("[SEND DEBUG] payload whatsapp:", payloadWhatsapp);
+    logMetaSendFinal(opcionesEnvio, numero, phoneIdEnviar);
 
     const respuestaMeta = await axios.post(
       `https://graph.facebook.com/v19.0/${phoneIdEnviar}/messages`,
@@ -688,6 +718,8 @@ async function enviarMediaWhatsApp(numero, tipo, mediaUrl, caption = "", opcione
       return false;
     }
 
+    logMetaSendFinal(opcionesEnvio, numeroDestino, phoneIdEnviar);
+
     const respuestaMeta = await axios.post(
       `https://graph.facebook.com/v19.0/${phoneIdEnviar}/messages`,
       payload,
@@ -816,6 +848,8 @@ async function enviarBotonesWhatsApp(numero, texto, botones, opciones = {}) {
         },
       },
     };
+
+    logMetaSendFinal(opcionesEnvio, numero, phoneIdEnviar);
 
     const respuestaMeta = await axios.post(
       `https://graph.facebook.com/v19.0/${phoneIdEnviar}/messages`,

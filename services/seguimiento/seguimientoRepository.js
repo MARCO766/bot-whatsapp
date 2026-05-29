@@ -64,10 +64,35 @@ function filtroEqCampo(campo, valor) {
   return `${campo}=eq.${encodeURIComponent(valor)}`;
 }
 
-/** Multi-número: filtra por línea WhatsApp; sin id = comportamiento legacy (sin filtro). */
+/** Multi-número: misma línea o legacy (ambos null). Nunca mezclar A con B. */
 function filtroConexionWhatsapp(conexionWhatsappId) {
-  if (!conexionWhatsappId) return "";
-  return `&conexion_whatsapp_id=eq.${encodeURIComponent(conexionWhatsappId)}`;
+  if (conexionWhatsappId) {
+    return `&conexion_whatsapp_id=eq.${encodeURIComponent(conexionWhatsappId)}`;
+  }
+  return "&conexion_whatsapp_id=is.null";
+}
+
+function filtrosClaveLead(numero, usuarioId, conexionWhatsappId) {
+  let parte =
+    `cliente_numero=eq.${encodeURIComponent(numero)}` +
+    filtroConexionWhatsapp(conexionWhatsappId);
+  if (usuarioId) {
+    parte += `&usuario_id=eq.${encodeURIComponent(usuarioId)}`;
+  }
+  return parte;
+}
+
+function logPendienteSeguimiento(origen, row) {
+  console.log("[WORKER LISTAR PENDIENTES]", {
+    origen,
+    id: row.id,
+    cliente_numero: row.cliente_numero,
+    estado: row.estado,
+    run_at: row.run_at,
+    conexion_whatsapp_id: row.conexion_whatsapp_id || null,
+    flujo_id: row.flujo_id || null,
+    nodo_id: row.nodo_id || null,
+  });
 }
 
 /** Deduplicación solo dentro del mismo lote (campana_id). */
@@ -155,6 +180,11 @@ async function obtenerPendientesVencidos(limite = 40) {
 
   const pendientes = response.data || [];
 
+  if (pendientes.length) {
+    console.log("[WORKER LISTAR PENDIENTES] vencidos total:", pendientes.length);
+    pendientes.forEach((row) => logPendienteSeguimiento("VENCIDOS", row));
+  }
+
   if (!pendientes.length) {
     try {
       const diag = await axios.get(
@@ -199,13 +229,20 @@ async function actualizarEstado(id, estado, extra = {}) {
   );
 }
 
-async function cancelarCampana(campanaId, estado, motivo) {
+async function cancelarCampana(campanaId, estado, motivo, opts = {}) {
   const ahora = nowUtc();
   const campoFecha =
     estado === ESTADOS_SEGUIMIENTO.RESPONDIDO ? "respondido_en" : "cancelado_en";
 
+  let url =
+    `${SUPABASE_URL}/rest/v1/seguimientos_programados?campana_id=eq.${campanaId}&estado=in.(${ESTADOS_SEGUIMIENTO.PENDIENTE},${ESTADOS_SEGUIMIENTO.PROCESANDO})`;
+
+  if (opts.conexionWhatsappId !== undefined) {
+    url += filtroConexionWhatsapp(opts.conexionWhatsappId);
+  }
+
   await axios.patch(
-    `${SUPABASE_URL}/rest/v1/seguimientos_programados?campana_id=eq.${campanaId}&estado=in.(${ESTADOS_SEGUIMIENTO.PENDIENTE},${ESTADOS_SEGUIMIENTO.PROCESANDO})`,
+    url,
     {
       estado,
       actualizado_en: ahora,
@@ -228,17 +265,12 @@ async function cancelarPendientesCliente(
     estado === ESTADOS_SEGUIMIENTO.RESPONDIDO ? "respondido_en" : "cancelado_en";
 
   let url =
-    `${SUPABASE_URL}/rest/v1/seguimientos_programados?cliente_numero=eq.${numero}&estado=in.(${ESTADOS_SEGUIMIENTO.PENDIENTE},${ESTADOS_SEGUIMIENTO.PROCESANDO})&detener_si_responde=eq.true`;
-
-  if (usuarioId) {
-    url += `&usuario_id=eq.${usuarioId}`;
-  }
+    `${SUPABASE_URL}/rest/v1/seguimientos_programados?${filtrosClaveLead(numero, usuarioId, opts.conexionWhatsappId)}` +
+    `&estado=in.(${ESTADOS_SEGUIMIENTO.PENDIENTE},${ESTADOS_SEGUIMIENTO.PROCESANDO})&detener_si_responde=eq.true`;
 
   if (opts.creadoAntesDe) {
     url += `&creado_en=lt.${encodeTimestampFilter(opts.creadoAntesDe)}`;
   }
-
-  url += filtroConexionWhatsapp(opts.conexionWhatsappId);
 
   await axios.patch(
     url,
@@ -265,13 +297,8 @@ async function clienteRespondioDespues(
   const checkpointEncoded = encodeTimestampFilter(umbral);
 
   let url =
-    `${SUPABASE_URL}/rest/v1/mensajes?cliente_numero=eq.${encodeURIComponent(numero)}&direccion=eq.entrante&creado_en=gt.${checkpointEncoded}&select=id,creado_en,conexion_whatsapp_id&limit=1`;
-
-  if (usuarioId) {
-    url += `&usuario_id=eq.${encodeURIComponent(usuarioId)}`;
-  }
-
-  url += filtroConexionWhatsapp(conexionWhatsappId);
+    `${SUPABASE_URL}/rest/v1/mensajes?${filtrosClaveLead(numero, usuarioId, conexionWhatsappId)}` +
+    `&direccion=eq.entrante&creado_en=gt.${checkpointEncoded}&select=id,creado_en,conexion_whatsapp_id&limit=1`;
 
   const response = await axios.get(url, { headers: headers() });
   const hay = (response.data || []).length > 0;
@@ -295,19 +322,23 @@ async function listarPendientesRespondibles(
   conexionWhatsappId = null
 ) {
   let url =
-    `${SUPABASE_URL}/rest/v1/seguimientos_programados?cliente_numero=eq.${encodeURIComponent(numero)}` +
+    `${SUPABASE_URL}/rest/v1/seguimientos_programados?${filtrosClaveLead(numero, usuarioId, conexionWhatsappId)}` +
     `&estado=in.(${ESTADOS_SEGUIMIENTO.PENDIENTE},${ESTADOS_SEGUIMIENTO.PROCESANDO})` +
     `&or=(solo_si_no_respondio.eq.true,detener_si_responde.eq.true)` +
     `&order=creado_en.asc&limit=${limite}&select=*`;
 
-  if (usuarioId) {
-    url += `&usuario_id=eq.${encodeURIComponent(usuarioId)}`;
+  const response = await axios.get(url, { headers: headers() });
+  const rows = response.data || [];
+
+  if (rows.length) {
+    console.log("[WORKER LISTAR PENDIENTES] respondibles total:", rows.length, {
+      cliente_numero: numero,
+      conexion_whatsapp_id: conexionWhatsappId || null,
+    });
+    rows.forEach((row) => logPendienteSeguimiento("RESPONDIBLES", row));
   }
 
-  url += filtroConexionWhatsapp(conexionWhatsappId);
-
-  const response = await axios.get(url, { headers: headers() });
-  return response.data || [];
+  return rows;
 }
 
 async function listarPorCliente(numero, usuarioId, limite = 50) {
