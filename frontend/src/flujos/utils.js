@@ -107,10 +107,18 @@ export function sortFlows(flows, sortBy) {
   }
 }
 
+/** Clave de carpeta para filtro: id uuid, sin_carpeta o slug legacy. */
+export function flowFolderKey(flow) {
+  if (flow?.meta?.carpeta_id) return flow.meta.carpeta_id;
+  const slug = flow?.meta?.carpeta;
+  if (!slug || slug === "sin_carpeta") return "sin_carpeta";
+  return slug;
+}
+
 export function filterFlows(flows, { query, folder, estado, activador, nodeType }) {
   const q = (query || "").trim().toLowerCase();
   return flows.filter((f) => {
-    if (folder && folder !== "all" && f.meta?.carpeta !== folder) return false;
+    if (folder && folder !== "all" && flowFolderKey(f) !== folder) return false;
     if (estado && estado !== "all" && f.meta?.estado !== estado) return false;
     if (activador && activador !== "all") {
       const has = f.activadores?.some((a) =>
@@ -129,10 +137,12 @@ export function filterFlows(flows, { query, folder, estado, activador, nodeType 
 }
 
 export function countByFolder(flows) {
-  const counts = { all: flows.length };
+  const counts = { all: flows.length, sin_carpeta: 0 };
   flows.forEach((f) => {
-    const c = f.meta?.carpeta || "sin_carpeta";
-    counts[c] = (counts[c] || 0) + 1;
+    const key = flowFolderKey(f);
+    counts[key] = (counts[key] || 0) + 1;
+    const slug = f.meta?.carpeta;
+    if (slug && slug !== "sin_carpeta") counts[slug] = (counts[slug] || 0) + 1;
   });
   return counts;
 }

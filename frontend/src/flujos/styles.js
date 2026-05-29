@@ -543,6 +543,66 @@ export const flujosStyles = `
   color: #bbf7d0;
 }
 
+.flFoldersPremium {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 18px;
+  border-radius: 18px;
+  background: linear-gradient(145deg, rgba(15, 23, 42, 0.72), rgba(2, 6, 23, 0.55));
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.flFoldersPremiumHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.flFoldersPremiumTitle {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: #f1f5f9;
+}
+
+.flFoldersPremiumSub {
+  margin: 4px 0 0;
+  font-size: 0.78rem;
+  color: #64748b;
+  max-width: 420px;
+  line-height: 1.45;
+}
+
+.flFoldersPremiumLoading {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #22d3ee;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(6, 182, 212, 0.1);
+  border: 1px solid rgba(6, 182, 212, 0.25);
+}
+
+.flFoldersGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.flFoldersGroupLabel {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: #64748b;
+  padding-left: 2px;
+}
+
 .flFolders {
   display: flex;
   flex-wrap: wrap;
@@ -550,7 +610,10 @@ export const flujosStyles = `
 }
 
 .flFolderChip {
-  padding: 9px 16px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 14px;
   border-radius: 999px;
   border: 1px solid rgba(148, 163, 184, 0.15);
   background: rgba(15, 23, 42, 0.55);
@@ -562,6 +625,52 @@ export const flujosStyles = `
   white-space: nowrap;
 }
 
+.flFolderChipIcon {
+  font-size: 0.95rem;
+  line-height: 1;
+}
+
+.flFolderChipLabel {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.flFolderChipLine {
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: rgba(148, 163, 184, 0.12);
+  color: #94a3b8;
+  max-width: 88px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.flFolderChipTag {
+  font-size: 0.58rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: rgba(168, 85, 247, 0.18);
+  color: #d8b4fe;
+}
+
+.flFolderChip--all.active {
+  border-color: rgba(34, 197, 94, 0.55);
+}
+
+.flFolderChip--muted {
+  opacity: 0.92;
+}
+
+.flFolderChip--custom {
+  border-style: dashed;
+}
+
 .flFolderChip:hover,
 .flFolderChip.active {
   border-color: rgba(34, 197, 94, 0.5);
@@ -571,7 +680,7 @@ export const flujosStyles = `
 }
 
 .flFolderChip .count {
-  margin-left: 6px;
+  margin-left: 2px;
   opacity: .65;
   font-size: 0.75rem;
 }

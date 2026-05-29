@@ -87,6 +87,30 @@ export function fetchFlows(conexionWhatsappId) {
   return request(withConexionQuery("/api/flujos", conexionWhatsappId));
 }
 
+export function fetchCarpetas(conexionWhatsappId) {
+  return request(withConexionQuery("/api/flujos/carpetas", conexionWhatsappId));
+}
+
+export function createCarpeta({ nombre, categoria }, conexionWhatsappId) {
+  return request("/api/flujos/carpetas", {
+    method: "POST",
+    body: JSON.stringify(writeConexionBody({ nombre, categoria }, conexionWhatsappId)),
+  });
+}
+
+export function updateCarpeta(id, patch, conexionWhatsappId) {
+  return request(withConexionQuery(`/api/flujos/carpetas/${id}`, conexionWhatsappId), {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+}
+
+export function deleteCarpeta(id, conexionWhatsappId) {
+  return request(withConexionQuery(`/api/flujos/carpetas/${id}`, conexionWhatsappId), {
+    method: "DELETE",
+  });
+}
+
 export function fetchFlowStats() {
   return request("/api/flujos/stats");
 }

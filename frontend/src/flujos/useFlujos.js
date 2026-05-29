@@ -7,6 +7,7 @@ import {
   duplicateFlow,
   fetchFlowExport,
   fetchFlows,
+  fetchCarpetas,
   importFlowJson,
   importFlowTemplate,
   fetchFlowVersions,
@@ -44,6 +45,10 @@ function etiquetaTabConexion(c) {
 
 export function useFlujos() {
   const [flows, setFlows] = useState([]);
+  const [carpetas, setCarpetas] = useState([]);
+  const [sinCarpeta, setSinCarpeta] = useState(null);
+  const [carpetasCounts, setCarpetasCounts] = useState(null);
+  const [carpetasLoading, setCarpetasLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [apiOnline, setApiOnline] = useState(false);
   const [apiError, setApiError] = useState(null);
@@ -130,17 +135,30 @@ export function useFlujos() {
     }
 
     setLoading(true);
+    setCarpetasLoading(true);
     setApiError(null);
     setApiUrl(resolveApiUrl(withConexionQueryForLog(conexionSeleccionadaId)));
 
     try {
-      const flowsRes = await fetchFlows(conexionSeleccionadaId);
+      const [flowsRes, carpetasRes] = await Promise.all([
+        fetchFlows(conexionSeleccionadaId),
+        fetchCarpetas(conexionSeleccionadaId).catch(() => ({ ok: false, carpetas: [] })),
+      ]);
 
       if (!flowsRes.ok && !flowsRes.flows) {
         throw new ApiError(flowsRes.error || "Error cargando flujos", "SERVER");
       }
 
       setFlows(flowsRes.flows || []);
+      if (carpetasRes?.ok !== false) {
+        setCarpetas(carpetasRes.carpetas || []);
+        setSinCarpeta(carpetasRes.sin_carpeta || null);
+        setCarpetasCounts(carpetasRes.counts || null);
+      } else {
+        setCarpetas([]);
+        setSinCarpeta(null);
+        setCarpetasCounts(null);
+      }
       setApiOnline(true);
       setApiError(null);
     } catch (err) {
@@ -149,6 +167,9 @@ export function useFlujos() {
 
       setApiOnline(false);
       setFlows([]);
+      setCarpetas([]);
+      setSinCarpeta(null);
+      setCarpetasCounts(null);
       setApiError({
         code: apiErr.code,
         message: apiErr.message,
@@ -157,6 +178,7 @@ export function useFlujos() {
       });
     } finally {
       setLoading(false);
+      setCarpetasLoading(false);
     }
   }, [conexionSeleccionadaId]);
 
@@ -182,7 +204,10 @@ export function useFlujos() {
     [flows, query, folder, estado, activador, nodeType, sortBy]
   );
 
-  const folderCounts = useMemo(() => countByFolder(flows), [flows]);
+  const folderCounts = useMemo(
+    () => carpetasCounts || countByFolder(flows),
+    [carpetasCounts, flows]
+  );
   const estadoCounts = useMemo(() => countByEstado(flows), [flows]);
 
   const updateMeta = useCallback(
@@ -219,8 +244,21 @@ export function useFlujos() {
   );
 
   const moveToFolder = useCallback(
-    async (id, carpeta) => {
-      await updateMeta(id, { carpeta });
+    async (id, carpetaKey) => {
+      if (carpetaKey === "sin_carpeta") {
+        await updateMeta(id, { carpeta_id: null, carpeta: "sin_carpeta" });
+        return;
+      }
+      const esUuid =
+        typeof carpetaKey === "string" &&
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+          carpetaKey
+        );
+      if (esUuid) {
+        await updateMeta(id, { carpeta_id: carpetaKey });
+        return;
+      }
+      await updateMeta(id, { carpeta: carpetaKey });
     },
     [updateMeta]
   );
@@ -440,6 +478,9 @@ export function useFlujos() {
     viewMode,
     setViewMode,
     folderCounts,
+    carpetas,
+    sinCarpeta,
+    carpetasLoading,
     estadoCounts,
     load,
     showToast,

@@ -36,6 +36,9 @@ export default function Flujos() {
     viewMode,
     setViewMode,
     folderCounts,
+    carpetas,
+    sinCarpeta,
+    carpetasLoading,
     showToast,
     toggleEstado,
     moveToFolder,
@@ -205,7 +208,18 @@ export default function Flujos() {
         onRetry={headerStats.reload}
       />
 
-      <FlowFolders active={folder} onChange={setFolder} counts={folderCounts} />
+      <FlowFolders
+        active={folder}
+        onChange={setFolder}
+        counts={folderCounts}
+        carpetas={carpetas}
+        sinCarpeta={sinCarpeta}
+        loading={carpetasLoading}
+        mostrarLinea={mostrarBadgeLinea}
+        conexionesMap={Object.fromEntries(
+          conexionesInbox.map((c) => [c.id, etiquetaTabConexion(c)])
+        )}
+      />
 
       <div className="flToolbar">
         <div className="flSearch">

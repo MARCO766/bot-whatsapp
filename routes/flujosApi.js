@@ -16,6 +16,11 @@ const {
   listVersions,
   restoreVersion,
 } = require("../services/flujosVersionService");
+const {
+  obtenerCarpetaUsuario,
+  metaFromCarpeta,
+  isSlugCarpeta,
+} = require("../services/flujosCarpetasService");
 const rt = require("../services/realtimeService");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -135,9 +140,12 @@ async function assertFlujoEnScope(usuarioId, flujoId, scope) {
 function extractMeta(data) {
   const raw = data && typeof data === "object" ? data : {};
   const meta = raw.macbot_meta && typeof raw.macbot_meta === "object" ? raw.macbot_meta : {};
+  const carpeta_id =
+    typeof meta.carpeta_id === "string" && meta.carpeta_id.trim() ? meta.carpeta_id.trim() : null;
   return {
     estado: resolveEstado(data),
     carpeta: FOLDERS.includes(meta.carpeta) ? meta.carpeta : "sin_carpeta",
+    carpeta_id,
     etiquetas: Array.isArray(meta.etiquetas) ? meta.etiquetas : [],
     campanas: Array.isArray(meta.campanas) ? meta.campanas : [],
     actualizado_en: meta.actualizado_en || null,
@@ -525,6 +533,7 @@ router.patch("/api/flujos/:id/meta", protegerApi, async (req, res) => {
     const nextMeta = {
       estado: prev.estado,
       carpeta: prev.carpeta,
+      carpeta_id: prev.carpeta_id,
       etiquetas: prev.etiquetas,
       campanas: prev.campanas,
       ultima_ejecucion: prev.ultima_ejecucion,
@@ -532,7 +541,24 @@ router.patch("/api/flujos/:id/meta", protegerApi, async (req, res) => {
     };
 
     if (patch.estado && ESTADOS.includes(patch.estado)) nextMeta.estado = patch.estado;
-    if (patch.carpeta && FOLDERS.includes(patch.carpeta)) nextMeta.carpeta = patch.carpeta;
+    if (patch.carpeta_id !== undefined) {
+      if (patch.carpeta_id === null || patch.carpeta_id === "") {
+        Object.assign(nextMeta, metaFromCarpeta("sin_carpeta"));
+      } else {
+        const carpeta = await obtenerCarpetaUsuario(usuarioId, patch.carpeta_id);
+        if (!carpeta) {
+          return res.status(400).json({ ok: false, error: "Carpeta no válida" });
+        }
+        const lineaFlujo = acceso.flujo?.conexion_whatsapp_id;
+        const lineaRef = scope?.id || lineaFlujo;
+        if (lineaRef && !sameConexionId(carpeta.conexion_whatsapp_id, lineaRef)) {
+          return res.status(403).json({ ok: false, error: "Carpeta no pertenece a esta línea" });
+        }
+        Object.assign(nextMeta, metaFromCarpeta(carpeta));
+      }
+    } else if (patch.carpeta && isSlugCarpeta(patch.carpeta)) {
+      Object.assign(nextMeta, metaFromCarpeta(patch.carpeta));
+    }
     if (Array.isArray(patch.etiquetas)) nextMeta.etiquetas = patch.etiquetas;
     if (Array.isArray(patch.campanas)) nextMeta.campanas = patch.campanas;
 
