@@ -36,15 +36,23 @@ export default function FlowPreviewMini({ preview }) {
 
   if (!nodos.length) {
     return (
-      <div className="flPreviewWrap" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <span style={{ fontSize: "0.75rem", color: "#475569" }}>Sin nodos — abre el builder</span>
+      <div className="flPreviewInner flPreviewEmpty">
+        <span className="flPreviewEmptyIcon" aria-hidden>◇</span>
+        <span>Sin nodos — abre el constructor</span>
       </div>
     );
   }
 
   return (
-    <div className="flPreviewWrap">
-      <svg width="100%" height="100%" viewBox="0 0 160 80" preserveAspectRatio="xMidYMid meet">
+    <div className="flPreviewInner">
+      <svg width="100%" height="100%" viewBox="0 0 160 80" preserveAspectRatio="xMidYMid meet" aria-hidden>
+        <defs>
+          <linearGradient id="flPreviewLineGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="rgba(34,197,94,.15)" />
+            <stop offset="50%" stopColor="rgba(34,197,94,.55)" />
+            <stop offset="100%" stopColor="rgba(6,182,212,.4)" />
+          </linearGradient>
+        </defs>
         {layout.lines.map((l, i) => (
           <line
             key={i}
@@ -52,20 +60,29 @@ export default function FlowPreviewMini({ preview }) {
             y1={l.y1}
             x2={l.x2}
             y2={l.y2}
-            stroke="rgba(34,197,94,.35)"
-            strokeWidth="1.5"
+            stroke="url(#flPreviewLineGrad)"
+            strokeWidth="1.75"
+            strokeLinecap="round"
           />
         ))}
         {layout.nodes.map((n) => (
-          <circle
-            key={n.id}
-            cx={n.sx}
-            cy={n.sy}
-            r="5"
-            fill={NODE_PREVIEW_COLORS[n.tipo] || "#14b8a6"}
-            stroke="rgba(255,255,255,.2)"
-            strokeWidth="1"
-          />
+          <g key={n.id}>
+            <circle
+              cx={n.sx}
+              cy={n.sy}
+              r="7"
+              fill={NODE_PREVIEW_COLORS[n.tipo] || "#14b8a6"}
+              opacity="0.25"
+            />
+            <circle
+              cx={n.sx}
+              cy={n.sy}
+              r="5"
+              fill={NODE_PREVIEW_COLORS[n.tipo] || "#14b8a6"}
+              stroke="rgba(255,255,255,.35)"
+              strokeWidth="1.25"
+            />
+          </g>
         ))}
       </svg>
     </div>

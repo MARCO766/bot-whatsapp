@@ -12,6 +12,14 @@ import FlowActionsMenu from "./FlowActionsMenu";
 import FlowPreviewMini from "./FlowPreviewMini";
 import FlowTimeline from "./FlowTimeline";
 
+const FLOW_METRICS = [
+  { key: "clientesEnFlujo", label: "En flujo", title: "Clientes únicos en seguimientos de este flujo" },
+  { key: "leadsHoy", label: "Hoy", title: "Actividad real registrada hoy" },
+  { key: "respuestas", label: "Respuestas", title: "Leads que respondieron" },
+  { key: "conversiones", label: "Conversiones", title: "Registros en crm_conversiones", fallback: 0 },
+  { key: "seguimientosActivos", label: "Seg. activos", title: "Seguimientos programados pendientes" },
+];
+
 function FlowCard({
   flow,
   listMode,
@@ -29,6 +37,9 @@ function FlowCard({
   const st = stateMeta(flow.meta?.estado);
   const m = flow.metricas || {};
   const isMenuOpen = openMenuId === flow.id;
+  const activos = flow.activadores?.filter((a) => a.activo).length || 0;
+  const totalActivadores = flow.activadores?.length || 0;
+  const isActivo = flow.meta?.estado === "activo";
 
   const actividadRel = formatRelativeTime(m.ultimaActividad);
   const ultimoLeadTxt = formatUltimoLead(m.ultimoLead);
@@ -36,71 +47,58 @@ function FlowCard({
   return (
     <article className={`flCard ${listMode ? "listMode" : ""} ${isMenuOpen ? "flCardMenuOpen" : ""}`}>
       <div className="flCardHead">
-        <div>
+        <div className="flCardHeadMain">
           <h3 className="flCardTitle">{flow.nombre}</h3>
           <div className="flCardMeta">
             <span
               className="flBadge"
               style={{
-                background: `${st.color}22`,
+                background: `${st.color}18`,
                 color: st.color,
-                border: `1px solid ${st.color}44`,
+                border: `1px solid ${st.color}40`,
               }}
             >
               <span className="flBadgeDot" style={{ background: st.color }} />
               {st.label}
             </span>
-            <span className="flCardMetaItem">📁 {folderLabel(flow.meta?.carpeta)}</span>
-            <span className="flCardMetaItem">
-              ⚡ {flow.activadores?.filter((a) => a.activo).length || 0}/
-              {flow.activadores?.length || 0} activadores
+            <span className="flMetaChip">
+              <span className="flMetaChipIcon" aria-hidden>📁</span>
+              {folderLabel(flow.meta?.carpeta)}
             </span>
             {mostrarBadgeLinea && (
-              <span className="flBadgeLinea" title="Línea WhatsApp del flujo">
+              <span className="flMetaChip flMetaChipLinea" title="Línea WhatsApp del flujo">
+                <span className="flMetaChipIcon" aria-hidden>📱</span>
                 {flow.conexion_nombre || (flow.conexion_whatsapp_id ? "Línea" : "Sin línea")}
               </span>
             )}
+            <span className="flMetaChip" title="Activadores del flujo">
+              <span className="flMetaChipIcon" aria-hidden>⚡</span>
+              {activos}/{totalActivadores} activadores
+            </span>
           </div>
         </div>
         <FlowActionsMenu
           flow={flow}
-          conexionWhatsappId={conexionWhatsappId}
           isOpen={isMenuOpen}
           onOpenChange={onMenuOpenChange}
-          onToggleEstado={onToggleEstado}
           onDuplicate={onDuplicate}
           onDelete={onDelete}
           onMoveFolder={onMoveFolder}
           onEditName={onEditName}
-          onShowStats={() => setShowTimeline(true)}
         />
       </div>
 
-      <div className={`flPreviewWrap ${listMode ? "tall" : ""}`} style={listMode ? { flex: "0 0 160px" } : undefined}>
+      <div className={`flPreviewWrap ${listMode ? "tall" : ""}`}>
         <FlowPreviewMini preview={flow.preview} />
       </div>
 
       <div className="flMetrics flMetricsCompact flMetrics5">
-        <div className="flMetric" title="Clientes únicos en seguimientos de este flujo">
-          <b>{formatMetric(m.clientesEnFlujo)}</b>
-          <span>En flujo</span>
-        </div>
-        <div className="flMetric" title="Actividad real registrada hoy">
-          <b>{formatMetric(m.leadsHoy)}</b>
-          <span>Hoy</span>
-        </div>
-        <div className="flMetric" title="Leads que respondieron (seguimiento o mensaje entrante)">
-          <b>{formatMetric(m.respuestas)}</b>
-          <span>Respuestas</span>
-        </div>
-        <div className="flMetric" title="Registros en crm_conversiones">
-          <b>{formatMetric(m.conversiones ?? 0)}</b>
-          <span>Conversiones</span>
-        </div>
-        <div className="flMetric" title="seguimientos_programados pendientes">
-          <b>{formatMetric(m.seguimientosActivos)}</b>
-          <span>Seg. activos</span>
-        </div>
+        {FLOW_METRICS.map((item) => (
+          <div key={item.key} className="flMetric" title={item.title}>
+            <b>{formatMetric(m[item.key] ?? item.fallback ?? 0)}</b>
+            <span>{item.label}</span>
+          </div>
+        ))}
       </div>
 
       <div className="flCardActivity">
@@ -110,7 +108,9 @@ function FlowCard({
         </div>
         <div className="flCardActivityItem">
           <span className="flCardActivityLabel">Último lead</span>
-          <span className="flCardActivityValue">{ultimoLeadTxt || "—"}</span>
+          <span className="flCardActivityValue flCardActivityLead">
+            {ultimoLeadTxt || "—"}
+          </span>
         </div>
       </div>
 
@@ -121,20 +121,27 @@ function FlowCard({
       />
 
       <div className="flCardFooter">
-        <span>Modificado: {formatDate(flow.meta?.actualizado_en)}</span>
+        <span className="flCardModified">Modificado {formatDate(flow.meta?.actualizado_en)}</span>
         <div className="flQuickActions">
           <a
             href={builderUrl(flow, conexionWhatsappId)}
             target="_blank"
             rel="noreferrer"
-            className="flQuickBtn"
+            className="flQuickBtn flQuickBtnPrimary"
           >
+            <span className="flQuickBtnIcon" aria-hidden>🛠</span>
             Constructor
           </a>
           <button type="button" className="flQuickBtn" onClick={() => onToggleEstado(flow)}>
-            {flow.meta?.estado === "activo" ? "Pausar" : "Activar"}
+            <span className="flQuickBtnIcon" aria-hidden>{isActivo ? "⏸" : "▶"}</span>
+            {isActivo ? "Pausar" : "Activar"}
           </button>
-          <button type="button" className="flQuickBtn" onClick={() => setShowTimeline(!showTimeline)}>
+          <button
+            type="button"
+            className={`flQuickBtn ${showTimeline ? "flQuickBtnActive" : ""}`}
+            onClick={() => setShowTimeline(!showTimeline)}
+          >
+            <span className="flQuickBtnIcon" aria-hidden>📊</span>
             {showTimeline ? "Ocultar" : "Actividad"}
           </button>
         </div>

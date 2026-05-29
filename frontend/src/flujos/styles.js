@@ -17,18 +17,49 @@ export const flujosStyles = `
 .flTopBar {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
-  align-items: center;
+  gap: 16px;
+  align-items: flex-start;
   justify-content: space-between;
+  padding: 4px 0 8px;
+}
+
+.flPageHeader {
+  flex: 1;
+  min-width: 240px;
+}
+
+.flPageEyebrow {
+  display: inline-block;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: #22d3ee;
+  margin-bottom: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(6, 182, 212, 0.1);
+  border: 1px solid rgba(6, 182, 212, 0.25);
 }
 
 .flTopBar h1 {
   margin: 0;
-  font-size: 1.55rem;
-  background: linear-gradient(135deg, #e2e8f0, #22c55e 60%, #06b6d4);
+  font-size: clamp(1.45rem, 2.5vw, 1.85rem);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  background: linear-gradient(120deg, #f8fafc 0%, #86efac 45%, #22d3ee 85%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+}
+
+.flPageSubtitle {
+  margin: 8px 0 0;
+  max-width: 520px;
+  color: #94a3b8;
+  font-size: 0.9rem;
+  line-height: 1.55;
 }
 
 .flTopActions {
@@ -43,20 +74,25 @@ export const flujosStyles = `
   flex-wrap: wrap;
   gap: 8px;
   align-items: center;
+  padding: 10px 12px;
+  border-radius: 16px;
+  background: rgba(15, 23, 42, 0.5);
+  border: 1px solid rgba(148, 163, 184, 0.1);
 }
 
 .flConexionTab {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 14px;
+  padding: 9px 16px;
   border-radius: 999px;
-  border: 1px solid #2a3140;
-  background: #11151c;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(2, 6, 23, 0.55);
   color: #94a3b8;
   font-size: 0.82rem;
+  font-weight: 600;
   cursor: pointer;
-  transition: border-color 0.15s, color 0.15s, background 0.15s;
+  transition: border-color 0.15s, color 0.15s, background 0.15s, box-shadow 0.15s;
 }
 
 .flConexionTab:hover {
@@ -65,9 +101,10 @@ export const flujosStyles = `
 }
 
 .flConexionTab--active {
-  border-color: #22c55e66;
-  background: #22c55e14;
-  color: #86efac;
+  border-color: rgba(34, 197, 94, 0.55);
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.18), rgba(6, 182, 212, 0.12));
+  color: #bbf7d0;
+  box-shadow: 0 4px 20px rgba(34, 197, 94, 0.15);
 }
 
 .flConexionPrincipal {
@@ -193,55 +230,114 @@ export const flujosStyles = `
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 16px 18px;
+  padding: 18px 20px;
   border-radius: 20px;
-  background: rgba(15,23,42,.78);
-  border: 1px solid rgba(148,163,184,.14);
-  backdrop-filter: blur(12px);
+  background: linear-gradient(145deg, rgba(15, 23, 42, 0.92), rgba(15, 23, 42, 0.72));
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  backdrop-filter: blur(14px);
   position: relative;
-  min-height: 88px;
+  min-height: 96px;
+  overflow: hidden;
+  transition: border-color 0.2s, transform 0.2s, box-shadow 0.2s;
 }
 
+.flHeaderStatCard::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 100% 0%, var(--fl-kpi-glow, rgba(34, 197, 94, 0.12)), transparent 58%);
+  pointer-events: none;
+}
+
+.flHeaderStatCard:hover {
+  border-color: rgba(148, 163, 184, 0.28);
+  transform: translateY(-2px);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
+}
+
+.flHeaderStatCard--cyan { --fl-kpi-glow: rgba(34, 211, 238, 0.2); }
+.flHeaderStatCard--violet { --fl-kpi-glow: rgba(167, 139, 250, 0.2); }
+.flHeaderStatCard--green { --fl-kpi-glow: rgba(34, 197, 94, 0.22); }
+.flHeaderStatCard--emerald { --fl-kpi-glow: rgba(52, 211, 153, 0.2); }
+
 .flHeaderStatIcon {
-  width: 44px;
-  height: 44px;
+  width: 48px;
+  height: 48px;
   border-radius: 14px;
   display: grid;
   place-items: center;
-  font-size: 1.25rem;
-  background: rgba(34,197,94,.12);
-  border: 1px solid rgba(34,197,94,.25);
+  font-size: 1.2rem;
+  background: rgba(34, 197, 94, 0.12);
+  border: 1px solid rgba(34, 197, 94, 0.25);
   flex-shrink: 0;
+  position: relative;
+  z-index: 1;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.flHeaderStatIcon--cyan {
+  background: rgba(34, 211, 238, 0.12);
+  border-color: rgba(34, 211, 238, 0.3);
+}
+
+.flHeaderStatIcon--violet {
+  background: rgba(167, 139, 250, 0.12);
+  border-color: rgba(167, 139, 250, 0.3);
+}
+
+.flHeaderStatIcon--green {
+  background: rgba(34, 197, 94, 0.14);
+  border-color: rgba(34, 197, 94, 0.35);
+}
+
+.flHeaderStatIcon--emerald {
+  background: rgba(52, 211, 153, 0.12);
+  border-color: rgba(52, 211, 153, 0.3);
 }
 
 .flHeaderStatBody {
   flex: 1;
   min-width: 0;
+  position: relative;
+  z-index: 1;
 }
 
 .flHeaderStatLabel {
   display: block;
-  font-size: 0.72rem;
+  font-size: 0.7rem;
   color: #94a3b8;
   text-transform: uppercase;
-  letter-spacing: .06em;
+  letter-spacing: 0.08em;
   margin-bottom: 4px;
+  font-weight: 600;
 }
 
 .flHeaderStatValue {
   margin: 0;
-  font-size: 1.35rem;
+  font-size: 1.5rem;
   font-weight: 800;
-  color: #f1f5f9;
-  line-height: 1.2;
+  color: #f8fafc;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+}
+
+.flHeaderStatSub {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #4ade80;
 }
 
 .flHeaderStatTrend {
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   font-weight: 700;
-  padding: 4px 8px;
-  border-radius: 8px;
+  padding: 5px 10px;
+  border-radius: 999px;
   flex-shrink: 0;
+  position: relative;
+  z-index: 1;
+  letter-spacing: 0.02em;
 }
 
 .flHeaderStatTrend.up {
@@ -333,65 +429,118 @@ export const flujosStyles = `
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
-  align-items: center;
-  padding: 14px 16px;
-  background: rgba(15,23,42,.55);
-  border: 1px solid rgba(148,163,184,.1);
-  border-radius: 18px;
+  align-items: flex-end;
+  padding: 16px 18px;
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.65), rgba(15, 23, 42, 0.45));
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 20px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 .flSearch {
-  flex: 1;
+  flex: 1 1 220px;
   min-width: 200px;
   position: relative;
 }
 
 .flSearch input {
   width: 100%;
-  padding: 11px 14px 11px 38px;
+  padding: 12px 14px 12px 40px;
   border-radius: 14px;
-  border: 1px solid rgba(148,163,184,.2);
-  background: rgba(2,6,23,.6);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: rgba(2, 6, 23, 0.65);
   color: #f1f5f9;
   font-size: 0.9rem;
+  transition: border-color 0.15s, box-shadow 0.15s;
 }
 
-.flSearch span {
+.flSearch input:focus {
+  outline: none;
+  border-color: rgba(34, 197, 94, 0.45);
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.12);
+}
+
+.flSearch input::placeholder {
+  color: #64748b;
+}
+
+.flSearchIcon {
   position: absolute;
-  left: 12px;
+  left: 14px;
   top: 50%;
   transform: translateY(-50%);
-  opacity: .5;
+  color: #64748b;
+  font-size: 1rem;
+  pointer-events: none;
+}
+
+.flFilterGroup {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: flex-end;
+}
+
+.flFilterField {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.flFilterLabel {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: #64748b;
+  padding-left: 2px;
 }
 
 .flSelect {
-  padding: 10px 12px;
+  padding: 10px 28px 10px 12px;
   border-radius: 12px;
-  border: 1px solid rgba(148,163,184,.2);
-  background: rgba(2,6,23,.6);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: rgba(2, 6, 23, 0.65);
   color: #e2e8f0;
-  font-size: 0.85rem;
+  font-size: 0.84rem;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.flSelect:hover,
+.flSelect:focus {
+  border-color: rgba(34, 197, 94, 0.35);
+  outline: none;
 }
 
 .flViewToggle {
   display: flex;
   border-radius: 12px;
   overflow: hidden;
-  border: 1px solid rgba(148,163,184,.2);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: rgba(2, 6, 23, 0.5);
+  flex-shrink: 0;
 }
 
 .flViewToggle button {
-  padding: 9px 14px;
+  padding: 10px 14px;
   border: 0;
   background: transparent;
   color: #94a3b8;
   cursor: pointer;
-  font-size: 0.85rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  transition: background 0.15s, color 0.15s;
+}
+
+.flViewToggle button:hover {
+  color: #cbd5e1;
 }
 
 .flViewToggle button.active {
-  background: linear-gradient(135deg, rgba(34,197,94,.25), rgba(6,182,212,.2));
-  color: #4ade80;
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.28), rgba(6, 182, 212, 0.22));
+  color: #bbf7d0;
 }
 
 .flFolders {
@@ -401,22 +550,24 @@ export const flujosStyles = `
 }
 
 .flFolderChip {
-  padding: 8px 14px;
+  padding: 9px 16px;
   border-radius: 999px;
-  border: 1px solid rgba(148,163,184,.15);
-  background: rgba(15,23,42,.5);
+  border: 1px solid rgba(148, 163, 184, 0.15);
+  background: rgba(15, 23, 42, 0.55);
   color: #cbd5e1;
   font-size: 0.82rem;
+  font-weight: 600;
   cursor: pointer;
-  transition: all .15s;
+  transition: all 0.15s;
   white-space: nowrap;
 }
 
 .flFolderChip:hover,
 .flFolderChip.active {
-  border-color: rgba(34,197,94,.5);
-  background: rgba(34,197,94,.12);
-  color: #86efac;
+  border-color: rgba(34, 197, 94, 0.5);
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.14), rgba(6, 182, 212, 0.08));
+  color: #bbf7d0;
+  box-shadow: 0 4px 16px rgba(34, 197, 94, 0.1);
 }
 
 .flFolderChip .count {
@@ -440,18 +591,19 @@ export const flujosStyles = `
 }
 
 .flCard {
-  background: rgba(15,23,42,.82);
-  border: 1px solid rgba(148,163,184,.14);
-  border-radius: 20px;
-  padding: 18px;
+  background: linear-gradient(160deg, rgba(15, 23, 42, 0.95), rgba(15, 23, 42, 0.78));
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 22px;
+  padding: 20px;
   display: flex;
   flex-direction: column;
   gap: 14px;
-  transition: border-color .2s, box-shadow .2s, transform .2s;
+  transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s;
   position: relative;
   overflow: visible;
   isolation: isolate;
-  backdrop-filter: blur(10px);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
 }
 
 .flCard.flCardMenuOpen {
@@ -488,29 +640,55 @@ export const flujosStyles = `
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 10px;
+  gap: 12px;
   position: relative;
   z-index: 2;
+}
+
+.flCardHeadMain {
+  flex: 1;
+  min-width: 0;
 }
 
 .flCardMeta {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 8px;
+  gap: 6px;
+  margin-top: 10px;
   align-items: center;
 }
 
-.flCardMetaItem {
-  font-size: 0.75rem;
-  color: #64748b;
+.flMetaChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #94a3b8;
+  background: rgba(2, 6, 23, 0.5);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.flMetaChipLinea {
+  color: #7dd3fc;
+  background: rgba(14, 165, 233, 0.1);
+  border-color: rgba(14, 165, 233, 0.25);
+}
+
+.flMetaChipIcon {
+  font-size: 0.68rem;
+  opacity: 0.85;
 }
 
 .flCardTitle {
-  font-size: 1.05rem;
+  font-size: 1.12rem;
   font-weight: 800;
   color: #f8fafc;
   margin: 0;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
 }
 
 .flBadge {
@@ -567,9 +745,9 @@ export const flujosStyles = `
   display: flex;
   gap: 16px;
   flex-wrap: wrap;
-  padding: 10px 12px;
-  border-radius: 12px;
-  background: rgba(2, 6, 23, 0.45);
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: linear-gradient(90deg, rgba(2, 6, 23, 0.55), rgba(15, 23, 42, 0.4));
   border: 1px solid rgba(148, 163, 184, 0.1);
   position: relative;
   z-index: 1;
@@ -591,73 +769,163 @@ export const flujosStyles = `
 
 .flCardActivityValue {
   font-size: 0.88rem;
-  color: #cbd5e1;
+  color: #e2e8f0;
   font-weight: 600;
+}
+
+.flCardActivityLead {
+  color: #86efac;
 }
 
 .flMetric {
   text-align: center;
-  padding: 8px;
+  padding: 10px 8px;
   border-radius: 12px;
-  background: rgba(2,6,23,.45);
+  background: rgba(2, 6, 23, 0.5);
+  border: 1px solid rgba(148, 163, 184, 0.08);
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.flMetric:hover {
+  border-color: rgba(34, 197, 94, 0.2);
+  background: rgba(2, 6, 23, 0.65);
 }
 
 .flMetric b {
   display: block;
-  font-size: 1rem;
-  color: #e2e8f0;
+  font-size: 1.08rem;
+  font-weight: 800;
+  color: #f1f5f9;
+  letter-spacing: -0.02em;
 }
 
 .flMetric span {
-  font-size: 0.68rem;
+  display: block;
+  margin-top: 2px;
+  font-size: 0.65rem;
   color: #64748b;
   text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
 }
 
 .flPreviewWrap {
-  height: 88px;
-  border-radius: 12px;
-  background: rgba(2,6,23,.5);
-  border: 1px solid rgba(148,163,184,.08);
+  height: 96px;
+  border-radius: 14px;
+  background: rgba(2, 6, 23, 0.55);
+  border: 1px solid rgba(148, 163, 184, 0.1);
   overflow: hidden;
   position: relative;
   z-index: 1;
 }
 
-.flPreviewWrap.tall { height: 100px; min-width: 160px; }
+.flPreviewWrap.tall {
+  height: 108px;
+  min-width: 160px;
+}
+
+.flPreviewInner {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  background:
+    linear-gradient(rgba(148, 163, 184, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.04) 1px, transparent 1px);
+  background-size: 14px 14px;
+}
+
+.flPreviewInner::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 50% 0%, rgba(34, 197, 94, 0.08), transparent 70%);
+  pointer-events: none;
+}
+
+.flPreviewEmpty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: #64748b;
+  font-size: 0.74rem;
+  font-weight: 500;
+}
+
+.flPreviewEmptyIcon {
+  font-size: 1.1rem;
+  opacity: 0.5;
+  color: #475569;
+}
 
 .flCardFooter {
   display: flex;
   justify-content: space-between;
   align-items: center;
   flex-wrap: wrap;
-  gap: 8px;
-  font-size: 0.75rem;
-  color: #64748b;
+  gap: 10px;
+  padding-top: 4px;
+  border-top: 1px solid rgba(148, 163, 184, 0.08);
   position: relative;
   z-index: 1;
+}
+
+.flCardModified {
+  font-size: 0.72rem;
+  color: #64748b;
 }
 
 .flQuickActions {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
 }
 
 .flQuickBtn {
-  padding: 6px 10px;
-  border-radius: 10px;
-  border: 1px solid rgba(148,163,184,.15);
-  background: rgba(15,23,42,.6);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: 11px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(15, 23, 42, 0.7);
   color: #cbd5e1;
-  font-size: 0.75rem;
+  font-size: 0.78rem;
+  font-weight: 600;
   cursor: pointer;
-  transition: all .12s;
+  text-decoration: none;
+  transition: all 0.12s;
 }
 
 .flQuickBtn:hover {
-  border-color: rgba(34,197,94,.4);
-  color: #86efac;
+  border-color: rgba(34, 197, 94, 0.4);
+  color: #bbf7d0;
+  background: rgba(34, 197, 94, 0.08);
+}
+
+.flQuickBtnPrimary {
+  border-color: rgba(34, 197, 94, 0.45);
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.22), rgba(6, 182, 212, 0.15));
+  color: #dcfce7;
+}
+
+.flQuickBtnPrimary:hover {
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.32), rgba(6, 182, 212, 0.22));
+  color: #f0fdf4;
+  box-shadow: 0 4px 16px rgba(34, 197, 94, 0.2);
+}
+
+.flQuickBtnActive {
+  border-color: rgba(6, 182, 212, 0.45);
+  background: rgba(6, 182, 212, 0.12);
+  color: #a5f3fc;
+}
+
+.flQuickBtnIcon {
+  font-size: 0.85rem;
+  line-height: 1;
+  opacity: 0.9;
 }
 
 .flMenuWrap {
@@ -796,6 +1064,45 @@ export const flujosStyles = `
 
 .flMenuDanger:hover {
   background: rgba(127,29,29,.35) !important;
+}
+
+.flMenuItemDisabled {
+  opacity: 0.55;
+  cursor: not-allowed !important;
+  justify-content: space-between !important;
+}
+
+.flMenuItemDisabled:hover {
+  background: transparent !important;
+}
+
+.flMenuSoon {
+  margin-left: auto;
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #64748b;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: rgba(148, 163, 184, 0.12);
+}
+
+.flMiniToast {
+  position: fixed;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10060;
+  padding: 12px 20px;
+  border-radius: 14px;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #e2e8f0;
+  background: rgba(15, 23, 42, 0.96);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+  animation: flFadeIn 0.2s ease;
 }
 
 .flTimeline {

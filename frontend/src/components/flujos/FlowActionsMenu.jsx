@@ -1,33 +1,37 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { builderUrl, exportFlowUrl } from "../../flujos/api";
+import { exportFlowUrl } from "../../flujos/api";
 import { FLOW_FOLDERS } from "../../flujos/constants";
 
 const MENU_W = 248;
 
 export default function FlowActionsMenu({
   flow,
-  conexionWhatsappId,
   isOpen,
   onOpenChange,
-  onToggleEstado,
   onDuplicate,
   onDelete,
   onMoveFolder,
-  onShowStats,
   onEditName,
 }) {
   const btnRef = useRef(null);
   const menuRef = useRef(null);
   const [pos, setPos] = useState({ top: 0, left: 0, placement: "bottom" });
+  const [miniToast, setMiniToast] = useState(null);
 
   const close = useCallback(() => onOpenChange(null), [onOpenChange]);
+
+  const showComingSoon = useCallback(() => {
+    setMiniToast("Próximamente");
+    close();
+    window.setTimeout(() => setMiniToast(null), 2800);
+  }, [close]);
 
   const updatePosition = useCallback(() => {
     const btn = btnRef.current;
     if (!btn) return;
     const rect = btn.getBoundingClientRect();
-    const estHeight = menuRef.current?.offsetHeight || 380;
+    const estHeight = menuRef.current?.offsetHeight || 320;
     const spaceBelow = window.innerHeight - rect.bottom;
     const openUp = spaceBelow < estHeight + 12 && rect.top > estHeight;
 
@@ -74,11 +78,6 @@ export default function FlowActionsMenu({
     };
   }, [isOpen, close, updatePosition]);
 
-  function copyId() {
-    navigator.clipboard?.writeText(flow.id);
-    close();
-  }
-
   const menu = isOpen ? (
     <>
       <div className="flMenuBackdrop" aria-hidden="true" />
@@ -94,44 +93,23 @@ export default function FlowActionsMenu({
           transform: pos.placement === "top" ? "translateY(-100%)" : "none",
         }}
         role="menu"
+        aria-label="Opciones del flujo"
       >
-        <a
-          href={builderUrl(flow, conexionWhatsappId)}
-          target="_blank"
-          rel="noreferrer"
-          role="menuitem"
-          onClick={close}
-        >
-          <span className="flMenuIcon">🛠️</span>
-          <span>Abrir constructor</span>
-        </a>
-        <button type="button" role="menuitem" onClick={() => { onEditName?.(flow); close(); }}>
-          <span className="flMenuIcon">✏️</span>
-          <span>Editar nombre</span>
-        </button>
-        <button type="button" role="menuitem" onClick={() => { onToggleEstado(flow); close(); }}>
-          <span className="flMenuIcon">{flow.meta?.estado === "activo" ? "⏸️" : "▶️"}</span>
-          <span>{flow.meta?.estado === "activo" ? "Pausar flujo" : "Activar flujo"}</span>
-        </button>
-        <button type="button" role="menuitem" onClick={() => { onShowStats?.(flow); close(); }}>
-          <span className="flMenuIcon">📊</span>
-          <span>Ver actividad</span>
-        </button>
         <button type="button" role="menuitem" onClick={() => { onDuplicate(flow.id); close(); }}>
-          <span className="flMenuIcon">🟪</span>
-          <span>Duplicar</span>
+          <span className="flMenuIcon" aria-hidden>⎘</span>
+          <span>Duplicar flujo</span>
         </button>
         <a href={exportFlowUrl(flow.id)} target="_blank" rel="noreferrer" role="menuitem" onClick={close}>
-          <span className="flMenuIcon">⬇️</span>
+          <span className="flMenuIcon" aria-hidden>↓</span>
           <span>Exportar JSON</span>
         </a>
-        <button type="button" role="menuitem" onClick={copyId}>
-          <span className="flMenuIcon">🔗</span>
-          <span>Copiar ID</span>
+        <button type="button" role="menuitem" onClick={() => { onEditName?.(flow); close(); }}>
+          <span className="flMenuIcon" aria-hidden>✎</span>
+          <span>Renombrar</span>
         </button>
 
         <div className="flMenuDivider" />
-        <div className="flMenuSection">Mover a carpeta</div>
+        <div className="flMenuSection">Mover carpeta</div>
 
         <div className="flMenuScroll">
           {FLOW_FOLDERS.map((f) => (
@@ -145,11 +123,25 @@ export default function FlowActionsMenu({
                 close();
               }}
             >
-              <span className="flMenuIcon">{f.icon}</span>
+              <span className="flMenuIcon" aria-hidden>{f.icon}</span>
               <span>{f.label}</span>
             </button>
           ))}
         </div>
+
+        <div className="flMenuDivider" />
+        <button
+          type="button"
+          role="menuitem"
+          className="flMenuItemDisabled"
+          aria-disabled="true"
+          title="Próximamente"
+          onClick={showComingSoon}
+        >
+          <span className="flMenuIcon" aria-hidden>🕐</span>
+          <span>Ver historial</span>
+          <span className="flMenuSoon">Próximamente</span>
+        </button>
 
         <div className="flMenuDivider" />
         <button
@@ -161,8 +153,8 @@ export default function FlowActionsMenu({
             close();
           }}
         >
-          <span className="flMenuIcon">🗑️</span>
-          <span>Eliminar flujo</span>
+          <span className="flMenuIcon" aria-hidden>🗑</span>
+          <span>Eliminar</span>
         </button>
       </div>
     </>
@@ -179,7 +171,7 @@ export default function FlowActionsMenu({
             e.stopPropagation();
             onOpenChange(isOpen ? null : flow.id);
           }}
-          aria-label="Menú del flujo"
+          aria-label="Más opciones del flujo"
           aria-expanded={isOpen}
           aria-haspopup="menu"
         >
@@ -187,6 +179,13 @@ export default function FlowActionsMenu({
         </button>
       </div>
       {menu && createPortal(menu, document.body)}
+      {miniToast &&
+        createPortal(
+          <div className="flMiniToast" role="status">
+            {miniToast}
+          </div>,
+          document.body
+        )}
     </>
   );
 }

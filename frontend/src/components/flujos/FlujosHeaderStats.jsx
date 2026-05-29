@@ -1,23 +1,35 @@
 import React from "react";
-import { formatHeaderTrend, formatNumber } from "../../flujos/utils";
+import { formatHeaderTrend, formatHeaderVentas, formatNumber } from "../../flujos/utils";
 
 const CARDS = [
-  { key: "leadsVivos", label: "Leads vivos", icon: "⚡", trendKey: "tendenciaLeads", accent: "accentCyan" },
+  {
+    key: "leadsVivos",
+    label: "Leads vivos",
+    icon: "⚡",
+    trendKey: "tendenciaLeads",
+    accent: "cyan",
+  },
   {
     key: "conversaciones",
     label: "Conversaciones",
     icon: "💬",
     trendKey: "tendenciaConversaciones",
-    accent: "",
+    accent: "violet",
   },
   {
     key: "ventasCantidad",
     label: "Ventas",
     icon: "💎",
     trendKey: "tendenciaVentas",
-    accent: "accentGreen",
+    accent: "green",
+    subKey: "ventasMonto",
   },
-  { key: "flujosActivos", label: "Flujos activos", icon: "🧩", accent: "accentGreen" },
+  {
+    key: "flujosActivos",
+    label: "Flujos activos",
+    icon: "🧩",
+    accent: "emerald",
+  },
 ];
 
 export default function FlujosHeaderStats({ data, loading, error, onRetry }) {
@@ -25,7 +37,7 @@ export default function FlujosHeaderStats({ data, loading, error, onRetry }) {
     return (
       <div className="flHeaderStats flHeaderStats4">
         {CARDS.map((_, i) => (
-          <div key={i} className="flHeaderStatCard flSkeleton" style={{ minHeight: 88 }} />
+          <div key={i} className="flHeaderStatCard flSkeleton" style={{ minHeight: 96 }} />
         ))}
       </div>
     );
@@ -48,19 +60,32 @@ export default function FlujosHeaderStats({ data, loading, error, onRetry }) {
       <div className="flHeaderStats flHeaderStats4">
         {CARDS.map((card) => {
           const trend = card.trendKey ? formatHeaderTrend(d[card.trendKey]) : null;
-          const value = card.format
-            ? card.format(d)
-            : formatNumber(d[card.key] ?? 0);
+          const value = formatNumber(d[card.key] ?? 0);
+          const sub =
+            card.subKey && Number(d[card.subKey]) > 0
+              ? formatHeaderVentas(d[card.subKey])
+              : null;
 
           return (
-            <div key={card.key} className="flHeaderStatCard">
-              <div className="flHeaderStatIcon">{card.icon}</div>
+            <div
+              key={card.key}
+              className={`flHeaderStatCard flHeaderStatCard--${card.accent}`}
+            >
+              <div className={`flHeaderStatIcon flHeaderStatIcon--${card.accent}`}>
+                <span aria-hidden>{card.icon}</span>
+              </div>
               <div className="flHeaderStatBody">
                 <span className="flHeaderStatLabel">{card.label}</span>
-                <h3 className={`flHeaderStatValue ${card.accent || ""}`}>{value}</h3>
+                <h3 className="flHeaderStatValue">{value}</h3>
+                {sub && <span className="flHeaderStatSub">{sub}</span>}
               </div>
               {trend && (
-                <b className={`flHeaderStatTrend ${trend.positive ? "up" : "down"}`}>{trend.text}</b>
+                <span
+                  className={`flHeaderStatTrend ${trend.positive ? "up" : "down"}`}
+                  title="vs. ayer"
+                >
+                  {trend.positive ? "↑" : "↓"} {trend.text}
+                </span>
               )}
             </div>
           );

@@ -89,11 +89,13 @@ export default function Flujos() {
         <div className={`flToast ${toast.type === "error" ? "error" : "success"}`}>{toast.message}</div>
       )}
 
-      <div className="flTopBar">
-        <div>
-          <h1>Flujos</h1>
-          <p style={{ margin: "4px 0 0", color: "#64748b", fontSize: "0.88rem" }}>
-            Automatizaciones premium · MacBot CRM
+      <header className="flTopBar">
+        <div className="flPageHeader">
+          <span className="flPageEyebrow">MacBot CRM</span>
+          <h1>Automatizaciones Premium</h1>
+          <p className="flPageSubtitle">
+            Orquesta flujos por línea WhatsApp, mide conversiones y activa automatizaciones con
+            control total.
           </p>
         </div>
         <div className="flTopActions">
@@ -124,7 +126,7 @@ export default function Flujos() {
             + Nuevo flujo
           </button>
         </div>
-      </div>
+      </header>
 
       {conexionesInbox.length > 0 && (
         <div className="flConexionPicker" role="tablist" aria-label="Línea WhatsApp">
@@ -201,57 +203,82 @@ export default function Flujos() {
 
       <div className="flToolbar">
         <div className="flSearch">
-          <span>🔍</span>
+          <span className="flSearchIcon" aria-hidden>⌕</span>
           <input
             type="search"
             placeholder="Buscar por nombre, carpeta, activador, etiquetas, nodos…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
+            aria-label="Buscar flujos"
           />
         </div>
-        <select className="flSelect" value={estado} onChange={(e) => setEstado(e.target.value)}>
-          <option value="all">Todos los estados</option>
-          {FLOW_STATES.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.label}
-            </option>
-          ))}
-        </select>
-        <select className="flSelect" value={activador} onChange={(e) => setActivador(e.target.value)}>
-          <option value="all">Activadores</option>
-          <option value="activo">Con activador activo</option>
-          <option value="inactivo">Sin activador activo</option>
-        </select>
-        <select className="flSelect" value={nodeType} onChange={(e) => setNodeType(e.target.value)}>
-          <option value="all">Tipo de nodo</option>
-          <option value="inicio">Inicio</option>
-          <option value="contenido">Contenido</option>
-          <option value="ia">IA</option>
-          <option value="seguimiento">Seguimiento</option>
-          <option value="espera">Espera</option>
-          <option value="etiqueta">Etiqueta</option>
-        </select>
-        <select className="flSelect" value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
-          {SORT_OPTIONS.map((o) => (
-            <option key={o.id} value={o.id}>
-              {o.label}
-            </option>
-          ))}
-        </select>
-        <div className="flViewToggle">
+        <div className="flFilterGroup">
+          <label className="flFilterField">
+            <span className="flFilterLabel">Estado</span>
+            <select className="flSelect" value={estado} onChange={(e) => setEstado(e.target.value)}>
+              <option value="all">Todos</option>
+              {FLOW_STATES.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flFilterField">
+            <span className="flFilterLabel">Activadores</span>
+            <select
+              className="flSelect"
+              value={activador}
+              onChange={(e) => setActivador(e.target.value)}
+            >
+              <option value="all">Todos</option>
+              <option value="activo">Con activador activo</option>
+              <option value="inactivo">Sin activador activo</option>
+            </select>
+          </label>
+          <label className="flFilterField">
+            <span className="flFilterLabel">Tipo nodo</span>
+            <select
+              className="flSelect"
+              value={nodeType}
+              onChange={(e) => setNodeType(e.target.value)}
+            >
+              <option value="all">Todos</option>
+              <option value="inicio">Inicio</option>
+              <option value="contenido">Contenido</option>
+              <option value="ia">IA</option>
+              <option value="seguimiento">Seguimiento</option>
+              <option value="espera">Espera</option>
+              <option value="etiqueta">Etiqueta</option>
+            </select>
+          </label>
+          <label className="flFilterField">
+            <span className="flFilterLabel">Orden</span>
+            <select className="flSelect" value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
+              {SORT_OPTIONS.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <div className="flViewToggle" role="group" aria-label="Vista">
           <button
             type="button"
             className={viewMode === "cards" ? "active" : ""}
             onClick={() => setViewMode("cards")}
+            title="Vista tarjetas"
           >
-            Tarjetas
+            ⊞ Tarjetas
           </button>
           <button
             type="button"
             className={viewMode === "list" ? "active" : ""}
             onClick={() => setViewMode("list")}
+            title="Vista lista"
           >
-            Lista
+            ☰ Lista
           </button>
         </div>
       </div>
