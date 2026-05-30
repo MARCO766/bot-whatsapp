@@ -1,4 +1,8 @@
-const { HORAS_INACTIVIDAD, clampHorasInactividad } = require("./constants");
+const {
+  HORAS_INACTIVIDAD,
+  clampHorasInactividad,
+  normalizarTiempoInactividad,
+} = require("./constants");
 const {
   normalizarItemContenido,
   sincronizarMensajeLegacy,
@@ -8,6 +12,7 @@ function crearConfigPorDefecto() {
   return {
     version: 1,
     activo: false,
+    tiempoInactividad: { valor: HORAS_INACTIVIDAD, unidad: "horas" },
     horasInactividad: HORAS_INACTIVIDAD,
     detenerSiResponde: false,
     reiniciarAlResponder: true,
@@ -84,10 +89,17 @@ function leerConfigDeNodo(nodo) {
 
   if (!raw || typeof raw !== "object") return base;
 
+  const tiempoInactividad = normalizarTiempoInactividad(raw);
+  const horasInactividad =
+    tiempoInactividad.unidad === "horas"
+      ? clampHorasInactividad(tiempoInactividad.valor)
+      : clampHorasInactividad(raw.horasInactividad ?? HORAS_INACTIVIDAD);
+
   const config = {
     ...base,
     ...raw,
-    horasInactividad: clampHorasInactividad(raw.horasInactividad ?? HORAS_INACTIVIDAD),
+    tiempoInactividad,
+    horasInactividad,
     detenerSiResponde: false,
     reiniciarAlResponder: raw.reiniciarAlResponder !== false,
     detenerEnConversion: raw.detenerEnConversion !== false,
@@ -112,7 +124,8 @@ function obtenerConfigRemarketingGlobal(flujoData) {
   console.log("[RM24H] config detectada en flujo", {
     nodoId: nodo.id,
     activo: config.activo,
-    horas: config.horasInactividad,
+    tiempoInactividad: config.tiempoInactividad,
+    horasInactividad: config.horasInactividad,
   });
 
   return { nodo, config };

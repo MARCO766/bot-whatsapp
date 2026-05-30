@@ -7,6 +7,7 @@ window.MacBotRemarketingGlobal = (function () {
     return {
       version: 1,
       activo: false,
+      tiempoInactividad: { valor: 23, unidad: "horas" },
       horasInactividad: 23,
       detenerSiResponde: false,
       reiniciarAlResponder: true,
@@ -309,6 +310,91 @@ window.MacBotRemarketingGlobal = (function () {
       .replace(/"/g, "&quot;");
   }
 
+  const PRESETS_TIEMPO_INACTIVIDAD = {
+    minutos: [1, 5, 10, 15, 30],
+    horas: [1, 2, 4, 8, 12, 23],
+    dias: [1, 2, 3, 7],
+  };
+
+  function normalizarUnidadTiempoInactividad(unidad) {
+    const s = String(unidad || "")
+      .toLowerCase()
+      .trim();
+    if (s === "minuto" || s === "minutos" || s === "min") return "minutos";
+    if (s === "hora" || s === "horas" || s === "h") return "horas";
+    if (s === "dia" || s === "días" || s === "dias" || s === "day" || s === "days") {
+      return "dias";
+    }
+    return null;
+  }
+
+  function normalizarTiempoInactividad(raw) {
+    const fallback = { valor: 23, unidad: "horas" };
+    if (!raw || typeof raw !== "object") return { ...fallback };
+
+    const anidado = raw.tiempoInactividad;
+    if (anidado && typeof anidado === "object") {
+      const unidad = normalizarUnidadTiempoInactividad(anidado.unidad);
+      const valor = parseInt(anidado.valor, 10);
+      if (unidad && Number.isFinite(valor) && valor > 0) {
+        return { valor: valor, unidad: unidad };
+      }
+    }
+
+    if (raw.horasInactividad != null) {
+      const valor = parseInt(raw.horasInactividad, 10);
+      if (Number.isFinite(valor) && valor > 0) {
+        return { valor: clampHorasInactividad(valor), unidad: "horas" };
+      }
+    }
+
+    return { ...fallback };
+  }
+
+  function etiquetaTiempoInactividadResumen(tiempo) {
+    const t = normalizarTiempoInactividad({ tiempoInactividad: tiempo });
+    const v = t.valor;
+    if (t.unidad === "minutos") return v + "min de inactividad";
+    if (t.unidad === "horas") return v + "h de inactividad";
+    if (t.unidad === "dias") {
+      return v + (v === 1 ? " día" : " días") + " de inactividad";
+    }
+    return "23h de inactividad";
+  }
+
+  function htmlPresetsTiempoInactividad(unidad, valorActivo) {
+    const presets = PRESETS_TIEMPO_INACTIVIDAD[unidad] || PRESETS_TIEMPO_INACTIVIDAD.horas;
+    return (
+      '<div class="rm24-tiempo-presets" id="rm24hTiempoPresets" role="group" aria-label="Valores recomendados">' +
+      presets
+        .map(function (n) {
+          const active = Number(valorActivo) === n ? " rm24-tiempo-preset-btn--active" : "";
+          return (
+            '<button type="button" class="rm24-tiempo-preset-btn' +
+            active +
+            '" data-rm24-preset-valor="' +
+            n +
+            '">' +
+            esc(String(n)) +
+            "</button>"
+          );
+        })
+        .join("") +
+      "</div>"
+    );
+  }
+
+  function sincronizarHorasLegacyDesdeTiempo(config) {
+    const tiempo = normalizarTiempoInactividad(config);
+    config.tiempoInactividad = tiempo;
+    if (tiempo.unidad === "horas") {
+      config.horasInactividad = clampHorasInactividad(tiempo.valor);
+    } else if (!Number.isFinite(parseInt(config.horasInactividad, 10))) {
+      config.horasInactividad = 23;
+    }
+    return config;
+  }
+
   function clampHorasInactividad(val) {
     const n = parseInt(val, 10);
     if (!Number.isFinite(n)) return 23;
@@ -317,12 +403,35 @@ window.MacBotRemarketingGlobal = (function () {
     return n;
   }
 
-  function normalizarInputHorasRm24h(inputEl) {
+  function normalizarInputTiempoValor(inputEl, unidad) {
     if (!inputEl) return 23;
     const raw = String(inputEl.value || "").replace(/\D/g, "");
-    const horas = raw === "" ? 23 : clampHorasInactividad(parseInt(raw, 10));
-    inputEl.value = String(horas);
-    return horas;
+    let valor = raw === "" ? NaN : parseInt(raw, 10);
+    if (!Number.isFinite(valor) || valor < 1) {
+      const presets = PRESETS_TIEMPO_INACTIVIDAD[unidad] || PRESETS_TIEMPO_INACTIVIDAD.horas;
+      valor = presets[0] || 23;
+    }
+    inputEl.value = String(valor);
+    return valor;
+  }
+
+  function leerTiempoDesdePanel() {
+    const unidad =
+      normalizarUnidadTiempoInactividad(
+        document.getElementById("rm24hTiempoUnidad")?.value
+      ) || "horas";
+    const valorEl = document.getElementById("rm24hTiempoValor");
+    const valor = normalizarInputTiempoValor(valorEl, unidad);
+    return normalizarTiempoInactividad({
+      tiempoInactividad: { valor: valor, unidad: unidad },
+    });
+  }
+
+  function renderPresetsTiempoPanel(tiempo) {
+    const t = normalizarTiempoInactividad({ tiempoInactividad: tiempo });
+    const mount = document.getElementById("rm24hTiempoPresets");
+    if (!mount) return;
+    mount.outerHTML = htmlPresetsTiempoInactividad(t.unidad, t.valor);
   }
 
   function leerTextareaJson(ta) {
@@ -350,7 +459,6 @@ window.MacBotRemarketingGlobal = (function () {
     if (!parsed || typeof parsed !== "object") return base;
 
     const config = Object.assign({}, base, parsed, {
-      horasInactividad: clampHorasInactividad(parsed.horasInactividad ?? 23),
       detenerSiResponde: false,
       reiniciarAlResponder: parsed.reiniciarAlResponder !== false,
       detenerEnConversion: parsed.detenerEnConversion !== false,
@@ -359,6 +467,7 @@ window.MacBotRemarketingGlobal = (function () {
         parsed.mensajeRemarketing || parsed.mensaje_remarketing
       ),
     });
+    sincronizarHorasLegacyDesdeTiempo(config);
 
     sincronizarMensajeRemarketingDesdeContenidos(config);
     nodo.__rm24hConfig = config;
@@ -441,7 +550,9 @@ window.MacBotRemarketingGlobal = (function () {
     body.innerHTML =
       '<div class="rm24-status rm24-global-status rm24h-badge-on">ACTIVO</div>' +
       '<ul class="rm24-summary rm24-summary--compact" aria-label="Resumen del remarketing">' +
-      '<li><span class="rm24-summary-dot"></span>23h de inactividad</li>' +
+      '<li><span class="rm24-summary-dot"></span>' +
+      esc(etiquetaTiempoInactividadResumen(config.tiempoInactividad)) +
+      "</li>" +
       '<li><span class="rm24-summary-dot"></span>Reinicia si responde</li>' +
       '<li><span class="rm24-summary-dot"></span>1 solo envío</li>' +
       '<li><span class="rm24-summary-dot"></span>Termina flujo</li>' +
@@ -1134,18 +1245,34 @@ window.MacBotRemarketingGlobal = (function () {
   }
 
   function aplicarConfigAlPanel(config) {
-    const cfg = config || configActiva;
+    const cfg = sincronizarHorasLegacyDesdeTiempo(
+      Object.assign({}, config || configActiva)
+    );
     const activoEl = document.getElementById("rm24hActivo");
-    const horasEl = document.getElementById("rm24hHoras");
+    const unidadEl = document.getElementById("rm24hTiempoUnidad");
+    const valorEl = document.getElementById("rm24hTiempoValor");
     const reiniciarEl = document.getElementById("rm24hReiniciar");
     const detenerConvEl = document.getElementById("rm24hDetenerConversion");
 
     if (activoEl) activoEl.checked = !!cfg.activo;
-    if (horasEl) horasEl.value = String(clampHorasInactividad(cfg.horasInactividad ?? 23));
+    if (unidadEl) unidadEl.value = cfg.tiempoInactividad.unidad;
+    if (valorEl) valorEl.value = String(cfg.tiempoInactividad.valor);
+    renderPresetsTiempoPanel(cfg.tiempoInactividad);
     if (reiniciarEl) reiniciarEl.checked = cfg.reiniciarAlResponder !== false;
     if (detenerConvEl) detenerConvEl.checked = cfg.detenerEnConversion !== false;
     renderRm24ContentBlocks();
     mostrarErrorContenidos("");
+    actualizarHintTiempoPanel(cfg.tiempoInactividad);
+  }
+
+  function actualizarHintTiempoPanel(tiempo) {
+    const hint = document.getElementById("rm24hTiempoHint");
+    if (!hint) return;
+    const t = normalizarTiempoInactividad({ tiempoInactividad: tiempo });
+    hint.textContent =
+      "Se envía tras " +
+      etiquetaTiempoInactividadResumen(t).replace(" de inactividad", "") +
+      " sin respuesta del lead.";
   }
 
   function renderPanel(nodo) {
@@ -1153,12 +1280,16 @@ window.MacBotRemarketingGlobal = (function () {
 
     nodoActivo = nodo;
     hydrateRm24ContentBlocksFromNode(nodo);
+    sincronizarHorasLegacyDesdeTiempo(configActiva);
 
     const contenido = document.getElementById("panelNodoContenido");
     const panelShell = document.getElementById("panelNodo");
     if (!contenido) return;
 
     if (panelShell) panelShell.classList.add("panel-nodo--rm24h");
+
+    const tiempo = configActiva.tiempoInactividad || { valor: 23, unidad: "horas" };
+    const introTiempo = etiquetaTiempoInactividadResumen(tiempo);
 
     contenido.innerHTML =
       '<div class="rm24h-panel rm24-config-panel">' +
@@ -1180,12 +1311,28 @@ window.MacBotRemarketingGlobal = (function () {
       "</section>" +
       '<section class="rm24-section">' +
       '<h5 class="rm24-section-title">Tiempo de inactividad</h5>' +
+      '<div class="rm24-tiempo-grid">' +
       '<div class="rm24h-field rm24-field">' +
-      "<label for=\"rm24hHoras\">Horas de inactividad</label>" +
-      '<input type="number" id="rm24hHoras" class="rm24-input" min="1" max="23" step="1" inputmode="numeric" value="' +
-      esc(String(clampHorasInactividad(configActiva.horasInactividad ?? 23))) +
-      '">' +
-      '<p class="rm24h-hint">Entre 1 y 23 h (ventana WhatsApp Cloud API)</p></div></section>' +
+      "<label for=\"rm24hTiempoUnidad\">Unidad</label>" +
+      '<select id="rm24hTiempoUnidad" class="rm24-input rm24-tiempo-unidad">' +
+      '<option value="minutos"' +
+      (tiempo.unidad === "minutos" ? " selected" : "") +
+      ">Minutos (pruebas)</option>" +
+      '<option value="horas"' +
+      (tiempo.unidad === "horas" ? " selected" : "") +
+      ">Horas</option>" +
+      '<option value="dias"' +
+      (tiempo.unidad === "dias" ? " selected" : "") +
+      ">Días</option></select></div>" +
+      '<div class="rm24h-field rm24-field">' +
+      "<label for=\"rm24hTiempoValor\">Valor</label>" +
+      '<input type="number" id="rm24hTiempoValor" class="rm24-input" min="1" step="1" inputmode="numeric" value="' +
+      esc(String(tiempo.valor)) +
+      '"></div></div>' +
+      htmlPresetsTiempoInactividad(tiempo.unidad, tiempo.valor) +
+      '<p class="rm24h-hint" id="rm24hTiempoHint">Se envía tras ' +
+      esc(introTiempo.replace(" de inactividad", "")) +
+      " sin respuesta del lead.</p></section>" +
       '<section class="rm24-section rm24-section--rules">' +
       '<h5 class="rm24-section-title">Reglas automáticas</h5>' +
       '<div class="rm24-rule rm24h-field--locked">' +
@@ -1208,7 +1355,7 @@ window.MacBotRemarketingGlobal = (function () {
       '<p class="rm24h-hint rm24-rule-hint">SÍ (fijo en Fase 1)</p></div></section>' +
       '<section class="rm24-section rm24-section--contenidos">' +
       '<h5 class="rm24-section-title">Contenido de remarketing</h5>' +
-      '<p class="rm24h-hint rm24-contenidos-intro">Se envían en orden tras 23h sin respuesta. URLs HTTPS públicas.</p>' +
+      '<p class="rm24h-hint rm24-contenidos-intro">Se envían en orden tras el tiempo de inactividad configurado. URLs HTTPS públicas.</p>' +
       '<div id="rm24hContenidosError" class="rm24-contenidos-error" hidden></div>' +
       htmlRm24BlockPicker() +
       '<div id="rm24hContenidosLista" class="rm24-contenidos-lista"></div>' +
@@ -1226,56 +1373,108 @@ window.MacBotRemarketingGlobal = (function () {
       "</div></div></div>";
 
     bindContenidosPanelEvents();
+    bindTiempoPanelEvents();
     aplicarConfigAlPanel(configActiva);
 
     document.getElementById("rm24hActivo")?.addEventListener("change", onPanelChange);
-    const horasEl = document.getElementById("rm24hHoras");
-    if (horasEl) {
-      horasEl.addEventListener("input", onHorasInactividadInput);
-      horasEl.addEventListener("change", onHorasInactividadCommit);
-      horasEl.addEventListener("blur", onHorasInactividadCommit);
-      horasEl.addEventListener("keydown", function (e) {
-        if (["e", "E", "+", "-", ".", ","].includes(e.key)) {
-          e.preventDefault();
-        }
-      });
-    }
     document
       .getElementById("rm24hGuardarPanel")
       ?.addEventListener("click", guardarDesdePanel);
+  }
+
+  function bindTiempoPanelEvents() {
+    const unidadEl = document.getElementById("rm24hTiempoUnidad");
+    const valorEl = document.getElementById("rm24hTiempoValor");
+    const mount = document.getElementById("panelNodoContenido");
+    if (!mount) return;
+
+    if (mount._rm24hTiempoClick) {
+      mount.removeEventListener("click", mount._rm24hTiempoClick);
+    }
+    if (mount._rm24hTiempoChange) {
+      mount.removeEventListener("change", mount._rm24hTiempoChange);
+    }
+    if (mount._rm24hTiempoInput) {
+      mount.removeEventListener("input", mount._rm24hTiempoInput);
+    }
+
+    mount._rm24hTiempoClick = function (ev) {
+      const presetBtn = ev.target.closest("[data-rm24-preset-valor]");
+      if (!presetBtn) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      const valor = parseInt(presetBtn.getAttribute("data-rm24-preset-valor"), 10);
+      if (!Number.isFinite(valor) || valor < 1) return;
+      if (valorEl) valorEl.value = String(valor);
+      onTiempoPanelChange();
+    };
+
+    mount._rm24hTiempoChange = function (ev) {
+      if (
+        ev.target.id === "rm24hTiempoUnidad" ||
+        ev.target.id === "rm24hTiempoValor"
+      ) {
+        if (ev.target.id === "rm24hTiempoUnidad") {
+          const unidad =
+            normalizarUnidadTiempoInactividad(unidadEl?.value) || "horas";
+          const presets =
+            PRESETS_TIEMPO_INACTIVIDAD[unidad] || PRESETS_TIEMPO_INACTIVIDAD.horas;
+          if (valorEl) valorEl.value = String(presets[0] || 23);
+          renderPresetsTiempoPanel({ valor: presets[0] || 23, unidad: unidad });
+        }
+        onTiempoPanelChange();
+      }
+    };
+
+    mount._rm24hTiempoInput = function (ev) {
+      if (ev.target.id !== "rm24hTiempoValor") return;
+      const cleaned = String(ev.target.value || "").replace(/\D/g, "");
+      if (cleaned !== ev.target.value) ev.target.value = cleaned;
+      onTiempoPanelChange();
+    };
+
+    mount.addEventListener("click", mount._rm24hTiempoClick);
+    mount.addEventListener("change", mount._rm24hTiempoChange);
+    mount.addEventListener("input", mount._rm24hTiempoInput);
+
+    valorEl?.addEventListener("blur", onTiempoPanelCommit);
+    valorEl?.addEventListener("keydown", function (e) {
+      if (["e", "E", "+", "-", ".", ","].includes(e.key)) {
+        e.preventDefault();
+      }
+    });
+  }
+
+  function onTiempoPanelCommit() {
+    const unidad =
+      normalizarUnidadTiempoInactividad(
+        document.getElementById("rm24hTiempoUnidad")?.value
+      ) || "horas";
+    normalizarInputTiempoValor(document.getElementById("rm24hTiempoValor"), unidad);
+    onTiempoPanelChange();
+  }
+
+  function onTiempoPanelChange() {
+    syncDesdePanel();
+    renderPresetsTiempoPanel(configActiva.tiempoInactividad);
+    actualizarHintTiempoPanel(configActiva.tiempoInactividad);
+    persistirContenidosEnNodo();
   }
 
   function syncDesdePanel() {
     if (!panelRemarketingAbierto()) return;
 
     const activoEl = document.getElementById("rm24hActivo");
-    const horasEl = document.getElementById("rm24hHoras");
 
     if (activoEl) configActiva.activo = !!activoEl.checked;
-    configActiva.horasInactividad = normalizarInputHorasRm24h(horasEl);
+    configActiva.tiempoInactividad = leerTiempoDesdePanel();
+    sincronizarHorasLegacyDesdeTiempo(configActiva);
     configActiva.detenerSiResponde = false;
     configActiva.reiniciarAlResponder = true;
     configActiva.detenerEnConversion = true;
     configActiva.modoContextual = false;
     configActiva.rm24h_contenidos = leerContenidosDesdePanel();
     sincronizarMensajeRemarketingDesdeContenidos(configActiva);
-  }
-
-  function onHorasInactividadInput(ev) {
-    const el = ev.target;
-    const cleaned = String(el.value || "").replace(/\D/g, "");
-    if (cleaned !== el.value) el.value = cleaned;
-    if (cleaned === "") return;
-    const n = parseInt(cleaned, 10);
-    if (n > 23) el.value = "23";
-    if (n < 1 && cleaned.length >= 1) el.value = "1";
-  }
-
-  function onHorasInactividadCommit() {
-    const horasEl = document.getElementById("rm24hHoras");
-    if (!horasEl) return;
-    configActiva.horasInactividad = normalizarInputHorasRm24h(horasEl);
-    onPanelChange();
   }
 
   function onPanelChange() {
