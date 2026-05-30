@@ -362,6 +362,152 @@ window.MacBotRemarketingGlobal = (function () {
     return "23h de inactividad";
   }
 
+  /** Etiqueta compacta para el embudo visual (ej. 5 min, 1 h, 2 días). */
+  function etiquetaTiempoEmbudoCompacto(tiempo) {
+    const t = normalizarTiempoInactividad({ tiempoInactividad: tiempo });
+    const v = t.valor;
+    if (t.unidad === "minutos") return v + " min";
+    if (t.unidad === "horas") return v + " h";
+    if (t.unidad === "dias") {
+      return v + (v === 1 ? " día" : " días");
+    }
+    return "23 h";
+  }
+
+  function obtenerContenidosParaEmbudo() {
+    if (panelRemarketingAbierto()) {
+      return leerContenidosDesdePanel();
+    }
+    return Array.isArray(configActiva.rm24h_contenidos) ? configActiva.rm24h_contenidos : [];
+  }
+
+  function resumenContenidoEmbudo(listaRaw) {
+    const validos = (listaRaw || []).map(normalizarItemContenidoUi).filter(Boolean);
+    if (!validos.length) {
+      return {
+        vacio: true,
+        linea: "Sin contenido configurado",
+        preview: "",
+        chips: [],
+      };
+    }
+
+    const primeroTexto = validos.find(function (c) {
+      return c.tipo === "texto";
+    });
+    const preview = primeroTexto
+      ? primeroTexto.texto.slice(0, 72) + (primeroTexto.texto.length > 72 ? "…" : "")
+      : "";
+
+    const conteo = {};
+    validos.forEach(function (c) {
+      const lbl = etiquetaTipoContenido(c.tipo);
+      conteo[lbl] = (conteo[lbl] || 0) + 1;
+    });
+    const chips = Object.keys(conteo).map(function (lbl) {
+      const n = conteo[lbl];
+      return n + " " + lbl.toLowerCase() + (n > 1 ? "s" : "");
+    });
+
+    const linea =
+      validos.length +
+      " bloque" +
+      (validos.length > 1 ? "s" : "") +
+      (chips.length ? " · " + chips.join(", ") : "");
+
+    return { vacio: false, linea: linea, preview: preview, chips: chips };
+  }
+
+  function htmlEmbudoRmSection() {
+    return (
+      '<section class="rm24-section rm24-section--embudo" id="rm24hEmbudoSection" aria-label="Embudo RM">' +
+      '<h5 class="rm24-section-title">Embudo RM</h5>' +
+      '<p class="rm24-embudo-intro">Vista del recorrido automático · arriba hacia abajo</p>' +
+      '<div class="rm24-embudo" id="rm24hEmbudoRm" role="list">' +
+      '<div class="rm24-embudo-step" role="listitem">' +
+      '<div class="rm24-embudo-node rm24-embudo-node--wait">' +
+      '<span class="rm24-embudo-badge" aria-hidden="true">1</span>' +
+      '<span class="rm24-embudo-icon" aria-hidden="true">⏱</span>' +
+      '<div class="rm24-embudo-body">' +
+      '<span class="rm24-embudo-label">Esperar inactividad</span>' +
+      '<span class="rm24-embudo-value" id="rm24hEmbudoTiempo">—</span>' +
+      "</div></div>" +
+      '<div class="rm24-embudo-connector" aria-hidden="true"><span></span></div>' +
+      '<div class="rm24-embudo-step" role="listitem">' +
+      '<div class="rm24-embudo-node rm24-embudo-node--send">' +
+      '<span class="rm24-embudo-badge" aria-hidden="true">2</span>' +
+      '<span class="rm24-embudo-icon" aria-hidden="true">💬</span>' +
+      '<div class="rm24-embudo-body">' +
+      '<span class="rm24-embudo-label">Enviar contenido</span>' +
+      '<span class="rm24-embudo-value" id="rm24hEmbudoContenidoLinea">—</span>' +
+      '<span class="rm24-embudo-preview" id="rm24hEmbudoContenidoPreview" hidden></span>' +
+      '<span class="rm24-embudo-chips" id="rm24hEmbudoContenidoChips"></span>' +
+      "</div></div>" +
+      '<div class="rm24-embudo-connector" aria-hidden="true"><span></span></div>' +
+      '<div class="rm24-embudo-step" role="listitem">' +
+      '<div class="rm24-embudo-node rm24-embudo-node--end">' +
+      '<span class="rm24-embudo-badge" aria-hidden="true">3</span>' +
+      '<span class="rm24-embudo-icon" aria-hidden="true">✅</span>' +
+      '<div class="rm24-embudo-body">' +
+      '<span class="rm24-embudo-label">Fin automático</span>' +
+      '<span class="rm24-embudo-value rm24-embudo-value--wrap">' +
+      "Después de enviar remarketing, el flujo se cierra como " +
+      '<code class="rm24-embudo-code">cerrado_sin_respuesta</code>' +
+      "</span></div></div></div></div></section>"
+    );
+  }
+
+  function actualizarEmbudoRmPanel() {
+    const embudo = document.getElementById("rm24hEmbudoRm");
+    if (!embudo) return;
+
+    const activo = !!document.getElementById("rm24hActivo")?.checked;
+    const section = document.getElementById("rm24hEmbudoSection");
+    if (section) {
+      section.classList.toggle("rm24-section--embudo-inactivo", !activo);
+    }
+    embudo.classList.toggle("rm24-embudo--inactivo", !activo);
+
+    const tiempo = panelRemarketingAbierto()
+      ? leerTiempoDesdePanel()
+      : configActiva.tiempoInactividad || { valor: 23, unidad: "horas" };
+
+    const tiempoEl = document.getElementById("rm24hEmbudoTiempo");
+    if (tiempoEl) {
+      tiempoEl.textContent = etiquetaTiempoEmbudoCompacto(tiempo);
+    }
+
+    const resumen = resumenContenidoEmbudo(obtenerContenidosParaEmbudo());
+    const lineaEl = document.getElementById("rm24hEmbudoContenidoLinea");
+    const previewEl = document.getElementById("rm24hEmbudoContenidoPreview");
+    const chipsEl = document.getElementById("rm24hEmbudoContenidoChips");
+
+    if (lineaEl) {
+      lineaEl.textContent = resumen.linea;
+      lineaEl.classList.toggle("rm24-embudo-value--muted", resumen.vacio);
+    }
+    if (previewEl) {
+      if (resumen.preview) {
+        previewEl.textContent = '"' + resumen.preview + '"';
+        previewEl.hidden = false;
+      } else {
+        previewEl.textContent = "";
+        previewEl.hidden = true;
+      }
+    }
+    if (chipsEl) {
+      if (!resumen.vacio && resumen.chips.length) {
+        chipsEl.innerHTML = resumen.chips
+          .map(function (chip) {
+            return '<span class="rm24-embudo-chip">' + esc(chip) + "</span>";
+          })
+          .join("");
+      } else {
+        chipsEl.innerHTML = "";
+      }
+    }
+  }
+
   function htmlPresetsTiempoInactividad(unidad, valorActivo) {
     const presets = PRESETS_TIEMPO_INACTIVIDAD[unidad] || PRESETS_TIEMPO_INACTIVIDAD.horas;
     return (
@@ -791,6 +937,7 @@ window.MacBotRemarketingGlobal = (function () {
     if (typeof window.macbotRecordHistoryDebounced === "function") {
       window.macbotRecordHistoryDebounced();
     }
+    actualizarEmbudoRmPanel();
   }
 
   function validarArchivoRm24hCliente(file, tipo) {
@@ -1123,6 +1270,7 @@ window.MacBotRemarketingGlobal = (function () {
     if (!items.length) {
       listaEl.innerHTML =
         '<p class="rm24-contenidos-empty">Sin bloques. Elige un tipo en el selector de arriba.</p>';
+      actualizarEmbudoRmPanel();
       return;
     }
     listaEl.innerHTML = items
@@ -1130,6 +1278,7 @@ window.MacBotRemarketingGlobal = (function () {
         return htmlBloqueContenido(mapearItemContenidoUi(item) || item, i, items.length);
       })
       .join("");
+    actualizarEmbudoRmPanel();
   }
 
   function bindContenidosPanelEvents() {
@@ -1273,6 +1422,7 @@ window.MacBotRemarketingGlobal = (function () {
       "Se envía tras " +
       etiquetaTiempoInactividadResumen(t).replace(" de inactividad", "") +
       " sin respuesta del lead.";
+    actualizarEmbudoRmPanel();
   }
 
   function renderPanel(nodo) {
@@ -1309,6 +1459,7 @@ window.MacBotRemarketingGlobal = (function () {
       '<span class="rm24-switch-track" aria-hidden="true"></span>' +
       "<span class=\"rm24-switch-label\">Activar remarketing global</span></label>" +
       "</section>" +
+      htmlEmbudoRmSection() +
       '<section class="rm24-section">' +
       '<h5 class="rm24-section-title">Tiempo de inactividad</h5>' +
       '<div class="rm24-tiempo-grid">' +
@@ -1380,6 +1531,8 @@ window.MacBotRemarketingGlobal = (function () {
     document
       .getElementById("rm24hGuardarPanel")
       ?.addEventListener("click", guardarDesdePanel);
+
+    actualizarEmbudoRmPanel();
   }
 
   function bindTiempoPanelEvents() {

@@ -2058,8 +2058,8 @@ body:has(#builderArea) {
 
 /* Panel derecho RM24H */
 .panel-nodo.panel-nodo--rm24h {
-  width: 380px;
-  max-width: 40vw;
+  width: 420px;
+  max-width: 44vw;
   padding: 0;
   overflow: hidden;
   flex-direction: column;
@@ -2186,6 +2186,175 @@ body:has(#builderArea) {
 
 .rm24-section--future {
   opacity: 0.85;
+}
+
+/* Embudo RM — vista vertical en panel derecho */
+.rm24-section--embudo {
+  padding: 14px 12px 12px;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 122, 24, 0.08) 0%,
+    rgba(255, 255, 255, 0.02) 100%
+  );
+  border-color: rgba(255, 122, 24, 0.22);
+}
+
+.rm24-section--embudo-inactivo {
+  opacity: 0.72;
+}
+
+.rm24-embudo-intro {
+  margin: -4px 0 12px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: #9ca3af;
+}
+
+.rm24-embudo {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+}
+
+.rm24-embudo--inactivo .rm24-embudo-node {
+  filter: grayscale(0.35);
+}
+
+.rm24-embudo-step {
+  position: relative;
+}
+
+.rm24-embudo-node {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px 12px;
+  border-radius: 10px;
+  background: rgba(17, 24, 39, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.rm24-embudo-node--wait {
+  border-left: 3px solid #60a5fa;
+}
+
+.rm24-embudo-node--send {
+  border-left: 3px solid #34d399;
+}
+
+.rm24-embudo-node--end {
+  border-left: 3px solid #a78bfa;
+}
+
+.rm24-embudo-badge {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #f9fafb;
+  background: rgba(255, 255, 255, 0.12);
+  margin-top: 1px;
+}
+
+.rm24-embudo-icon {
+  flex-shrink: 0;
+  font-size: 18px;
+  line-height: 1;
+  margin-top: 1px;
+}
+
+.rm24-embudo-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rm24-embudo-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #f3f4f6;
+  letter-spacing: -0.01em;
+}
+
+.rm24-embudo-value {
+  font-size: 12px;
+  line-height: 1.45;
+  color: #d1d5db;
+}
+
+.rm24-embudo-value--wrap {
+  font-size: 11px;
+  color: #9ca3af;
+}
+
+.rm24-embudo-value--muted {
+  color: #6b7280;
+  font-style: italic;
+}
+
+.rm24-embudo-preview {
+  font-size: 11px;
+  line-height: 1.4;
+  color: #9ca3af;
+  font-style: italic;
+  word-break: break-word;
+}
+
+.rm24-embudo-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.rm24-embudo-chip {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 500;
+  color: #6ee7b7;
+  background: rgba(52, 211, 153, 0.12);
+  border: 1px solid rgba(52, 211, 153, 0.22);
+}
+
+.rm24-embudo-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(167, 139, 250, 0.15);
+  color: #c4b5fd;
+  white-space: nowrap;
+}
+
+.rm24-embudo-connector {
+  display: flex;
+  justify-content: center;
+  height: 18px;
+  position: relative;
+}
+
+.rm24-embudo-connector span {
+  display: block;
+  width: 2px;
+  height: 100%;
+  border-radius: 2px;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 122, 24, 0.55) 0%,
+    rgba(255, 255, 255, 0.12) 100%
+  );
 }
 
 .rm24-section-title {
