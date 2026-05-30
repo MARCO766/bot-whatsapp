@@ -2235,8 +2235,7 @@ body:has(#builderArea) {
   min-width: 0;
 }
 
-.panel-nodo--rm24h-wide .rm24-config-col--editor .rm24-block-picker,
-.panel-nodo--rm24h-wide .rm24-config-col--editor .rm24-contenidos-lista {
+.panel-nodo--rm24h-wide .rm24-config-col--editor .rm24-mini-funnel-workspace {
   width: 100%;
 }
 
@@ -3123,9 +3122,309 @@ body:has(#builderArea) {
   cursor: pointer;
 }
 
+/* RM24H — mini embudo de contenidos (Fase 1 UI) */
+.panel-nodo--rm24h .rm24-add-paso-wrap {
+  position: relative;
+  margin-bottom: 14px;
+}
+
+.panel-nodo--rm24h .rm24-add-paso-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 10px 16px;
+  border: 1px dashed rgba(255, 122, 24, 0.45);
+  border-radius: 10px;
+  background: rgba(255, 122, 24, 0.08);
+  color: #fdba74;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.panel-nodo--rm24h .rm24-add-paso-btn:hover,
+.panel-nodo--rm24h .rm24-add-paso-btn--open {
+  background: rgba(255, 122, 24, 0.16);
+  border-color: rgba(255, 122, 24, 0.65);
+  color: #ffedd5;
+}
+
+.panel-nodo--rm24h .rm24-add-paso-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 30;
+  min-width: 220px;
+  padding: 6px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(17, 24, 39, 0.98);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+}
+
+.panel-nodo--rm24h .rm24-add-paso-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #e5e7eb;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.panel-nodo--rm24h .rm24-add-paso-menu-item:hover {
+  background: rgba(255, 122, 24, 0.14);
+}
+
+.panel-nodo--rm24h .rm24-add-paso-menu-icon {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.panel-nodo--rm24h .rm24-add-paso-menu-label {
+  flex: 1;
+}
+
+.panel-nodo--rm24h .rm24-future-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #fde68a;
+  background: rgba(251, 191, 36, 0.14);
+  border: 1px solid rgba(251, 191, 36, 0.28);
+  white-space: nowrap;
+}
+
+.panel-nodo--rm24h .rm24-mini-funnel-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 240px) minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+  min-width: 0;
+}
+
+.panel-nodo--rm24h .rm24-mini-funnel-col-title {
+  margin: 0 0 8px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #6b7280;
+}
+
+.panel-nodo--rm24h .rm24-funnel-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-width: 0;
+}
+
+.panel-nodo--rm24h .rm24-funnel-empty {
+  margin: 0;
+  padding: 12px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #94a3b8;
+  border: 1px dashed rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+}
+
+.panel-nodo--rm24h .rm24-funnel-step-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.panel-nodo--rm24h .rm24-funnel-step {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  padding: 4px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(17, 24, 39, 0.75);
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    opacity 0.15s ease;
+}
+
+.panel-nodo--rm24h .rm24-funnel-step--selected {
+  border-color: rgba(255, 122, 24, 0.55);
+  box-shadow: 0 0 0 1px rgba(255, 122, 24, 0.12);
+  background: rgba(255, 122, 24, 0.08);
+}
+
+.panel-nodo--rm24h .rm24-funnel-step--dragging {
+  opacity: 0.55;
+}
+
+.panel-nodo--rm24h .rm24-funnel-step--drop-target {
+  border-color: rgba(57, 255, 20, 0.55);
+  box-shadow: 0 0 0 1px rgba(57, 255, 20, 0.18);
+}
+
+.panel-nodo--rm24h .rm24-funnel-step-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.panel-nodo--rm24h .rm24-funnel-step-grip {
+  flex-shrink: 0;
+  color: #64748b;
+  font-size: 12px;
+  cursor: grab;
+}
+
+.panel-nodo--rm24h .rm24-funnel-step-num {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #f9fafb;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.panel-nodo--rm24h .rm24-funnel-step-icon {
+  flex-shrink: 0;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.panel-nodo--rm24h .rm24-funnel-step-meta {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.panel-nodo--rm24h .rm24-funnel-step-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #f3f4f6;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.panel-nodo--rm24h .rm24-funnel-step-preview {
+  font-size: 10px;
+  line-height: 1.35;
+  color: #94a3b8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.panel-nodo--rm24h .rm24-funnel-step-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex-shrink: 0;
+  padding: 2px;
+}
+
+.panel-nodo--rm24h .rm24-funnel-step-actions .rm24-action-icon {
+  width: 24px;
+  height: 24px;
+  font-size: 11px;
+}
+
+.panel-nodo--rm24h .rm24-funnel-connector {
+  display: flex;
+  justify-content: center;
+  height: 14px;
+}
+
+.panel-nodo--rm24h .rm24-funnel-connector span {
+  display: block;
+  width: 2px;
+  height: 100%;
+  border-radius: 2px;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 122, 24, 0.55) 0%,
+    rgba(255, 255, 255, 0.12) 100%
+  );
+}
+
+.panel-nodo--rm24h .rm24-step-editor {
+  min-height: 180px;
+}
+
+.panel-nodo--rm24h .rm24-step-editor-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 180px;
+  padding: 16px;
+  border: 1px dashed rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.panel-nodo--rm24h .rm24-step-editor-empty p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #94a3b8;
+  text-align: center;
+}
+
+.panel-nodo--rm24h .rm24-step-editor-card {
+  padding: 14px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.rm24-embudo-node--delay {
+  border-left: 3px solid #fbbf24;
+}
+
+@media (max-width: 960px) {
+  .panel-nodo--rm24h .rm24-mini-funnel-workspace {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 420px) {
-  .panel-nodo--rm24h .rm24-block-picker {
-    grid-template-columns: repeat(2, 1fr);
+  .panel-nodo--rm24h .rm24-add-paso-menu {
+    min-width: calc(100vw - 48px);
   }
 }
 

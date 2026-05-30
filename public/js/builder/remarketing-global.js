@@ -77,36 +77,76 @@ window.MacBotRemarketingGlobal = (function () {
     return { tipo: "texto", texto: "" };
   }
 
-  function htmlRm24BlockPicker() {
-    const cards = [
+  const RM24_TIPOS_PASO = [
     { tipo: "texto", icon: "📝", label: "Texto" },
     { tipo: "imagen", icon: "🖼️", label: "Imagen" },
     { tipo: "video", icon: "🎬", label: "Video" },
-    { tipo: "documento", icon: "📁", label: "Archivo" },
     { tipo: "audio", icon: "🎵", label: "Audio" },
-    { tipo: "retraso", icon: "⏱️", label: "Retraso" },
+    { tipo: "documento", icon: "📁", label: "Archivo" },
+    { tipo: "retraso", icon: "⏱️", label: "Retraso visual", futuro: true },
   ];
+
+  function htmlRm24AddPasoControl() {
     return (
-      '<div class="rm24-block-picker" id="rm24hBlockPicker" role="group" aria-label="Añadir bloque">' +
-      cards
-        .map(function (c) {
-          return (
-            '<button type="button" class="rm24-block-card" data-add-tipo="' +
-            esc(c.tipo) +
-            '" title="Añadir ' +
-            esc(c.label) +
-            '">' +
-            '<span class="rm24-block-icon" aria-hidden="true">' +
-            c.icon +
-            "</span>" +
-            '<span class="rm24-block-label">' +
-            esc(c.label) +
-            "</span></button>"
-          );
-        })
-        .join("") +
-      "</div>"
+      '<div class="rm24-add-paso-wrap" id="rm24hAddPasoWrap">' +
+      '<button type="button" class="rm24-add-paso-btn" id="rm24hAddPasoBtn" aria-expanded="false" aria-haspopup="menu">' +
+      "+ Agregar paso</button>" +
+      '<div class="rm24-add-paso-menu" id="rm24hAddPasoMenu" role="menu" hidden>' +
+      RM24_TIPOS_PASO.map(function (c) {
+        return (
+          '<button type="button" class="rm24-add-paso-menu-item" role="menuitem" data-add-tipo="' +
+          esc(c.tipo) +
+          '">' +
+          '<span class="rm24-add-paso-menu-icon" aria-hidden="true">' +
+          c.icon +
+          "</span>" +
+          '<span class="rm24-add-paso-menu-label">' +
+          esc(c.label) +
+          "</span>" +
+          (c.futuro
+            ? '<span class="rm24-future-badge">visual / futuro</span>'
+            : "") +
+          "</button>"
+        );
+      }).join("") +
+      "</div></div>"
     );
+  }
+
+  function toggleRm24AddPasoMenu(open) {
+    const btn = document.getElementById("rm24hAddPasoBtn");
+    const menu = document.getElementById("rm24hAddPasoMenu");
+    if (!btn || !menu) return;
+    const show = typeof open === "boolean" ? open : menu.hidden;
+    menu.hidden = !show;
+    btn.setAttribute("aria-expanded", show ? "true" : "false");
+    btn.classList.toggle("rm24-add-paso-btn--open", show);
+  }
+
+  function resumenPasoFunnel(item) {
+    if (!item) return "Vacío";
+    if (item.tipo === "texto") {
+      const t = String(item.texto || "").trim();
+      if (!t) return "Sin texto";
+      return t.length > 36 ? t.slice(0, 36) + "…" : t;
+    }
+    if (item.tipo === "retraso") {
+      const n = parseInt(item.cantidad, 10) || 1;
+      const u = String(item.unidad || "minutos");
+      return n + " " + u + " (solo visual)";
+    }
+    const url = String(item.url || "").trim();
+    if (url) {
+      if (item.tipo === "documento") {
+        return String(item.filename || "archivo").trim() || url.split("/").pop();
+      }
+      return url.split("/").pop() || "URL configurada";
+    }
+    return "Sin archivo";
+  }
+
+  function etiquetaRetrasoVisualBadge() {
+    return '<span class="rm24-future-badge">visual / futuro</span>';
   }
 
   function hydrateRm24ContentBlocksFromNode(nodo) {
@@ -223,7 +263,7 @@ window.MacBotRemarketingGlobal = (function () {
       audio: "Audio",
       video: "Video",
       documento: "Archivo",
-      retraso: "Retraso",
+      retraso: "Retraso visual",
     };
     return map[tipo] || tipo;
   }
@@ -254,6 +294,8 @@ window.MacBotRemarketingGlobal = (function () {
   let nodoActivo = null;
   let configActiva = crearConfigVacia();
   let rm24hSubidaEnCurso = false;
+  let rm24hPasoSeleccionado = 0;
+  let rm24hDragPasoIndex = null;
 
   const RM24H_MEDIA_CLIENT = {
     imagen: {
@@ -423,38 +465,112 @@ window.MacBotRemarketingGlobal = (function () {
       '<section class="rm24-section rm24-section--embudo" id="rm24hEmbudoSection" aria-label="Embudo RM">' +
       '<h5 class="rm24-section-title">Embudo RM</h5>' +
       '<p class="rm24-embudo-intro">Vista del recorrido automático · arriba hacia abajo</p>' +
-      '<div class="rm24-embudo" id="rm24hEmbudoRm" role="list">' +
+      '<div class="rm24-embudo" id="rm24hEmbudoRm" role="list"></div></section>'
+    );
+  }
+
+  function htmlEmbudoConnector() {
+    return '<div class="rm24-embudo-connector" aria-hidden="true"><span></span></div>';
+  }
+
+  function htmlEmbudoPasoWait(stepNum, tiempoLabel) {
+    return (
       '<div class="rm24-embudo-step" role="listitem">' +
       '<div class="rm24-embudo-node rm24-embudo-node--wait">' +
-      '<span class="rm24-embudo-badge" aria-hidden="true">1</span>' +
+      '<span class="rm24-embudo-badge" aria-hidden="true">' +
+      stepNum +
+      "</span>" +
       '<span class="rm24-embudo-icon" aria-hidden="true">⏱</span>' +
       '<div class="rm24-embudo-body">' +
       '<span class="rm24-embudo-label">Esperar inactividad</span>' +
-      '<span class="rm24-embudo-value" id="rm24hEmbudoTiempo">—</span>' +
-      "</div></div>" +
-      '<div class="rm24-embudo-connector" aria-hidden="true"><span></span></div>' +
+      '<span class="rm24-embudo-value">' +
+      esc(tiempoLabel) +
+      "</span></div></div></div>"
+    );
+  }
+
+  function htmlEmbudoPasoContenido(stepNum, item) {
+    const tipo = item?.tipo || "texto";
+    const esRetraso = tipo === "retraso";
+    const nodeClass = esRetraso
+      ? "rm24-embudo-node rm24-embudo-node--delay"
+      : "rm24-embudo-node rm24-embudo-node--send";
+    return (
+      '<div class="rm24-embudo-step" role="listitem">' +
+      '<div class="' +
+      nodeClass +
+      '">' +
+      '<span class="rm24-embudo-badge" aria-hidden="true">' +
+      stepNum +
+      "</span>" +
+      '<span class="rm24-embudo-icon" aria-hidden="true">' +
+      iconoTipoContenido(tipo) +
+      "</span>" +
+      '<div class="rm24-embudo-body">' +
+      '<span class="rm24-embudo-label">' +
+      esc(etiquetaTipoContenido(tipo)) +
+      (esRetraso ? " " + etiquetaRetrasoVisualBadge() : "") +
+      "</span>" +
+      '<span class="rm24-embudo-value' +
+      (resumenPasoFunnel(item) === "Vacío" ? " rm24-embudo-value--muted" : "") +
+      '">' +
+      esc(resumenPasoFunnel(item)) +
+      "</span></div></div></div>"
+    );
+  }
+
+  function htmlEmbudoPasoVacio(stepNum) {
+    return (
       '<div class="rm24-embudo-step" role="listitem">' +
       '<div class="rm24-embudo-node rm24-embudo-node--send">' +
-      '<span class="rm24-embudo-badge" aria-hidden="true">2</span>' +
+      '<span class="rm24-embudo-badge" aria-hidden="true">' +
+      stepNum +
+      "</span>" +
       '<span class="rm24-embudo-icon" aria-hidden="true">💬</span>' +
       '<div class="rm24-embudo-body">' +
       '<span class="rm24-embudo-label">Enviar contenido</span>' +
-      '<span class="rm24-embudo-value" id="rm24hEmbudoContenidoLinea">—</span>' +
-      '<span class="rm24-embudo-preview" id="rm24hEmbudoContenidoPreview" hidden></span>' +
-      '<span class="rm24-embudo-chips" id="rm24hEmbudoContenidoChips"></span>' +
-      "</div></div>" +
-      '<div class="rm24-embudo-connector" aria-hidden="true"><span></span></div>' +
+      '<span class="rm24-embudo-value rm24-embudo-value--muted">Sin contenido configurado</span>' +
+      "</div></div></div>"
+    );
+  }
+
+  function htmlEmbudoPasoFin(stepNum) {
+    return (
       '<div class="rm24-embudo-step" role="listitem">' +
       '<div class="rm24-embudo-node rm24-embudo-node--end">' +
-      '<span class="rm24-embudo-badge" aria-hidden="true">3</span>' +
+      '<span class="rm24-embudo-badge" aria-hidden="true">' +
+      stepNum +
+      "</span>" +
       '<span class="rm24-embudo-icon" aria-hidden="true">✅</span>' +
       '<div class="rm24-embudo-body">' +
       '<span class="rm24-embudo-label">Fin automático</span>' +
       '<span class="rm24-embudo-value rm24-embudo-value--wrap">' +
       "Después de enviar remarketing, el flujo se cierra como " +
       '<code class="rm24-embudo-code">cerrado_sin_respuesta</code>' +
-      "</span></div></div></div></div></section>"
+      "</span></div></div></div>"
     );
+  }
+
+  function renderEmbudoRmStepsHtml(contenidosRaw, tiempo) {
+    const items = (contenidosRaw || [])
+      .map(function (item) {
+        return mapearItemContenidoUi(item);
+      })
+      .filter(Boolean);
+    const tiempoLabel = etiquetaTiempoEmbudoCompacto(tiempo);
+    let html = htmlEmbudoPasoWait(1, tiempoLabel);
+    let stepNum = 2;
+
+    if (!items.length) {
+      html += htmlEmbudoConnector() + htmlEmbudoPasoVacio(stepNum++);
+    } else {
+      items.forEach(function (item) {
+        html += htmlEmbudoConnector() + htmlEmbudoPasoContenido(stepNum++, item);
+      });
+    }
+
+    html += htmlEmbudoConnector() + htmlEmbudoPasoFin(stepNum);
+    return html;
   }
 
   function actualizarEmbudoRmPanel() {
@@ -472,40 +588,7 @@ window.MacBotRemarketingGlobal = (function () {
       ? leerTiempoDesdePanel()
       : configActiva.tiempoInactividad || { valor: 23, unidad: "horas" };
 
-    const tiempoEl = document.getElementById("rm24hEmbudoTiempo");
-    if (tiempoEl) {
-      tiempoEl.textContent = etiquetaTiempoEmbudoCompacto(tiempo);
-    }
-
-    const resumen = resumenContenidoEmbudo(obtenerContenidosParaEmbudo());
-    const lineaEl = document.getElementById("rm24hEmbudoContenidoLinea");
-    const previewEl = document.getElementById("rm24hEmbudoContenidoPreview");
-    const chipsEl = document.getElementById("rm24hEmbudoContenidoChips");
-
-    if (lineaEl) {
-      lineaEl.textContent = resumen.linea;
-      lineaEl.classList.toggle("rm24-embudo-value--muted", resumen.vacio);
-    }
-    if (previewEl) {
-      if (resumen.preview) {
-        previewEl.textContent = '"' + resumen.preview + '"';
-        previewEl.hidden = false;
-      } else {
-        previewEl.textContent = "";
-        previewEl.hidden = true;
-      }
-    }
-    if (chipsEl) {
-      if (!resumen.vacio && resumen.chips.length) {
-        chipsEl.innerHTML = resumen.chips
-          .map(function (chip) {
-            return '<span class="rm24-embudo-chip">' + esc(chip) + "</span>";
-          })
-          .join("");
-      } else {
-        chipsEl.innerHTML = "";
-      }
-    }
+    embudo.innerHTML = renderEmbudoRmStepsHtml(obtenerContenidosParaEmbudo(), tiempo);
   }
 
   function htmlPresetsTiempoInactividad(unidad, valorActivo) {
@@ -655,7 +738,7 @@ window.MacBotRemarketingGlobal = (function () {
       audio: "Audio",
       video: "Video",
       documento: "Archivo",
-      retraso: "Retraso",
+      retraso: "Retraso visual",
     };
     let previewHtml = "";
     const primeroTexto = validos.find(function (c) {
@@ -828,48 +911,66 @@ window.MacBotRemarketingGlobal = (function () {
     }
   }
 
+  function syncEditorPasoToContenidos() {
+    const editor = document.getElementById("rm24hStepEditor");
+    if (!editor) return;
+    const card = editor.querySelector(".rm24-contenido-item");
+    if (!card) return;
+    const index = parseInt(card.dataset.index, 10);
+    if (!Number.isFinite(index) || index < 0) return;
+    const lista = Array.isArray(configActiva.rm24h_contenidos)
+      ? configActiva.rm24h_contenidos.slice()
+      : [];
+    if (index >= lista.length) return;
+
+    const tipo = card.dataset.tipo;
+    const item = Object.assign({}, lista[index] || crearBloqueVacio(tipo));
+    if (tipo === "texto") {
+      item.tipo = "texto";
+      item.texto = String(card.querySelector(".rm24-contenido-texto")?.value ?? "");
+    } else if (tipo === "retraso") {
+      const cantidad = parseInt(card.querySelector(".rm24-contenido-cantidad")?.value, 10);
+      item.tipo = "retraso";
+      item.cantidad = Number.isFinite(cantidad) && cantidad > 0 ? cantidad : 1;
+      item.unidad = String(card.querySelector(".rm24-contenido-unidad")?.value || "minutos");
+    } else {
+      item.tipo = tipo;
+      item.url = String(card.querySelector(".rm24-contenido-url")?.value ?? "");
+      item.caption = String(card.querySelector(".rm24-contenido-caption")?.value ?? "");
+      if (tipo === "documento") {
+        item.filename = String(card.querySelector(".rm24-contenido-filename")?.value ?? "archivo.pdf");
+      }
+    }
+    lista[index] = item;
+    configActiva.rm24h_contenidos = lista;
+  }
+
   function leerContenidosDesdePanel() {
-    const lista = [];
-    const root = document.getElementById("rm24hContenidosLista");
-    if (!root) return lista;
-    root.querySelectorAll(".rm24-contenido-item").forEach(function (card) {
-      const tipo = card.dataset.tipo;
-      if (tipo === "texto") {
-        lista.push({
-          tipo: "texto",
-          texto: String(card.querySelector(".rm24-contenido-texto")?.value ?? ""),
-        });
-        return;
-      }
-      const url = String(card.querySelector(".rm24-contenido-url")?.value ?? "");
-      const caption = String(card.querySelector(".rm24-contenido-caption")?.value ?? "");
-      const filename = String(card.querySelector(".rm24-contenido-filename")?.value ?? "");
-      if (tipo === "imagen") {
-        lista.push({ tipo: "imagen", url: url, caption: caption });
-      } else if (tipo === "audio") {
-        lista.push({ tipo: "audio", url: url });
-      } else if (tipo === "video") {
-        lista.push({ tipo: "video", url: url, caption: caption });
-      } else if (tipo === "documento") {
-        lista.push({
-          tipo: "documento",
-          url: url,
-          filename: filename || "archivo.pdf",
-          caption: caption,
-        });
-      } else if (tipo === "retraso") {
-        const cantidad = parseInt(
-          card.querySelector(".rm24-contenido-cantidad")?.value,
-          10
-        );
-        lista.push({
-          tipo: "retraso",
-          cantidad: Number.isFinite(cantidad) && cantidad > 0 ? cantidad : 1,
-          unidad: String(card.querySelector(".rm24-contenido-unidad")?.value || "minutos"),
-        });
-      }
-    });
-    return lista;
+    syncEditorPasoToContenidos();
+    return Array.isArray(configActiva.rm24h_contenidos)
+      ? configActiva.rm24h_contenidos.slice()
+      : [];
+  }
+
+  function clampPasoSeleccionado(total) {
+    if (!total || total < 1) {
+      rm24hPasoSeleccionado = 0;
+      return;
+    }
+    if (rm24hPasoSeleccionado < 0) rm24hPasoSeleccionado = 0;
+    if (rm24hPasoSeleccionado >= total) rm24hPasoSeleccionado = total - 1;
+  }
+
+  function selectRm24Paso(index) {
+    syncEditorPasoToContenidos();
+    const total = getRm24ContenidosActivos().length;
+    if (!total) {
+      rm24hPasoSeleccionado = 0;
+      renderRm24ContentBlocks();
+      return;
+    }
+    rm24hPasoSeleccionado = Math.max(0, Math.min(index, total - 1));
+    renderRm24ContentBlocks();
   }
 
   function getRm24ContenidosActivos() {
@@ -882,19 +983,19 @@ window.MacBotRemarketingGlobal = (function () {
   function addRm24ContentBlock(tipo) {
     const t = String(tipo || "texto").toLowerCase();
     const tipoNorm = t === "archivo" ? "documento" : t;
-    console.log("[RM24H_ADD_BLOCK]", tipoNorm);
+    toggleRm24AddPasoMenu(false);
     const lista = leerContenidosDesdePanel();
     lista.push(crearBloqueVacio(tipoNorm));
     configActiva.rm24h_contenidos = lista;
+    rm24hPasoSeleccionado = lista.length - 1;
     renderRm24ContentBlocks();
     mostrarErrorContenidos("");
     persistirContenidosEnNodo();
     if (RM24H_MEDIA_CLIENT[tipoNorm]) {
       requestAnimationFrame(function () {
-        const mount = document.getElementById("rm24hContenidosLista");
-        const input = mount?.querySelector(
-          ".rm24-contenido-item:last-child .rm24-contenido-file"
-        );
+        const input = document
+          .getElementById("rm24hStepEditor")
+          ?.querySelector(".rm24-contenido-file");
         input?.click();
       });
     }
@@ -905,6 +1006,7 @@ window.MacBotRemarketingGlobal = (function () {
     if (index < 0 || index >= lista.length) return;
     lista.splice(index, 1);
     configActiva.rm24h_contenidos = lista;
+    clampPasoSeleccionado(lista.length);
     renderRm24ContentBlocks();
     persistirContenidosEnNodo();
   }
@@ -917,6 +1019,37 @@ window.MacBotRemarketingGlobal = (function () {
     lista[index] = lista[next];
     lista[next] = tmp;
     configActiva.rm24h_contenidos = lista;
+    if (rm24hPasoSeleccionado === index) {
+      rm24hPasoSeleccionado = next;
+    } else if (rm24hPasoSeleccionado === next) {
+      rm24hPasoSeleccionado = index;
+    }
+    renderRm24ContentBlocks();
+    persistirContenidosEnNodo();
+  }
+
+  function reorderRm24ContentBlock(fromIndex, toIndex) {
+    const lista = leerContenidosDesdePanel();
+    if (
+      fromIndex < 0 ||
+      fromIndex >= lista.length ||
+      toIndex < 0 ||
+      toIndex >= lista.length ||
+      fromIndex === toIndex
+    ) {
+      return;
+    }
+    const selectedId = rm24hPasoSeleccionado;
+    const item = lista.splice(fromIndex, 1)[0];
+    lista.splice(toIndex, 0, item);
+    configActiva.rm24h_contenidos = lista;
+    if (selectedId === fromIndex) {
+      rm24hPasoSeleccionado = toIndex;
+    } else if (fromIndex < selectedId && toIndex >= selectedId) {
+      rm24hPasoSeleccionado = selectedId - 1;
+    } else if (fromIndex > selectedId && toIndex <= selectedId) {
+      rm24hPasoSeleccionado = selectedId + 1;
+    }
     renderRm24ContentBlocks();
     persistirContenidosEnNodo();
   }
@@ -1191,17 +1324,17 @@ window.MacBotRemarketingGlobal = (function () {
     return html;
   }
 
-  function htmlBloqueContenido(item, index, total) {
+  function htmlStepEditorBody(item, index) {
     const tipo = item.tipo || "texto";
-    const totalBlocks = typeof total === "number" ? total : 1;
-    const tituloUpper = etiquetaTipoContenido(tipo).toUpperCase();
     let campos = "";
     if (tipo === "retraso") {
       const cantidad = item.cantidad ?? 1;
       const unidad = String(item.unidad || "minutos").toLowerCase();
       campos =
         '<div class="rm24-block-body-inner">' +
-        '<p class="rm24-block-body-label">⏱️ RETRASO</p>' +
+        '<p class="rm24-block-body-label">⏱️ RETRASO VISUAL ' +
+        etiquetaRetrasoVisualBadge() +
+        "</p>" +
         '<div class="rm24-delay-grid">' +
         '<input type="number" class="rm24-input rm24-contenido-cantidad" min="1" step="1" value="' +
         esc(String(cantidad)) +
@@ -1216,12 +1349,12 @@ window.MacBotRemarketingGlobal = (function () {
         '<option value="horas"' +
         (unidad === "horas" ? " selected" : "") +
         ">Horas</option></select></div>" +
-        '<p class="rm24-upload-hint">Pausa antes del siguiente bloque</p></div>';
+        '<p class="rm24-upload-hint">Solo visual en Fase 1 · el envío actual no espera este retraso</p></div>';
     } else if (tipo === "texto") {
       campos =
         '<div class="rm24-block-body-inner">' +
         '<p class="rm24-block-body-label">📝 MENSAJE DE TEXTO</p>' +
-        '<textarea class="rm24-input rm24-textarea rm24-textarea-premium rm24-contenido-texto" rows="4" placeholder="Escribe el mensaje de remarketing…">' +
+        '<textarea class="rm24-input rm24-textarea rm24-textarea-premium rm24-contenido-texto" rows="6" placeholder="Escribe el mensaje de remarketing…">' +
         esc(item.texto) +
         "</textarea></div>";
     } else if (RM24H_MEDIA_CLIENT[tipo]) {
@@ -1230,20 +1363,49 @@ window.MacBotRemarketingGlobal = (function () {
     }
 
     return (
-      '<div class="rm24-content-block rm24-contenido-item" data-tipo="' +
+      '<div class="rm24-contenido-item rm24-step-editor-card" data-tipo="' +
       esc(tipo) +
       '" data-index="' +
       index +
       '">' +
-      '<div class="rm24-content-block-header rm24-contenido-item-head">' +
-      '<div class="rm24-content-block-title">' +
-      '<span class="rm24-block-type-icon" aria-hidden="true">' +
+      campos +
+      "</div>"
+    );
+  }
+
+  function htmlFunnelStepRow(item, index, total, selected) {
+    const tipo = item.tipo || "texto";
+    const selectedClass = selected ? " rm24-funnel-step--selected" : "";
+    const dragClass = rm24hDragPasoIndex === index ? " rm24-funnel-step--dragging" : "";
+    return (
+      '<div class="rm24-funnel-step-wrap" role="listitem">' +
+      '<div class="rm24-funnel-step' +
+      selectedClass +
+      dragClass +
+      '" data-index="' +
+      index +
+      '" draggable="true">' +
+      '<button type="button" class="rm24-funnel-step-main" data-rm24-select-paso="' +
+      index +
+      '" title="Editar paso ' +
+      (index + 1) +
+      '">' +
+      '<span class="rm24-funnel-step-grip" aria-hidden="true">⠿</span>' +
+      '<span class="rm24-funnel-step-num">' +
+      (index + 1) +
+      "</span>" +
+      '<span class="rm24-funnel-step-icon" aria-hidden="true">' +
       iconoTipoContenido(tipo) +
       "</span>" +
-      '<span class="rm24-block-type-label">' +
-      esc(tituloUpper) +
-      "</span></div>" +
-      '<div class="rm24-content-actions">' +
+      '<span class="rm24-funnel-step-meta">' +
+      '<span class="rm24-funnel-step-label">' +
+      esc(etiquetaTipoContenido(tipo)) +
+      (tipo === "retraso" ? " " + etiquetaRetrasoVisualBadge() : "") +
+      "</span>" +
+      '<span class="rm24-funnel-step-preview">' +
+      esc(resumenPasoFunnel(item)) +
+      "</span></span></button>" +
+      '<div class="rm24-funnel-step-actions">' +
       '<button type="button" class="rm24-action-icon" data-rm24-move-up="' +
       index +
       '" title="Subir"' +
@@ -1252,32 +1414,60 @@ window.MacBotRemarketingGlobal = (function () {
       '<button type="button" class="rm24-action-icon" data-rm24-move-down="' +
       index +
       '" title="Bajar"' +
-      (index >= totalBlocks - 1 ? " disabled" : "") +
+      (index >= total - 1 ? " disabled" : "") +
       '>↓</button>' +
       '<button type="button" class="rm24-action-icon rm24-action-icon--danger" data-rm24-remove="' +
       index +
       '" title="Eliminar">×</button></div></div>' +
-      '<div class="rm24-content-block-body rm24-contenido-fields">' +
-      campos +
-      "</div></div>"
+      (index < total - 1
+        ? '<div class="rm24-funnel-connector" aria-hidden="true"><span></span></div>'
+        : "") +
+      "</div>"
     );
   }
 
-  function renderRm24ContentBlocks() {
-    const listaEl = document.getElementById("rm24hContenidosLista");
-    if (!listaEl) return;
-    const items = getRm24ContenidosActivos();
+  function renderRm24FunnelSteps() {
+    const mount = document.getElementById("rm24hFunnelSteps");
+    if (!mount) return;
+    const items = getRm24ContenidosActivos().map(function (item) {
+      return mapearItemContenidoUi(item) || item;
+    });
+    clampPasoSeleccionado(items.length);
     if (!items.length) {
-      listaEl.innerHTML =
-        '<p class="rm24-contenidos-empty">Sin bloques. Elige un tipo en el selector de arriba.</p>';
-      actualizarEmbudoRmPanel();
+      mount.innerHTML =
+        '<p class="rm24-funnel-empty">Sin pasos. Usa <strong>+ Agregar paso</strong> para armar el mini embudo.</p>';
       return;
     }
-    listaEl.innerHTML = items
+    mount.innerHTML = items
       .map(function (item, i) {
-        return htmlBloqueContenido(mapearItemContenidoUi(item) || item, i, items.length);
+        return htmlFunnelStepRow(item, i, items.length, i === rm24hPasoSeleccionado);
       })
       .join("");
+  }
+
+  function renderRm24StepEditor() {
+    const mount = document.getElementById("rm24hStepEditor");
+    const titleEl = document.getElementById("rm24hStepEditorTitle");
+    if (!mount) return;
+    const items = getRm24ContenidosActivos();
+    clampPasoSeleccionado(items.length);
+    if (!items.length) {
+      mount.innerHTML =
+        '<div class="rm24-step-editor-empty"><p>Selecciona o agrega un paso para editarlo aquí.</p></div>';
+      if (titleEl) titleEl.textContent = "Editor de paso";
+      return;
+    }
+    const item = mapearItemContenidoUi(items[rm24hPasoSeleccionado]) || items[rm24hPasoSeleccionado];
+    if (titleEl) {
+      titleEl.textContent =
+        "Paso " + (rm24hPasoSeleccionado + 1) + " · " + etiquetaTipoContenido(item.tipo);
+    }
+    mount.innerHTML = htmlStepEditorBody(item, rm24hPasoSeleccionado);
+  }
+
+  function renderRm24ContentBlocks() {
+    renderRm24FunnelSteps();
+    renderRm24StepEditor();
     actualizarEmbudoRmPanel();
   }
 
@@ -1294,15 +1484,44 @@ window.MacBotRemarketingGlobal = (function () {
     if (mount._rm24hOnInput) {
       mount.removeEventListener("input", mount._rm24hOnInput);
     }
+    if (mount._rm24hOnDragStart) {
+      mount.removeEventListener("dragstart", mount._rm24hOnDragStart);
+    }
+    if (mount._rm24hOnDragOver) {
+      mount.removeEventListener("dragover", mount._rm24hOnDragOver);
+    }
+    if (mount._rm24hOnDrop) {
+      mount.removeEventListener("drop", mount._rm24hOnDrop);
+    }
+    if (mount._rm24hOnDragEnd) {
+      mount.removeEventListener("dragend", mount._rm24hOnDragEnd);
+    }
 
     mount._rm24hOnClick = function (ev) {
-      const addBtn = ev.target.closest("[data-add-tipo]");
+      const addBtn = ev.target.closest("#rm24hAddPasoBtn");
       if (addBtn) {
         ev.preventDefault();
         ev.stopPropagation();
-        addRm24ContentBlock(addBtn.getAttribute("data-add-tipo"));
+        toggleRm24AddPasoMenu();
         return;
       }
+
+      const addTipoBtn = ev.target.closest("[data-add-tipo]");
+      if (addTipoBtn) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        addRm24ContentBlock(addTipoBtn.getAttribute("data-add-tipo"));
+        return;
+      }
+
+      const selectBtn = ev.target.closest("[data-rm24-select-paso]");
+      if (selectBtn) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        selectRm24Paso(parseInt(selectBtn.getAttribute("data-rm24-select-paso"), 10));
+        return;
+      }
+
       const removeBtn = ev.target.closest("[data-rm24-remove]");
       if (removeBtn) {
         ev.preventDefault();
@@ -1361,7 +1580,7 @@ window.MacBotRemarketingGlobal = (function () {
       ) {
         return;
       }
-      configActiva.rm24h_contenidos = leerContenidosDesdePanel();
+      syncEditorPasoToContenidos();
       if (ev.target.closest(".rm24-contenido-url")) {
         renderRm24ContentBlocks();
       }
@@ -1369,16 +1588,80 @@ window.MacBotRemarketingGlobal = (function () {
     };
 
     mount._rm24hOnInput = function (ev) {
-      if (!ev.target.closest("#rm24hContenidosLista")) return;
+      if (!ev.target.closest("#rm24hStepEditor")) return;
       mostrarErrorContenidos("");
-      configActiva.rm24h_contenidos = leerContenidosDesdePanel();
+      syncEditorPasoToContenidos();
       sincronizarMensajeRemarketingDesdeContenidos(configActiva);
+      renderRm24FunnelSteps();
+      actualizarEmbudoRmPanel();
       persistirContenidosEnNodo();
+    };
+
+    mount._rm24hOnDragStart = function (ev) {
+      const step = ev.target.closest(".rm24-funnel-step");
+      if (!step) return;
+      rm24hDragPasoIndex = parseInt(step.dataset.index, 10);
+      step.classList.add("rm24-funnel-step--dragging");
+      if (ev.dataTransfer) {
+        ev.dataTransfer.effectAllowed = "move";
+        ev.dataTransfer.setData("text/plain", String(rm24hDragPasoIndex));
+      }
+    };
+
+    mount._rm24hOnDragOver = function (ev) {
+      const step = ev.target.closest(".rm24-funnel-step");
+      if (!step) return;
+      ev.preventDefault();
+      if (ev.dataTransfer) ev.dataTransfer.dropEffect = "move";
+      document.querySelectorAll(".rm24-funnel-step--drop-target").forEach(function (el) {
+        el.classList.remove("rm24-funnel-step--drop-target");
+      });
+      step.classList.add("rm24-funnel-step--drop-target");
+    };
+
+    mount._rm24hOnDrop = function (ev) {
+      const step = ev.target.closest(".rm24-funnel-step");
+      if (!step) return;
+      ev.preventDefault();
+      const from =
+        rm24hDragPasoIndex != null
+          ? rm24hDragPasoIndex
+          : parseInt(ev.dataTransfer?.getData("text/plain"), 10);
+      const to = parseInt(step.dataset.index, 10);
+      document.querySelectorAll(".rm24-funnel-step--drop-target").forEach(function (el) {
+        el.classList.remove("rm24-funnel-step--drop-target");
+      });
+      if (Number.isFinite(from) && Number.isFinite(to)) {
+        reorderRm24ContentBlock(from, to);
+      }
+    };
+
+    mount._rm24hOnDragEnd = function () {
+      rm24hDragPasoIndex = null;
+      document.querySelectorAll(".rm24-funnel-step--dragging").forEach(function (el) {
+        el.classList.remove("rm24-funnel-step--dragging");
+      });
+      document.querySelectorAll(".rm24-funnel-step--drop-target").forEach(function (el) {
+        el.classList.remove("rm24-funnel-step--drop-target");
+      });
     };
 
     mount.addEventListener("click", mount._rm24hOnClick);
     mount.addEventListener("change", mount._rm24hOnChange);
     mount.addEventListener("input", mount._rm24hOnInput);
+    mount.addEventListener("dragstart", mount._rm24hOnDragStart);
+    mount.addEventListener("dragover", mount._rm24hOnDragOver);
+    mount.addEventListener("drop", mount._rm24hOnDrop);
+    mount.addEventListener("dragend", mount._rm24hOnDragEnd);
+
+    if (!mount._rm24hDocClick) {
+      mount._rm24hDocClick = function (ev) {
+        if (!panelRemarketingAbierto()) return;
+        if (ev.target.closest("#rm24hAddPasoWrap")) return;
+        toggleRm24AddPasoMenu(false);
+      };
+      document.addEventListener("click", mount._rm24hDocClick);
+    }
   }
 
   function esNodoRemarketingGlobal(nodo) {
@@ -1429,6 +1712,7 @@ window.MacBotRemarketingGlobal = (function () {
     if (!nodo) return;
 
     nodoActivo = nodo;
+    rm24hPasoSeleccionado = 0;
     hydrateRm24ContentBlocksFromNode(nodo);
     sincronizarHorasLegacyDesdeTiempo(configActiva);
 
@@ -1516,11 +1800,18 @@ window.MacBotRemarketingGlobal = (function () {
       '<p class="rm24h-hint rm24-rule-hint">SÍ (fijo en Fase 1)</p></div></section>' +
       '<section class="rm24-section rm24-section--contenidos">' +
       '<h5 class="rm24-section-title">Contenido de remarketing</h5>' +
-      '<p class="rm24h-hint rm24-contenidos-intro">Se envían en orden tras el tiempo de inactividad configurado. URLs HTTPS públicas.</p>' +
+      '<p class="rm24h-hint rm24-contenidos-intro">Mini embudo vertical · los pasos se envían en orden tras la inactividad. URLs HTTPS públicas.</p>' +
       '<div id="rm24hContenidosError" class="rm24-contenidos-error" hidden></div>' +
-      htmlRm24BlockPicker() +
-      '<div id="rm24hContenidosLista" class="rm24-contenidos-lista"></div>' +
-      "</section>" +
+      htmlRm24AddPasoControl() +
+      '<div class="rm24-mini-funnel-workspace">' +
+      '<div class="rm24-mini-funnel-col rm24-mini-funnel-col--list">' +
+      '<p class="rm24-mini-funnel-col-title">Pasos del mini embudo</p>' +
+      '<div id="rm24hFunnelSteps" class="rm24-funnel-steps" role="list" aria-label="Pasos del remarketing"></div>' +
+      "</div>" +
+      '<div class="rm24-mini-funnel-col rm24-mini-funnel-col--editor">' +
+      '<p class="rm24-mini-funnel-col-title" id="rm24hStepEditorTitle">Editor de paso</p>' +
+      '<div id="rm24hStepEditor" class="rm24-step-editor"></div>' +
+      "</div></div></section>" +
       '<section class="rm24-section rm24-section--future">' +
       '<h5 class="rm24-section-title">Opciones futuras</h5>' +
       '<div class="rm24-rule rm24h-field--locked">' +
@@ -1682,6 +1973,7 @@ window.MacBotRemarketingGlobal = (function () {
     }
     nodoActivo = null;
     configActiva = crearConfigVacia();
+    rm24hPasoSeleccionado = 0;
     const panelShell = document.getElementById("panelNodo");
     panelShell?.classList.remove(
       "panel-nodo--rm24h",
