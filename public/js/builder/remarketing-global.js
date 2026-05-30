@@ -1436,13 +1436,19 @@ window.MacBotRemarketingGlobal = (function () {
     const panelShell = document.getElementById("panelNodo");
     if (!contenido) return;
 
-    if (panelShell) panelShell.classList.add("panel-nodo--rm24h");
+    if (panelShell) {
+      panelShell.classList.add(
+        "panel-nodo--rm24h",
+        "panel-nodo--rm24h-wide",
+        "rm-panel-wide"
+      );
+    }
 
     const tiempo = configActiva.tiempoInactividad || { valor: 23, unidad: "horas" };
     const introTiempo = etiquetaTiempoInactividadResumen(tiempo);
 
     contenido.innerHTML =
-      '<div class="rm24h-panel rm24-config-panel">' +
+      '<div class="rm24h-panel rm24-config-panel rm-panel-wide">' +
       '<div class="rm24-card rm24-card--hero">' +
       '<span class="rm24h-panel-icon" aria-hidden="true">🔥</span>' +
       "<div>" +
@@ -1450,7 +1456,7 @@ window.MacBotRemarketingGlobal = (function () {
       "<p>Cerebro global del flujo · no mueve leads entre nodos</p>" +
       "</div></div>" +
       '<div class="rm24-config-scroll">' +
-      '<section class="rm24-section">' +
+      '<section class="rm24-section rm24-section--estado">' +
       '<h5 class="rm24-section-title">Estado</h5>' +
       '<label class="rm24-switch rm24h-toggle">' +
       '<input type="checkbox" id="rm24hActivo" ' +
@@ -1459,7 +1465,11 @@ window.MacBotRemarketingGlobal = (function () {
       '<span class="rm24-switch-track" aria-hidden="true"></span>' +
       "<span class=\"rm24-switch-label\">Activar remarketing global</span></label>" +
       "</section>" +
+      '<div class="rm24-config-workspace">' +
+      '<aside class="rm24-config-col rm24-config-col--funnel" aria-label="Embudo RM">' +
       htmlEmbudoRmSection() +
+      "</aside>" +
+      '<div class="rm24-config-col rm24-config-col--editor">' +
       '<section class="rm24-section">' +
       '<h5 class="rm24-section-title">Tiempo de inactividad</h5>' +
       '<div class="rm24-tiempo-grid">' +
@@ -1521,7 +1531,7 @@ window.MacBotRemarketingGlobal = (function () {
       '<p class="rm24h-hint rm24-rule-hint">Desactivado en Fase 1</p></div></section>' +
       '<div class="rm24-config-footer">' +
       '<button type="button" class="panel-btn rm24-btn-save" id="rm24hGuardarPanel">Guardar nodo</button>' +
-      "</div></div></div>";
+      "</div></div></div></div></div>";
 
     bindContenidosPanelEvents();
     bindTiempoPanelEvents();
@@ -1672,7 +1682,12 @@ window.MacBotRemarketingGlobal = (function () {
     }
     nodoActivo = null;
     configActiva = crearConfigVacia();
-    document.getElementById("panelNodo")?.classList.remove("panel-nodo--rm24h");
+    const panelShell = document.getElementById("panelNodo");
+    panelShell?.classList.remove(
+      "panel-nodo--rm24h",
+      "panel-nodo--rm24h-wide",
+      "rm-panel-wide"
+    );
   }
 
   function initNodoRecienCreado(nodo) {
