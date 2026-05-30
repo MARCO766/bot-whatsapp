@@ -78,20 +78,22 @@ window.MacBotRemarketingGlobal = (function () {
   }
 
   const RM24_TIPOS_PASO = [
-    { tipo: "texto", icon: "📝", label: "Texto" },
-    { tipo: "imagen", icon: "🖼️", label: "Imagen" },
-    { tipo: "video", icon: "🎬", label: "Video" },
-    { tipo: "audio", icon: "🎵", label: "Audio" },
-    { tipo: "documento", icon: "📁", label: "Archivo" },
-    { tipo: "retraso", icon: "⏱️", label: "Retraso visual", futuro: true },
+    { tipo: "texto", icon: "💬", label: "Texto" },
+    { tipo: "imagen", icon: "🖼", label: "Imagen" },
+    { tipo: "video", icon: "🎥", label: "Video" },
+    { tipo: "audio", icon: "🎧", label: "Audio" },
+    { tipo: "documento", icon: "📄", label: "Archivo" },
+    { tipo: "retraso", icon: "⏱", label: "Retraso", futuro: true },
   ];
 
   function htmlRm24AddPasoControl() {
     return (
-      '<div class="rm24-add-paso-wrap" id="rm24hAddPasoWrap">' +
-      '<button type="button" class="rm24-add-paso-btn" id="rm24hAddPasoBtn" aria-expanded="false" aria-haspopup="menu">' +
-      "+ Agregar paso</button>" +
-      '<div class="rm24-add-paso-menu" id="rm24hAddPasoMenu" role="menu" hidden>' +
+      '<div class="rm24-add-paso-wrap rm24-add-paso-wrap--premium" id="rm24hAddPasoWrap">' +
+      '<button type="button" class="rm24-add-paso-btn rm24-add-paso-btn--premium" id="rm24hAddPasoBtn" aria-expanded="false" aria-haspopup="menu">' +
+      '<span class="rm24-add-paso-btn-icon" aria-hidden="true">＋</span>' +
+      "<span>Agregar paso</span></button>" +
+      '<div class="rm24-add-paso-menu rm24-add-paso-menu--premium" id="rm24hAddPasoMenu" role="menu" hidden>' +
+      '<p class="rm24-add-paso-menu-title">Tipo de paso</p>' +
       RM24_TIPOS_PASO.map(function (c) {
         return (
           '<button type="button" class="rm24-add-paso-menu-item" role="menuitem" data-add-tipo="' +
@@ -270,12 +272,12 @@ window.MacBotRemarketingGlobal = (function () {
 
   function iconoTipoContenido(tipo) {
     const map = {
-      texto: "📝",
-      imagen: "🖼️",
-      audio: "🎵",
-      video: "🎬",
-      documento: "📁",
-      retraso: "⏱️",
+      texto: "💬",
+      imagen: "🖼",
+      audio: "🎧",
+      video: "🎥",
+      documento: "📄",
+      retraso: "⏱",
     };
     return map[tipo] || "📎";
   }
@@ -416,6 +418,54 @@ window.MacBotRemarketingGlobal = (function () {
     return "23 h";
   }
 
+  function convertirTiempoAMinutos(valor, unidad) {
+    const v = parseInt(valor, 10);
+    if (!Number.isFinite(v) || v < 1) return 0;
+    const u = String(unidad || "").toLowerCase();
+    if (u === "segundos") return v / 60;
+    if (u === "minutos") return v;
+    if (u === "horas") return v * 60;
+    if (u === "dias" || u === "días") return v * 24 * 60;
+    return v;
+  }
+
+  function formatearTiempoTotalMinutos(totalMin) {
+    if (!Number.isFinite(totalMin) || totalMin <= 0) return "0 min";
+    if (totalMin < 1) return "menos de 1 min";
+    if (totalMin < 60) return Math.round(totalMin) + " min";
+    if (totalMin < 24 * 60) {
+      const h = Math.floor(totalMin / 60);
+      const m = Math.round(totalMin % 60);
+      return m ? h + " h " + m + " min" : h + " h";
+    }
+    const d = Math.floor(totalMin / (24 * 60));
+    const rest = totalMin - d * 24 * 60;
+    const h = Math.floor(rest / 60);
+    if (h) return d + " d " + h + " h";
+    return d + (d === 1 ? " día" : " días");
+  }
+
+  function calcularTiempoTotalEmbudo(tiempo, contenidosRaw) {
+    const t = normalizarTiempoInactividad({ tiempoInactividad: tiempo });
+    let totalMin = convertirTiempoAMinutos(t.valor, t.unidad);
+    (contenidosRaw || []).forEach(function (item) {
+      const m = mapearItemContenidoUi(item);
+      if (m && m.tipo === "retraso") {
+        totalMin += convertirTiempoAMinutos(m.cantidad, m.unidad);
+      }
+    });
+    return formatearTiempoTotalMinutos(totalMin);
+  }
+
+  function contarPasosEmbudo(contenidosRaw) {
+    const n = (contenidosRaw || [])
+      .map(function (item) {
+        return mapearItemContenidoUi(item);
+      })
+      .filter(Boolean).length;
+    return n + " paso" + (n === 1 ? "" : "s");
+  }
+
   function obtenerContenidosParaEmbudo() {
     if (panelRemarketingAbierto()) {
       return leerContenidosDesdePanel();
@@ -462,15 +512,30 @@ window.MacBotRemarketingGlobal = (function () {
 
   function htmlEmbudoRmSection() {
     return (
-      '<section class="rm24-section rm24-section--embudo" id="rm24hEmbudoSection" aria-label="Embudo RM">' +
-      '<h5 class="rm24-section-title">Embudo RM</h5>' +
-      '<p class="rm24-embudo-intro">Vista del recorrido automático · arriba hacia abajo</p>' +
-      '<div class="rm24-embudo" id="rm24hEmbudoRm" role="list"></div></section>'
+      '<section class="rm24-section rm24-section--embudo rm24-section--embudo-premium" id="rm24hEmbudoSection" aria-label="Embudo RM">' +
+      '<div class="rm24-embudo-head">' +
+      '<div class="rm24-embudo-head-title">' +
+      '<span class="rm24-embudo-head-icon" aria-hidden="true">🔥</span>' +
+      "<span>Embudo RM</span></div>" +
+      '<div class="rm24-embudo-head-stats">' +
+      '<span class="rm24-embudo-stat" id="rm24hEmbudoPasoCount">0 pasos</span>' +
+      '<span class="rm24-embudo-stat rm24-embudo-stat--time" id="rm24hEmbudoTiempoTotal">Tiempo total: —</span>' +
+      "</div></div>" +
+      '<p class="rm24-embudo-intro">Selecciona un paso para editarlo · recorrido automático</p>' +
+      '<div class="rm24-embudo rm24-embudo--premium" id="rm24hEmbudoRm" role="list"></div></section>'
     );
   }
 
   function htmlEmbudoConnector() {
-    return '<div class="rm24-embudo-connector" aria-hidden="true"><span></span></div>';
+    return (
+      '<div class="rm24-embudo-connector rm24-embudo-connector--premium" aria-hidden="true">' +
+      '<span class="rm24-embudo-connector-line"></span>' +
+      '<span class="rm24-embudo-connector-arrow">▼</span></div>'
+    );
+  }
+
+  function claseEmbudoNodeSelected(selected) {
+    return selected ? " rm24-embudo-node--selected" : "";
   }
 
   function htmlEmbudoPasoWait(stepNum, tiempoLabel) {
@@ -489,16 +554,24 @@ window.MacBotRemarketingGlobal = (function () {
     );
   }
 
-  function htmlEmbudoPasoContenido(stepNum, item) {
+  function htmlEmbudoPasoContenido(stepNum, item, contentIndex, selected) {
     const tipo = item?.tipo || "texto";
     const esRetraso = tipo === "retraso";
     const nodeClass = esRetraso
-      ? "rm24-embudo-node rm24-embudo-node--delay"
-      : "rm24-embudo-node rm24-embudo-node--send";
+      ? "rm24-embudo-node rm24-embudo-node--delay rm24-embudo-node--clickable"
+      : "rm24-embudo-node rm24-embudo-node--send rm24-embudo-node--clickable";
+    const dragClass =
+      rm24hDragPasoIndex === contentIndex ? " rm24-embudo-node--dragging" : "";
     return (
       '<div class="rm24-embudo-step" role="listitem">' +
-      '<div class="' +
+      '<button type="button" class="' +
       nodeClass +
+      claseEmbudoNodeSelected(selected) +
+      dragClass +
+      '" data-rm24-embudo-index="' +
+      contentIndex +
+      '" draggable="true" title="Editar paso ' +
+      (contentIndex + 1) +
       '">' +
       '<span class="rm24-embudo-badge" aria-hidden="true">' +
       stepNum +
@@ -515,7 +588,7 @@ window.MacBotRemarketingGlobal = (function () {
       (resumenPasoFunnel(item) === "Vacío" ? " rm24-embudo-value--muted" : "") +
       '">' +
       esc(resumenPasoFunnel(item)) +
-      "</span></div></div></div>"
+      "</span></div></button></div>"
     );
   }
 
@@ -551,7 +624,7 @@ window.MacBotRemarketingGlobal = (function () {
     );
   }
 
-  function renderEmbudoRmStepsHtml(contenidosRaw, tiempo) {
+  function renderEmbudoRmStepsHtml(contenidosRaw, tiempo, pasoSeleccionado) {
     const items = (contenidosRaw || [])
       .map(function (item) {
         return mapearItemContenidoUi(item);
@@ -564,8 +637,10 @@ window.MacBotRemarketingGlobal = (function () {
     if (!items.length) {
       html += htmlEmbudoConnector() + htmlEmbudoPasoVacio(stepNum++);
     } else {
-      items.forEach(function (item) {
-        html += htmlEmbudoConnector() + htmlEmbudoPasoContenido(stepNum++, item);
+      items.forEach(function (item, i) {
+        html +=
+          htmlEmbudoConnector() +
+          htmlEmbudoPasoContenido(stepNum++, item, i, i === pasoSeleccionado);
       });
     }
 
@@ -588,7 +663,27 @@ window.MacBotRemarketingGlobal = (function () {
       ? leerTiempoDesdePanel()
       : configActiva.tiempoInactividad || { valor: 23, unidad: "horas" };
 
-    embudo.innerHTML = renderEmbudoRmStepsHtml(obtenerContenidosParaEmbudo(), tiempo);
+    const contenidos = obtenerContenidosParaEmbudo();
+    const pasoCountEl = document.getElementById("rm24hEmbudoPasoCount");
+    const tiempoTotalEl = document.getElementById("rm24hEmbudoTiempoTotal");
+    if (pasoCountEl) pasoCountEl.textContent = contarPasosEmbudo(contenidos);
+    if (tiempoTotalEl) {
+      tiempoTotalEl.textContent =
+        "Tiempo total: " + calcularTiempoTotalEmbudo(tiempo, contenidos);
+    }
+
+    clampPasoSeleccionado(
+      (contenidos || [])
+        .map(function (item) {
+          return mapearItemContenidoUi(item);
+        })
+        .filter(Boolean).length
+    );
+    embudo.innerHTML = renderEmbudoRmStepsHtml(
+      contenidos,
+      tiempo,
+      rm24hPasoSeleccionado
+    );
   }
 
   function htmlPresetsTiempoInactividad(unidad, valorActivo) {
@@ -971,6 +1066,11 @@ window.MacBotRemarketingGlobal = (function () {
     }
     rm24hPasoSeleccionado = Math.max(0, Math.min(index, total - 1));
     renderRm24ContentBlocks();
+    requestAnimationFrame(function () {
+      document
+        .getElementById("rm24hStepEditor")
+        ?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    });
   }
 
   function getRm24ContenidosActivos() {
@@ -1373,39 +1473,22 @@ window.MacBotRemarketingGlobal = (function () {
     );
   }
 
-  function htmlFunnelStepRow(item, index, total, selected) {
+  function htmlStepEditorShell(item, index, total) {
     const tipo = item.tipo || "texto";
-    const selectedClass = selected ? " rm24-funnel-step--selected" : "";
-    const dragClass = rm24hDragPasoIndex === index ? " rm24-funnel-step--dragging" : "";
     return (
-      '<div class="rm24-funnel-step-wrap" role="listitem">' +
-      '<div class="rm24-funnel-step' +
-      selectedClass +
-      dragClass +
-      '" data-index="' +
-      index +
-      '" draggable="true">' +
-      '<button type="button" class="rm24-funnel-step-main" data-rm24-select-paso="' +
-      index +
-      '" title="Editar paso ' +
+      '<div class="rm24-step-editor-shell">' +
+      '<div class="rm24-step-editor-head">' +
+      '<div class="rm24-step-editor-head-main">' +
+      '<p class="rm24-step-editor-kicker">✏️ Editando paso #' +
       (index + 1) +
-      '">' +
-      '<span class="rm24-funnel-step-grip" aria-hidden="true">⠿</span>' +
-      '<span class="rm24-funnel-step-num">' +
-      (index + 1) +
-      "</span>" +
-      '<span class="rm24-funnel-step-icon" aria-hidden="true">' +
+      "</p>" +
+      '<p class="rm24-step-editor-type">' +
       iconoTipoContenido(tipo) +
-      "</span>" +
-      '<span class="rm24-funnel-step-meta">' +
-      '<span class="rm24-funnel-step-label">' +
+      " " +
       esc(etiquetaTipoContenido(tipo)) +
       (tipo === "retraso" ? " " + etiquetaRetrasoVisualBadge() : "") +
-      "</span>" +
-      '<span class="rm24-funnel-step-preview">' +
-      esc(resumenPasoFunnel(item)) +
-      "</span></span></button>" +
-      '<div class="rm24-funnel-step-actions">' +
+      "</p></div>" +
+      '<div class="rm24-step-editor-actions">' +
       '<button type="button" class="rm24-action-icon" data-rm24-move-up="' +
       index +
       '" title="Subir"' +
@@ -1418,55 +1501,30 @@ window.MacBotRemarketingGlobal = (function () {
       '>↓</button>' +
       '<button type="button" class="rm24-action-icon rm24-action-icon--danger" data-rm24-remove="' +
       index +
-      '" title="Eliminar">×</button></div></div>' +
-      (index < total - 1
-        ? '<div class="rm24-funnel-connector" aria-hidden="true"><span></span></div>'
-        : "") +
+      '" title="Eliminar paso">×</button></div></div>' +
+      htmlStepEditorBody(item, index) +
       "</div>"
     );
   }
 
-  function renderRm24FunnelSteps() {
-    const mount = document.getElementById("rm24hFunnelSteps");
-    if (!mount) return;
-    const items = getRm24ContenidosActivos().map(function (item) {
-      return mapearItemContenidoUi(item) || item;
-    });
-    clampPasoSeleccionado(items.length);
-    if (!items.length) {
-      mount.innerHTML =
-        '<p class="rm24-funnel-empty">Sin pasos. Usa <strong>+ Agregar paso</strong> para armar el mini embudo.</p>';
-      return;
-    }
-    mount.innerHTML = items
-      .map(function (item, i) {
-        return htmlFunnelStepRow(item, i, items.length, i === rm24hPasoSeleccionado);
-      })
-      .join("");
-  }
-
   function renderRm24StepEditor() {
     const mount = document.getElementById("rm24hStepEditor");
-    const titleEl = document.getElementById("rm24hStepEditorTitle");
     if (!mount) return;
     const items = getRm24ContenidosActivos();
     clampPasoSeleccionado(items.length);
     if (!items.length) {
       mount.innerHTML =
-        '<div class="rm24-step-editor-empty"><p>Selecciona o agrega un paso para editarlo aquí.</p></div>';
-      if (titleEl) titleEl.textContent = "Editor de paso";
+        '<div class="rm24-step-editor-empty rm24-step-editor-empty--premium">' +
+        "<p><strong>Sin pasos aún</strong></p>" +
+        "<p>Usa <strong>＋ Agregar paso</strong> o selecciona un paso en el embudo izquierdo.</p></div>";
       return;
     }
-    const item = mapearItemContenidoUi(items[rm24hPasoSeleccionado]) || items[rm24hPasoSeleccionado];
-    if (titleEl) {
-      titleEl.textContent =
-        "Paso " + (rm24hPasoSeleccionado + 1) + " · " + etiquetaTipoContenido(item.tipo);
-    }
-    mount.innerHTML = htmlStepEditorBody(item, rm24hPasoSeleccionado);
+    const item =
+      mapearItemContenidoUi(items[rm24hPasoSeleccionado]) || items[rm24hPasoSeleccionado];
+    mount.innerHTML = htmlStepEditorShell(item, rm24hPasoSeleccionado, items.length);
   }
 
   function renderRm24ContentBlocks() {
-    renderRm24FunnelSteps();
     renderRm24StepEditor();
     actualizarEmbudoRmPanel();
   }
@@ -1514,11 +1572,11 @@ window.MacBotRemarketingGlobal = (function () {
         return;
       }
 
-      const selectBtn = ev.target.closest("[data-rm24-select-paso]");
+      const selectBtn = ev.target.closest("[data-rm24-embudo-index]");
       if (selectBtn) {
         ev.preventDefault();
         ev.stopPropagation();
-        selectRm24Paso(parseInt(selectBtn.getAttribute("data-rm24-select-paso"), 10));
+        selectRm24Paso(parseInt(selectBtn.getAttribute("data-rm24-embudo-index"), 10));
         return;
       }
 
@@ -1592,16 +1650,15 @@ window.MacBotRemarketingGlobal = (function () {
       mostrarErrorContenidos("");
       syncEditorPasoToContenidos();
       sincronizarMensajeRemarketingDesdeContenidos(configActiva);
-      renderRm24FunnelSteps();
       actualizarEmbudoRmPanel();
       persistirContenidosEnNodo();
     };
 
     mount._rm24hOnDragStart = function (ev) {
-      const step = ev.target.closest(".rm24-funnel-step");
+      const step = ev.target.closest("[data-rm24-embudo-index]");
       if (!step) return;
-      rm24hDragPasoIndex = parseInt(step.dataset.index, 10);
-      step.classList.add("rm24-funnel-step--dragging");
+      rm24hDragPasoIndex = parseInt(step.getAttribute("data-rm24-embudo-index"), 10);
+      step.classList.add("rm24-embudo-node--dragging");
       if (ev.dataTransfer) {
         ev.dataTransfer.effectAllowed = "move";
         ev.dataTransfer.setData("text/plain", String(rm24hDragPasoIndex));
@@ -1609,27 +1666,27 @@ window.MacBotRemarketingGlobal = (function () {
     };
 
     mount._rm24hOnDragOver = function (ev) {
-      const step = ev.target.closest(".rm24-funnel-step");
+      const step = ev.target.closest("[data-rm24-embudo-index]");
       if (!step) return;
       ev.preventDefault();
       if (ev.dataTransfer) ev.dataTransfer.dropEffect = "move";
-      document.querySelectorAll(".rm24-funnel-step--drop-target").forEach(function (el) {
-        el.classList.remove("rm24-funnel-step--drop-target");
+      document.querySelectorAll(".rm24-embudo-node--drop-target").forEach(function (el) {
+        el.classList.remove("rm24-embudo-node--drop-target");
       });
-      step.classList.add("rm24-funnel-step--drop-target");
+      step.classList.add("rm24-embudo-node--drop-target");
     };
 
     mount._rm24hOnDrop = function (ev) {
-      const step = ev.target.closest(".rm24-funnel-step");
+      const step = ev.target.closest("[data-rm24-embudo-index]");
       if (!step) return;
       ev.preventDefault();
       const from =
         rm24hDragPasoIndex != null
           ? rm24hDragPasoIndex
           : parseInt(ev.dataTransfer?.getData("text/plain"), 10);
-      const to = parseInt(step.dataset.index, 10);
-      document.querySelectorAll(".rm24-funnel-step--drop-target").forEach(function (el) {
-        el.classList.remove("rm24-funnel-step--drop-target");
+      const to = parseInt(step.getAttribute("data-rm24-embudo-index"), 10);
+      document.querySelectorAll(".rm24-embudo-node--drop-target").forEach(function (el) {
+        el.classList.remove("rm24-embudo-node--drop-target");
       });
       if (Number.isFinite(from) && Number.isFinite(to)) {
         reorderRm24ContentBlock(from, to);
@@ -1638,11 +1695,11 @@ window.MacBotRemarketingGlobal = (function () {
 
     mount._rm24hOnDragEnd = function () {
       rm24hDragPasoIndex = null;
-      document.querySelectorAll(".rm24-funnel-step--dragging").forEach(function (el) {
-        el.classList.remove("rm24-funnel-step--dragging");
+      document.querySelectorAll(".rm24-embudo-node--dragging").forEach(function (el) {
+        el.classList.remove("rm24-embudo-node--dragging");
       });
-      document.querySelectorAll(".rm24-funnel-step--drop-target").forEach(function (el) {
-        el.classList.remove("rm24-funnel-step--drop-target");
+      document.querySelectorAll(".rm24-embudo-node--drop-target").forEach(function (el) {
+        el.classList.remove("rm24-embudo-node--drop-target");
       });
     };
 
@@ -1800,18 +1857,11 @@ window.MacBotRemarketingGlobal = (function () {
       '<p class="rm24h-hint rm24-rule-hint">SÍ (fijo en Fase 1)</p></div></section>' +
       '<section class="rm24-section rm24-section--contenidos">' +
       '<h5 class="rm24-section-title">Contenido de remarketing</h5>' +
-      '<p class="rm24h-hint rm24-contenidos-intro">Mini embudo vertical · los pasos se envían en orden tras la inactividad. URLs HTTPS públicas.</p>' +
+      '<p class="rm24h-hint rm24-contenidos-intro">Selecciona un paso en el embudo izquierdo o agrega uno nuevo. URLs HTTPS públicas.</p>' +
       '<div id="rm24hContenidosError" class="rm24-contenidos-error" hidden></div>' +
       htmlRm24AddPasoControl() +
-      '<div class="rm24-mini-funnel-workspace">' +
-      '<div class="rm24-mini-funnel-col rm24-mini-funnel-col--list">' +
-      '<p class="rm24-mini-funnel-col-title">Pasos del mini embudo</p>' +
-      '<div id="rm24hFunnelSteps" class="rm24-funnel-steps" role="list" aria-label="Pasos del remarketing"></div>' +
-      "</div>" +
-      '<div class="rm24-mini-funnel-col rm24-mini-funnel-col--editor">' +
-      '<p class="rm24-mini-funnel-col-title" id="rm24hStepEditorTitle">Editor de paso</p>' +
-      '<div id="rm24hStepEditor" class="rm24-step-editor"></div>' +
-      "</div></div></section>" +
+      '<div id="rm24hStepEditor" class="rm24-step-editor rm24-step-editor--premium"></div>' +
+      "</section>" +
       '<section class="rm24-section rm24-section--future">' +
       '<h5 class="rm24-section-title">Opciones futuras</h5>' +
       '<div class="rm24-rule rm24h-field--locked">' +
