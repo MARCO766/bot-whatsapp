@@ -2328,6 +2328,20 @@ body:has(#builderArea) {
   text-overflow: ellipsis;
 }
 
+.rm24-content-pick[draggable="true"] {
+  cursor: grab;
+}
+
+.rm24-content-pick--dragging {
+  opacity: 0.55;
+  cursor: grabbing;
+}
+
+.rm24-content-pick--drop-target {
+  outline: 2px dashed rgba(251, 191, 36, 0.75);
+  outline-offset: 2px;
+}
+
 .rm24-embudo-value-preview {
   display: block;
   margin-top: 4px;

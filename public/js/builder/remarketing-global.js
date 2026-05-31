@@ -303,6 +303,7 @@ window.MacBotRemarketingGlobal = (function () {
   let rm24hMiniFlujoNodos = [];
   let rm24hMiniFlujoUidSeq = 0;
   let rm24hDragNodoIndex = null;
+  let rm24hDragContentIndex = null;
 
   /** Catálogo de nodos agregables al mini flujo (solo UI, sin persistencia JSON). */
   const RM24H_NODO_TIPOS = [
@@ -563,7 +564,57 @@ window.MacBotRemarketingGlobal = (function () {
     rm24hMiniFlujoNodos = [];
     rm24hMiniFlujoUidSeq = 0;
     rm24hDragNodoIndex = null;
+    rm24hDragContentIndex = null;
     rm24hBloqueSeleccionado = "espera";
+  }
+
+  function miniFlujoTieneNodoContenido() {
+    return rm24hMiniFlujoNodos.some(function (n) {
+      return n.tipo === "contenido";
+    });
+  }
+
+  function findNodoContenidoMiniFlujo() {
+    return rm24hMiniFlujoNodos.find(function (n) {
+      return n.tipo === "contenido";
+    });
+  }
+
+  /** Restaura el nodo Contenido del mini flujo desde rm24h_contenidos (sin schema nuevo). */
+  function hydrateMiniFlujoDesdeConfig(config) {
+    const cfg = config || configActiva;
+    const tieneContenido =
+      (Array.isArray(cfg.rm24h_contenidos) && cfg.rm24h_contenidos.length > 0) ||
+      String(cfg.mensajeRemarketing || "").trim().length > 0;
+
+    if (!miniFlujoTieneNodoContenido()) {
+      rm24hMiniFlujoNodos.push({
+        uid: crearUidMiniFlujoNodo(),
+        tipo: "contenido",
+      });
+    }
+
+    if (tieneContenido) {
+      const nodoContenido = findNodoContenidoMiniFlujo();
+      if (nodoContenido) {
+        rm24hBloqueSeleccionado = nodoContenido.uid;
+      }
+    }
+  }
+
+  function prepararConfigParaGuardar(config) {
+    const cfg = Object.assign({}, config || configActiva);
+    cfg.version = 1;
+    cfg.tiempoInactividad = normalizarTiempoInactividad(cfg);
+    sincronizarHorasLegacyDesdeTiempo(cfg);
+    cfg.rm24h_contenidos = (cfg.rm24h_contenidos || [])
+      .map(normalizarItemContenidoUi)
+      .filter(Boolean);
+    sincronizarMensajeRemarketingDesdeContenidos(cfg);
+    cfg.detenerSiResponde = false;
+    cfg.reiniciarAlResponder = true;
+    cfg.detenerEnConversion = true;
+    return cfg;
   }
 
   function crearUidMiniFlujoNodo() {
@@ -636,6 +687,13 @@ window.MacBotRemarketingGlobal = (function () {
     const cat = getCatalogoNodoRm24(String(tipo || "").toLowerCase());
     if (!cat) return;
     toggleRm24AddNodoMenu(false);
+    if (cat.tipo === "contenido") {
+      const existente = findNodoContenidoMiniFlujo();
+      if (existente) {
+        selectRm24Bloque(existente.uid);
+        return;
+      }
+    }
     const uid = crearUidMiniFlujoNodo();
     rm24hMiniFlujoNodos.push({ uid: uid, tipo: cat.tipo });
     selectRm24Bloque(uid);
@@ -646,6 +704,12 @@ window.MacBotRemarketingGlobal = (function () {
       return n.uid === uid;
     });
     if (idx < 0) return;
+    const removido = rm24hMiniFlujoNodos[idx];
+    if (removido && removido.tipo === "contenido") {
+      configActiva.rm24h_contenidos = [];
+      configActiva.mensajeRemarketing = "";
+      persistirContenidosEnNodo();
+    }
     rm24hMiniFlujoNodos.splice(idx, 1);
     if (rm24hBloqueSeleccionado === uid) {
       rm24hBloqueSeleccionado = rm24hMiniFlujoNodos.length
@@ -905,8 +969,8 @@ window.MacBotRemarketingGlobal = (function () {
   function htmlEditorBloqueContenido() {
     return (
       '<section class="rm24-section rm24-section--contenidos rm24-section--bloque-editor">' +
-      '<h5 class="rm24-section-title">Contenido de remarketing</h5>' +
-      '<p class="rm24h-hint rm24-contenidos-intro">Bloques que se envían juntos tras la espera. URLs HTTPS públicas.</p>' +
+      '<h5 class="rm24-section-title">Nodo Contenido</h5>' +
+      '<p class="rm24h-hint rm24-contenidos-intro">Bloques que se envían juntos tras la espera. Se guardan en <code>rm24h_contenidos</code> (compatible con RM24H actual).</p>' +
       '<div id="rm24hContenidosError" class="rm24-contenidos-error" hidden></div>' +
       htmlRm24AddPasoControl() +
       '<div id="rm24hContentPickerWrap" class="rm24-content-picker-wrap"></div>' +
@@ -1142,14 +1206,17 @@ window.MacBotRemarketingGlobal = (function () {
 
   function guardarConfigEnNodo(nodo, config) {
     if (!nodo || !config) return;
-    const json = JSON.stringify(config);
+    const payload = Object.assign({}, config, { version: 1 });
+    sincronizarHorasLegacyDesdeTiempo(payload);
+    sincronizarMensajeRemarketingDesdeContenidos(payload);
+    const json = JSON.stringify(payload);
     const ta = nodo.querySelector(".remarketing-global-data");
     if (ta) {
       ta.value = json;
       ta.textContent = json;
     }
-    nodo.__rm24hConfig = config;
-    renderPreviewNodo(nodo, config);
+    nodo.__rm24hConfig = payload;
+    renderPreviewNodo(nodo, payload);
   }
 
   function renderPreviewNodo(nodo, config) {
@@ -1881,7 +1948,7 @@ window.MacBotRemarketingGlobal = (function () {
         selected +
         '" data-rm24-content-index="' +
         index +
-        '" role="tab" aria-selected="' +
+        '" draggable="true" role="tab" aria-selected="' +
         (index === selectedIndex ? "true" : "false") +
         '">' +
         '<span class="rm24-content-pick-icon" aria-hidden="true">' +
@@ -1985,6 +2052,18 @@ window.MacBotRemarketingGlobal = (function () {
     }
     if (mount._rm24hOnDragEnd) {
       mount.removeEventListener("dragend", mount._rm24hOnDragEnd);
+    }
+    if (mount._rm24hOnContentDragStart) {
+      mount.removeEventListener("dragstart", mount._rm24hOnContentDragStart);
+    }
+    if (mount._rm24hOnContentDragOver) {
+      mount.removeEventListener("dragover", mount._rm24hOnContentDragOver);
+    }
+    if (mount._rm24hOnContentDrop) {
+      mount.removeEventListener("drop", mount._rm24hOnContentDrop);
+    }
+    if (mount._rm24hOnContentDragEnd) {
+      mount.removeEventListener("dragend", mount._rm24hOnContentDragEnd);
     }
 
     mount._rm24hOnClick = function (ev) {
@@ -2214,6 +2293,58 @@ window.MacBotRemarketingGlobal = (function () {
       });
     };
 
+    mount._rm24hOnContentDragStart = function (ev) {
+      const pick = ev.target.closest(".rm24-content-pick[draggable='true']");
+      if (!pick) return;
+      ev.stopPropagation();
+      rm24hDragContentIndex = parseInt(pick.getAttribute("data-rm24-content-index"), 10);
+      pick.classList.add("rm24-content-pick--dragging");
+      if (ev.dataTransfer) {
+        ev.dataTransfer.effectAllowed = "move";
+        ev.dataTransfer.setData("text/plain", String(rm24hDragContentIndex));
+      }
+    };
+
+    mount._rm24hOnContentDragOver = function (ev) {
+      const pick = ev.target.closest(".rm24-content-pick[draggable='true']");
+      if (!pick) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      if (ev.dataTransfer) ev.dataTransfer.dropEffect = "move";
+      document.querySelectorAll(".rm24-content-pick--drop-target").forEach(function (el) {
+        el.classList.remove("rm24-content-pick--drop-target");
+      });
+      pick.classList.add("rm24-content-pick--drop-target");
+    };
+
+    mount._rm24hOnContentDrop = function (ev) {
+      const pick = ev.target.closest(".rm24-content-pick[draggable='true']");
+      if (!pick) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      const from =
+        rm24hDragContentIndex != null
+          ? rm24hDragContentIndex
+          : parseInt(ev.dataTransfer?.getData("text/plain"), 10);
+      const to = parseInt(pick.getAttribute("data-rm24-content-index"), 10);
+      document.querySelectorAll(".rm24-content-pick--drop-target").forEach(function (el) {
+        el.classList.remove("rm24-content-pick--drop-target");
+      });
+      if (Number.isFinite(from) && Number.isFinite(to)) {
+        reorderRm24ContentBlock(from, to);
+      }
+    };
+
+    mount._rm24hOnContentDragEnd = function () {
+      rm24hDragContentIndex = null;
+      document.querySelectorAll(".rm24-content-pick--dragging").forEach(function (el) {
+        el.classList.remove("rm24-content-pick--dragging");
+      });
+      document.querySelectorAll(".rm24-content-pick--drop-target").forEach(function (el) {
+        el.classList.remove("rm24-content-pick--drop-target");
+      });
+    };
+
     mount.addEventListener("click", mount._rm24hOnClick);
     mount.addEventListener("change", mount._rm24hOnChange);
     mount.addEventListener("input", mount._rm24hOnInput);
@@ -2221,6 +2352,10 @@ window.MacBotRemarketingGlobal = (function () {
     mount.addEventListener("dragover", mount._rm24hOnDragOver);
     mount.addEventListener("drop", mount._rm24hOnDrop);
     mount.addEventListener("dragend", mount._rm24hOnDragEnd);
+    mount.addEventListener("dragstart", mount._rm24hOnContentDragStart);
+    mount.addEventListener("dragover", mount._rm24hOnContentDragOver);
+    mount.addEventListener("drop", mount._rm24hOnContentDrop);
+    mount.addEventListener("dragend", mount._rm24hOnContentDragEnd);
 
     if (!mount._rm24hDocClick) {
       mount._rm24hDocClick = function (ev) {
@@ -2289,6 +2424,7 @@ window.MacBotRemarketingGlobal = (function () {
     rm24hPasoSeleccionado = 0;
     resetMiniFlujoRmPanel();
     hydrateRm24ContentBlocksFromNode(nodo);
+    hydrateMiniFlujoDesdeConfig(configActiva);
     sincronizarHorasLegacyDesdeTiempo(configActiva);
 
     const contenido = document.getElementById("panelNodoContenido");
@@ -2445,6 +2581,12 @@ window.MacBotRemarketingGlobal = (function () {
   function guardarDesdePanel() {
     if (!nodoActivo) return;
     syncDesdePanel();
+    if (configActiva.activo && !miniFlujoTieneNodoContenido()) {
+      mostrarErrorContenidos(
+        "Con remarketing activo necesitas el nodo Contenido en el mini flujo."
+      );
+      return;
+    }
     const lista = (configActiva.rm24h_contenidos || [])
       .map(normalizarItemContenidoUi)
       .filter(Boolean);
@@ -2460,7 +2602,12 @@ window.MacBotRemarketingGlobal = (function () {
       return;
     }
     mostrarErrorContenidos("");
+    configActiva = prepararConfigParaGuardar(configActiva);
     guardarConfigEnNodo(nodoActivo, configActiva);
+    if (esNodoContenidoSeleccionado()) {
+      renderRm24ContentBlocks();
+    }
+    actualizarEmbudoRmPanel();
     alert("Remarketing Global guardado. Recuerda guardar el flujo completo.");
   }
 
