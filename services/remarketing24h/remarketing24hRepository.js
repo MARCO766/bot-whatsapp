@@ -250,6 +250,41 @@ async function buscarUltimaPostEnvio({
   return (response.data || [])[0] || null;
 }
 
+/**
+ * Resetbot: invalida la fila post-envío que usa Motor 1A (guard ya no la matchea).
+ */
+async function invalidarPostEnvioPorResetbot({
+  usuario_id,
+  cliente_numero,
+  conexion_whatsapp_id,
+}) {
+  const conexionId = normalizarConexionId(conexion_whatsapp_id);
+  if (!usuario_id || !cliente_numero || !conexionId) {
+    return null;
+  }
+
+  const fila = await buscarUltimaPostEnvio({
+    usuario_id,
+    cliente_numero,
+    conexion_whatsapp_id: conexionId,
+  });
+
+  if (!fila?.id) {
+    return null;
+  }
+
+  return actualizarPorId(
+    fila.id,
+    {
+      estado: ESTADOS_RM24H.CANCELADO_RESETBOT,
+      activo: false,
+      cancelado_en: nowUtc(),
+      motivo_cancelacion: MOTIVOS_RM24H.RESETBOT,
+    },
+    fila
+  );
+}
+
 async function listarReinicioPorCliente(
   usuario_id,
   cliente_numero,
@@ -275,6 +310,7 @@ module.exports = {
   normalizarConexionId,
   buscarAbierto,
   buscarUltimaPostEnvio,
+  invalidarPostEnvioPorResetbot,
   buscarInconsistenteActivoApagado,
   insertar,
   actualizarPorId,
