@@ -430,19 +430,75 @@ window.MacBotRemarketingGlobal = (function () {
     return t.length > n ? t.slice(0, n) + "…" : t;
   }
 
-  function resumenNodoMiniRmAlmacenado(nodo) {
-    const tipo = String(nodo?.type || nodo?.tipo || "").toLowerCase();
-    if (tipo === "lector_pagos") {
-      return resumenLectorPagosEmbudo(nodo);
+  /** Tipos con editor real en el panel (sin placeholder). */
+  function nodoRmTieneEditor(tipo) {
+    const t = String(tipo || "").toLowerCase();
+    return (
+      t === "contenido" ||
+      t === "agente_rapido" ||
+      t === "lector_pagos"
+    );
+  }
+
+  function crearMiniNodoContextMain(uid, nodeIndex, total) {
+    return { scope: "main", uid: uid, nodeIndex: nodeIndex, total: total };
+  }
+
+  function crearMiniNodoContextBranch(ramaKey, nodeId, nodeIndex, total) {
+    return {
+      scope: "branch",
+      ramaKey: ramaKey,
+      nodeId: nodeId,
+      nodeIndex: nodeIndex,
+      total: total,
+    };
+  }
+
+  function miniNodoSelectId(context) {
+    if (context.scope === "branch") {
+      return idSeleccionNodoRama(context.ramaKey, context.nodeId);
     }
+    return context.uid;
+  }
+
+  function resumenNodoMiniRm(node, context, contenidosRaw) {
+    const tipo = String(node?.type || node?.tipo || "").toLowerCase();
     if (tipo === "contenido") {
-      const cfg = normalizarConfigContenidoNodo(nodo.config);
-      const resumen = resumenContenidoEmbudo(cfg.contenidos);
+      if (context?.scope === "branch") {
+        const cfg = normalizarConfigContenidoNodo(node.config);
+        const resumen = resumenContenidoEmbudo(cfg.contenidos);
+        return resumen.vacio ? "Sin contenido configurado" : resumen.linea;
+      }
+      const resumen = resumenContenidoEmbudo(contenidosRaw || []);
       return resumen.vacio ? "Sin contenido configurado" : resumen.linea;
     }
-    const cat = getCatalogoNodoRm24(tipo);
-    if (cat && !cat.runtime) return "Configuración pendiente · solo UI";
-    return cat ? cat.label : tipo || "Nodo RM";
+    if (tipo === "agente_rapido") {
+      return resumenAgenteRapidoEmbudo(configActiva.rm24h_agente_rapido);
+    }
+    if (tipo === "lector_pagos") {
+      const lp =
+        context?.scope === "branch"
+          ? normalizarLectorPagosNodo({
+              type: "lector_pagos",
+              id: node.id,
+              config: node.config,
+            })
+          : configActiva.rm24h_lector_pagos;
+      return resumenLectorPagosEmbudo(lp);
+    }
+    if (!nodoRmTieneEditor(tipo)) {
+      return "Sin configurar";
+    }
+    return "Listo";
+  }
+
+  function resumenMiniNodoRmMuted(resumen) {
+    return (
+      resumen === "Sin contenido configurado" ||
+      resumen === "0 caminos" ||
+      resumen === "Configurar validación de pago" ||
+      resumen === "Sin configurar"
+    );
   }
 
   function encodeCaminoInsertKey(ramaKey, insertIndex) {
@@ -582,7 +638,6 @@ window.MacBotRemarketingGlobal = (function () {
       ? encodeCaminoInsertKey(o.caminoRamaKey, insertIndex)
       : String(insertIndex);
     const branchClass = o.caminoRamaKey ? " rm24-wf-junction--branch" : "";
-    const addBtnClass = o.caminoRamaKey ? " rm24-wf-junction-add--branch" : "";
     return (
       '<div class="rm24-wf-junction' +
       branchClass +
@@ -591,9 +646,7 @@ window.MacBotRemarketingGlobal = (function () {
       '">' +
       '<div class="rm24-wf-junction-line" aria-hidden="true"></div>' +
       '<div class="rm24-wf-junction-add-wrap">' +
-      '<button type="button" class="rm24-wf-junction-add' +
-      addBtnClass +
-      '" data-rm24-wf-add-toggle="' +
+      '<button type="button" class="rm24-wf-junction-add" data-rm24-wf-add-toggle="' +
       esc(key) +
       '" aria-expanded="false" aria-label="Añadir nodo">＋</button>' +
       '<div class="rm24-wf-junction-popover" data-rm24-wf-add-menu="' +
@@ -668,22 +721,52 @@ window.MacBotRemarketingGlobal = (function () {
     );
   }
 
-  function htmlCaminoChainNode(nodo, ramaKey, nodeIndex, total, seleccionado) {
-    const selId = idSeleccionNodoRama(ramaKey, nodo.id);
-    const selected = seleccionado === selId;
-    const tipo = String(nodo.type || nodo.tipo || "").toLowerCase();
+  function htmlWfMiniNodoActions(context) {
+    if (context.scope === "branch") {
+      return htmlWfCaminoNodeActions(
+        context.ramaKey,
+        context.nodeId,
+        context.nodeIndex,
+        context.total
+      );
+    }
+    return htmlWfNodeActions(context.uid, context.nodeIndex, context.total);
+  }
+
+  /** Render visual unificado de mini nodos RM (main y ramas). */
+  function renderMiniNodoRm(node, context, opts) {
+    const o = opts || {};
+    const tipo = String(node?.type || node?.tipo || "").toLowerCase();
+    if (context.scope === "main" && tipo === "agente_rapido") {
+      return htmlMiniFlujoNodoAgenteRapido(
+        { uid: context.uid, tipo: tipo },
+        o.stepNum,
+        o.resumen,
+        o.selected,
+        context.nodeIndex,
+        context.total
+      );
+    }
     const cat = getCatalogoNodoRm24(tipo) || {
       icon: "📎",
       label: tipo,
       kind: "action",
-      runtime: false,
     };
-    const resumen = resumenNodoMiniRmAlmacenado(nodo);
-    const muted =
-      resumen === "Configurar validación de pago" || resumen.indexOf("pendiente") >= 0;
+    const selId = miniNodoSelectId(context);
+    const selected =
+      o.selected === selId || o.selected === true || rm24hBloqueSeleccionado === selId;
+    const resumen =
+      o.resumen != null ? o.resumen : resumenNodoMiniRm(node, context, o.contenidosRaw);
+    const muted = resumenMiniNodoRmMuted(resumen);
+    const dragging =
+      context.scope === "main" && rm24hDragNodoIndex === context.nodeIndex;
+    const attrs =
+      context.scope === "branch"
+        ? 'data-rm24-ar-select="' + esc(selId) + '"'
+        : 'data-rm24-nodo-uid="' + esc(context.uid) + '"';
     return (
-      '<div class="rm24-wf-step rm24-wf-step--camino-chain" role="listitem">' +
-      '<div class="rm24-wf-step-inner rm24-wf-step-inner--camino">' +
+      '<div class="rm24-wf-step" role="listitem">' +
+      '<div class="rm24-wf-step-inner">' +
       htmlWfCard({
         kind: cat.kind,
         icon: cat.icon,
@@ -692,11 +775,21 @@ window.MacBotRemarketingGlobal = (function () {
         subtitleMuted: muted,
         selected: selected,
         showEditingPill: true,
-        futureBadge: !cat.runtime,
-        attrs: 'data-rm24-ar-select="' + esc(selId) + '"',
+        futureBadge: !nodoRmTieneEditor(tipo),
+        dragging: dragging,
+        draggable: context.scope === "main",
+        attrs: attrs,
       }) +
-      htmlWfStepActions(htmlWfCaminoNodeActions(ramaKey, nodo.id, nodeIndex, total)) +
+      htmlWfStepActions(htmlWfMiniNodoActions(context)) +
       "</div></div>"
+    );
+  }
+
+  function htmlCaminoChainNode(nodo, ramaKey, nodeIndex, total, seleccionado) {
+    return renderMiniNodoRm(
+      nodo,
+      crearMiniNodoContextBranch(ramaKey, nodo.id, nodeIndex, total),
+      { selected: seleccionado }
     );
   }
 
@@ -795,7 +888,12 @@ window.MacBotRemarketingGlobal = (function () {
     const norm = normalizarNodoRamaAgenteRapido({
       type: cat.tipo,
       id: crearUidNodoRamaAgenteRapido(),
-      config: cat.tipo === "contenido" ? normalizarConfigContenidoNodo({}) : {},
+      config:
+        cat.tipo === "contenido"
+          ? normalizarConfigContenidoNodo({})
+          : cat.tipo === "lector_pagos"
+            ? normalizarLectorPagosNodo(null).config
+            : {},
     });
     if (!norm) return;
     const idx = Math.max(0, Math.min(Number(insertIndex) || 0, lista.length));
@@ -1167,6 +1265,7 @@ window.MacBotRemarketingGlobal = (function () {
   let rm24hPasoSeleccionado = 0;
   let rm24hBloqueSeleccionado = "espera";
   let rm24hContenidoContext = { scope: "main" };
+  let rm24hLectorPagosContext = { scope: "main" };
   let rm24hMiniFlujoNodos = [];
   let rm24hMiniFlujoUidSeq = 0;
   let rm24hDragNodoIndex = null;
@@ -1184,6 +1283,42 @@ window.MacBotRemarketingGlobal = (function () {
       configActiva.rm24h_lector_pagos = normalizarLectorPagosNodo(null);
     }
     return configActiva.rm24h_lector_pagos;
+  }
+
+  function crearLectorPagosContextMain() {
+    return { scope: "main" };
+  }
+
+  function crearLectorPagosContextBranch(ramaKey, nodeId) {
+    return { scope: "branch", ramaKey: ramaKey, nodeId: nodeId };
+  }
+
+  function getLectorPagosPorContexto(ctx) {
+    const c = ctx || rm24hLectorPagosContext || crearLectorPagosContextMain();
+    if (c.scope === "branch") {
+      const nodo = findNodoEnCaminoAgenteRapido(c.ramaKey, c.nodeId);
+      if (!nodo) return normalizarLectorPagosNodo(null);
+      return normalizarLectorPagosNodo({
+        type: "lector_pagos",
+        id: nodo.id,
+        config: nodo.config,
+      });
+    }
+    return getLectorPagosActivo();
+  }
+
+  function setLectorPagosPorContexto(ctx, lp) {
+    const c = ctx || rm24hLectorPagosContext || crearLectorPagosContextMain();
+    const norm = normalizarLectorPagosNodo(lp);
+    if (c.scope === "branch") {
+      const nodo = findNodoEnCaminoAgenteRapido(c.ramaKey, c.nodeId);
+      if (!nodo) return;
+      nodo.config = norm.config;
+      nodo.type = "lector_pagos";
+      configActiva.rm24h_agente_rapido = getAgenteRapidoActivo();
+      return;
+    }
+    configActiva.rm24h_lector_pagos = norm;
   }
 
   function crearContenidoContextMain() {
@@ -1273,12 +1408,22 @@ window.MacBotRemarketingGlobal = (function () {
     sincronizarMensajeRemarketingDesdeContenidos(configActiva);
   }
 
-  function syncContenidoContextDesdeSeleccion() {
+  function syncMiniNodoContextDesdeSeleccion() {
     const arSel = parseSeleccionAgenteRapido(rm24hBloqueSeleccionado);
     if (arSel && arSel.kind === "node") {
       const nodo = findNodoEnCaminoAgenteRapido(arSel.ramaKey, arSel.nodeId);
-      if (nodo && String(nodo.type || nodo.tipo || "").toLowerCase() === "contenido") {
+      const tipo = String(nodo?.type || nodo?.tipo || "").toLowerCase();
+      if (tipo === "contenido") {
         setContenidoContext(crearContenidoContextBranch(arSel.ramaKey, arSel.nodeId));
+        rm24hLectorPagosContext = crearLectorPagosContextMain();
+        return;
+      }
+      if (tipo === "lector_pagos") {
+        rm24hLectorPagosContext = crearLectorPagosContextBranch(
+          arSel.ramaKey,
+          arSel.nodeId
+        );
+        setContenidoContext(crearContenidoContextMain());
         return;
       }
     }
@@ -1286,6 +1431,13 @@ window.MacBotRemarketingGlobal = (function () {
     if (n && n.tipo === "contenido") {
       setContenidoContext(crearContenidoContextMain());
     }
+    if (n && n.tipo === "lector_pagos") {
+      rm24hLectorPagosContext = crearLectorPagosContextMain();
+    }
+  }
+
+  function syncContenidoContextDesdeSeleccion() {
+    syncMiniNodoContextDesdeSeleccion();
   }
 
   /** Catálogo de nodos agregables al mini flujo (solo UI, sin persistencia JSON). */
@@ -1595,6 +1747,11 @@ window.MacBotRemarketingGlobal = (function () {
   }
 
   function esNodoLectorPagosSeleccionado() {
+    const arSel = parseSeleccionAgenteRapido(rm24hBloqueSeleccionado);
+    if (arSel && arSel.kind === "node") {
+      const nodo = findNodoEnCaminoAgenteRapido(arSel.ramaKey, arSel.nodeId);
+      return String(nodo?.type || nodo?.tipo || "").toLowerCase() === "lector_pagos";
+    }
     const n = getMiniFlujoNodo(rm24hBloqueSeleccionado);
     return !!(n && n.tipo === "lector_pagos");
   }
@@ -1723,7 +1880,7 @@ window.MacBotRemarketingGlobal = (function () {
           '<span class="rm24-add-paso-menu-label">' +
           esc(c.label) +
           "</span>" +
-          (c.runtime ? "" : '<span class="rm24-future-badge">solo UI</span>') +
+          (nodoRmTieneEditor(c.tipo) ? "" : '<span class="rm24-future-badge">solo UI</span>') +
           "</button>"
         );
       }).join("") +
@@ -1849,19 +2006,11 @@ window.MacBotRemarketingGlobal = (function () {
   }
 
   function resumenMiniFlujoNodo(nodo, contenidosRaw) {
-    if (nodo.tipo === "contenido") {
-      const resumen = resumenContenidoEmbudo(contenidosRaw);
-      return resumen.vacio ? "Sin contenido configurado" : resumen.linea;
-    }
-    if (nodo.tipo === "agente_rapido") {
-      return resumenAgenteRapidoEmbudo(configActiva.rm24h_agente_rapido);
-    }
-    if (nodo.tipo === "lector_pagos") {
-      return resumenLectorPagosEmbudo(configActiva.rm24h_lector_pagos);
-    }
-    const cat = getCatalogoNodoRm24(nodo.tipo);
-    if (cat && !cat.runtime) return "Configuración pendiente · solo UI";
-    return "Listo";
+    return resumenNodoMiniRm(
+      { type: nodo.tipo, tipo: nodo.tipo },
+      crearMiniNodoContextMain(nodo.uid, 0, 1),
+      contenidosRaw
+    );
   }
 
   function resumenMiniFlujoBloqueFijo(bloqueId, contenidosRaw, tiempo) {
@@ -1912,39 +2061,14 @@ window.MacBotRemarketingGlobal = (function () {
   }
 
   function htmlMiniFlujoNodo(nodo, stepNum, resumen, selected, nodeIndex, total) {
-    if (nodo.tipo === "agente_rapido") {
-      return htmlMiniFlujoNodoAgenteRapido(nodo, stepNum, resumen, selected, nodeIndex, total);
-    }
-    const cat = getCatalogoNodoRm24(nodo.tipo) || {
-      icon: "📎",
-      label: nodo.tipo,
-      kind: "action",
-      runtime: false,
-    };
-    const muted =
-      resumen === "Sin contenido configurado" ||
-      resumen === "0 caminos" ||
-      resumen === "Configurar validación de pago" ||
-      resumen.indexOf("pendiente") >= 0;
-    const dragging = rm24hDragNodoIndex === nodeIndex;
-    return (
-      '<div class="rm24-wf-step" role="listitem">' +
-      '<div class="rm24-wf-step-inner">' +
-      htmlWfCard({
-        kind: cat.kind,
-        icon: cat.icon,
-        title: cat.label,
-        subtitle: resumen,
-        subtitleMuted: muted,
+    return renderMiniNodoRm(
+      { type: nodo.tipo, tipo: nodo.tipo, uid: nodo.uid },
+      crearMiniNodoContextMain(nodo.uid, nodeIndex, total),
+      {
+        stepNum: stepNum,
+        resumen: resumen,
         selected: selected,
-        showEditingPill: true,
-        futureBadge: !cat.runtime,
-        dragging: dragging,
-        draggable: true,
-        attrs: 'data-rm24-nodo-uid="' + esc(nodo.uid) + '"',
-      }) +
-      htmlWfStepActions(htmlWfNodeActions(nodo.uid, nodeIndex, total)) +
-      "</div></div>"
+      }
     );
   }
 
@@ -1976,7 +2100,7 @@ window.MacBotRemarketingGlobal = (function () {
         innerBadge: fallbackOn ? "Fallback ✓" : "",
         selected: headSelected,
         showEditingPill: selected,
-        futureBadge: true,
+        futureBadge: false,
         dragging: dragging,
         draggable: true,
         attrs: 'data-rm24-nodo-uid="' + esc(nodo.uid) + '"',
@@ -2147,33 +2271,57 @@ window.MacBotRemarketingGlobal = (function () {
     return renderEditorContenido(crearContenidoContextMain());
   }
 
-  function htmlEditorBloqueNodoRamaAgenteRapido(nodo, ramaKey) {
-    const tipo = String(nodo.type || nodo.tipo || "").toLowerCase();
-    const cat = getCatalogoNodoRm24(tipo) || { label: nodo.type, icon: "📎" };
-    const ramaLabel =
-      ramaKey === "default"
-        ? "Default"
-        : "Camino: " +
-          String(
-            getCaminoAgenteRapidoPorRamaKey(ramaKey)?.nombre ||
-              getCaminoAgenteRapidoPorRamaKey(ramaKey)?.nombreCamino ||
-              ramaKey
-          );
-    return (
-      '<section class="rm24-section rm24-section--bloque-editor rm24-section--bloque-futuro">' +
-      '<h5 class="rm24-section-title">' +
-      esc(cat.icon + " " + cat.label) +
-      "</h5>" +
-      '<p class="rm24h-hint">Nodo en rama <strong>' +
-      esc(ramaLabel) +
-      "</strong> · solo UI.</p>" +
-      '<div class="rm24-bloque-futuro-card">' +
-      '<span class="rm24-future-badge">UI preparada · motor pendiente</span>' +
-      "<p>Este nodo se ejecutará cuando el motor de caminos RM esté conectado.</p>" +
-      "<p>ID: <code>" +
-      esc(nodo.id) +
-      "</code></p></div></section>"
-    );
+  /** Editor unificado por tipo de mini nodo RM (main o rama). */
+  function renderEditorMiniNodoRm(node, context) {
+    const tipo = String(node?.type || node?.tipo || "").toLowerCase();
+    if (tipo === "contenido") {
+      const ctx =
+        context?.scope === "branch"
+          ? crearContenidoContextBranch(context.ramaKey, context.nodeId)
+          : crearContenidoContextMain();
+      return renderEditorContenido(ctx);
+    }
+    if (tipo === "lector_pagos") {
+      return htmlEditorBloqueLectorPagos(context);
+    }
+    if (tipo === "agente_rapido") {
+      if (!configActiva.rm24h_agente_rapido) {
+        configActiva.rm24h_agente_rapido = crearAgenteRapidoVacio();
+      }
+      return htmlEditorBloqueAgenteRapido();
+    }
+    return htmlEditorBloqueNodoFuturo(tipo);
+  }
+
+  function mountEditorMiniNodoRm(node, context) {
+    const mount = document.getElementById("rm24hBloqueEditor");
+    if (!mount) return;
+    const tipo = String(node?.type || node?.tipo || "").toLowerCase();
+    if (tipo === "contenido") {
+      const ctx =
+        context?.scope === "branch"
+          ? crearContenidoContextBranch(context.ramaKey, context.nodeId)
+          : crearContenidoContextMain();
+      mountEditorContenido(ctx);
+      return;
+    }
+    if (tipo === "lector_pagos") {
+      rm24hLectorPagosContext =
+        context?.scope === "branch"
+          ? crearLectorPagosContextBranch(context.ramaKey, context.nodeId)
+          : crearLectorPagosContextMain();
+      mount.innerHTML = htmlEditorBloqueLectorPagos(rm24hLectorPagosContext);
+      return;
+    }
+    if (tipo === "agente_rapido") {
+      if (!configActiva.rm24h_agente_rapido) {
+        configActiva.rm24h_agente_rapido = crearAgenteRapidoVacio();
+      }
+      mount.innerHTML = htmlEditorBloqueAgenteRapido();
+      renderAgenteRapidoCaminos();
+      return;
+    }
+    mount.innerHTML = htmlEditorBloqueNodoFuturo(tipo);
   }
 
   function htmlEditorBloqueAgenteRapido() {
@@ -2183,8 +2331,7 @@ window.MacBotRemarketingGlobal = (function () {
       '<section class="rm24-section rm24-section--agente-rapido rm24-section--bloque-editor">' +
       '<header class="rm24-ar-hero">' +
       '<div class="rm24-ar-hero__top">' +
-      '<h5 class="rm24-ar-hero__title">⚡ Agente rápido</h5>' +
-      '<span class="rm24-future-badge">Solo config · motor pendiente</span></div>' +
+      '<h5 class="rm24-ar-hero__title">⚡ Agente rápido</h5></div>' +
       '<p class="rm24h-hint rm24-ar-hero__desc">Detecta intención del lead y ejecuta un camino.</p></header>' +
       '<input type="hidden" id="rm24hAgenteRapidoModo" value="caminos">' +
       '<section class="rm24-ar-card rm24-ar-card--routes">' +
@@ -2391,16 +2538,20 @@ window.MacBotRemarketingGlobal = (function () {
     );
   }
 
-  function htmlEditorBloqueLectorPagos() {
-    const lp = getLectorPagosActivo();
+  function htmlEditorBloqueLectorPagos(context) {
+    const ctx = context || rm24hLectorPagosContext || crearLectorPagosContextMain();
+    const lp = getLectorPagosPorContexto(ctx);
     const c = normalizarLectorPagosConfig(lp.config);
     const tiempo = c.tiempoMaximoEspera;
+    const storageHint =
+      ctx.scope === "branch"
+        ? "Se guarda en <code>caminos[].next[].config</code>"
+        : "Se guarda en <code>rm24h_lector_pagos</code>";
     return (
       '<section class="rm24-section rm24-section--lector-pagos rm24-section--bloque-editor">' +
       '<header class="rm24-ar-hero">' +
       '<div class="rm24-ar-hero__top">' +
-      '<h5 class="rm24-ar-hero__title">💳 Lector de pagos</h5>' +
-      '<span class="rm24-future-badge">Solo config · motor pendiente</span></div>' +
+      '<h5 class="rm24-ar-hero__title">💳 Lector de pagos</h5></div>' +
       '<p class="rm24h-hint rm24-ar-hero__desc">Detecta comprobantes enviados por el lead dentro del remarketing.</p></header>' +
       '<div class="rm24h-field rm24-field">' +
       '<label class="rm24-switch rm24h-toggle">' +
@@ -2479,14 +2630,17 @@ window.MacBotRemarketingGlobal = (function () {
       ">Días</option></select></div></div></div>" +
       '<p class="rm24h-hint">ID nodo: <code>' +
       esc(lp.id) +
-      "</code> · Se guarda en <code>rm24h_lector_pagos</code></p></section>"
+      "</code> · " +
+      storageHint +
+      "</p></section>"
     );
   }
 
   function syncLectorPagosDesdePanel() {
-    const prev = getLectorPagosActivo();
+    const ctx = rm24hLectorPagosContext || crearLectorPagosContextMain();
+    const prev = getLectorPagosPorContexto(ctx);
     const monto = parseFloat(document.getElementById("rm24hLectorPagosMonto")?.value);
-    configActiva.rm24h_lector_pagos = normalizarLectorPagosNodo({
+    setLectorPagosPorContexto(ctx, {
       type: "lector_pagos",
       id: prev.id,
       config: {
@@ -2518,11 +2672,10 @@ window.MacBotRemarketingGlobal = (function () {
       '<h5 class="rm24-section-title">' +
       esc(label) +
       "</h5>" +
-      '<p class="rm24h-hint">Nodo del mini flujo RM · solo UI por ahora.</p>' +
+      '<p class="rm24h-hint">Configura este nodo cuando el editor esté disponible.</p>' +
       '<div class="rm24-bloque-futuro-card">' +
-      '<span class="rm24-future-badge">UI preparada · motor pendiente</span>' +
-      "<p>Este nodo aún no ejecuta acciones en runtime.</p>" +
-      "<p>El envío actual sigue usando <strong>rm24h_contenidos</strong> cuando hay nodo Contenido configurado.</p></div></section>"
+      '<span class="rm24-future-badge">Próximamente</span>' +
+      "<p>Este tipo de nodo aún no tiene editor en el mini flujo RM.</p></div></section>"
     );
   }
 
@@ -2545,7 +2698,7 @@ window.MacBotRemarketingGlobal = (function () {
     if (document.getElementById("rm24hStepEditor")) {
       syncEditorPasoToContenidos();
     }
-    syncContenidoContextDesdeSeleccion();
+    syncMiniNodoContextDesdeSeleccion();
     const tiempo = panelRemarketingAbierto()
       ? leerTiempoDesdePanel()
       : configActiva.tiempoInactividad || { valor: 23, unidad: "horas" };
@@ -2564,23 +2717,17 @@ window.MacBotRemarketingGlobal = (function () {
     const arSel = parseSeleccionAgenteRapido(rm24hBloqueSeleccionado);
     if (arSel) {
       if (arSel.kind === "node") {
-        const ar = getAgenteRapidoActivo();
-        const lista =
-          arSel.ramaKey === "default"
-            ? ar.default?.next || []
-            : (ar.caminos || []).find(function (c) {
-                return c.id === arSel.ramaKey;
-              })?.next || [];
-        const found = lista.find(function (n) {
-          return n.id === arSel.nodeId;
-        });
+        const found = findNodoEnCaminoAgenteRapido(arSel.ramaKey, arSel.nodeId);
         if (found) {
-          const tipoNodo = String(found.type || found.tipo || "").toLowerCase();
-          if (tipoNodo === "contenido") {
-            mountEditorContenido(crearContenidoContextBranch(arSel.ramaKey, arSel.nodeId));
-            return;
-          }
-          mount.innerHTML = htmlEditorBloqueNodoRamaAgenteRapido(found, arSel.ramaKey);
+          mountEditorMiniNodoRm(
+            found,
+            crearMiniNodoContextBranch(
+              arSel.ramaKey,
+              arSel.nodeId,
+              0,
+              getNextArrayPorRamaKey(arSel.ramaKey)?.length || 0
+            )
+          );
           return;
         }
       }
@@ -2597,19 +2744,24 @@ window.MacBotRemarketingGlobal = (function () {
       return;
     }
     if (nodo.tipo === "contenido") {
-      mountEditorContenido(crearContenidoContextMain());
+      mountEditorMiniNodoRm(
+        { type: "contenido", tipo: "contenido" },
+        crearMiniNodoContextMain(nodo.uid, 0, rm24hMiniFlujoNodos.length)
+      );
       return;
     }
     if (nodo.tipo === "agente_rapido") {
-      if (!configActiva.rm24h_agente_rapido) {
-        configActiva.rm24h_agente_rapido = crearAgenteRapidoVacio();
-      }
-      mount.innerHTML = htmlEditorBloqueAgenteRapido();
-      renderAgenteRapidoCaminos();
+      mountEditorMiniNodoRm(
+        { type: "agente_rapido", tipo: "agente_rapido" },
+        crearMiniNodoContextMain(nodo.uid, 0, rm24hMiniFlujoNodos.length)
+      );
       return;
     }
     if (nodo.tipo === "lector_pagos") {
-      mount.innerHTML = htmlEditorBloqueLectorPagos();
+      mountEditorMiniNodoRm(
+        { type: "lector_pagos", tipo: "lector_pagos" },
+        crearMiniNodoContextMain(nodo.uid, 0, rm24hMiniFlujoNodos.length)
+      );
       return;
     }
     mount.innerHTML = htmlEditorBloqueNodoFuturo(nodo.tipo);

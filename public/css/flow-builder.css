@@ -2352,7 +2352,6 @@ body:has(#builderArea) {
 
 .rm24-wf-card--camino {
   border-top: 2px solid rgba(52, 211, 153, 0.65);
-  max-width: 168px;
 }
 
 .rm24-wf-card--branch {
@@ -2607,20 +2606,6 @@ body:has(#builderArea) {
   box-shadow: 0 0 22px rgba(255, 122, 24, 0.35);
 }
 
-.rm24-wf-junction-add--branch {
-  width: 24px;
-  height: 24px;
-  font-size: 14px;
-  border-color: rgba(52, 211, 153, 0.45);
-  color: #6ee7b7;
-  background: linear-gradient(
-    180deg,
-    rgba(52, 211, 153, 0.16) 0%,
-    rgba(12, 18, 28, 0.95) 100%
-  );
-  box-shadow: 0 0 12px rgba(52, 211, 153, 0.18);
-}
-
 .rm24-wf-junction-popover {
   position: absolute;
   left: 50%;
@@ -2748,7 +2733,7 @@ body:has(#builderArea) {
 
 .rm24-wf-fork-col {
   flex: 1 1 130px;
-  max-width: 168px;
+  max-width: 240px;
   min-width: 118px;
   display: flex;
   flex-direction: column;
