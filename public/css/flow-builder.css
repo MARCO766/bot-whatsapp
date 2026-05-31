@@ -2342,6 +2342,113 @@ body:has(#builderArea) {
   outline-offset: 2px;
 }
 
+/* Agente rápido (mini flujo RM — solo config) */
+.rm24-section--agente-rapido {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.rm24-ar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.rm24-ar-subtitle {
+  margin: 0;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.rm24-ar-caminos-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.rm24-ar-btn-add {
+  font-size: 0.78rem;
+  padding: 6px 12px;
+}
+
+.rm24-ar-caminos-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.rm24-ar-caminos-vacio {
+  padding: 16px;
+  border: 1px dashed rgba(255, 255, 255, 0.18);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  font-size: 0.82rem;
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.rm24-ar-caminos-vacio p {
+  margin: 0 0 6px;
+}
+
+.rm24-ar-camino-card {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  padding: 12px;
+  background: rgba(15, 23, 42, 0.45);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.rm24-ar-camino-card[draggable="true"] {
+  cursor: grab;
+}
+
+.rm24-ar-camino-card--dragging {
+  opacity: 0.55;
+  cursor: grabbing;
+}
+
+.rm24-ar-camino-card--drop-target {
+  outline: 2px dashed rgba(96, 165, 250, 0.75);
+  outline-offset: 2px;
+}
+
+.rm24-ar-camino-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.rm24-ar-camino-num {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: rgba(251, 191, 36, 0.95);
+}
+
+.rm24-ar-camino-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.rm24-ar-default-section,
+.rm24-ar-caminos-section {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 12px;
+}
+
+.rm24-ar-toggle {
+  margin-top: 4px;
+}
+
 .rm24-embudo-value-preview {
   display: block;
   margin-top: 4px;

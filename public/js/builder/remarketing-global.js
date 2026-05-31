@@ -18,6 +18,125 @@ window.MacBotRemarketingGlobal = (function () {
     };
   }
 
+  function crearAgenteRapidoVacio() {
+    return {
+      activo: false,
+      modo: "caminos",
+      mensajeBase: "",
+      caminos: [],
+      caminoDefault: {
+        respuestaDefault:
+          "Te ayudo 😊 ¿quieres que te pase el precio o los métodos de pago?",
+        accionSiguienteDefault: "responder_y_seguir",
+      },
+    };
+  }
+
+  const RM24H_ACCIONES_SIGUIENTE = [
+    { value: "responder_y_seguir", label: "Responder y seguir" },
+    { value: "ir_a_lector_pago", label: "Ir a lector de pago" },
+    { value: "aplicar_etiqueta", label: "Aplicar etiqueta" },
+    { value: "registrar_conversion", label: "Registrar conversión" },
+    { value: "finalizar_rm", label: "Finalizar RM" },
+  ];
+
+  function crearUidCaminoAgenteRapido() {
+    return "rm_ar_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 6);
+  }
+
+  function crearCaminoAgenteRapidoVacio() {
+    return {
+      id: crearUidCaminoAgenteRapido(),
+      nombreCamino: "",
+      palabrasClave: "",
+      descripcionIntencion: "",
+      respuesta: "",
+      accionSiguiente: "responder_y_seguir",
+    };
+  }
+
+  function normalizarAccionSiguiente(val) {
+    const v = String(val || "responder_y_seguir").trim();
+    return RM24H_ACCIONES_SIGUIENTE.some(function (a) {
+      return a.value === v;
+    })
+      ? v
+      : "responder_y_seguir";
+  }
+
+  function etiquetaAccionSiguiente(val) {
+    const v = normalizarAccionSiguiente(val);
+    const found = RM24H_ACCIONES_SIGUIENTE.find(function (a) {
+      return a.value === v;
+    });
+    return found ? found.label : v;
+  }
+
+  function mapearCaminoAgenteRapidoUi(item) {
+    if (!item || typeof item !== "object") return null;
+    return {
+      id: String(item.id || crearUidCaminoAgenteRapido()),
+      nombreCamino: String(item.nombreCamino ?? item.nombre ?? ""),
+      palabrasClave: Array.isArray(item.palabrasClave)
+        ? item.palabrasClave.join(", ")
+        : String(item.palabrasClave ?? item.keywords ?? ""),
+      descripcionIntencion: String(item.descripcionIntencion ?? item.descripcion ?? ""),
+      respuesta: String(item.respuesta ?? ""),
+      accionSiguiente: normalizarAccionSiguiente(item.accionSiguiente),
+    };
+  }
+
+  function normalizarAgenteRapidoConfig(raw) {
+    const base = crearAgenteRapidoVacio();
+    if (!raw || typeof raw !== "object") return base;
+
+    const caminos = [];
+    if (Array.isArray(raw.caminos)) {
+      raw.caminos.forEach(function (item) {
+        const m = mapearCaminoAgenteRapidoUi(item);
+        if (m) caminos.push(m);
+      });
+    }
+
+    const defRaw = raw.caminoDefault && typeof raw.caminoDefault === "object" ? raw.caminoDefault : {};
+    return {
+      activo: raw.activo === true,
+      modo: String(raw.modo || "caminos") === "caminos" ? "caminos" : "caminos",
+      mensajeBase: String(raw.mensajeBase ?? raw.instrucciones ?? ""),
+      caminos: caminos,
+      caminoDefault: {
+        respuestaDefault: String(
+          defRaw.respuestaDefault ?? base.caminoDefault.respuestaDefault
+        ),
+        accionSiguienteDefault: normalizarAccionSiguiente(
+          defRaw.accionSiguienteDefault ?? base.caminoDefault.accionSiguienteDefault
+        ),
+      },
+    };
+  }
+
+  function htmlSelectAccionSiguiente(value, className) {
+    const cls = className || "rm24-input";
+    const v = normalizarAccionSiguiente(value);
+    return (
+      '<select class="' +
+      esc(cls) +
+      ' rm24-ar-accion">' +
+      RM24H_ACCIONES_SIGUIENTE.map(function (a) {
+        return (
+          '<option value="' +
+          esc(a.value) +
+          '"' +
+          (a.value === v ? " selected" : "") +
+          ">" +
+          esc(a.label) +
+          "</option>"
+        );
+      }).join("") +
+      "</select>"
+    );
+  }
+
   /** Mapea un ítem para edición en panel (conserva bloques vacíos). */
   function mapearItemContenidoUi(item) {
     if (!item || typeof item !== "object") return null;
@@ -304,6 +423,14 @@ window.MacBotRemarketingGlobal = (function () {
   let rm24hMiniFlujoUidSeq = 0;
   let rm24hDragNodoIndex = null;
   let rm24hDragContentIndex = null;
+  let rm24hAgenteRapidoCaminoDragIndex = null;
+
+  function getAgenteRapidoActivo() {
+    if (!configActiva.rm24h_agente_rapido) {
+      configActiva.rm24h_agente_rapido = crearAgenteRapidoVacio();
+    }
+    return configActiva.rm24h_agente_rapido;
+  }
 
   /** Catálogo de nodos agregables al mini flujo (solo UI, sin persistencia JSON). */
   const RM24H_NODO_TIPOS = [
@@ -580,7 +707,35 @@ window.MacBotRemarketingGlobal = (function () {
     });
   }
 
-  /** Restaura el nodo Contenido del mini flujo desde rm24h_contenidos (sin schema nuevo). */
+  function miniFlujoTieneNodoAgenteRapido() {
+    return rm24hMiniFlujoNodos.some(function (n) {
+      return n.tipo === "agente_rapido";
+    });
+  }
+
+  function findNodoAgenteRapidoMiniFlujo() {
+    return rm24hMiniFlujoNodos.find(function (n) {
+      return n.tipo === "agente_rapido";
+    });
+  }
+
+  function esNodoAgenteRapidoSeleccionado() {
+    const n = getMiniFlujoNodo(rm24hBloqueSeleccionado);
+    return !!(n && n.tipo === "agente_rapido");
+  }
+
+  function agenteRapidoTieneConfig(cfg) {
+    const ar = normalizarAgenteRapidoConfig(cfg?.rm24h_agente_rapido);
+    return (
+      ar.activo ||
+      String(ar.mensajeBase || "").trim().length > 0 ||
+      (ar.caminos || []).some(function (c) {
+        return String(c.nombreCamino || "").trim();
+      })
+    );
+  }
+
+  /** Restaura nodos del mini flujo desde config guardada (sin schema nuevo). */
   function hydrateMiniFlujoDesdeConfig(config) {
     const cfg = config || configActiva;
     const tieneContenido =
@@ -594,11 +749,21 @@ window.MacBotRemarketingGlobal = (function () {
       });
     }
 
+    if (agenteRapidoTieneConfig(cfg) && !miniFlujoTieneNodoAgenteRapido()) {
+      rm24hMiniFlujoNodos.push({
+        uid: crearUidMiniFlujoNodo(),
+        tipo: "agente_rapido",
+      });
+    }
+
     if (tieneContenido) {
       const nodoContenido = findNodoContenidoMiniFlujo();
       if (nodoContenido) {
         rm24hBloqueSeleccionado = nodoContenido.uid;
       }
+    } else if (agenteRapidoTieneConfig(cfg)) {
+      const nodoAr = findNodoAgenteRapidoMiniFlujo();
+      if (nodoAr) rm24hBloqueSeleccionado = nodoAr.uid;
     }
   }
 
@@ -611,6 +776,11 @@ window.MacBotRemarketingGlobal = (function () {
       .map(normalizarItemContenidoUi)
       .filter(Boolean);
     sincronizarMensajeRemarketingDesdeContenidos(cfg);
+    if (miniFlujoTieneNodoAgenteRapido()) {
+      cfg.rm24h_agente_rapido = normalizarAgenteRapidoConfig(cfg.rm24h_agente_rapido);
+    } else {
+      delete cfg.rm24h_agente_rapido;
+    }
     cfg.detenerSiResponde = false;
     cfg.reiniciarAlResponder = true;
     cfg.detenerEnConversion = true;
@@ -694,6 +864,16 @@ window.MacBotRemarketingGlobal = (function () {
         return;
       }
     }
+    if (cat.tipo === "agente_rapido") {
+      const existente = findNodoAgenteRapidoMiniFlujo();
+      if (existente) {
+        selectRm24Bloque(existente.uid);
+        return;
+      }
+      if (!configActiva.rm24h_agente_rapido) {
+        configActiva.rm24h_agente_rapido = crearAgenteRapidoVacio();
+      }
+    }
     const uid = crearUidMiniFlujoNodo();
     rm24hMiniFlujoNodos.push({ uid: uid, tipo: cat.tipo });
     selectRm24Bloque(uid);
@@ -708,7 +888,11 @@ window.MacBotRemarketingGlobal = (function () {
     if (removido && removido.tipo === "contenido") {
       configActiva.rm24h_contenidos = [];
       configActiva.mensajeRemarketing = "";
-      persistirContenidosEnNodo();
+      persistirConfigPanelEnNodo();
+    }
+    if (removido && removido.tipo === "agente_rapido") {
+      delete configActiva.rm24h_agente_rapido;
+      persistirConfigPanelEnNodo();
     }
     rm24hMiniFlujoNodos.splice(idx, 1);
     if (rm24hBloqueSeleccionado === uid) {
@@ -753,6 +937,18 @@ window.MacBotRemarketingGlobal = (function () {
     if (nodo.tipo === "contenido") {
       const resumen = resumenContenidoEmbudo(contenidosRaw);
       return resumen.vacio ? "Sin contenido configurado" : resumen.linea;
+    }
+    if (nodo.tipo === "agente_rapido") {
+      const ar = normalizarAgenteRapidoConfig(configActiva.rm24h_agente_rapido);
+      const n = (ar.caminos || []).filter(function (c) {
+        return String(c.nombreCamino || "").trim();
+      }).length;
+      if (!n && !ar.activo) return "Sin caminos configurados";
+      const partes = [];
+      if (n) partes.push(n + " camino" + (n === 1 ? "" : "s"));
+      if (ar.activo) partes.push("activo");
+      partes.push("solo config");
+      return partes.join(" · ");
     }
     const cat = getCatalogoNodoRm24(nodo.tipo);
     if (cat && !cat.runtime) return "Configuración pendiente · solo UI";
@@ -979,6 +1175,217 @@ window.MacBotRemarketingGlobal = (function () {
     );
   }
 
+  function htmlEditorBloqueAgenteRapido() {
+    const ar = getAgenteRapidoActivo();
+    const def = ar.caminoDefault || crearAgenteRapidoVacio().caminoDefault;
+    return (
+      '<section class="rm24-section rm24-section--agente-rapido rm24-section--bloque-editor">' +
+      '<div class="rm24-ar-head">' +
+      '<h5 class="rm24-section-title">⚡ Agente rápido</h5>' +
+      '<span class="rm24-future-badge">Solo config · motor pendiente</span></div>' +
+      '<p class="rm24h-hint">Detecta intención del lead y ejecuta un camino.</p>' +
+      '<label class="rm24-switch rm24-ar-toggle">' +
+      '<input type="checkbox" id="rm24hAgenteRapidoActivo"' +
+      (ar.activo ? " checked" : "") +
+      ">" +
+      '<span class="rm24-switch-track" aria-hidden="true"></span>' +
+      '<span class="rm24-switch-label">Nodo activo (preparación)</span></label>' +
+      '<div class="rm24h-field rm24-field">' +
+      "<label for=\"rm24hAgenteRapidoMensajeBase\">Instrucciones cortas / mensaje base</label>" +
+      '<textarea id="rm24hAgenteRapidoMensajeBase" class="rm24-input rm24-textarea rm24-textarea-premium" rows="3" placeholder="Contexto breve para detectar intención…">' +
+      esc(ar.mensajeBase) +
+      "</textarea></div>" +
+      '<input type="hidden" id="rm24hAgenteRapidoModo" value="caminos">' +
+      '<section class="rm24-ar-caminos-section">' +
+      '<div class="rm24-ar-caminos-head">' +
+      '<h6 class="rm24-ar-subtitle">Caminos</h6>' +
+      '<button type="button" class="panel-btn rm24-ar-btn-add" id="rm24hAgenteRapidoAddCamino">+ Agregar camino</button></div>' +
+      '<div id="rm24hAgenteRapidoCaminos" class="rm24-ar-caminos-lista"></div></section>' +
+      '<section class="rm24-ar-default-section">' +
+      '<h6 class="rm24-ar-subtitle">Camino default</h6>' +
+      '<p class="rm24h-hint">Se usa cuando ninguna palabra clave coincide.</p>' +
+      '<div class="rm24h-field rm24-field">' +
+      "<label for=\"rm24hAgenteRapidoRespuestaDefault\">Respuesta default</label>" +
+      '<textarea id="rm24hAgenteRapidoRespuestaDefault" class="rm24-input rm24-textarea" rows="3">' +
+      esc(def.respuestaDefault) +
+      "</textarea></div>" +
+      '<div class="rm24h-field rm24-field">' +
+      "<label for=\"rm24hAgenteRapidoAccionDefault\">Acción siguiente default</label>" +
+      htmlSelectAccionSiguiente(
+        def.accionSiguienteDefault,
+        "rm24-input rm24-ar-accion-default"
+      ) +
+      "</div></section></section>"
+    );
+  }
+
+  function htmlCaminoAgenteRapidoCard(camino, index, total) {
+    const c = mapearCaminoAgenteRapidoUi(camino) || crearCaminoAgenteRapidoVacio();
+    return (
+      '<article class="rm24-ar-camino-card" data-camino-id="' +
+      esc(c.id) +
+      '" data-camino-index="' +
+      index +
+      '" draggable="true">' +
+      '<div class="rm24-ar-camino-head">' +
+      '<span class="rm24-ar-camino-num">Camino #' +
+      (index + 1) +
+      "</span>" +
+      '<div class="rm24-ar-camino-actions">' +
+      '<button type="button" class="rm24-action-icon" data-rm24-ar-move-up="' +
+      index +
+      '" title="Subir"' +
+      (index === 0 ? " disabled" : "") +
+      '>↑</button>' +
+      '<button type="button" class="rm24-action-icon" data-rm24-ar-move-down="' +
+      index +
+      '" title="Bajar"' +
+      (index >= total - 1 ? " disabled" : "") +
+      '>↓</button>' +
+      '<button type="button" class="rm24-action-icon rm24-action-icon--danger" data-rm24-ar-remove="' +
+      esc(c.id) +
+      '" title="Eliminar">×</button></div></div>' +
+      '<div class="rm24h-field rm24-field">' +
+      "<label>Nombre del camino</label>" +
+      '<input type="text" class="rm24-input rm24-ar-nombre" placeholder="Ej: Quiere pagar" value="' +
+      esc(c.nombreCamino) +
+      '"></div>' +
+      '<div class="rm24h-field rm24-field">' +
+      "<label>Palabras clave (coma)</label>" +
+      '<input type="text" class="rm24-input rm24-ar-keywords" placeholder="pago, qr, transferencia, quiero comprar" value="' +
+      esc(c.palabrasClave) +
+      '"></div>' +
+      '<div class="rm24h-field rm24-field">' +
+      "<label>Descripción de intención</label>" +
+      '<input type="text" class="rm24-input rm24-ar-descripcion" placeholder="El lead quiere pagar o pedir datos de pago" value="' +
+      esc(c.descripcionIntencion) +
+      '"></div>' +
+      '<div class="rm24h-field rm24-field">' +
+      "<label>Respuesta</label>" +
+      '<textarea class="rm24-input rm24-textarea rm24-ar-respuesta" rows="3" placeholder="Mensaje a enviar si coincide este camino">' +
+      esc(c.respuesta) +
+      "</textarea></div>" +
+      '<div class="rm24h-field rm24-field">' +
+      "<label>Acción siguiente</label>" +
+      htmlSelectAccionSiguiente(c.accionSiguiente, "rm24-input rm24-ar-accion") +
+      "</div></article>"
+    );
+  }
+
+  function renderAgenteRapidoCaminos() {
+    const wrap = document.getElementById("rm24hAgenteRapidoCaminos");
+    if (!wrap) return;
+    const ar = getAgenteRapidoActivo();
+    const caminos = Array.isArray(ar.caminos) ? ar.caminos : [];
+    if (!caminos.length) {
+      wrap.innerHTML =
+        '<div class="rm24-ar-caminos-vacio">' +
+        "<p><strong>Sin caminos todavía</strong></p>" +
+        "<p>Agrega caminos con palabras clave e intención. El motor se conectará después.</p></div>";
+      return;
+    }
+    wrap.innerHTML = caminos
+      .map(function (c, i) {
+        return htmlCaminoAgenteRapidoCard(c, i, caminos.length);
+      })
+      .join("");
+  }
+
+  function syncAgenteRapidoDesdePanel() {
+    const ar = getAgenteRapidoActivo();
+    ar.activo = !!document.getElementById("rm24hAgenteRapidoActivo")?.checked;
+    ar.modo = "caminos";
+    ar.mensajeBase = String(
+      document.getElementById("rm24hAgenteRapidoMensajeBase")?.value ?? ""
+    );
+
+    const cards = document.querySelectorAll("#rm24hAgenteRapidoCaminos .rm24-ar-camino-card");
+    if (cards.length) {
+      const caminos = [];
+      cards.forEach(function (card) {
+        caminos.push({
+          id: card.getAttribute("data-camino-id") || crearUidCaminoAgenteRapido(),
+          nombreCamino: String(card.querySelector(".rm24-ar-nombre")?.value ?? ""),
+          palabrasClave: String(card.querySelector(".rm24-ar-keywords")?.value ?? ""),
+          descripcionIntencion: String(card.querySelector(".rm24-ar-descripcion")?.value ?? ""),
+          respuesta: String(card.querySelector(".rm24-ar-respuesta")?.value ?? ""),
+          accionSiguiente: normalizarAccionSiguiente(
+            card.querySelector(".rm24-ar-accion")?.value
+          ),
+        });
+      });
+      ar.caminos = caminos;
+    }
+
+    ar.caminoDefault = {
+      respuestaDefault: String(
+        document.getElementById("rm24hAgenteRapidoRespuestaDefault")?.value ??
+          crearAgenteRapidoVacio().caminoDefault.respuestaDefault
+      ),
+      accionSiguienteDefault: normalizarAccionSiguiente(
+        document.getElementById("rm24hAgenteRapidoAccionDefault")?.value ||
+          document.querySelector(".rm24-ar-accion-default")?.value
+      ),
+    };
+    configActiva.rm24h_agente_rapido = ar;
+  }
+
+  function addAgenteRapidoCamino() {
+    syncAgenteRapidoDesdePanel();
+    const ar = getAgenteRapidoActivo();
+    ar.caminos.push(crearCaminoAgenteRapidoVacio());
+    configActiva.rm24h_agente_rapido = ar;
+    renderAgenteRapidoCaminos();
+    persistirConfigPanelEnNodo();
+  }
+
+  function removeAgenteRapidoCamino(caminoId) {
+    syncAgenteRapidoDesdePanel();
+    const ar = getAgenteRapidoActivo();
+    ar.caminos = (ar.caminos || []).filter(function (c) {
+      return c.id !== caminoId;
+    });
+    configActiva.rm24h_agente_rapido = ar;
+    renderAgenteRapidoCaminos();
+    persistirConfigPanelEnNodo();
+  }
+
+  function moveAgenteRapidoCamino(index, delta) {
+    syncAgenteRapidoDesdePanel();
+    const ar = getAgenteRapidoActivo();
+    const lista = ar.caminos || [];
+    const next = index + delta;
+    if (index < 0 || index >= lista.length || next < 0 || next >= lista.length) return;
+    const tmp = lista[index];
+    lista[index] = lista[next];
+    lista[next] = tmp;
+    ar.caminos = lista;
+    configActiva.rm24h_agente_rapido = ar;
+    renderAgenteRapidoCaminos();
+    persistirConfigPanelEnNodo();
+  }
+
+  function reorderAgenteRapidoCamino(fromIndex, toIndex) {
+    syncAgenteRapidoDesdePanel();
+    const ar = getAgenteRapidoActivo();
+    const lista = ar.caminos || [];
+    if (
+      fromIndex < 0 ||
+      fromIndex >= lista.length ||
+      toIndex < 0 ||
+      toIndex >= lista.length ||
+      fromIndex === toIndex
+    ) {
+      return;
+    }
+    const item = lista.splice(fromIndex, 1)[0];
+    lista.splice(toIndex, 0, item);
+    ar.caminos = lista;
+    configActiva.rm24h_agente_rapido = ar;
+    renderAgenteRapidoCaminos();
+    persistirConfigPanelEnNodo();
+  }
+
   function htmlEditorBloqueNodoFuturo(tipo) {
     const cat = getCatalogoNodoRm24(tipo);
     const label = cat?.label || "Nodo RM";
@@ -1035,6 +1442,14 @@ window.MacBotRemarketingGlobal = (function () {
       mount.innerHTML = htmlEditorBloqueContenido();
       renderRm24ContentPicker();
       renderRm24StepEditor();
+      return;
+    }
+    if (nodo.tipo === "agente_rapido") {
+      if (!configActiva.rm24h_agente_rapido) {
+        configActiva.rm24h_agente_rapido = crearAgenteRapidoVacio();
+      }
+      mount.innerHTML = htmlEditorBloqueAgenteRapido();
+      renderAgenteRapidoCaminos();
       return;
     }
     mount.innerHTML = htmlEditorBloqueNodoFuturo(nodo.tipo);
@@ -1197,6 +1612,9 @@ window.MacBotRemarketingGlobal = (function () {
         parsed.mensajeRemarketing || parsed.mensaje_remarketing
       ),
     });
+    if (parsed.rm24h_agente_rapido) {
+      config.rm24h_agente_rapido = normalizarAgenteRapidoConfig(parsed.rm24h_agente_rapido);
+    }
     sincronizarHorasLegacyDesdeTiempo(config);
 
     sincronizarMensajeRemarketingDesdeContenidos(config);
@@ -1572,14 +1990,37 @@ window.MacBotRemarketingGlobal = (function () {
     persistirContenidosEnNodo();
   }
 
-  function persistirContenidosEnNodo() {
+  function syncMiniFlujoEditorToConfig() {
+    if (esNodoContenidoSeleccionado()) {
+      syncEditorPasoToContenidos();
+    }
+    if (esNodoAgenteRapidoSeleccionado()) {
+      syncAgenteRapidoDesdePanel();
+    }
+  }
+
+  function persistirConfigPanelEnNodo() {
     if (!nodoActivo) return;
+    syncMiniFlujoEditorToConfig();
     sincronizarMensajeRemarketingDesdeContenidos(configActiva);
+    if (configActiva.rm24h_agente_rapido) {
+      if (miniFlujoTieneNodoAgenteRapido()) {
+        configActiva.rm24h_agente_rapido = normalizarAgenteRapidoConfig(
+          configActiva.rm24h_agente_rapido
+        );
+      } else {
+        delete configActiva.rm24h_agente_rapido;
+      }
+    }
     guardarConfigEnNodo(nodoActivo, configActiva);
     if (typeof window.macbotRecordHistoryDebounced === "function") {
       window.macbotRecordHistoryDebounced();
     }
     actualizarEmbudoRmPanel();
+  }
+
+  function persistirContenidosEnNodo() {
+    persistirConfigPanelEnNodo();
   }
 
   function validarArchivoRm24hCliente(file, tipo) {
@@ -2066,6 +2507,19 @@ window.MacBotRemarketingGlobal = (function () {
       mount.removeEventListener("dragend", mount._rm24hOnContentDragEnd);
     }
 
+    if (mount._rm24hOnArCaminoDragStart) {
+      mount.removeEventListener("dragstart", mount._rm24hOnArCaminoDragStart);
+    }
+    if (mount._rm24hOnArCaminoDragOver) {
+      mount.removeEventListener("dragover", mount._rm24hOnArCaminoDragOver);
+    }
+    if (mount._rm24hOnArCaminoDrop) {
+      mount.removeEventListener("drop", mount._rm24hOnArCaminoDrop);
+    }
+    if (mount._rm24hOnArCaminoDragEnd) {
+      mount.removeEventListener("dragend", mount._rm24hOnArCaminoDragEnd);
+    }
+
     mount._rm24hOnClick = function (ev) {
       const addNodoBtn = ev.target.closest("#rm24hAddNodoBtn");
       if (addNodoBtn) {
@@ -2201,10 +2655,52 @@ window.MacBotRemarketingGlobal = (function () {
         ev.stopPropagation();
         const card = toggleManual.closest(".rm24-contenido-item");
         card?.querySelector(".rm24-manual-url")?.classList.toggle("rm24-manual-url--open");
+        return;
+      }
+
+      const addArCaminoBtn = ev.target.closest("#rm24hAgenteRapidoAddCamino");
+      if (addArCaminoBtn) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        addAgenteRapidoCamino();
+        return;
+      }
+
+      const arRemoveBtn = ev.target.closest("[data-rm24-ar-remove]");
+      if (arRemoveBtn) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        removeAgenteRapidoCamino(arRemoveBtn.getAttribute("data-rm24-ar-remove"));
+        return;
+      }
+
+      const arMoveUpBtn = ev.target.closest("[data-rm24-ar-move-up]");
+      if (arMoveUpBtn && !arMoveUpBtn.disabled) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        moveAgenteRapidoCamino(parseInt(arMoveUpBtn.getAttribute("data-rm24-ar-move-up"), 10), -1);
+        return;
+      }
+
+      const arMoveDownBtn = ev.target.closest("[data-rm24-ar-move-down]");
+      if (arMoveDownBtn && !arMoveDownBtn.disabled) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        moveAgenteRapidoCamino(parseInt(arMoveDownBtn.getAttribute("data-rm24-ar-move-down"), 10), 1);
+        return;
       }
     };
 
     mount._rm24hOnChange = function (ev) {
+      if (
+        ev.target.id === "rm24hAgenteRapidoActivo" ||
+        ev.target.closest(".rm24-ar-accion") ||
+        ev.target.closest(".rm24-ar-accion-default")
+      ) {
+        syncAgenteRapidoDesdePanel();
+        persistirConfigPanelEnNodo();
+        return;
+      }
       const fileInput = ev.target.closest(".rm24-contenido-file");
       if (fileInput?.files?.[0]) {
         const card = fileInput.closest(".rm24-contenido-item");
@@ -2227,6 +2723,11 @@ window.MacBotRemarketingGlobal = (function () {
     };
 
     mount._rm24hOnInput = function (ev) {
+      if (ev.target.closest(".rm24-section--agente-rapido")) {
+        syncAgenteRapidoDesdePanel();
+        persistirConfigPanelEnNodo();
+        return;
+      }
       if (!ev.target.closest("#rm24hStepEditor")) return;
       mostrarErrorContenidos("");
       syncEditorPasoToContenidos();
@@ -2345,6 +2846,58 @@ window.MacBotRemarketingGlobal = (function () {
       });
     };
 
+    mount._rm24hOnArCaminoDragStart = function (ev) {
+      const card = ev.target.closest(".rm24-ar-camino-card[draggable='true']");
+      if (!card) return;
+      ev.stopPropagation();
+      rm24hAgenteRapidoCaminoDragIndex = parseInt(card.getAttribute("data-camino-index"), 10);
+      card.classList.add("rm24-ar-camino-card--dragging");
+      if (ev.dataTransfer) {
+        ev.dataTransfer.effectAllowed = "move";
+        ev.dataTransfer.setData("text/plain", String(rm24hAgenteRapidoCaminoDragIndex));
+      }
+    };
+
+    mount._rm24hOnArCaminoDragOver = function (ev) {
+      const card = ev.target.closest(".rm24-ar-camino-card[draggable='true']");
+      if (!card) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      if (ev.dataTransfer) ev.dataTransfer.dropEffect = "move";
+      document.querySelectorAll(".rm24-ar-camino-card--drop-target").forEach(function (el) {
+        el.classList.remove("rm24-ar-camino-card--drop-target");
+      });
+      card.classList.add("rm24-ar-camino-card--drop-target");
+    };
+
+    mount._rm24hOnArCaminoDrop = function (ev) {
+      const card = ev.target.closest(".rm24-ar-camino-card[draggable='true']");
+      if (!card) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      const from =
+        rm24hAgenteRapidoCaminoDragIndex != null
+          ? rm24hAgenteRapidoCaminoDragIndex
+          : parseInt(ev.dataTransfer?.getData("text/plain"), 10);
+      const to = parseInt(card.getAttribute("data-camino-index"), 10);
+      document.querySelectorAll(".rm24-ar-camino-card--drop-target").forEach(function (el) {
+        el.classList.remove("rm24-ar-camino-card--drop-target");
+      });
+      if (Number.isFinite(from) && Number.isFinite(to)) {
+        reorderAgenteRapidoCamino(from, to);
+      }
+    };
+
+    mount._rm24hOnArCaminoDragEnd = function () {
+      rm24hAgenteRapidoCaminoDragIndex = null;
+      document.querySelectorAll(".rm24-ar-camino-card--dragging").forEach(function (el) {
+        el.classList.remove("rm24-ar-camino-card--dragging");
+      });
+      document.querySelectorAll(".rm24-ar-camino-card--drop-target").forEach(function (el) {
+        el.classList.remove("rm24-ar-camino-card--drop-target");
+      });
+    };
+
     mount.addEventListener("click", mount._rm24hOnClick);
     mount.addEventListener("change", mount._rm24hOnChange);
     mount.addEventListener("input", mount._rm24hOnInput);
@@ -2356,6 +2909,10 @@ window.MacBotRemarketingGlobal = (function () {
     mount.addEventListener("dragover", mount._rm24hOnContentDragOver);
     mount.addEventListener("drop", mount._rm24hOnContentDrop);
     mount.addEventListener("dragend", mount._rm24hOnContentDragEnd);
+    mount.addEventListener("dragstart", mount._rm24hOnArCaminoDragStart);
+    mount.addEventListener("dragover", mount._rm24hOnArCaminoDragOver);
+    mount.addEventListener("drop", mount._rm24hOnArCaminoDrop);
+    mount.addEventListener("dragend", mount._rm24hOnArCaminoDragEnd);
 
     if (!mount._rm24hDocClick) {
       mount._rm24hDocClick = function (ev) {
@@ -2571,6 +3128,9 @@ window.MacBotRemarketingGlobal = (function () {
     configActiva.modoContextual = false;
     configActiva.rm24h_contenidos = leerContenidosDesdePanel();
     sincronizarMensajeRemarketingDesdeContenidos(configActiva);
+    if (esNodoAgenteRapidoSeleccionado()) {
+      syncAgenteRapidoDesdePanel();
+    }
   }
 
   function onPanelChange() {
@@ -2606,6 +3166,9 @@ window.MacBotRemarketingGlobal = (function () {
     guardarConfigEnNodo(nodoActivo, configActiva);
     if (esNodoContenidoSeleccionado()) {
       renderRm24ContentBlocks();
+    }
+    if (esNodoAgenteRapidoSeleccionado()) {
+      renderAgenteRapidoCaminos();
     }
     actualizarEmbudoRmPanel();
     alert("Remarketing Global guardado. Recuerda guardar el flujo completo.");
