@@ -24,6 +24,9 @@ function inferirEstadoCerrado(payload = {}, filaActual = {}) {
   if (motivo === "resetbot") {
     return ESTADOS_RM24H.CANCELADO_RESETBOT;
   }
+  if (motivo === "resetbot_context_cleared") {
+    return ESTADOS_RM24H.CERRADO_SIN_RESPUESTA;
+  }
   if (motivo === "conversion") {
     return ESTADOS_RM24H.CANCELADO_CONVERSION;
   }

@@ -281,6 +281,12 @@ async function resetearFlujoLead(numero, usuarioId, conexionWhatsappId = null) {
         cliente_numero: num,
         conexion_whatsapp_id: conexionId,
       });
+      if (filaPostEnvioInvalidada) {
+        console.log("[RESETBOT_RM24H] guard Motor 1A liberado (post-envío invalidado)", {
+          rm24h_id: filaPostEnvioInvalidada.id,
+          motivo_cancelacion: filaPostEnvioInvalidada.motivo_cancelacion,
+        });
+      }
 
       const filasCanceladas = await cancelarRemarketing24hPorResetbot({
         usuario_id: uid,

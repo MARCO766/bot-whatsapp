@@ -20,6 +20,8 @@ const MOTIVOS_RM24H = {
   VENTANA_CERRADA: "ventana_whatsapp_cerrada",
   MENSAJE_VACIO: "mensaje_vacio",
   RESETBOT: "resetbot",
+  /** Resetbot invalidó contexto Motor 1A (fila post-envío sigue en historial). */
+  RESETBOT_CONTEXT_CLEARED: "resetbot_context_cleared",
 };
 
 /** Máximo / default inactividad RM24H antes de disparar (no 24 exactas) */

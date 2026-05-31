@@ -252,37 +252,57 @@ async function buscarUltimaPostEnvio({
 
 /**
  * Resetbot: invalida la fila post-envío que usa Motor 1A (guard ya no la matchea).
+ * Solo cambia motivo_cancelacion; no borra la fila ni toca worker/cron.
  */
 async function invalidarPostEnvioPorResetbot({
   usuario_id,
   cliente_numero,
   conexion_whatsapp_id,
 }) {
-  const conexionId = normalizarConexionId(conexion_whatsapp_id);
-  if (!usuario_id || !cliente_numero || !conexionId) {
+  if (!usuario_id || !cliente_numero) {
     return null;
   }
 
-  const fila = await buscarUltimaPostEnvio({
+  const conexionId = normalizarConexionId(conexion_whatsapp_id);
+
+  let fila = await buscarUltimaPostEnvio({
     usuario_id,
     cliente_numero,
     conexion_whatsapp_id: conexionId,
   });
 
+  if (!fila?.id && conexionId) {
+    fila = await buscarUltimaPostEnvio({
+      usuario_id,
+      cliente_numero,
+      conexion_whatsapp_id: null,
+    });
+  }
+
   if (!fila?.id) {
     return null;
   }
 
-  return actualizarPorId(
+  const actualizado = await actualizarPorId(
     fila.id,
     {
-      estado: ESTADOS_RM24H.CANCELADO_RESETBOT,
-      activo: false,
+      motivo_cancelacion: MOTIVOS_RM24H.RESETBOT_CONTEXT_CLEARED,
       cancelado_en: nowUtc(),
-      motivo_cancelacion: MOTIVOS_RM24H.RESETBOT,
     },
     fila
   );
+
+  if (actualizado) {
+    console.log("[RM24H_RESETBOT] contexto post-envío invalidado", {
+      id: actualizado.id,
+      cliente: actualizado.cliente_numero,
+      conexion_whatsapp_id: actualizado.conexion_whatsapp_id || null,
+      motivo_cancelacion: actualizado.motivo_cancelacion,
+      estado: actualizado.estado,
+    });
+  }
+
+  return actualizado;
 }
 
 async function listarReinicioPorCliente(
