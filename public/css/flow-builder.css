@@ -2587,6 +2587,254 @@ body:has(#builderArea) {
   color: #cbd5e1;
 }
 
+/* Ramas visuales del Agente rápido en mini flujo */
+.rm24-embudo-step--agente-rapido {
+  width: 100%;
+}
+
+.rm24-embudo-step--agente-rapido .rm24-embudo-step-card {
+  width: 100%;
+}
+
+.rm24-ar-ramas-tree {
+  margin: 8px 0 0 10px;
+  padding-left: 8px;
+  border-left: 2px solid rgba(52, 211, 153, 0.28);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.rm24-ar-rama {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 6px;
+  align-items: flex-start;
+}
+
+.rm24-ar-rama-glyph {
+  font-family: ui-monospace, monospace;
+  font-size: 14px;
+  line-height: 1.2;
+  color: rgba(52, 211, 153, 0.75);
+  padding-top: 8px;
+  user-select: none;
+}
+
+.rm24-ar-rama--default .rm24-ar-rama-glyph {
+  color: rgba(167, 139, 250, 0.85);
+}
+
+.rm24-ar-rama-body {
+  min-width: 0;
+}
+
+.rm24-ar-rama-head {
+  width: 100%;
+  text-align: left;
+  border: 1px solid rgba(52, 211, 153, 0.24);
+  border-radius: 10px;
+  background: rgba(8, 16, 14, 0.72);
+  padding: 10px 12px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.rm24-ar-rama--default .rm24-ar-rama-head {
+  border-color: rgba(167, 139, 250, 0.28);
+  background: rgba(15, 12, 28, 0.65);
+}
+
+.rm24-ar-rama-head:hover {
+  border-color: rgba(52, 211, 153, 0.45);
+}
+
+.rm24-ar-rama-head--selected {
+  border-color: rgba(34, 211, 238, 0.55);
+  box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.2);
+}
+
+.rm24-ar-rama-title {
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: rgba(226, 232, 240, 0.95);
+}
+
+.rm24-ar-rama-meta {
+  font-size: 0.72rem;
+  color: rgba(148, 163, 184, 0.95);
+  line-height: 1.35;
+}
+
+.rm24-ar-rama-preview {
+  font-size: 0.72rem;
+  color: rgba(203, 213, 225, 0.9);
+  font-style: italic;
+  line-height: 1.35;
+}
+
+.rm24-ar-rama-badge {
+  display: inline-block;
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 6px;
+  border-radius: 999px;
+  width: fit-content;
+}
+
+.rm24-ar-rama-badge--off {
+  background: rgba(100, 116, 139, 0.25);
+  color: #94a3b8;
+}
+
+.rm24-ar-rama-chain {
+  margin-top: 6px;
+  padding-left: 8px;
+  border-left: 1px dashed rgba(52, 211, 153, 0.22);
+}
+
+.rm24-ar-rama-node-step {
+  margin-left: 0;
+}
+
+.rm24-ar-rama-node-step .rm24-embudo-connector {
+  margin: 2px 0;
+  min-height: 14px;
+}
+
+.rm24-ar-rama-node-card {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+}
+
+.rm24-ar-rama-node {
+  flex: 1;
+  width: 100%;
+  text-align: left;
+  border: 1px solid rgba(34, 211, 238, 0.2);
+  border-radius: 8px;
+  background: rgba(8, 20, 28, 0.75);
+  padding: 8px 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.rm24-ar-rama-node.rm24-embudo-node--selected {
+  border-color: rgba(34, 211, 238, 0.55);
+  box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.18);
+}
+
+.rm24-ar-rama-node-del {
+  flex-shrink: 0;
+  width: 28px;
+  border: 1px solid rgba(248, 113, 113, 0.35);
+  border-radius: 8px;
+  background: transparent;
+  color: #fca5a5;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.rm24-ar-rama-node-del:hover {
+  background: rgba(127, 29, 29, 0.35);
+}
+
+.rm24-ar-rama-add-wrap {
+  position: relative;
+  margin-top: 8px;
+}
+
+.rm24-ar-rama-add-btn {
+  width: 100%;
+  border: 1px dashed rgba(167, 139, 250, 0.45);
+  border-radius: 8px;
+  background: rgba(79, 70, 229, 0.12);
+  color: #c4b5fd;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 8px 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.rm24-ar-rama-add-btn:hover {
+  background: rgba(99, 102, 241, 0.22);
+  border-color: rgba(167, 139, 250, 0.65);
+}
+
+.rm24-ar-rama-add-popover {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 30;
+}
+
+.rm24-ar-rama-add-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 29;
+}
+
+.rm24-ar-rama-add-menu {
+  position: relative;
+  z-index: 31;
+  border: 1px solid rgba(167, 139, 250, 0.35);
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.98);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rm24-ar-rama-add-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #e2e8f0;
+  font-size: 0.78rem;
+  padding: 8px 10px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.rm24-ar-rama-add-item:hover {
+  background: rgba(99, 102, 241, 0.2);
+}
+
+.rm24-ar-rama-add-icon {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.rm24-mini-flujo-node--agente-rapido {
+  border-color: rgba(251, 191, 36, 0.28);
+}
+
 .rm24-embudo-value-preview {
   display: block;
   margin-top: 4px;
