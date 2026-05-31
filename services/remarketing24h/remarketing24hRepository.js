@@ -1,5 +1,5 @@
 const axios = require("axios");
-const { ESTADOS_RM24H, ESTADOS_ABIERTOS } = require("./constants");
+const { ESTADOS_RM24H, ESTADOS_ABIERTOS, MOTIVOS_RM24H } = require("./constants");
 const { coherenciaEstadoRm24h } = require("./estadoCoherencia");
 const { nowUtc, toTimestamptzUtc } = require("../seguimiento/timestamps");
 
@@ -230,6 +230,26 @@ async function obtenerNombreFlujo(usuario_id, flujo_id) {
   return null;
 }
 
+/** Última fila RM cerrada tras envío exitoso (contexto post-disparo, Motor 1A). */
+async function buscarUltimaPostEnvio({
+  usuario_id,
+  cliente_numero,
+  conexion_whatsapp_id,
+}) {
+  const response = await axios.get(
+    `${SUPABASE_URL}/rest/v1/remarketing_global_24h?usuario_id=eq.${usuario_id}` +
+      `&cliente_numero=eq.${encodeURIComponent(cliente_numero)}` +
+      filtroConexionPostgrest(conexion_whatsapp_id) +
+      `&estado=eq.${ESTADOS_RM24H.CERRADO_SIN_RESPUESTA}` +
+      `&motivo_cancelacion=eq.${MOTIVOS_RM24H.MAX_INTENTOS_TRAS_ENVIO}` +
+      `&disparado_en=not.is.null` +
+      `&activo=eq.false` +
+      `&order=disparado_en.desc&limit=1&select=*`,
+    { headers: headers() }
+  );
+  return (response.data || [])[0] || null;
+}
+
 async function listarReinicioPorCliente(
   usuario_id,
   cliente_numero,
@@ -254,6 +274,7 @@ async function listarReinicioPorCliente(
 module.exports = {
   normalizarConexionId,
   buscarAbierto,
+  buscarUltimaPostEnvio,
   buscarInconsistenteActivoApagado,
   insertar,
   actualizarPorId,

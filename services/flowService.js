@@ -37,6 +37,12 @@ const {
   resetearRemarketing24h,
   cancelarRemarketing24h,
 } = require("./remarketing24h/remarketing24hService");
+const {
+  obtenerContextoRemarketingPostEnvio,
+} = require("./remarketing24h/rmContextPostEnvio");
+const {
+  procesarRespuestaRemarketingStub,
+} = require("./remarketing24h/procesarRespuestaRemarketingStub");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
@@ -1310,6 +1316,40 @@ async function procesarMensajeEntrante(
   if (reanudado) {
     console.log("[FLUJO] reanudado IA/OpenAI pendiente OK");
     return true;
+  }
+
+  const conexionEntrante = opts.conexionWhatsappId || null;
+  try {
+    const rmContext = await obtenerContextoRemarketingPostEnvio({
+      usuarioId,
+      clienteNumero: numero,
+      conexionWhatsappId: conexionEntrante,
+    });
+    if (rmContext?.bloquearActivadores) {
+      console.log("[RM_CONTEXT] Lead en remarketing, bloqueando activadores normales", {
+        lead: numero,
+        usuario: usuarioId,
+        conexion_whatsapp_id: conexionEntrante,
+        rm24h_id: rmContext.fila?.id,
+        flujo_id: rmContext.flujo_id,
+        policy_mode: rmContext.policy?.mode,
+        disparado_en: rmContext.disparado_en,
+      });
+      await procesarRespuestaRemarketingStub({
+        numero,
+        texto,
+        usuarioId,
+        conexionWhatsappId: conexionEntrante,
+        fila: rmContext.fila,
+        policy: rmContext.policy,
+      });
+      return true;
+    }
+  } catch (err) {
+    console.log(
+      "[RM_CONTEXT] error evaluando contexto post-envío:",
+      err.response?.data || err.message
+    );
   }
 
   console.log("[FLUJO] sin sesión IA pendiente → buscar activador");
