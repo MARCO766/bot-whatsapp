@@ -10,9 +10,6 @@ const {
   limpiarLastReplies: limpiarLastRepliesOpenAI,
 } = require("./openaiAgentService");
 const { enviarTextoWhatsApp } = require("./whatsappService");
-const {
-  cancelarRemarketing24hPorResetbot,
-} = require("./remarketing24h/remarketing24hService");
 const repoRm24h = require("./remarketing24h/remarketing24hRepository");
 const {
   obtenerContextoRemarketingPostEnvio,
@@ -288,6 +285,9 @@ async function resetearFlujoLead(numero, usuarioId, conexionWhatsappId = null) {
         });
       }
 
+      const {
+        cancelarRemarketing24hPorResetbot,
+      } = require("./remarketing24h/remarketing24hService");
       const filasCanceladas = await cancelarRemarketing24hPorResetbot({
         usuario_id: uid,
         cliente_numero: num,
