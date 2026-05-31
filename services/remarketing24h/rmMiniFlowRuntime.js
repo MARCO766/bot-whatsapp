@@ -2,7 +2,10 @@ const {
   enviarContenidosRemarketing,
   normalizarItemContenido,
 } = require("./rm24hContenidos");
-const { normalizarConexionId } = require("./remarketing24hRepository");
+const repo = require("./remarketing24hRepository");
+const { normalizarConexionId } = repo;
+const { ESTADOS_RM24H, MOTIVOS_RM24H } = require("./constants");
+const { nowUtc } = require("../seguimiento/timestamps");
 
 function escapeRegExp(str) {
   return String(str).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -244,6 +247,45 @@ function buildOpcionesEnvio(ctx) {
   };
 }
 
+/**
+ * Fin RM: invalida la fila post-envío para que obtenerContextoRemarketingPostEnvio deje de matchear.
+ */
+async function cerrarContextoRmPorFin(ctx) {
+  const fila = ctx?.fila;
+  if (!fila?.id) {
+    console.log("[RM_RUNTIME] fin_rm omitido — sin fila RM en contexto");
+    return null;
+  }
+
+  const actualizado = await repo.actualizarPorId(
+    fila.id,
+    {
+      estado: ESTADOS_RM24H.CERRADO_SIN_RESPUESTA,
+      activo: false,
+      motivo_cancelacion: MOTIVOS_RM24H.FIN_RM,
+      cancelado_en: nowUtc(),
+    },
+    fila
+  );
+
+  console.log("[RM_RUNTIME] fin_rm", {
+    rm24h_id: actualizado?.id || fila.id,
+    lead: ctx.numero || fila.cliente_numero || null,
+    usuario: ctx.usuarioId || fila.usuario_id || null,
+    conexion_whatsapp_id:
+      normalizarConexionId(ctx.conexionWhatsappId) ||
+      normalizarConexionId(fila.conexion_whatsapp_id),
+    estado: actualizado?.estado || ESTADOS_RM24H.CERRADO_SIN_RESPUESTA,
+    motivo_cancelacion: actualizado?.motivo_cancelacion || MOTIVOS_RM24H.FIN_RM,
+  });
+
+  if (actualizado && ctx.fila) {
+    ctx.fila = actualizado;
+  }
+
+  return actualizado;
+}
+
 async function enviarContenidosRm(ctx, contenidos) {
   const lista = (contenidos || []).map(normalizarItemContenido).filter(Boolean);
   if (!lista.length) {
@@ -312,6 +354,15 @@ async function ejecutarNext(nextNodes, ctx) {
         type: tipo || "(sin tipo)",
         id: nodo?.id || null,
       });
+      continue;
+    }
+    if (tipo === "fin_rm" || tipo === "fin") {
+      console.log("[RM_RUNTIME_DEBUG] fin_rm_detectado", {
+        type: tipo,
+        id: nodo?.id || null,
+        config: nodo?.config || null,
+      });
+      await cerrarContextoRmPorFin(ctx);
       continue;
     }
     console.log("[RM_RUNTIME] nodo no implementado todavía", {
@@ -431,5 +482,6 @@ module.exports = {
   obtenerContenidosDeNodoContenido,
   ejecutarNext,
   enviarFallbackAgente,
+  cerrarContextoRmPorFin,
   ejecutarMiniFlujoRm,
 };

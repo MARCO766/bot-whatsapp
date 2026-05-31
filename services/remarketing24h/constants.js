@@ -22,6 +22,8 @@ const MOTIVOS_RM24H = {
   RESETBOT: "resetbot",
   /** Resetbot invalidó contexto Motor 1A (fila post-envío sigue en historial). */
   RESETBOT_CONTEXT_CLEARED: "resetbot_context_cleared",
+  /** Mini flujo RM llegó a nodo Fin RM (guard ya no bloquea). */
+  FIN_RM: "fin_rm",
 };
 
 /** Máximo / default inactividad RM24H antes de disparar (no 24 exactas) */
