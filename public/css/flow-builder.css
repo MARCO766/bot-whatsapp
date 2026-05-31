@@ -2206,7 +2206,7 @@ body:has(#builderArea) {
   position: sticky;
   top: 0;
   align-self: stretch;
-  min-height: 420px;
+  min-height: 0;
 }
 
 .rm24-config-col--funnel .rm24-section--embudo {
@@ -2219,9 +2219,28 @@ body:has(#builderArea) {
 
 .rm24-config-col--funnel .rm24-section--embudo-premium {
   height: 100%;
-  min-height: 420px;
+  min-height: 0;
   display: flex;
   flex-direction: column;
+}
+
+.rm24-embudo-canvas {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: stretch;
+  min-height: 340px;
+  padding: 22px 16px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 122, 24, 0.14);
+  background-color: rgba(0, 0, 0, 0.18);
+  background-image:
+    linear-gradient(rgba(255, 122, 24, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 122, 24, 0.04) 1px, transparent 1px),
+    radial-gradient(ellipse 80% 60% at 50% 0%, rgba(255, 122, 24, 0.1), transparent 70%);
+  background-size: 22px 22px, 22px 22px, auto;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 .panel-nodo--rm24h-wide .rm24-config-col--funnel .rm24-embudo-node {
@@ -2353,20 +2372,108 @@ body:has(#builderArea) {
 }
 
 .rm24-embudo--premium {
-  flex: 1;
-  padding: 4px 2px 6px;
+  flex: 0 1 auto;
+  width: 100%;
+  max-width: 100%;
+  padding: 4px 0;
 }
 
 .rm24-embudo--premium .rm24-embudo-node {
   width: 100%;
   text-align: left;
   cursor: default;
+  position: relative;
+}
+
+.rm24-embudo-step-card {
+  position: relative;
+}
+
+.rm24-embudo-editing-pill {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 2;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #431407;
+  background: linear-gradient(135deg, #fdba74, #fb923c);
+  box-shadow: 0 0 12px rgba(255, 122, 24, 0.45);
+}
+
+.rm24-embudo-step-hover-actions {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 10px;
+  background: rgba(15, 20, 32, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+  opacity: 0;
+  transform: translateY(-50%) translateX(6px);
+  pointer-events: none;
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
+}
+
+.rm24-embudo-step-card:hover .rm24-embudo-step-hover-actions,
+.rm24-embudo-step-card:focus-within .rm24-embudo-step-hover-actions,
+.rm24-embudo-step-card:has(.rm24-embudo-node--selected) .rm24-embudo-step-hover-actions {
+  opacity: 1;
+  transform: translateY(-50%) translateX(0);
+  pointer-events: auto;
+}
+
+.rm24-embudo-quick-action {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #cbd5e1;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.rm24-embudo-quick-action:hover:not(:disabled) {
+  color: #fff;
+  border-color: rgba(255, 122, 24, 0.45);
+  background: rgba(255, 122, 24, 0.18);
+}
+
+.rm24-embudo-quick-action:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.rm24-embudo-quick-action--danger:hover:not(:disabled) {
+  border-color: rgba(248, 113, 113, 0.5);
+  background: rgba(248, 113, 113, 0.2);
+  color: #fecaca;
 }
 
 .rm24-embudo-node--clickable {
   cursor: pointer;
   font: inherit;
   color: inherit;
+  padding-right: 48px;
   transition:
     border-color 0.18s ease,
     box-shadow 0.18s ease,
@@ -2375,19 +2482,25 @@ body:has(#builderArea) {
 }
 
 .rm24-embudo-node--clickable:hover {
-  border-color: rgba(255, 122, 24, 0.45);
+  border-color: rgba(255, 122, 24, 0.55);
   box-shadow:
-    0 4px 16px rgba(0, 0, 0, 0.22),
-    0 0 20px rgba(255, 122, 24, 0.12);
-  transform: translateY(-1px);
+    0 6px 20px rgba(0, 0, 0, 0.24),
+    0 0 24px rgba(255, 122, 24, 0.16);
+  transform: translateY(-2px);
 }
 
 .rm24-embudo-node--selected {
-  border-color: rgba(255, 122, 24, 0.72) !important;
-  background: rgba(255, 122, 24, 0.1) !important;
+  border: 2px solid rgba(255, 140, 40, 0.9) !important;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 122, 24, 0.14),
+    rgba(255, 122, 24, 0.06)
+  ) !important;
   box-shadow:
-    0 0 0 1px rgba(255, 122, 24, 0.22),
-    0 8px 24px rgba(255, 122, 24, 0.14) !important;
+    0 0 0 1px rgba(255, 122, 24, 0.35),
+    0 0 32px rgba(255, 122, 24, 0.22),
+    inset 0 0 24px rgba(255, 122, 24, 0.06) !important;
+  transform: translateY(-1px);
 }
 
 .rm24-embudo-node--dragging {
@@ -2552,29 +2665,29 @@ body:has(#builderArea) {
 }
 
 .rm24-embudo-connector--premium {
-  height: 32px;
-  gap: 0;
+  height: 38px;
+  gap: 2px;
 }
 
 .rm24-embudo-connector--premium .rm24-embudo-connector-line {
   width: 2px;
-  height: 14px;
+  height: 16px;
   border-radius: 2px;
   background: linear-gradient(
     180deg,
-    rgba(255, 122, 24, 0.75) 0%,
-    rgba(255, 122, 24, 0.25) 100%
+    rgba(255, 122, 24, 0.85) 0%,
+    rgba(255, 122, 24, 0.28) 100%
   );
-  box-shadow: 0 0 8px rgba(255, 122, 24, 0.35);
-  animation: rm24ConnectorPulse 2.4s ease-in-out infinite;
+  box-shadow: 0 0 10px rgba(255, 122, 24, 0.4);
+  animation: rm24ConnectorPulse 2.8s ease-in-out infinite;
 }
 
 .rm24-embudo-connector--premium .rm24-embudo-connector-arrow {
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1;
-  color: rgba(255, 180, 100, 0.85);
-  text-shadow: 0 0 8px rgba(255, 122, 24, 0.45);
-  animation: rm24ConnectorArrow 2.4s ease-in-out infinite;
+  color: rgba(255, 190, 110, 0.95);
+  text-shadow: 0 0 10px rgba(255, 122, 24, 0.55);
+  animation: rm24ConnectorArrow 2.8s ease-in-out infinite;
 }
 
 @keyframes rm24ConnectorPulse {
@@ -3298,6 +3411,55 @@ body:has(#builderArea) {
   margin-bottom: 16px;
 }
 
+.panel-nodo--rm24h .rm24-add-paso-popover {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.panel-nodo--rm24h .rm24-add-paso-popover[hidden] {
+  display: none !important;
+}
+
+.panel-nodo--rm24h .rm24-add-paso-popover-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(6, 10, 18, 0.55);
+  backdrop-filter: blur(4px);
+}
+
+.panel-nodo--rm24h .rm24-add-paso-menu--premium {
+  position: relative;
+  z-index: 1;
+  width: min(320px, calc(100vw - 40px));
+  max-height: min(420px, calc(100vh - 80px));
+  overflow: auto;
+  padding: 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 122, 24, 0.28);
+  background: rgba(12, 16, 28, 0.98);
+  box-shadow:
+    0 24px 60px rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(255, 122, 24, 0.1),
+    0 0 40px rgba(255, 122, 24, 0.12);
+  animation: rm24PopoverIn 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes rm24PopoverIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 .panel-nodo--rm24h .rm24-add-paso-btn--premium {
   display: inline-flex;
   align-items: center;
@@ -3332,20 +3494,6 @@ body:has(#builderArea) {
   border-color: rgba(255, 122, 24, 0.65);
   box-shadow: 0 8px 24px rgba(255, 122, 24, 0.2);
   transform: translateY(-1px);
-}
-
-.panel-nodo--rm24h .rm24-add-paso-menu--premium {
-  position: absolute;
-  top: calc(100% + 8px);
-  left: 0;
-  right: 0;
-  z-index: 40;
-  min-width: 0;
-  padding: 10px;
-  border-radius: 14px;
-  border: 1px solid rgba(255, 122, 24, 0.22);
-  background: rgba(15, 20, 32, 0.98);
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 122, 24, 0.08);
 }
 
 .panel-nodo--rm24h .rm24-add-paso-menu-title {
@@ -3403,11 +3551,66 @@ body:has(#builderArea) {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
+  gap: 14px;
+  padding: 16px 18px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(255, 122, 24, 0.12), rgba(255, 255, 255, 0.03));
+  border: 1px solid rgba(255, 122, 24, 0.24);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.panel-nodo--rm24h .rm24-step-editor-head-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.panel-nodo--rm24h .rm24-step-editor-preview {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.panel-nodo--rm24h .rm24-step-editor-preview-label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #6b7280;
+}
+
+.panel-nodo--rm24h .rm24-step-editor-preview-text {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #e5e7eb;
+  word-break: break-word;
+}
+
+.panel-nodo--rm24h .rm24-step-editor-preview-text--muted {
+  color: #94a3b8;
+  font-style: italic;
+}
+
+.panel-nodo--rm24h .rm24-step-editor-fields {
+  display: flex;
+  flex-direction: column;
   gap: 12px;
-  padding: 14px 16px;
-  border-radius: 12px;
-  background: linear-gradient(135deg, rgba(255, 122, 24, 0.1), rgba(255, 255, 255, 0.03));
-  border: 1px solid rgba(255, 122, 24, 0.2);
+}
+
+.panel-nodo--rm24h .rm24-field-label {
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: #94a3b8;
+  text-transform: none;
+  text-align: left;
 }
 
 .panel-nodo--rm24h .rm24-step-editor-kicker {
@@ -3453,10 +3656,11 @@ body:has(#builderArea) {
 }
 
 .panel-nodo--rm24h .rm24-step-editor-card {
-  padding: 16px;
-  border-radius: 12px;
+  padding: 18px;
+  border-radius: 14px;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(0, 0, 0, 0.18);
+  background: rgba(0, 0, 0, 0.2);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
 .panel-nodo--rm24h .rm24-future-badge {
@@ -3483,8 +3687,9 @@ body:has(#builderArea) {
     min-height: 0;
   }
 
-  .rm24-config-col--funnel .rm24-section--embudo-premium {
-    min-height: 0;
+  .rm24-embudo-canvas {
+    min-height: 280px;
+    padding: 18px 12px;
   }
 }
 

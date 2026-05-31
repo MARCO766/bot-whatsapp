@@ -83,17 +83,19 @@ window.MacBotRemarketingGlobal = (function () {
     { tipo: "video", icon: "🎥", label: "Video" },
     { tipo: "audio", icon: "🎧", label: "Audio" },
     { tipo: "documento", icon: "📄", label: "Archivo" },
-    { tipo: "retraso", icon: "⏱", label: "Retraso", futuro: true },
+    { tipo: "retraso", icon: "⏱", label: "Retraso visual", futuro: true },
   ];
 
   function htmlRm24AddPasoControl() {
     return (
       '<div class="rm24-add-paso-wrap rm24-add-paso-wrap--premium" id="rm24hAddPasoWrap">' +
-      '<button type="button" class="rm24-add-paso-btn rm24-add-paso-btn--premium" id="rm24hAddPasoBtn" aria-expanded="false" aria-haspopup="menu">' +
+      '<button type="button" class="rm24-add-paso-btn rm24-add-paso-btn--premium" id="rm24hAddPasoBtn" aria-expanded="false" aria-haspopup="dialog">' +
       '<span class="rm24-add-paso-btn-icon" aria-hidden="true">＋</span>' +
       "<span>Agregar paso</span></button>" +
-      '<div class="rm24-add-paso-menu rm24-add-paso-menu--premium" id="rm24hAddPasoMenu" role="menu" hidden>' +
-      '<p class="rm24-add-paso-menu-title">Tipo de paso</p>' +
+      '<div class="rm24-add-paso-popover" id="rm24hAddPasoPopover" hidden>' +
+      '<div class="rm24-add-paso-popover-backdrop" data-rm24-close-add-paso aria-hidden="true"></div>' +
+      '<div class="rm24-add-paso-menu rm24-add-paso-menu--premium" id="rm24hAddPasoMenu" role="menu">' +
+      '<p class="rm24-add-paso-menu-title">Elegir tipo de paso</p>' +
       RM24_TIPOS_PASO.map(function (c) {
         return (
           '<button type="button" class="rm24-add-paso-menu-item" role="menuitem" data-add-tipo="' +
@@ -111,18 +113,22 @@ window.MacBotRemarketingGlobal = (function () {
           "</button>"
         );
       }).join("") +
-      "</div></div>"
+      "</div></div></div>"
     );
   }
 
   function toggleRm24AddPasoMenu(open) {
     const btn = document.getElementById("rm24hAddPasoBtn");
     const menu = document.getElementById("rm24hAddPasoMenu");
-    if (!btn || !menu) return;
-    const show = typeof open === "boolean" ? open : menu.hidden;
+    const popover = document.getElementById("rm24hAddPasoPopover");
+    const wrap = document.getElementById("rm24hAddPasoWrap");
+    if (!btn || !menu || !popover) return;
+    const show = typeof open === "boolean" ? open : popover.hidden;
+    popover.hidden = !show;
     menu.hidden = !show;
     btn.setAttribute("aria-expanded", show ? "true" : "false");
     btn.classList.toggle("rm24-add-paso-btn--open", show);
+    wrap?.classList.toggle("rm24-add-paso-wrap--open", show);
   }
 
   function resumenPasoFunnel(item) {
@@ -522,7 +528,9 @@ window.MacBotRemarketingGlobal = (function () {
       '<span class="rm24-embudo-stat rm24-embudo-stat--time" id="rm24hEmbudoTiempoTotal">Tiempo total: —</span>' +
       "</div></div>" +
       '<p class="rm24-embudo-intro">Selecciona un paso para editarlo · recorrido automático</p>' +
-      '<div class="rm24-embudo rm24-embudo--premium" id="rm24hEmbudoRm" role="list"></div></section>'
+      '<div class="rm24-embudo-canvas">' +
+      '<div class="rm24-embudo rm24-embudo--premium" id="rm24hEmbudoRm" role="list"></div>' +
+      "</div></section>"
     );
   }
 
@@ -554,7 +562,7 @@ window.MacBotRemarketingGlobal = (function () {
     );
   }
 
-  function htmlEmbudoPasoContenido(stepNum, item, contentIndex, selected) {
+  function htmlEmbudoPasoContenido(stepNum, item, contentIndex, selected, total) {
     const tipo = item?.tipo || "texto";
     const esRetraso = tipo === "retraso";
     const nodeClass = esRetraso
@@ -562,8 +570,10 @@ window.MacBotRemarketingGlobal = (function () {
       : "rm24-embudo-node rm24-embudo-node--send rm24-embudo-node--clickable";
     const dragClass =
       rm24hDragPasoIndex === contentIndex ? " rm24-embudo-node--dragging" : "";
+    const totalSteps = typeof total === "number" ? total : 1;
     return (
       '<div class="rm24-embudo-step" role="listitem">' +
+      '<div class="rm24-embudo-step-card">' +
       '<button type="button" class="' +
       nodeClass +
       claseEmbudoNodeSelected(selected) +
@@ -573,6 +583,9 @@ window.MacBotRemarketingGlobal = (function () {
       '" draggable="true" title="Editar paso ' +
       (contentIndex + 1) +
       '">' +
+      (selected
+        ? '<span class="rm24-embudo-editing-pill">Editando</span>'
+        : "") +
       '<span class="rm24-embudo-badge" aria-hidden="true">' +
       stepNum +
       "</span>" +
@@ -588,7 +601,24 @@ window.MacBotRemarketingGlobal = (function () {
       (resumenPasoFunnel(item) === "Vacío" ? " rm24-embudo-value--muted" : "") +
       '">' +
       esc(resumenPasoFunnel(item)) +
-      "</span></div></button></div>"
+      "</span></div></button>" +
+      '<div class="rm24-embudo-step-hover-actions" aria-label="Acciones rápidas">' +
+      '<button type="button" class="rm24-embudo-quick-action" data-rm24-embudo-index="' +
+      contentIndex +
+      '" title="Editar">✏</button>' +
+      '<button type="button" class="rm24-embudo-quick-action" data-rm24-move-up="' +
+      contentIndex +
+      '" title="Subir"' +
+      (contentIndex === 0 ? " disabled" : "") +
+      ">↑</button>" +
+      '<button type="button" class="rm24-embudo-quick-action" data-rm24-move-down="' +
+      contentIndex +
+      '" title="Bajar"' +
+      (contentIndex >= totalSteps - 1 ? " disabled" : "") +
+      ">↓</button>" +
+      '<button type="button" class="rm24-embudo-quick-action rm24-embudo-quick-action--danger" data-rm24-remove="' +
+      contentIndex +
+      '" title="Eliminar">×</button></div></div></div>"
     );
   }
 
@@ -640,7 +670,7 @@ window.MacBotRemarketingGlobal = (function () {
       items.forEach(function (item, i) {
         html +=
           htmlEmbudoConnector() +
-          htmlEmbudoPasoContenido(stepNum++, item, i, i === pasoSeleccionado);
+          htmlEmbudoPasoContenido(stepNum++, item, i, i === pasoSeleccionado, items.length);
       });
     }
 
@@ -1424,6 +1454,24 @@ window.MacBotRemarketingGlobal = (function () {
     return html;
   }
 
+  function htmlEditorPreviewBlock(item) {
+    const resumen = resumenPasoFunnel(item);
+    const vacio =
+      !resumen ||
+      resumen === "Vacío" ||
+      resumen === "Sin texto" ||
+      resumen === "Sin archivo";
+    return (
+      '<div class="rm24-step-editor-preview">' +
+      '<span class="rm24-step-editor-preview-label">Vista previa del paso</span>' +
+      '<p class="rm24-step-editor-preview-text' +
+      (vacio ? " rm24-step-editor-preview-text--muted" : "") +
+      '">' +
+      esc(vacio ? "Sin contenido configurado todavía" : resumen) +
+      "</p></div>"
+    );
+  }
+
   function htmlStepEditorBody(item, index) {
     const tipo = item.tipo || "texto";
     let campos = "";
@@ -1432,7 +1480,7 @@ window.MacBotRemarketingGlobal = (function () {
       const unidad = String(item.unidad || "minutos").toLowerCase();
       campos =
         '<div class="rm24-block-body-inner">' +
-        '<p class="rm24-block-body-label">⏱️ RETRASO VISUAL ' +
+        '<p class="rm24-block-body-label rm24-field-label">Retraso visual ' +
         etiquetaRetrasoVisualBadge() +
         "</p>" +
         '<div class="rm24-delay-grid">' +
@@ -1453,7 +1501,7 @@ window.MacBotRemarketingGlobal = (function () {
     } else if (tipo === "texto") {
       campos =
         '<div class="rm24-block-body-inner">' +
-        '<p class="rm24-block-body-label">📝 MENSAJE DE TEXTO</p>' +
+        '<p class="rm24-block-body-label rm24-field-label">Contenido del mensaje</p>' +
         '<textarea class="rm24-input rm24-textarea rm24-textarea-premium rm24-contenido-texto" rows="6" placeholder="Escribe el mensaje de remarketing…">' +
         esc(item.texto) +
         "</textarea></div>";
@@ -1484,10 +1532,12 @@ window.MacBotRemarketingGlobal = (function () {
       "</p>" +
       '<p class="rm24-step-editor-type">' +
       iconoTipoContenido(tipo) +
-      " " +
+      " Tipo: " +
       esc(etiquetaTipoContenido(tipo)) +
       (tipo === "retraso" ? " " + etiquetaRetrasoVisualBadge() : "") +
-      "</p></div>" +
+      "</p>" +
+      htmlEditorPreviewBlock(item) +
+      "</div>" +
       '<div class="rm24-step-editor-actions">' +
       '<button type="button" class="rm24-action-icon" data-rm24-move-up="' +
       index +
@@ -1502,8 +1552,9 @@ window.MacBotRemarketingGlobal = (function () {
       '<button type="button" class="rm24-action-icon rm24-action-icon--danger" data-rm24-remove="' +
       index +
       '" title="Eliminar paso">×</button></div></div>' +
+      '<div class="rm24-step-editor-fields">' +
       htmlStepEditorBody(item, index) +
-      "</div>"
+      "</div></div>"
     );
   }
 
@@ -1522,6 +1573,27 @@ window.MacBotRemarketingGlobal = (function () {
     const item =
       mapearItemContenidoUi(items[rm24hPasoSeleccionado]) || items[rm24hPasoSeleccionado];
     mount.innerHTML = htmlStepEditorShell(item, rm24hPasoSeleccionado, items.length);
+  }
+
+  function actualizarPreviewEditorPaso() {
+    const el = document.querySelector(
+      "#rm24hStepEditor .rm24-step-editor-preview-text"
+    );
+    if (!el) return;
+    syncEditorPasoToContenidos();
+    const items = getRm24ContenidosActivos();
+    if (!items.length || rm24hPasoSeleccionado >= items.length) return;
+    const item =
+      mapearItemContenidoUi(items[rm24hPasoSeleccionado]) ||
+      items[rm24hPasoSeleccionado];
+    const resumen = resumenPasoFunnel(item);
+    const vacio =
+      !resumen ||
+      resumen === "Vacío" ||
+      resumen === "Sin texto" ||
+      resumen === "Sin archivo";
+    el.textContent = vacio ? "Sin contenido configurado todavía" : resumen;
+    el.classList.toggle("rm24-step-editor-preview-text--muted", vacio);
   }
 
   function renderRm24ContentBlocks() {
@@ -1569,6 +1641,13 @@ window.MacBotRemarketingGlobal = (function () {
         ev.preventDefault();
         ev.stopPropagation();
         addRm24ContentBlock(addTipoBtn.getAttribute("data-add-tipo"));
+        return;
+      }
+
+      if (ev.target.closest("[data-rm24-close-add-paso]")) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        toggleRm24AddPasoMenu(false);
         return;
       }
 
@@ -1650,12 +1729,15 @@ window.MacBotRemarketingGlobal = (function () {
       mostrarErrorContenidos("");
       syncEditorPasoToContenidos();
       sincronizarMensajeRemarketingDesdeContenidos(configActiva);
+      actualizarPreviewEditorPaso();
       actualizarEmbudoRmPanel();
       persistirContenidosEnNodo();
     };
 
     mount._rm24hOnDragStart = function (ev) {
-      const step = ev.target.closest("[data-rm24-embudo-index]");
+      const step = ev.target.closest(
+        ".rm24-embudo-node--clickable[draggable='true']"
+      );
       if (!step) return;
       rm24hDragPasoIndex = parseInt(step.getAttribute("data-rm24-embudo-index"), 10);
       step.classList.add("rm24-embudo-node--dragging");
