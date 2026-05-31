@@ -618,7 +618,7 @@ window.MacBotRemarketingGlobal = (function () {
       ">↓</button>" +
       '<button type="button" class="rm24-embudo-quick-action rm24-embudo-quick-action--danger" data-rm24-remove="' +
       contentIndex +
-      '" title="Eliminar">×</button></div></div></div>"
+      '" title="Eliminar">×</button></div></div></div>'
     );
   }
 
