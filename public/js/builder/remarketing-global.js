@@ -298,7 +298,21 @@ window.MacBotRemarketingGlobal = (function () {
   let configActiva = crearConfigVacia();
   let rm24hSubidaEnCurso = false;
   let rm24hPasoSeleccionado = 0;
-  let rm24hDragPasoIndex = null;
+  let rm24hBloqueSeleccionado = "espera";
+
+  /**
+   * Mini Flujo RM — catálogo visual (solo UI, Fase 1).
+   * Persistencia futura propuesta: config.rm24h_flujo (ver comentario en renderMiniFlujoRmHtml).
+   */
+  const RM24H_MINI_FLUJO_BLOQUES = [
+    { id: "espera", icon: "⏱", label: "Esperar inactividad", kind: "wait", activo: true },
+    { id: "contenido", icon: "📤", label: "Contenido", kind: "send", activo: true },
+    { id: "agente_rapido", icon: "🤖", label: "Agente rápido", kind: "action", futuro: true },
+    { id: "lector_pagos", icon: "💳", label: "Lector de pagos", kind: "action", futuro: true },
+    { id: "etiqueta", icon: "🏷️", label: "Etiqueta", kind: "action", futuro: true },
+    { id: "conversion", icon: "🎯", label: "Conversión", kind: "action", futuro: true },
+    { id: "fin", icon: "✅", label: "Fin", kind: "end", activo: true },
+  ];
 
   const RM24H_MEDIA_CLIENT = {
     imagen: {
@@ -523,22 +537,226 @@ window.MacBotRemarketingGlobal = (function () {
     return { vacio: false, linea: linea, preview: preview, chips: chips };
   }
 
-  function htmlEmbudoRmSection() {
+  function htmlMiniFlujoRmSection() {
     return (
-      '<section class="rm24-section rm24-section--embudo rm24-section--embudo-premium" id="rm24hEmbudoSection" aria-label="Embudo RM">' +
+      '<section class="rm24-section rm24-section--embudo rm24-section--embudo-premium rm24-section--mini-flujo" id="rm24hEmbudoSection" aria-label="Mini flujo RM">' +
       '<div class="rm24-embudo-head">' +
       '<div class="rm24-embudo-head-title">' +
       '<span class="rm24-embudo-head-icon" aria-hidden="true">🔥</span>' +
-      "<span>Embudo RM</span></div>" +
+      "<span>Mini flujo RM</span></div>" +
       '<div class="rm24-embudo-head-stats">' +
       '<span class="rm24-embudo-stat" id="rm24hEmbudoPasoCount">0 contenidos</span>' +
       '<span class="rm24-embudo-stat rm24-embudo-stat--time" id="rm24hEmbudoTiempoTotal">Espera: —</span>' +
       "</div></div>" +
-      '<p class="rm24-embudo-intro">Espera inactividad → envío de remarketing → cierre automático</p>' +
+      '<p class="rm24-embudo-intro">Recorrido vertical · selecciona un bloque para editarlo</p>' +
       '<div class="rm24-embudo-canvas">' +
-      '<div class="rm24-embudo rm24-embudo--premium" id="rm24hEmbudoRm" role="list"></div>' +
+      '<div class="rm24-embudo rm24-embudo--premium rm24-mini-flujo" id="rm24hEmbudoRm" role="list"></div>' +
       "</div></section>"
     );
+  }
+
+  function resumenMiniFlujoBloque(bloqueId, contenidosRaw, tiempo) {
+    if (bloqueId === "espera") {
+      return etiquetaTiempoEmbudoCompacto(tiempo);
+    }
+    if (bloqueId === "contenido") {
+      const resumen = resumenContenidoEmbudo(contenidosRaw);
+      return resumen.vacio ? "Sin contenido configurado" : resumen.linea;
+    }
+    if (bloqueId === "fin") {
+      return "Lead queda en remarketing · no vuelve al flujo";
+    }
+    return "Próxima fase · sin motor aún";
+  }
+
+  function htmlMiniFlujoBloque(bloque, stepNum, resumen, selected) {
+    const locked = !!bloque.futuro;
+    const muted = locked || resumen === "Sin contenido configurado";
+    const nodeKind = bloque.kind || "action";
+    return (
+      '<div class="rm24-embudo-step" role="listitem">' +
+      '<button type="button" class="rm24-embudo-node rm24-mini-flujo-node rm24-mini-flujo-node--' +
+      esc(nodeKind) +
+      (selected ? " rm24-embudo-node--selected" : "") +
+      (locked ? " rm24-mini-flujo-node--locked" : "") +
+      '" data-rm24-bloque-id="' +
+      esc(bloque.id) +
+      '" aria-current="' +
+      (selected ? "step" : "false") +
+      '">' +
+      (selected ? '<span class="rm24-embudo-editing-pill">Editando</span>' : "") +
+      (locked ? '<span class="rm24-future-badge rm24-mini-flujo-badge">futuro</span>' : "") +
+      '<span class="rm24-embudo-badge" aria-hidden="true">' +
+      stepNum +
+      "</span>" +
+      '<span class="rm24-embudo-icon" aria-hidden="true">' +
+      bloque.icon +
+      "</span>" +
+      '<div class="rm24-embudo-body">' +
+      '<span class="rm24-embudo-label">' +
+      esc(bloque.label) +
+      "</span>" +
+      '<span class="rm24-embudo-value' +
+      (muted ? " rm24-embudo-value--muted" : "") +
+      '">' +
+      esc(resumen) +
+      "</span></div></button></div>"
+    );
+  }
+
+  function renderMiniFlujoRmHtml(contenidosRaw, tiempo, bloqueSeleccionado) {
+    let html = "";
+    RM24H_MINI_FLUJO_BLOQUES.forEach(function (bloque, index) {
+      if (index > 0) html += htmlEmbudoConnector();
+      html += htmlMiniFlujoBloque(
+        bloque,
+        index + 1,
+        resumenMiniFlujoBloque(bloque.id, contenidosRaw, tiempo),
+        bloque.id === bloqueSeleccionado
+      );
+    });
+    return html;
+  }
+
+  function selectRm24Bloque(bloqueId) {
+    const bloque = RM24H_MINI_FLUJO_BLOQUES.find(function (b) {
+      return b.id === bloqueId;
+    });
+    if (!bloque) return;
+    rm24hBloqueSeleccionado = bloque.id;
+    renderRm24BloqueEditor();
+    actualizarEmbudoRmPanel();
+    requestAnimationFrame(function () {
+      document
+        .getElementById("rm24hBloqueEditor")
+        ?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    });
+  }
+
+  function htmlEditorBloqueEspera(tiempo) {
+    const introTiempo = etiquetaTiempoInactividadResumen(tiempo);
+    return (
+      '<section class="rm24-section rm24-section--bloque-editor">' +
+      '<h5 class="rm24-section-title">Esperar inactividad</h5>' +
+      '<p class="rm24h-hint">Tiempo sin respuesta del lead antes del remarketing.</p>' +
+      '<div class="rm24-tiempo-grid">' +
+      '<div class="rm24h-field rm24-field">' +
+      "<label for=\"rm24hTiempoUnidad\">Unidad</label>" +
+      '<select id="rm24hTiempoUnidad" class="rm24-input rm24-tiempo-unidad">' +
+      '<option value="minutos"' +
+      (tiempo.unidad === "minutos" ? " selected" : "") +
+      ">Minutos (pruebas)</option>" +
+      '<option value="horas"' +
+      (tiempo.unidad === "horas" ? " selected" : "") +
+      ">Horas</option>" +
+      '<option value="dias"' +
+      (tiempo.unidad === "dias" ? " selected" : "") +
+      ">Días</option></select></div>" +
+      '<div class="rm24h-field rm24-field">' +
+      "<label for=\"rm24hTiempoValor\">Valor</label>" +
+      '<input type="number" id="rm24hTiempoValor" class="rm24-input" min="1" step="1" inputmode="numeric" value="' +
+      esc(String(tiempo.valor)) +
+      '"></div></div>' +
+      htmlPresetsTiempoInactividad(tiempo.unidad, tiempo.valor) +
+      '<p class="rm24h-hint" id="rm24hTiempoHint">Se envía tras ' +
+      esc(introTiempo.replace(" de inactividad", "")) +
+      " sin respuesta del lead.</p></section>"
+    );
+  }
+
+  function htmlEditorBloqueReglas() {
+    return (
+      '<section class="rm24-section rm24-section--rules rm24-section--bloque-editor">' +
+      '<h5 class="rm24-section-title">Reglas automáticas (Fase 1)</h5>' +
+      '<div class="rm24-rule rm24h-field--locked">' +
+      '<label class="rm24-switch rm24-switch--locked">' +
+      '<input type="checkbox" id="rm24hDetenerSiResponde" disabled>' +
+      '<span class="rm24-switch-track" aria-hidden="true"></span>' +
+      '<span class="rm24-switch-label">Detener si responde</span></label>' +
+      '<p class="rm24h-hint rm24-rule-hint">NO — responder reinicia el contador</p></div>' +
+      '<div class="rm24-rule rm24h-field--locked">' +
+      '<label class="rm24-switch rm24-switch--locked rm24-switch--on">' +
+      '<input type="checkbox" id="rm24hReiniciar" checked disabled>' +
+      '<span class="rm24-switch-track" aria-hidden="true"></span>' +
+      '<span class="rm24-switch-label">Reiniciar contador al responder</span></label>' +
+      '<p class="rm24h-hint rm24-rule-hint">SÍ (fijo en Fase 1)</p></div>' +
+      '<div class="rm24-rule rm24h-field--locked">' +
+      '<label class="rm24-switch rm24-switch--locked rm24-switch--on">' +
+      '<input type="checkbox" id="rm24hDetenerConversion" checked disabled>' +
+      '<span class="rm24-switch-track" aria-hidden="true"></span>' +
+      '<span class="rm24-switch-label">Detener al llegar a Conversión</span></label>' +
+      '<p class="rm24h-hint rm24-rule-hint">SÍ (fijo en Fase 1)</p></div></section>'
+    );
+  }
+
+  function htmlEditorBloqueContenido() {
+    return (
+      '<section class="rm24-section rm24-section--contenidos rm24-section--bloque-editor">' +
+      '<h5 class="rm24-section-title">Contenido de remarketing</h5>' +
+      '<p class="rm24h-hint rm24-contenidos-intro">Bloques que se envían juntos tras la espera. URLs HTTPS públicas.</p>' +
+      '<div id="rm24hContenidosError" class="rm24-contenidos-error" hidden></div>' +
+      htmlRm24AddPasoControl() +
+      '<div id="rm24hContentPickerWrap" class="rm24-content-picker-wrap"></div>' +
+      '<div id="rm24hStepEditor" class="rm24-step-editor rm24-step-editor--premium"></div>' +
+      "</section>"
+    );
+  }
+
+  function htmlEditorBloqueFuturo(bloqueId) {
+    const bloque = RM24H_MINI_FLUJO_BLOQUES.find(function (b) {
+      return b.id === bloqueId;
+    });
+    const label = bloque?.label || "Bloque";
+    return (
+      '<section class="rm24-section rm24-section--bloque-editor rm24-section--bloque-futuro">' +
+      '<h5 class="rm24-section-title">' +
+      esc(label) +
+      "</h5>" +
+      '<p class="rm24h-hint">Este bloque forma parte del Mini Flujo RM, pero aún no tiene motor en runtime.</p>' +
+      '<div class="rm24-bloque-futuro-card">' +
+      '<span class="rm24-future-badge">UI preparada · motor pendiente</span>' +
+      "<p>En Fase 1 el envío sigue siendo: espera → contenido → fin automático.</p>" +
+      "<p>No se guarda configuración extra todavía.</p></div></section>"
+    );
+  }
+
+  function htmlEditorBloqueFin() {
+    return (
+      '<section class="rm24-section rm24-section--bloque-editor rm24-section--bloque-fin">' +
+      '<h5 class="rm24-section-title">Fin del mini flujo</h5>' +
+      '<p class="rm24h-hint">Comportamiento actual del remarketing global (sin cambios).</p>' +
+      '<ul class="rm24-mini-flujo-fin-list">' +
+      "<li>Tras enviar remarketing, el lead queda en estado remarketing.</li>" +
+      "<li>No regresa al flujo normal del canvas.</li>" +
+      "<li>El flujo se cierra como <code>cerrado_sin_respuesta</code>.</li>" +
+      "</ul></section>"
+    );
+  }
+
+  function renderRm24BloqueEditor() {
+    const mount = document.getElementById("rm24hBloqueEditor");
+    if (!mount) return;
+    const tiempo = panelRemarketingAbierto()
+      ? leerTiempoDesdePanel()
+      : configActiva.tiempoInactividad || { valor: 23, unidad: "horas" };
+
+    if (rm24hBloqueSeleccionado === "espera") {
+      mount.innerHTML = htmlEditorBloqueEspera(tiempo) + htmlEditorBloqueReglas();
+      bindTiempoPanelEvents();
+      actualizarHintTiempoPanel(configActiva.tiempoInactividad || tiempo);
+      return;
+    }
+    if (rm24hBloqueSeleccionado === "contenido") {
+      mount.innerHTML = htmlEditorBloqueContenido();
+      renderRm24ContentPicker();
+      renderRm24StepEditor();
+      return;
+    }
+    if (rm24hBloqueSeleccionado === "fin") {
+      mount.innerHTML = htmlEditorBloqueFin();
+      return;
+    }
+    mount.innerHTML = htmlEditorBloqueFuturo(rm24hBloqueSeleccionado);
   }
 
   function htmlEmbudoConnector() {
@@ -547,84 +765,6 @@ window.MacBotRemarketingGlobal = (function () {
       '<span class="rm24-embudo-connector-line"></span>' +
       '<span class="rm24-embudo-connector-arrow">▼</span></div>'
     );
-  }
-
-  function htmlEmbudoPasoEnvio(stepNum, resumen) {
-    const valueClass = resumen.vacio ? " rm24-embudo-value--muted" : "";
-    let valueInner = esc(resumen.linea);
-    if (resumen.preview) {
-      valueInner +=
-        '<span class="rm24-embudo-value-preview">' + esc(resumen.preview) + "</span>";
-    }
-    return (
-      '<div class="rm24-embudo-step" role="listitem">' +
-      '<div class="rm24-embudo-node rm24-embudo-node--send">' +
-      '<span class="rm24-embudo-badge" aria-hidden="true">' +
-      stepNum +
-      "</span>" +
-      '<span class="rm24-embudo-icon" aria-hidden="true">📤</span>' +
-      '<div class="rm24-embudo-body">' +
-      '<span class="rm24-embudo-label">Enviar contenido</span>' +
-      '<span class="rm24-embudo-value' +
-      valueClass +
-      '">' +
-      valueInner +
-      "</span></div></div></div>"
-    );
-  }
-
-  function htmlEmbudoPasoVacio(stepNum) {
-    return htmlEmbudoPasoEnvio(stepNum, {
-      vacio: true,
-      linea: "Sin contenido configurado",
-      preview: "",
-      chips: [],
-    });
-  }
-
-  function htmlEmbudoPasoWait(stepNum, tiempoLabel) {
-    return (
-      '<div class="rm24-embudo-step" role="listitem">' +
-      '<div class="rm24-embudo-node rm24-embudo-node--wait">' +
-      '<span class="rm24-embudo-badge" aria-hidden="true">' +
-      stepNum +
-      "</span>" +
-      '<span class="rm24-embudo-icon" aria-hidden="true">⏱</span>' +
-      '<div class="rm24-embudo-body">' +
-      '<span class="rm24-embudo-label">Esperar inactividad</span>' +
-      '<span class="rm24-embudo-value">' +
-      esc(tiempoLabel) +
-      "</span></div></div></div>"
-    );
-  }
-
-  function htmlEmbudoPasoFin(stepNum) {
-    return (
-      '<div class="rm24-embudo-step" role="listitem">' +
-      '<div class="rm24-embudo-node rm24-embudo-node--end">' +
-      '<span class="rm24-embudo-badge" aria-hidden="true">' +
-      stepNum +
-      "</span>" +
-      '<span class="rm24-embudo-icon" aria-hidden="true">✅</span>' +
-      '<div class="rm24-embudo-body">' +
-      '<span class="rm24-embudo-label">Fin automático</span>' +
-      '<span class="rm24-embudo-value rm24-embudo-value--wrap">' +
-      "Después de enviar remarketing, el flujo se cierra como " +
-      '<code class="rm24-embudo-code">cerrado_sin_respuesta</code>' +
-      "</span></div></div></div>"
-    );
-  }
-
-  function renderEmbudoRmStepsHtml(contenidosRaw, tiempo) {
-    const tiempoLabel = etiquetaTiempoEmbudoCompacto(tiempo);
-    const resumen = resumenContenidoEmbudo(contenidosRaw);
-    let html = htmlEmbudoPasoWait(1, tiempoLabel);
-    html += htmlEmbudoConnector();
-    html += resumen.vacio
-      ? htmlEmbudoPasoVacio(2)
-      : htmlEmbudoPasoEnvio(2, resumen);
-    html += htmlEmbudoConnector() + htmlEmbudoPasoFin(3);
-    return html;
   }
 
   function actualizarEmbudoRmPanel() {
@@ -650,15 +790,22 @@ window.MacBotRemarketingGlobal = (function () {
       tiempoTotalEl.textContent = "Espera: " + calcularTiempoEsperaEmbudo(tiempo);
     }
 
-    const editableCount = (contenidos || []).filter(esContenidoEditableRm24).length;
-    clampPasoSeleccionado(editableCount);
-    if (
-      editableCount &&
-      !esContenidoEditableRm24(getRm24ContenidosActivos()[rm24hPasoSeleccionado])
-    ) {
-      rm24hPasoSeleccionado = indicePrimerContenidoEditable(getRm24ContenidosActivos());
+    if (rm24hBloqueSeleccionado === "contenido") {
+      const editableCount = (contenidos || []).filter(esContenidoEditableRm24).length;
+      clampPasoSeleccionado(editableCount);
+      if (
+        editableCount &&
+        !esContenidoEditableRm24(getRm24ContenidosActivos()[rm24hPasoSeleccionado])
+      ) {
+        rm24hPasoSeleccionado = indicePrimerContenidoEditable(getRm24ContenidosActivos());
+      }
     }
-    embudo.innerHTML = renderEmbudoRmStepsHtml(contenidos, tiempo);
+
+    embudo.innerHTML = renderMiniFlujoRmHtml(
+      contenidos,
+      tiempo,
+      rm24hBloqueSeleccionado
+    );
   }
 
   function htmlPresetsTiempoInactividad(unidad, valorActivo) {
@@ -1587,8 +1734,10 @@ window.MacBotRemarketingGlobal = (function () {
   }
 
   function renderRm24ContentBlocks() {
-    renderRm24ContentPicker();
-    renderRm24StepEditor();
+    if (rm24hBloqueSeleccionado === "contenido") {
+      renderRm24ContentPicker();
+      renderRm24StepEditor();
+    }
     actualizarEmbudoRmPanel();
   }
 
@@ -1627,6 +1776,14 @@ window.MacBotRemarketingGlobal = (function () {
         ev.preventDefault();
         ev.stopPropagation();
         toggleRm24AddPasoMenu(false);
+        return;
+      }
+
+      const bloqueBtn = ev.target.closest("[data-rm24-bloque-id]");
+      if (bloqueBtn) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        selectRm24Bloque(bloqueBtn.getAttribute("data-rm24-bloque-id"));
         return;
       }
 
@@ -1755,9 +1912,13 @@ window.MacBotRemarketingGlobal = (function () {
     renderPresetsTiempoPanel(cfg.tiempoInactividad);
     if (reiniciarEl) reiniciarEl.checked = cfg.reiniciarAlResponder !== false;
     if (detenerConvEl) detenerConvEl.checked = cfg.detenerEnConversion !== false;
-    renderRm24ContentBlocks();
+    renderRm24BloqueEditor();
     mostrarErrorContenidos("");
-    actualizarHintTiempoPanel(cfg.tiempoInactividad);
+    if (rm24hBloqueSeleccionado === "espera") {
+      actualizarHintTiempoPanel(cfg.tiempoInactividad);
+    } else {
+      actualizarEmbudoRmPanel();
+    }
   }
 
   function actualizarHintTiempoPanel(tiempo) {
@@ -1776,6 +1937,7 @@ window.MacBotRemarketingGlobal = (function () {
 
     nodoActivo = nodo;
     rm24hPasoSeleccionado = 0;
+    rm24hBloqueSeleccionado = "espera";
     hydrateRm24ContentBlocksFromNode(nodo);
     sincronizarHorasLegacyDesdeTiempo(configActiva);
 
@@ -1791,16 +1953,13 @@ window.MacBotRemarketingGlobal = (function () {
       );
     }
 
-    const tiempo = configActiva.tiempoInactividad || { valor: 23, unidad: "horas" };
-    const introTiempo = etiquetaTiempoInactividadResumen(tiempo);
-
     contenido.innerHTML =
       '<div class="rm24h-panel rm24-config-panel rm-panel-wide">' +
       '<div class="rm24-card rm24-card--hero">' +
       '<span class="rm24h-panel-icon" aria-hidden="true">🔥</span>' +
       "<div>" +
       "<h4>Remarketing Global 24h</h4>" +
-      "<p>Cerebro global del flujo · no mueve leads entre nodos</p>" +
+      "<p>Mini flujo vertical · cerebro global del flujo</p>" +
       "</div></div>" +
       '<div class="rm24-config-scroll">' +
       '<section class="rm24-section rm24-section--estado">' +
@@ -1813,76 +1972,16 @@ window.MacBotRemarketingGlobal = (function () {
       "<span class=\"rm24-switch-label\">Activar remarketing global</span></label>" +
       "</section>" +
       '<div class="rm24-config-workspace">' +
-      '<aside class="rm24-config-col rm24-config-col--funnel" aria-label="Embudo RM">' +
-      htmlEmbudoRmSection() +
+      '<aside class="rm24-config-col rm24-config-col--funnel" aria-label="Mini flujo RM">' +
+      htmlMiniFlujoRmSection() +
       "</aside>" +
       '<div class="rm24-config-col rm24-config-col--editor">' +
-      '<section class="rm24-section">' +
-      '<h5 class="rm24-section-title">Tiempo de inactividad</h5>' +
-      '<div class="rm24-tiempo-grid">' +
-      '<div class="rm24h-field rm24-field">' +
-      "<label for=\"rm24hTiempoUnidad\">Unidad</label>" +
-      '<select id="rm24hTiempoUnidad" class="rm24-input rm24-tiempo-unidad">' +
-      '<option value="minutos"' +
-      (tiempo.unidad === "minutos" ? " selected" : "") +
-      ">Minutos (pruebas)</option>" +
-      '<option value="horas"' +
-      (tiempo.unidad === "horas" ? " selected" : "") +
-      ">Horas</option>" +
-      '<option value="dias"' +
-      (tiempo.unidad === "dias" ? " selected" : "") +
-      ">Días</option></select></div>" +
-      '<div class="rm24h-field rm24-field">' +
-      "<label for=\"rm24hTiempoValor\">Valor</label>" +
-      '<input type="number" id="rm24hTiempoValor" class="rm24-input" min="1" step="1" inputmode="numeric" value="' +
-      esc(String(tiempo.valor)) +
-      '"></div></div>' +
-      htmlPresetsTiempoInactividad(tiempo.unidad, tiempo.valor) +
-      '<p class="rm24h-hint" id="rm24hTiempoHint">Se envía tras ' +
-      esc(introTiempo.replace(" de inactividad", "")) +
-      " sin respuesta del lead.</p></section>" +
-      '<section class="rm24-section rm24-section--rules">' +
-      '<h5 class="rm24-section-title">Reglas automáticas</h5>' +
-      '<div class="rm24-rule rm24h-field--locked">' +
-      '<label class="rm24-switch rm24-switch--locked">' +
-      '<input type="checkbox" id="rm24hDetenerSiResponde" disabled>' +
-      '<span class="rm24-switch-track" aria-hidden="true"></span>' +
-      '<span class="rm24-switch-label">Detener si responde</span></label>' +
-      '<p class="rm24h-hint rm24-rule-hint">NO — responder reinicia el contador</p></div>' +
-      '<div class="rm24-rule rm24h-field--locked">' +
-      '<label class="rm24-switch rm24-switch--locked rm24-switch--on">' +
-      '<input type="checkbox" id="rm24hReiniciar" checked disabled>' +
-      '<span class="rm24-switch-track" aria-hidden="true"></span>' +
-      '<span class="rm24-switch-label">Reiniciar contador al responder</span></label>' +
-      '<p class="rm24h-hint rm24-rule-hint">SÍ (fijo en Fase 1)</p></div>' +
-      '<div class="rm24-rule rm24h-field--locked">' +
-      '<label class="rm24-switch rm24-switch--locked rm24-switch--on">' +
-      '<input type="checkbox" id="rm24hDetenerConversion" checked disabled>' +
-      '<span class="rm24-switch-track" aria-hidden="true"></span>' +
-      '<span class="rm24-switch-label">Detener al llegar a Conversión</span></label>' +
-      '<p class="rm24h-hint rm24-rule-hint">SÍ (fijo en Fase 1)</p></div></section>' +
-      '<section class="rm24-section rm24-section--contenidos">' +
-      '<h5 class="rm24-section-title">Contenido de remarketing</h5>' +
-      '<p class="rm24h-hint rm24-contenidos-intro">Selecciona un bloque para editarlo. Todos se envían juntos tras la espera. URLs HTTPS públicas.</p>' +
-      '<div id="rm24hContenidosError" class="rm24-contenidos-error" hidden></div>' +
-      htmlRm24AddPasoControl() +
-      '<div id="rm24hContentPickerWrap" class="rm24-content-picker-wrap"></div>' +
-      '<div id="rm24hStepEditor" class="rm24-step-editor rm24-step-editor--premium"></div>' +
-      "</section>" +
-      '<section class="rm24-section rm24-section--future">' +
-      '<h5 class="rm24-section-title">Opciones futuras</h5>' +
-      '<div class="rm24-rule rm24h-field--locked">' +
-      '<label class="rm24-switch rm24-switch--locked">' +
-      '<input type="checkbox" id="rm24hModoContextual" disabled>' +
-      '<span class="rm24-switch-track" aria-hidden="true"></span>' +
-      '<span class="rm24-switch-label">Modo contextual (futuro)</span></label>' +
-      '<p class="rm24h-hint rm24-rule-hint">Desactivado en Fase 1</p></div></section>' +
+      '<div id="rm24hBloqueEditor" class="rm24-bloque-editor"></div>' +
       '<div class="rm24-config-footer">' +
       '<button type="button" class="panel-btn rm24-btn-save" id="rm24hGuardarPanel">Guardar nodo</button>' +
       "</div></div></div></div></div>";
 
     bindContenidosPanelEvents();
-    bindTiempoPanelEvents();
     aplicarConfigAlPanel(configActiva);
 
     document.getElementById("rm24hActivo")?.addEventListener("change", onPanelChange);
@@ -2031,6 +2130,7 @@ window.MacBotRemarketingGlobal = (function () {
     nodoActivo = null;
     configActiva = crearConfigVacia();
     rm24hPasoSeleccionado = 0;
+    rm24hBloqueSeleccionado = "espera";
     const panelShell = document.getElementById("panelNodo");
     panelShell?.classList.remove(
       "panel-nodo--rm24h",

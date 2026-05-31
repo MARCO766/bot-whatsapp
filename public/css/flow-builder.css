@@ -2336,6 +2336,76 @@ body:has(#builderArea) {
   line-height: 1.35;
 }
 
+.rm24-bloque-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.rm24-mini-flujo-node {
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  font: inherit;
+  color: inherit;
+}
+
+.rm24-mini-flujo-node--locked {
+  opacity: 0.72;
+  cursor: pointer;
+}
+
+.rm24-mini-flujo-node--wait {
+  border-color: rgba(96, 165, 250, 0.35);
+}
+
+.rm24-mini-flujo-node--send {
+  border-color: rgba(255, 122, 24, 0.35);
+}
+
+.rm24-mini-flujo-node--end {
+  border-color: rgba(74, 222, 128, 0.35);
+}
+
+.rm24-mini-flujo-node--action {
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.rm24-mini-flujo-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+}
+
+.rm24-mini-flujo-node {
+  position: relative;
+}
+
+.rm24-bloque-futuro-card,
+.rm24-section--bloque-fin .rm24-mini-flujo-fin-list {
+  margin-top: 10px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px dashed rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.rm24-mini-flujo-fin-list {
+  margin: 0;
+  padding-left: 18px;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.rm24-bloque-futuro-card p {
+  margin: 8px 0 0;
+  font-size: 0.82rem;
+  color: rgba(255, 255, 255, 0.65);
+}
+
 @media (max-width: 960px) {
   .rm24-config-workspace {
     grid-template-columns: 1fr;
