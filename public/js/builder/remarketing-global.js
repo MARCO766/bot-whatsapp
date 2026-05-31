@@ -331,44 +331,182 @@ window.MacBotRemarketingGlobal = (function () {
     return !!parseSeleccionAgenteRapido(sel);
   }
 
-  function htmlAgenteRapidoRamaAddMenu(ramaKey) {
-    const addLabel =
-      ramaKey === "default"
-        ? "Añadir nodo en default"
-        : "Añadir nodo en este camino";
+  function htmlWfCard(opts) {
+    const o = opts || {};
+    const tag = o.tag || "button";
+    const typeAttr = tag === "button" ? ' type="button"' : "";
+    const draggable = o.draggable ? ' draggable="true"' : "";
+    let cls =
+      "rm24-wf-card" +
+      (o.kind ? " rm24-wf-card--" + o.kind : "") +
+      (o.mod ? " rm24-wf-card--" + o.mod : "") +
+      (o.selected ? " rm24-wf-card--selected" : "") +
+      (o.dragging ? " rm24-wf-card--dragging" : "") +
+      (o.small ? " rm24-wf-card--sm" : "");
+    const attrs = o.attrs || "";
     return (
-      '<div class="rm24-ar-rama-add-wrap" data-rm24-ar-rama-key="' +
-      esc(ramaKey) +
-      '">' +
-      '<button type="button" class="rm24-ar-rama-add-btn" data-rm24-ar-add-toggle="' +
-      esc(ramaKey) +
-      '" aria-expanded="false">' +
-      '<span aria-hidden="true">＋</span> ' +
-      esc(addLabel) +
-      "</button>" +
-      '<div class="rm24-ar-rama-add-popover" data-rm24-ar-add-menu="' +
-      esc(ramaKey) +
-      '" hidden>' +
-      '<div class="rm24-ar-rama-add-backdrop" data-rm24-ar-add-close="' +
-      esc(ramaKey) +
-      '" aria-hidden="true"></div>' +
-      '<div class="rm24-ar-rama-add-menu" role="menu">' +
-      RM24H_RAMA_NODO_TIPOS.map(function (c) {
-        return (
-          '<button type="button" class="rm24-ar-rama-add-item" role="menuitem" data-rm24-ar-add-tipo="' +
-          esc(c.tipo) +
-          '" data-rm24-ar-rama-key="' +
-          esc(ramaKey) +
+      "<" +
+      tag +
+      typeAttr +
+      ' class="' +
+      cls +
+      '"' +
+      draggable +
+      (o.selected ? ' aria-current="step"' : "") +
+      " " +
+      attrs +
+      ">" +
+      (o.selected && o.showEditingPill
+        ? '<span class="rm24-wf-editing-pill">Editando</span>'
+        : "") +
+      (o.futureBadge ? '<span class="rm24-wf-ui-badge">solo UI</span>' : "") +
+      '<span class="rm24-wf-card-icon" aria-hidden="true">' +
+      (o.icon || "📎") +
+      "</span>" +
+      '<span class="rm24-wf-card-body">' +
+      '<span class="rm24-wf-card-title">' +
+      esc(o.title || "") +
+      "</span>" +
+      (o.subtitle
+        ? '<span class="rm24-wf-card-sub' +
+          (o.subtitleMuted ? " rm24-wf-card-sub--muted" : "") +
           '">' +
-          '<span class="rm24-ar-rama-add-icon" aria-hidden="true">' +
+          esc(o.subtitle) +
+          "</span>"
+        : "") +
+      (o.hint ? '<span class="rm24-wf-card-hint">' + esc(o.hint) + "</span>" : "") +
+      "</span></" +
+      tag +
+      ">"
+    );
+  }
+
+  function htmlWfStepActions(actionsHtml) {
+    if (!actionsHtml) return "";
+    return (
+      '<div class="rm24-wf-step-actions" aria-label="Acciones del nodo">' +
+      actionsHtml +
+      "</div>"
+    );
+  }
+
+  function htmlWfMiniFlujoAddMenuItems(insertIndex, tipos) {
+    const idx = String(insertIndex);
+    return (tipos || RM24H_NODO_TIPOS)
+      .map(function (c) {
+        return (
+          '<button type="button" class="rm24-wf-add-item" role="menuitem" data-add-nodo-tipo="' +
+          esc(c.tipo) +
+          '" data-rm24-wf-insert="' +
+          esc(idx) +
+          '">' +
+          '<span class="rm24-wf-add-icon" aria-hidden="true">' +
           c.icon +
           "</span>" +
-          '<span class="rm24-ar-rama-add-label">' +
+          '<span class="rm24-wf-add-label">' +
           esc(c.label) +
           "</span></button>"
         );
-      }).join("") +
-      "</div></div></div>"
+      })
+      .join("");
+  }
+
+  function htmlWfJunction(insertIndex) {
+    const idx = String(insertIndex);
+    return (
+      '<div class="rm24-wf-junction" data-rm24-wf-junction="' +
+      esc(idx) +
+      '">' +
+      '<div class="rm24-wf-junction-line" aria-hidden="true"></div>' +
+      '<div class="rm24-wf-junction-add-wrap">' +
+      '<button type="button" class="rm24-wf-junction-add" data-rm24-wf-add-toggle="' +
+      esc(idx) +
+      '" aria-expanded="false" aria-label="Añadir nodo">＋</button>' +
+      '<div class="rm24-wf-junction-popover" data-rm24-wf-add-menu="' +
+      esc(idx) +
+      '" hidden>' +
+      '<div class="rm24-wf-junction-backdrop" data-rm24-wf-add-close="' +
+      esc(idx) +
+      '" aria-hidden="true"></div>' +
+      '<div class="rm24-wf-add-menu" role="menu">' +
+      htmlWfMiniFlujoAddMenuItems(insertIndex) +
+      "</div></div></div>" +
+      '<div class="rm24-wf-junction-line" aria-hidden="true"></div>' +
+      "</div>"
+    );
+  }
+
+  function toggleWfAddMenu(insertIndex, open) {
+    const key = String(insertIndex);
+    document.querySelectorAll(".rm24-wf-junction-popover").forEach(function (el) {
+      const menuKey = el.getAttribute("data-rm24-wf-add-menu");
+      let show = false;
+      if (menuKey === key) {
+        show = typeof open === "boolean" ? open : !!el.hidden;
+      }
+      el.hidden = !show;
+      el.parentElement?.classList.toggle("rm24-wf-junction-add-wrap--open", show);
+    });
+    if (typeof open === "boolean" && open) {
+      document.querySelectorAll(".rm24-wf-junction-popover").forEach(function (el) {
+        if (el.getAttribute("data-rm24-wf-add-menu") !== key) {
+          el.hidden = true;
+          el.parentElement?.classList.remove("rm24-wf-junction-add-wrap--open");
+        }
+      });
+      toggleAllArRamaAddMenus(false);
+      toggleRm24AddPasoMenu(false);
+    }
+  }
+
+  function toggleAllWfAddMenus(open) {
+    document.querySelectorAll(".rm24-wf-junction-popover").forEach(function (el) {
+      const show = typeof open === "boolean" ? open : false;
+      el.hidden = !show;
+      el.parentElement?.classList.toggle("rm24-wf-junction-add-wrap--open", show);
+    });
+  }
+
+  function htmlAgenteRapidoRamaAddMenu(ramaKey) {
+    const addLabel =
+      ramaKey === "default" ? "Añadir nodo en default" : "Añadir nodo en este camino";
+    const menuItems = RM24H_RAMA_NODO_TIPOS.map(function (c) {
+      return (
+        '<button type="button" class="rm24-wf-add-item" role="menuitem" data-rm24-ar-add-tipo="' +
+        esc(c.tipo) +
+        '" data-rm24-ar-rama-key="' +
+        esc(ramaKey) +
+        '">' +
+        '<span class="rm24-wf-add-icon" aria-hidden="true">' +
+        c.icon +
+        "</span>" +
+        '<span class="rm24-wf-add-label">' +
+        esc(c.label) +
+        "</span></button>"
+      );
+    }).join("");
+    return (
+      '<div class="rm24-wf-junction rm24-wf-junction--branch">' +
+      '<div class="rm24-wf-junction-line" aria-hidden="true"></div>' +
+      '<div class="rm24-wf-junction-add-wrap rm24-ar-rama-add-wrap" data-rm24-ar-rama-key="' +
+      esc(ramaKey) +
+      '">' +
+      '<button type="button" class="rm24-wf-junction-add rm24-wf-junction-add--branch" data-rm24-ar-add-toggle="' +
+      esc(ramaKey) +
+      '" aria-expanded="false" aria-label="' +
+      esc(addLabel) +
+      '">＋</button>' +
+      '<div class="rm24-wf-junction-popover rm24-ar-rama-add-popover" data-rm24-ar-add-menu="' +
+      esc(ramaKey) +
+      '" hidden>' +
+      '<div class="rm24-wf-junction-backdrop" data-rm24-ar-add-close="' +
+      esc(ramaKey) +
+      '" aria-hidden="true"></div>' +
+      '<div class="rm24-wf-add-menu" role="menu">' +
+      menuItems +
+      "</div></div></div>" +
+      '<div class="rm24-wf-junction-line" aria-hidden="true"></div>' +
+      "</div>"
     );
   }
 
@@ -380,28 +518,24 @@ window.MacBotRemarketingGlobal = (function () {
       label: nodo.type,
     };
     return (
-      '<div class="rm24-ar-rama-node-step">' +
-      htmlEmbudoConnector() +
-      '<div class="rm24-ar-rama-node-card">' +
-      '<button type="button" class="rm24-ar-rama-node rm24-mini-flujo-node rm24-mini-flujo-node--branch' +
-      (selected ? " rm24-embudo-node--selected" : "") +
-      '" data-rm24-ar-select="' +
-      esc(selId) +
-      '">' +
-      (selected ? '<span class="rm24-embudo-editing-pill">Editando</span>' : "") +
-      '<span class="rm24-embudo-icon" aria-hidden="true">' +
-      cat.icon +
-      "</span>" +
-      '<div class="rm24-embudo-body">' +
-      '<span class="rm24-embudo-label">' +
-      esc(cat.label) +
-      "</span>" +
-      '<span class="rm24-embudo-value rm24-embudo-value--muted">Solo UI · sin runtime</span></div></button>' +
-      '<button type="button" class="rm24-ar-rama-node-del" data-rm24-ar-node-remove="' +
+      '<div class="rm24-wf-col-node">' +
+      htmlWfCard({
+        small: true,
+        mod: "branch",
+        kind: "action",
+        icon: cat.icon,
+        title: cat.label,
+        subtitle: "Solo UI · sin runtime",
+        subtitleMuted: true,
+        selected: selected,
+        showEditingPill: true,
+        attrs: 'data-rm24-ar-select="' + esc(selId) + '"',
+      }) +
+      '<button type="button" class="rm24-wf-col-node-del" data-rm24-ar-node-remove="' +
       esc(ramaKey) +
       '" data-rm24-ar-node-id="' +
       esc(nodo.id) +
-      '" title="Eliminar">×</button></div></div>'
+      '" title="Eliminar">×</button></div>'
     );
   }
 
@@ -411,40 +545,30 @@ window.MacBotRemarketingGlobal = (function () {
     const selCamino = seleccionado === idSeleccionRamaCamino(ramaKey);
     const nombre = String(c.nombre || c.nombreCamino || "Camino sin nombre").trim() || "Camino sin nombre";
     const palabras = palabrasClaveToString(c.palabrasClave);
-    const respPreview = previewTextoCorto(c.respuesta, 56);
-    const accion = etiquetaAccionSiguiente(c.accionSiguiente);
+    const respPreview = previewTextoCorto(c.respuesta, 42);
     let html =
-      '<div class="rm24-ar-rama" data-rm24-ar-rama-id="' +
+      '<div class="rm24-wf-fork-col" data-rm24-ar-rama-id="' +
       esc(ramaKey) +
       '">' +
-      '<div class="rm24-ar-rama-glyph" aria-hidden="true">├</div>' +
-      '<div class="rm24-ar-rama-body">' +
-      '<button type="button" class="rm24-ar-rama-head' +
-      (selCamino ? " rm24-ar-rama-head--selected" : "") +
-      '" data-rm24-ar-select="' +
-      esc(idSeleccionRamaCamino(ramaKey)) +
-      '">' +
-      '<span class="rm24-ar-rama-title">Camino: ' +
-      esc(nombre) +
-      "</span>" +
-      (c.activo === false
-        ? '<span class="rm24-ar-rama-badge rm24-ar-rama-badge--off">inactivo</span>'
-        : "") +
-      '<span class="rm24-ar-rama-meta">Palabras: ' +
-      esc(palabras || "—") +
-      "</span>" +
-      (respPreview
-        ? '<span class="rm24-ar-rama-preview">“' + esc(respPreview) + "”</span>"
-        : "") +
-      '<span class="rm24-ar-rama-meta">Acción: ' +
-      esc(accion) +
-      "</span></button>" +
-      '<div class="rm24-ar-rama-chain">';
-    (c.next || []).forEach(function (n) {
+      htmlWfCard({
+        mod: "camino",
+        kind: "action",
+        icon: "🔀",
+        title: nombre,
+        subtitle: palabras || "Sin palabras clave",
+        subtitleMuted: !palabras,
+        hint: respPreview || "",
+        selected: selCamino,
+        showEditingPill: false,
+        attrs: 'data-rm24-ar-select="' + esc(idSeleccionRamaCamino(ramaKey)) + '"',
+      }) +
+      '<div class="rm24-wf-col-chain">';
+    (c.next || []).forEach(function (n, i) {
+      if (i > 0) html += '<div class="rm24-wf-col-line" aria-hidden="true"></div>';
       html += htmlAgenteRapidoNodoRama(n, ramaKey, seleccionado);
     });
     html += htmlAgenteRapidoRamaAddMenu(ramaKey);
-    html += "</div></div></div>";
+    html += "</div></div>";
     return html;
   }
 
@@ -452,39 +576,47 @@ window.MacBotRemarketingGlobal = (function () {
     const d = def || { respuesta: "", next: [] };
     const ramaKey = "default";
     const selDefault = seleccionado === idSeleccionRamaDefault();
-    const respPreview = previewTextoCorto(d.respuesta, 56);
+    const respPreview = previewTextoCorto(d.respuesta, 42);
     let html =
-      '<div class="rm24-ar-rama rm24-ar-rama--last rm24-ar-rama--default" data-rm24-ar-rama-id="default">' +
-      '<div class="rm24-ar-rama-glyph" aria-hidden="true">└</div>' +
-      '<div class="rm24-ar-rama-body">' +
-      '<button type="button" class="rm24-ar-rama-head' +
-      (selDefault ? " rm24-ar-rama-head--selected" : "") +
-      '" data-rm24-ar-select="' +
-      esc(idSeleccionRamaDefault()) +
-      '">' +
-      '<span class="rm24-ar-rama-title">Default</span>' +
-      (respPreview
-        ? '<span class="rm24-ar-rama-preview">“' + esc(respPreview) + "”</span>"
-        : '<span class="rm24-ar-rama-meta">Sin respuesta fallback</span>') +
-      "</button>" +
-      '<div class="rm24-ar-rama-chain">';
-    (d.next || []).forEach(function (n) {
+      '<div class="rm24-wf-fork-col rm24-wf-fork-col--default" data-rm24-ar-rama-id="default">' +
+      htmlWfCard({
+        mod: "default",
+        kind: "end",
+        icon: "↩",
+        title: "Default",
+        subtitle: respPreview || "Sin respuesta fallback",
+        subtitleMuted: !respPreview,
+        selected: selDefault,
+        showEditingPill: false,
+        attrs: 'data-rm24-ar-select="' + esc(idSeleccionRamaDefault()) + '"',
+      }) +
+      '<div class="rm24-wf-col-chain">';
+    (d.next || []).forEach(function (n, i) {
+      if (i > 0) html += '<div class="rm24-wf-col-line" aria-hidden="true"></div>';
       html += htmlAgenteRapidoNodoRama(n, ramaKey, seleccionado);
     });
     html += htmlAgenteRapidoRamaAddMenu(ramaKey);
-    html += "</div></div></div>";
+    html += "</div></div>";
     return html;
   }
 
   function htmlAgenteRapidoRamasTree(arRaw, seleccionado) {
     const ar = normalizarAgenteRapidoConfig(arRaw);
     const caminos = ar.caminos || [];
-    let html = '<div class="rm24-ar-ramas-tree" aria-label="Ramas del Agente rápido">';
+    const colCount = Math.max(caminos.length + 1, 1);
+    let html =
+      '<div class="rm24-wf-fork" aria-label="Ramas del Agente rápido" style="--rm24-fork-cols:' +
+      colCount +
+      '">' +
+      '<div class="rm24-wf-fork-rail" aria-hidden="true">' +
+      '<div class="rm24-wf-fork-stem"></div>' +
+      '<div class="rm24-wf-fork-bar"></div></div>' +
+      '<div class="rm24-wf-fork-columns">';
     caminos.forEach(function (camino, index) {
       html += htmlAgenteRapidoRamaCamino(camino, index, caminos.length, seleccionado);
     });
     html += htmlAgenteRapidoRamaDefault(ar.default, seleccionado);
-    html += "</div>";
+    html += "</div></div>";
     return html;
   }
 
@@ -565,16 +697,16 @@ window.MacBotRemarketingGlobal = (function () {
         show = typeof open === "boolean" ? open : !!el.hidden;
       }
       el.hidden = !show;
-      el.parentElement?.classList.toggle("rm24-ar-rama-add-wrap--open", show);
+      el.parentElement?.classList.toggle("rm24-wf-junction-add-wrap--open", show);
     });
     if (typeof open === "boolean" && open) {
       document.querySelectorAll(".rm24-ar-rama-add-popover").forEach(function (el) {
         if (el.getAttribute("data-rm24-ar-add-menu") !== ramaKey) {
           el.hidden = true;
-          el.parentElement?.classList.remove("rm24-ar-rama-add-wrap--open");
+          el.parentElement?.classList.remove("rm24-wf-junction-add-wrap--open");
         }
       });
-      toggleRm24AddNodoMenu(false);
+      toggleAllWfAddMenus(false);
       toggleRm24AddPasoMenu(false);
     }
   }
@@ -583,7 +715,7 @@ window.MacBotRemarketingGlobal = (function () {
     document.querySelectorAll(".rm24-ar-rama-add-popover").forEach(function (el) {
       const show = typeof open === "boolean" ? open : false;
       el.hidden = !show;
-      el.parentElement?.classList.toggle("rm24-ar-rama-add-wrap--open", show);
+      el.parentElement?.classList.toggle("rm24-wf-junction-add-wrap--open", show);
     });
   }
 
@@ -916,6 +1048,7 @@ window.MacBotRemarketingGlobal = (function () {
     { tipo: "lector_pagos", icon: "💳", label: "Lector pagos", kind: "action", runtime: false },
     { tipo: "etiqueta", icon: "🏷", label: "Etiqueta", kind: "action", runtime: false },
     { tipo: "conversion", icon: "🎯", label: "Conversión", kind: "action", runtime: false },
+    { tipo: "fin_rm", icon: "✅", label: "Fin RM", kind: "end", runtime: false },
   ];
 
   const RM24H_BLOQUES_FIJOS = {
@@ -1157,9 +1290,9 @@ window.MacBotRemarketingGlobal = (function () {
       '<span class="rm24-embudo-stat" id="rm24hEmbudoPasoCount">0 nodos</span>' +
       '<span class="rm24-embudo-stat rm24-embudo-stat--time" id="rm24hEmbudoTiempoTotal">Espera: —</span>' +
       "</div></div>" +
-      '<p class="rm24-embudo-intro">Espera y Fin fijos · construye el centro con nodos RM</p>' +
-      '<div class="rm24-embudo-canvas">' +
-      '<div class="rm24-embudo rm24-embudo--premium rm24-mini-flujo" id="rm24hEmbudoRm" role="list"></div>' +
+      '<p class="rm24-embudo-intro">Flujo vertical · Espera y Fin fijos · ＋ entre nodos</p>' +
+      '<div class="rm24-embudo-canvas rm24-wf-canvas-wrap">' +
+      '<div class="rm24-embudo rm24-embudo--premium rm24-mini-flujo rm24-wf-root" id="rm24hEmbudoRm" role="list"></div>' +
       "</div></section>"
     );
   }
@@ -1328,10 +1461,10 @@ window.MacBotRemarketingGlobal = (function () {
     if (show) toggleRm24AddPasoMenu(false);
   }
 
-  function addMiniFlujoNodo(tipo) {
+  function addMiniFlujoNodoAt(insertIndex, tipo) {
     const cat = getCatalogoNodoRm24(String(tipo || "").toLowerCase());
     if (!cat) return;
-    toggleRm24AddNodoMenu(false);
+    toggleAllWfAddMenus(false);
     if (cat.tipo === "contenido") {
       const existente = findNodoContenidoMiniFlujo();
       if (existente) {
@@ -1349,9 +1482,14 @@ window.MacBotRemarketingGlobal = (function () {
         configActiva.rm24h_agente_rapido = crearAgenteRapidoVacio();
       }
     }
+    const idx = Math.max(0, Math.min(Number(insertIndex) || 0, rm24hMiniFlujoNodos.length));
     const uid = crearUidMiniFlujoNodo();
-    rm24hMiniFlujoNodos.push({ uid: uid, tipo: cat.tipo });
+    rm24hMiniFlujoNodos.splice(idx, 0, { uid: uid, tipo: cat.tipo });
     selectRm24Bloque(uid);
+  }
+
+  function addMiniFlujoNodo(tipo) {
+    addMiniFlujoNodoAt(rm24hMiniFlujoNodos.length, tipo);
   }
 
   function removeMiniFlujoNodo(uid) {
@@ -1427,37 +1565,44 @@ window.MacBotRemarketingGlobal = (function () {
     return "";
   }
 
+  function htmlWfNodeActions(uid, nodeIndex, total) {
+    return (
+      '<button type="button" class="rm24-wf-action" data-rm24-nodo-uid="' +
+      esc(uid) +
+      '" title="Editar">✏</button>' +
+      '<button type="button" class="rm24-wf-action" data-rm24-nodo-move-up="' +
+      esc(uid) +
+      '" title="Subir"' +
+      (nodeIndex === 0 ? " disabled" : "") +
+      ">↑</button>" +
+      '<button type="button" class="rm24-wf-action" data-rm24-nodo-move-down="' +
+      esc(uid) +
+      '" title="Bajar"' +
+      (nodeIndex >= total - 1 ? " disabled" : "") +
+      ">↓</button>" +
+      '<button type="button" class="rm24-wf-action rm24-wf-action--danger" data-rm24-nodo-remove="' +
+      esc(uid) +
+      '" title="Eliminar">×</button>'
+    );
+  }
+
   function htmlMiniFlujoBloqueFijo(bloqueId, stepNum, resumen, selected) {
     const bloque = RM24H_BLOQUES_FIJOS[bloqueId];
     if (!bloque) return "";
-    const muted = bloqueId === "fin" ? false : false;
     return (
-      '<div class="rm24-embudo-step" role="listitem">' +
-      '<button type="button" class="rm24-embudo-node rm24-mini-flujo-node rm24-mini-flujo-node--' +
-      esc(bloque.kind) +
-      " rm24-mini-flujo-node--fixed" +
-      (selected ? " rm24-embudo-node--selected" : "") +
-      '" data-rm24-bloque-id="' +
-      esc(bloque.id) +
-      '" aria-current="' +
-      (selected ? "step" : "false") +
-      '">' +
-      (selected ? '<span class="rm24-embudo-editing-pill">Editando</span>' : "") +
-      '<span class="rm24-embudo-badge" aria-hidden="true">' +
-      stepNum +
-      "</span>" +
-      '<span class="rm24-embudo-icon" aria-hidden="true">' +
-      bloque.icon +
-      "</span>" +
-      '<div class="rm24-embudo-body">' +
-      '<span class="rm24-embudo-label">' +
-      esc(bloque.label) +
-      "</span>" +
-      '<span class="rm24-embudo-value' +
-      (muted ? " rm24-embudo-value--muted" : "") +
-      '">' +
-      esc(resumen) +
-      "</span></div></button></div>"
+      '<div class="rm24-wf-step" role="listitem">' +
+      '<div class="rm24-wf-step-inner">' +
+      htmlWfCard({
+        kind: bloque.kind,
+        mod: "fixed",
+        icon: bloque.icon,
+        title: bloque.label,
+        subtitle: resumen,
+        selected: selected,
+        showEditingPill: true,
+        attrs: 'data-rm24-bloque-id="' + esc(bloque.id) + '"',
+      }) +
+      "</div></div>"
     );
   }
 
@@ -1476,55 +1621,25 @@ window.MacBotRemarketingGlobal = (function () {
       resumen === "0 caminos · fallback activo" ||
       resumen === "0 caminos · fallback inactivo" ||
       resumen.indexOf("pendiente") >= 0;
-    const dragClass =
-      rm24hDragNodoIndex === nodeIndex ? " rm24-embudo-node--dragging" : "";
+    const dragging = rm24hDragNodoIndex === nodeIndex;
     return (
-      '<div class="rm24-embudo-step" role="listitem">' +
-      '<div class="rm24-embudo-step-card">' +
-      '<button type="button" class="rm24-embudo-node rm24-mini-flujo-node rm24-mini-flujo-node--' +
-      esc(cat.kind) +
-      (selected ? " rm24-embudo-node--selected" : "") +
-      (!cat.runtime ? " rm24-mini-flujo-node--locked" : "") +
-      dragClass +
-      '" data-rm24-nodo-uid="' +
-      esc(nodo.uid) +
-      '" draggable="true" aria-current="' +
-      (selected ? "step" : "false") +
-      '">' +
-      (selected ? '<span class="rm24-embudo-editing-pill">Editando</span>' : "") +
-      (!cat.runtime ? '<span class="rm24-future-badge rm24-mini-flujo-badge">solo UI</span>' : "") +
-      '<span class="rm24-embudo-badge" aria-hidden="true">' +
-      stepNum +
-      "</span>" +
-      '<span class="rm24-embudo-icon" aria-hidden="true">' +
-      cat.icon +
-      "</span>" +
-      '<div class="rm24-embudo-body">' +
-      '<span class="rm24-embudo-label">' +
-      esc(cat.label) +
-      "</span>" +
-      '<span class="rm24-embudo-value' +
-      (muted ? " rm24-embudo-value--muted" : "") +
-      '">' +
-      esc(resumen) +
-      "</span></div></button>" +
-      '<div class="rm24-embudo-step-hover-actions" aria-label="Acciones del nodo">' +
-      '<button type="button" class="rm24-embudo-quick-action" data-rm24-nodo-uid="' +
-      esc(nodo.uid) +
-      '" title="Editar">✏</button>' +
-      '<button type="button" class="rm24-embudo-quick-action" data-rm24-nodo-move-up="' +
-      esc(nodo.uid) +
-      '" title="Subir"' +
-      (nodeIndex === 0 ? " disabled" : "") +
-      ">↑</button>" +
-      '<button type="button" class="rm24-embudo-quick-action" data-rm24-nodo-move-down="' +
-      esc(nodo.uid) +
-      '" title="Bajar"' +
-      (nodeIndex >= total - 1 ? " disabled" : "") +
-      ">↓</button>" +
-      '<button type="button" class="rm24-embudo-quick-action rm24-embudo-quick-action--danger" data-rm24-nodo-remove="' +
-      esc(nodo.uid) +
-      '" title="Eliminar">×</button></div></div></div>'
+      '<div class="rm24-wf-step" role="listitem">' +
+      '<div class="rm24-wf-step-inner">' +
+      htmlWfCard({
+        kind: cat.kind,
+        icon: cat.icon,
+        title: cat.label,
+        subtitle: resumen,
+        subtitleMuted: muted,
+        selected: selected,
+        showEditingPill: true,
+        futureBadge: !cat.runtime,
+        dragging: dragging,
+        draggable: true,
+        attrs: 'data-rm24-nodo-uid="' + esc(nodo.uid) + '"',
+      }) +
+      htmlWfStepActions(htmlWfNodeActions(nodo.uid, nodeIndex, total)) +
+      "</div></div>"
     );
   }
 
@@ -1533,91 +1648,69 @@ window.MacBotRemarketingGlobal = (function () {
     const muted =
       resumen === "0 caminos · fallback activo" ||
       resumen === "0 caminos · fallback inactivo";
-    const dragClass =
-      rm24hDragNodoIndex === nodeIndex ? " rm24-embudo-node--dragging" : "";
+    const dragging = rm24hDragNodoIndex === nodeIndex;
     const arSel = parseSeleccionAgenteRapido(rm24hBloqueSeleccionado);
     const headSelected =
       selected ||
-      (arSel && arSel.kind !== "node" && rm24hBloqueSeleccionado !== "espera" && rm24hBloqueSeleccionado !== "fin");
+      (arSel &&
+        arSel.kind !== "node" &&
+        rm24hBloqueSeleccionado !== "espera" &&
+        rm24hBloqueSeleccionado !== "fin");
+    const ar = normalizarAgenteRapidoConfig(configActiva.rm24h_agente_rapido);
+    const hasBranches = (ar.caminos || []).length > 0;
     return (
-      '<div class="rm24-embudo-step rm24-embudo-step--agente-rapido" role="listitem">' +
-      '<div class="rm24-embudo-step-card">' +
-      '<button type="button" class="rm24-embudo-node rm24-mini-flujo-node rm24-mini-flujo-node--action rm24-mini-flujo-node--agente-rapido' +
-      (headSelected ? " rm24-embudo-node--selected" : "") +
-      dragClass +
-      '" data-rm24-nodo-uid="' +
-      esc(nodo.uid) +
-      '" draggable="true" aria-current="' +
-      (headSelected ? "step" : "false") +
-      '">' +
-      (headSelected && selected ? '<span class="rm24-embudo-editing-pill">Editando</span>' : "") +
-      '<span class="rm24-future-badge rm24-mini-flujo-badge">solo UI</span>' +
-      '<span class="rm24-embudo-badge" aria-hidden="true">' +
-      stepNum +
-      "</span>" +
-      '<span class="rm24-embudo-icon" aria-hidden="true">' +
-      cat.icon +
-      "</span>" +
-      '<div class="rm24-embudo-body">' +
-      '<span class="rm24-embudo-label">' +
-      esc(cat.label) +
-      "</span>" +
-      '<span class="rm24-embudo-value' +
-      (muted ? " rm24-embudo-value--muted" : "") +
-      '">' +
-      esc(resumen) +
-      "</span></div></button>" +
-      '<div class="rm24-embudo-step-hover-actions" aria-label="Acciones del nodo">' +
-      '<button type="button" class="rm24-embudo-quick-action" data-rm24-nodo-uid="' +
-      esc(nodo.uid) +
-      '" title="Editar">✏</button>' +
-      '<button type="button" class="rm24-embudo-quick-action" data-rm24-nodo-move-up="' +
-      esc(nodo.uid) +
-      '" title="Subir"' +
-      (nodeIndex === 0 ? " disabled" : "") +
-      ">↑</button>" +
-      '<button type="button" class="rm24-embudo-quick-action" data-rm24-nodo-move-down="' +
-      esc(nodo.uid) +
-      '" title="Bajar"' +
-      (nodeIndex >= total - 1 ? " disabled" : "") +
-      ">↓</button>" +
-      '<button type="button" class="rm24-embudo-quick-action rm24-embudo-quick-action--danger" data-rm24-nodo-remove="' +
-      esc(nodo.uid) +
-      '" title="Eliminar">×</button></div></div>' +
-      htmlAgenteRapidoRamasTree(configActiva.rm24h_agente_rapido, rm24hBloqueSeleccionado) +
+      '<div class="rm24-wf-step rm24-wf-step--branch-parent" role="listitem">' +
+      '<div class="rm24-wf-step-inner">' +
+      htmlWfCard({
+        kind: "action",
+        mod: "agente",
+        icon: cat.icon,
+        title: cat.label,
+        subtitle: resumen,
+        subtitleMuted: muted,
+        selected: headSelected,
+        showEditingPill: selected,
+        futureBadge: true,
+        dragging: dragging,
+        draggable: true,
+        attrs: 'data-rm24-nodo-uid="' + esc(nodo.uid) + '"',
+      }) +
+      htmlWfStepActions(htmlWfNodeActions(nodo.uid, nodeIndex, total)) +
+      "</div>" +
+      (hasBranches
+        ? htmlAgenteRapidoRamasTree(configActiva.rm24h_agente_rapido, rm24hBloqueSeleccionado)
+        : "") +
       "</div>"
     );
   }
 
   function renderMiniFlujoRmHtml(contenidosRaw, tiempo, seleccionado) {
-    let html = "";
-    let stepNum = 1;
+    let html = '<div class="rm24-wf">';
     html += htmlMiniFlujoBloqueFijo(
       "espera",
-      stepNum++,
+      1,
       resumenMiniFlujoBloqueFijo("espera", contenidosRaw, tiempo),
       seleccionado === "espera"
     );
-    html += htmlEmbudoConnector();
+    html += htmlWfJunction(0);
     rm24hMiniFlujoNodos.forEach(function (nodo, index) {
       html += htmlMiniFlujoNodo(
         nodo,
-        stepNum++,
+        index + 2,
         resumenMiniFlujoNodo(nodo, contenidosRaw),
         seleccionado === nodo.uid,
         index,
         rm24hMiniFlujoNodos.length
       );
-      html += htmlEmbudoConnector();
+      html += htmlWfJunction(index + 1);
     });
-    html += htmlRm24AddNodoControl();
-    html += htmlEmbudoConnector();
     html += htmlMiniFlujoBloqueFijo(
       "fin",
-      stepNum,
+      rm24hMiniFlujoNodos.length + 2,
       resumenMiniFlujoBloqueFijo("fin", contenidosRaw, tiempo),
       seleccionado === "fin"
     );
+    html += "</div>";
     return html;
   }
 
@@ -1632,6 +1725,7 @@ window.MacBotRemarketingGlobal = (function () {
       return;
     }
     toggleAllArRamaAddMenus(false);
+    toggleAllWfAddMenus(false);
     renderRm24BloqueEditor();
     actualizarEmbudoRmPanel();
     requestAnimationFrame(function () {
@@ -3079,11 +3173,11 @@ window.MacBotRemarketingGlobal = (function () {
     }
 
     mount._rm24hOnClick = function (ev) {
-      const addNodoBtn = ev.target.closest("#rm24hAddNodoBtn");
-      if (addNodoBtn) {
+      const wfAddToggle = ev.target.closest("[data-rm24-wf-add-toggle]");
+      if (wfAddToggle) {
         ev.preventDefault();
         ev.stopPropagation();
-        toggleRm24AddNodoMenu();
+        toggleWfAddMenu(wfAddToggle.getAttribute("data-rm24-wf-add-toggle"));
         return;
       }
 
@@ -3091,7 +3185,27 @@ window.MacBotRemarketingGlobal = (function () {
       if (addNodoTipoBtn) {
         ev.preventDefault();
         ev.stopPropagation();
-        addMiniFlujoNodo(addNodoTipoBtn.getAttribute("data-add-nodo-tipo"));
+        const insertRaw = addNodoTipoBtn.getAttribute("data-rm24-wf-insert");
+        const insertIdx =
+          insertRaw != null && insertRaw !== ""
+            ? parseInt(insertRaw, 10)
+            : rm24hMiniFlujoNodos.length;
+        addMiniFlujoNodoAt(insertIdx, addNodoTipoBtn.getAttribute("data-add-nodo-tipo"));
+        return;
+      }
+
+      if (ev.target.closest("[data-rm24-wf-add-close]")) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        toggleAllWfAddMenus(false);
+        return;
+      }
+
+      const addNodoBtn = ev.target.closest("#rm24hAddNodoBtn");
+      if (addNodoBtn) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        toggleRm24AddNodoMenu();
         return;
       }
 
@@ -3149,19 +3263,19 @@ window.MacBotRemarketingGlobal = (function () {
         return;
       }
 
-      const nodoBtn = ev.target.closest("[data-rm24-nodo-uid]");
-      if (nodoBtn) {
-        ev.preventDefault();
-        ev.stopPropagation();
-        selectRm24Bloque(nodoBtn.getAttribute("data-rm24-nodo-uid"));
-        return;
-      }
-
       const bloqueBtn = ev.target.closest("[data-rm24-bloque-id]");
       if (bloqueBtn) {
         ev.preventDefault();
         ev.stopPropagation();
         selectRm24Bloque(bloqueBtn.getAttribute("data-rm24-bloque-id"));
+        return;
+      }
+
+      const nodoBtn = ev.target.closest("[data-rm24-nodo-uid]");
+      if (nodoBtn && !ev.target.closest(".rm24-wf-step-actions")) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        selectRm24Bloque(nodoBtn.getAttribute("data-rm24-nodo-uid"));
         return;
       }
 
@@ -3332,14 +3446,14 @@ window.MacBotRemarketingGlobal = (function () {
 
     mount._rm24hOnDragStart = function (ev) {
       const step = ev.target.closest(
-        ".rm24-mini-flujo-node[draggable='true'][data-rm24-nodo-uid]"
+        ".rm24-wf-card[draggable='true'][data-rm24-nodo-uid]"
       );
       if (!step) return;
       const uid = step.getAttribute("data-rm24-nodo-uid");
       rm24hDragNodoIndex = rm24hMiniFlujoNodos.findIndex(function (n) {
         return n.uid === uid;
       });
-      step.classList.add("rm24-embudo-node--dragging");
+      step.classList.add("rm24-wf-card--dragging");
       if (ev.dataTransfer) {
         ev.dataTransfer.effectAllowed = "move";
         ev.dataTransfer.setData("text/plain", String(rm24hDragNodoIndex));
@@ -3347,18 +3461,18 @@ window.MacBotRemarketingGlobal = (function () {
     };
 
     mount._rm24hOnDragOver = function (ev) {
-      const step = ev.target.closest("[data-rm24-nodo-uid][draggable='true']");
+      const step = ev.target.closest(".rm24-wf-card[data-rm24-nodo-uid][draggable='true']");
       if (!step) return;
       ev.preventDefault();
       if (ev.dataTransfer) ev.dataTransfer.dropEffect = "move";
-      document.querySelectorAll(".rm24-embudo-node--drop-target").forEach(function (el) {
-        el.classList.remove("rm24-embudo-node--drop-target");
+      document.querySelectorAll(".rm24-wf-card--drop-target").forEach(function (el) {
+        el.classList.remove("rm24-wf-card--drop-target");
       });
-      step.classList.add("rm24-embudo-node--drop-target");
+      step.classList.add("rm24-wf-card--drop-target");
     };
 
     mount._rm24hOnDrop = function (ev) {
-      const step = ev.target.closest("[data-rm24-nodo-uid][draggable='true']");
+      const step = ev.target.closest(".rm24-wf-card[data-rm24-nodo-uid][draggable='true']");
       if (!step) return;
       ev.preventDefault();
       const from =
@@ -3369,8 +3483,8 @@ window.MacBotRemarketingGlobal = (function () {
       const to = rm24hMiniFlujoNodos.findIndex(function (n) {
         return n.uid === uid;
       });
-      document.querySelectorAll(".rm24-embudo-node--drop-target").forEach(function (el) {
-        el.classList.remove("rm24-embudo-node--drop-target");
+      document.querySelectorAll(".rm24-wf-card--drop-target").forEach(function (el) {
+        el.classList.remove("rm24-wf-card--drop-target");
       });
       if (Number.isFinite(from) && Number.isFinite(to)) {
         reorderMiniFlujoNodo(from, to);
@@ -3379,11 +3493,11 @@ window.MacBotRemarketingGlobal = (function () {
 
     mount._rm24hOnDragEnd = function () {
       rm24hDragNodoIndex = null;
-      document.querySelectorAll(".rm24-embudo-node--dragging").forEach(function (el) {
-        el.classList.remove("rm24-embudo-node--dragging");
+      document.querySelectorAll(".rm24-wf-card--dragging").forEach(function (el) {
+        el.classList.remove("rm24-wf-card--dragging");
       });
-      document.querySelectorAll(".rm24-embudo-node--drop-target").forEach(function (el) {
-        el.classList.remove("rm24-embudo-node--drop-target");
+      document.querySelectorAll(".rm24-wf-card--drop-target").forEach(function (el) {
+        el.classList.remove("rm24-wf-card--drop-target");
       });
     };
 
@@ -3456,9 +3570,10 @@ window.MacBotRemarketingGlobal = (function () {
         if (!panelRemarketingAbierto()) return;
         if (ev.target.closest("#rm24hAddPasoWrap")) return;
         if (ev.target.closest("#rm24hAddNodoWrap")) return;
-        if (ev.target.closest(".rm24-ar-rama-add-wrap")) return;
+        if (ev.target.closest(".rm24-wf-junction-add-wrap")) return;
         toggleRm24AddPasoMenu(false);
         toggleRm24AddNodoMenu(false);
+        toggleAllWfAddMenus(false);
         toggleAllArRamaAddMenus(false);
       };
       document.addEventListener("click", mount._rm24hDocClick);
