@@ -261,7 +261,7 @@ window.MacBotRemarketingGlobal = (function () {
     return sincronizarCaminoDefaultDesdeComportamiento(result);
   }
 
-  function resumenAgenteRapidoEmbudo(arRaw) {
+  function resumenCaminosAgenteRapidoEmbudo(arRaw) {
     const ar = normalizarAgenteRapidoConfig(arRaw);
     const caminos = (ar.caminos || []).filter(function (c) {
       return String(c.nombre || c.nombreCamino || c.texto || "").trim();
@@ -270,22 +270,27 @@ window.MacBotRemarketingGlobal = (function () {
       return c.activo !== false && c.enabled !== false;
     });
     const total = caminos.length;
-    let lineaCaminos;
-    if (!total) {
-      lineaCaminos = "0 caminos";
-    } else if (activos.length === total) {
-      lineaCaminos = activos.length + " camino" + (activos.length === 1 ? "" : "s") + " activos";
-    } else {
-      lineaCaminos =
-        activos.length +
-        " activo" +
-        (activos.length === 1 ? "" : "s") +
-        " · " +
-        total +
-        " total";
+    if (!total) return "0 caminos";
+    if (activos.length === total) {
+      return activos.length + " camino" + (activos.length === 1 ? "" : "s") + " activos";
     }
-    const fallbackOn = ar.comportamiento?.responderSiNoCoincide !== false;
-    return lineaCaminos + " · fallback " + (fallbackOn ? "activo" : "inactivo");
+    return (
+      activos.length +
+      " activo" +
+      (activos.length === 1 ? "" : "s") +
+      " · " +
+      total +
+      " total"
+    );
+  }
+
+  function agenteRapidoFallbackActivo(arRaw) {
+    const ar = normalizarAgenteRapidoConfig(arRaw);
+    return ar.comportamiento?.responderSiNoCoincide !== false;
+  }
+
+  function resumenAgenteRapidoEmbudo(arRaw) {
+    return resumenCaminosAgenteRapidoEmbudo(arRaw);
   }
 
   function previewTextoCorto(texto, max) {
@@ -375,6 +380,9 @@ window.MacBotRemarketingGlobal = (function () {
           "</span>"
         : "") +
       (o.hint ? '<span class="rm24-wf-card-hint">' + esc(o.hint) + "</span>" : "") +
+      (o.innerBadge
+        ? '<span class="rm24-wf-fallback-badge">' + esc(o.innerBadge) + "</span>"
+        : "") +
       "</span></" +
       tag +
       ">"
@@ -572,40 +580,13 @@ window.MacBotRemarketingGlobal = (function () {
     return html;
   }
 
-  function htmlAgenteRapidoRamaDefault(def, seleccionado) {
-    const d = def || { respuesta: "", next: [] };
-    const ramaKey = "default";
-    const selDefault = seleccionado === idSeleccionRamaDefault();
-    const respPreview = previewTextoCorto(d.respuesta, 42);
-    let html =
-      '<div class="rm24-wf-fork-col rm24-wf-fork-col--default" data-rm24-ar-rama-id="default">' +
-      htmlWfCard({
-        mod: "default",
-        kind: "end",
-        icon: "↩",
-        title: "Default",
-        subtitle: respPreview || "Sin respuesta fallback",
-        subtitleMuted: !respPreview,
-        selected: selDefault,
-        showEditingPill: false,
-        attrs: 'data-rm24-ar-select="' + esc(idSeleccionRamaDefault()) + '"',
-      }) +
-      '<div class="rm24-wf-col-chain">';
-    (d.next || []).forEach(function (n, i) {
-      if (i > 0) html += '<div class="rm24-wf-col-line" aria-hidden="true"></div>';
-      html += htmlAgenteRapidoNodoRama(n, ramaKey, seleccionado);
-    });
-    html += htmlAgenteRapidoRamaAddMenu(ramaKey);
-    html += "</div></div>";
-    return html;
-  }
-
   function htmlAgenteRapidoRamasTree(arRaw, seleccionado) {
     const ar = normalizarAgenteRapidoConfig(arRaw);
     const caminos = ar.caminos || [];
-    const colCount = Math.max(caminos.length + 1, 1);
+    if (!caminos.length) return "";
+    const colCount = Math.max(caminos.length, 1);
     let html =
-      '<div class="rm24-wf-fork" aria-label="Ramas del Agente rápido" style="--rm24-fork-cols:' +
+      '<div class="rm24-wf-fork" aria-label="Caminos del Agente rápido" style="--rm24-fork-cols:' +
       colCount +
       '">' +
       '<div class="rm24-wf-fork-rail" aria-hidden="true">' +
@@ -615,7 +596,6 @@ window.MacBotRemarketingGlobal = (function () {
     caminos.forEach(function (camino, index) {
       html += htmlAgenteRapidoRamaCamino(camino, index, caminos.length, seleccionado);
     });
-    html += htmlAgenteRapidoRamaDefault(ar.default, seleccionado);
     html += "</div></div>";
     return html;
   }
@@ -626,7 +606,6 @@ window.MacBotRemarketingGlobal = (function () {
     (ar.caminos || []).forEach(function (c) {
       n += (c.next || []).length;
     });
-    n += (ar.default?.next || []).length;
     return n;
   }
 
@@ -1618,8 +1597,7 @@ window.MacBotRemarketingGlobal = (function () {
     };
     const muted =
       resumen === "Sin contenido configurado" ||
-      resumen === "0 caminos · fallback activo" ||
-      resumen === "0 caminos · fallback inactivo" ||
+      resumen === "0 caminos" ||
       resumen.indexOf("pendiente") >= 0;
     const dragging = rm24hDragNodoIndex === nodeIndex;
     return (
@@ -1645,9 +1623,10 @@ window.MacBotRemarketingGlobal = (function () {
 
   function htmlMiniFlujoNodoAgenteRapido(nodo, stepNum, resumen, selected, nodeIndex, total) {
     const cat = getCatalogoNodoRm24("agente_rapido");
-    const muted =
-      resumen === "0 caminos · fallback activo" ||
-      resumen === "0 caminos · fallback inactivo";
+    const ar = normalizarAgenteRapidoConfig(configActiva.rm24h_agente_rapido);
+    const resumenCaminos = resumenCaminosAgenteRapidoEmbudo(ar);
+    const muted = resumenCaminos === "0 caminos";
+    const fallbackOn = agenteRapidoFallbackActivo(ar);
     const dragging = rm24hDragNodoIndex === nodeIndex;
     const arSel = parseSeleccionAgenteRapido(rm24hBloqueSeleccionado);
     const headSelected =
@@ -1656,7 +1635,6 @@ window.MacBotRemarketingGlobal = (function () {
         arSel.kind !== "node" &&
         rm24hBloqueSeleccionado !== "espera" &&
         rm24hBloqueSeleccionado !== "fin");
-    const ar = normalizarAgenteRapidoConfig(configActiva.rm24h_agente_rapido);
     const hasBranches = (ar.caminos || []).length > 0;
     return (
       '<div class="rm24-wf-step rm24-wf-step--branch-parent" role="listitem">' +
@@ -1666,8 +1644,9 @@ window.MacBotRemarketingGlobal = (function () {
         mod: "agente",
         icon: cat.icon,
         title: cat.label,
-        subtitle: resumen,
+        subtitle: resumenCaminos,
         subtitleMuted: muted,
+        innerBadge: fallbackOn ? "Fallback ✓" : "",
         selected: headSelected,
         showEditingPill: selected,
         futureBadge: true,
