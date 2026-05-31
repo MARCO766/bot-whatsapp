@@ -190,8 +190,20 @@ function detectarCamino(agente, texto) {
 
   for (const camino of caminos) {
     const keywords = keywordsDeCaminoRm(camino);
+    const score = keywords.length
+      ? puntuarCaminoRm(textoNorm, keywords)
+      : { mejorFraseExacta: 0, keywordsEncontradas: 0, fuerza: 0 };
+    console.log("[RM_RUNTIME_DEBUG] evaluando_camino", {
+      id: camino.id || null,
+      nombre: camino.nombre || camino.texto || null,
+      activo: camino.activo !== false,
+      keywords_count: keywords.length,
+      keywords: keywords.slice(0, 20),
+      score,
+      candidato:
+        score.keywordsEncontradas > 0 || score.mejorFraseExacta > 0,
+    });
     if (!keywords.length) continue;
-    const score = puntuarCaminoRm(textoNorm, keywords);
     if (score.keywordsEncontradas <= 0 && score.mejorFraseExacta <= 0) continue;
     if (
       !mejor ||
@@ -251,15 +263,55 @@ async function enviarContenidosRm(ctx, contenidos) {
 async function ejecutarNext(nextNodes, ctx) {
   const nodos = Array.isArray(nextNodes) ? nextNodes : [];
 
+  console.log("[RM_RUNTIME_DEBUG] ejecutar_next", {
+    count: nodos.length,
+    nodos: nodos.map((n) => ({
+      type: String(n?.type || n?.tipo || "").toLowerCase() || null,
+      id: n?.id || null,
+    })),
+  });
+
   for (const nodo of nodos) {
     const tipo = String(nodo?.type || nodo?.tipo || "").toLowerCase();
+    console.log("[RM_RUNTIME_DEBUG] ejecutar_next_nodo", {
+      type: tipo || "(sin tipo)",
+      id: nodo?.id || null,
+      config: nodo?.config || null,
+    });
     if (tipo === "contenido") {
       const contenidos = obtenerContenidosDeNodoContenido(nodo);
       if (contenidos.length) {
+        console.log("[RM_RUNTIME_DEBUG] contenido_send", {
+          id: nodo?.id || null,
+          count: contenidos.length,
+          tipos: contenidos.map((c) => c.tipo),
+        });
         await enviarContenidosRm(ctx, contenidos);
       } else {
         console.log("[RM_RUNTIME] nodo contenido vacío", { id: nodo?.id || null });
       }
+      continue;
+    }
+    if (tipo === "lector_pagos" || tipo === "lector_pago") {
+      console.log("[RM_RUNTIME_DEBUG] lector_pago_detectado", {
+        id: nodo?.id || null,
+        config: nodo?.config || null,
+      });
+      console.log("[RM_RUNTIME] nodo no implementado todavía", {
+        type: tipo || "(sin tipo)",
+        id: nodo?.id || null,
+      });
+      continue;
+    }
+    if (tipo === "conversion") {
+      console.log("[RM_RUNTIME_DEBUG] conversion_detectada", {
+        id: nodo?.id || null,
+        config: nodo?.config || null,
+      });
+      console.log("[RM_RUNTIME] nodo no implementado todavía", {
+        type: tipo || "(sin tipo)",
+        id: nodo?.id || null,
+      });
       continue;
     }
     console.log("[RM_RUNTIME] nodo no implementado todavía", {
@@ -272,6 +324,10 @@ async function ejecutarNext(nextNodes, ctx) {
 async function enviarFallbackAgente(agente, ctx) {
   const comp = agente?.comportamiento || {};
   if (comp.responderSiNoCoincide === false) {
+    console.log("[RM_RUNTIME_DEBUG] fallback_send", {
+      enviado: false,
+      motivo: "responderSiNoCoincide=false",
+    });
     console.log("[RM_RUNTIME] fallback desactivado (responderSiNoCoincide=false)");
     return;
   }
@@ -280,10 +336,18 @@ async function enviarFallbackAgente(agente, ctx) {
     comp.mensajeFallback || agente?.default?.respuesta || ""
   ).trim();
   if (!msg) {
+    console.log("[RM_RUNTIME_DEBUG] fallback_send", {
+      enviado: false,
+      motivo: "mensaje_vacio",
+    });
     console.log("[RM_RUNTIME] fallback vacío, no se envía");
     return;
   }
 
+  console.log("[RM_RUNTIME_DEBUG] fallback_send", {
+    enviado: true,
+    preview: msg.slice(0, 120),
+  });
   await enviarContenidosRm(ctx, [{ tipo: "texto", texto: msg }]);
 }
 
@@ -291,23 +355,67 @@ async function enviarFallbackAgente(agente, ctx) {
  * Runtime Fase 1: agente rápido + nodos contenido en caminos[].next.
  */
 async function ejecutarMiniFlujoRm(ctx) {
+  console.log("[RM_RUNTIME_DEBUG] runtime_start", {
+    lead: ctx.numero || null,
+    usuario: ctx.usuarioId || null,
+    conexion_whatsapp_id: ctx.conexionWhatsappId || ctx.fila?.conexion_whatsapp_id || null,
+    rm24h_id: ctx.fila?.id || null,
+    texto_preview: String(ctx.texto || "").slice(0, 120),
+  });
+
   const snapshot = leerSnapshot(ctx.fila);
   const miniFlow = snapshot.rm24h_mini_flujo;
+  const agenteRaw = snapshot.rm24h_agente_rapido;
+
+  console.log("[RM_RUNTIME_DEBUG] snapshot_info", {
+    rm24h_id: ctx.fila?.id || null,
+    existe_rm24h_mini_flujo: Array.isArray(miniFlow) && miniFlow.length > 0,
+    rm24h_mini_flujo_count: Array.isArray(miniFlow) ? miniFlow.length : 0,
+    rm24h_mini_flujo_types: Array.isArray(miniFlow)
+      ? miniFlow.map((n) => String(n?.type || n?.tipo || "").toLowerCase())
+      : [],
+    existe_rm24h_agente_rapido: !!(agenteRaw && typeof agenteRaw === "object"),
+    rm24h_agente_rapido_caminos_count: Array.isArray(agenteRaw?.caminos)
+      ? agenteRaw.caminos.length
+      : 0,
+  });
+
   const refAgente = buscarNodoAgenteRapidoEnMiniFlujo(miniFlow);
+
+  console.log("[RM_RUNTIME_DEBUG] agente_detectado", {
+    detectado: !!refAgente,
+    ref_uid: refAgente?.uid || null,
+    ref_type: refAgente?.type || refAgente?.tipo || null,
+  });
+
+  const textoNorm = normalizarTextoMensaje(ctx.texto);
+  console.log("[RM_RUNTIME_DEBUG] texto_normalizado", {
+    original: String(ctx.texto || "").slice(0, 120),
+    normalizado: textoNorm,
+  });
 
   if (!refAgente) {
     console.log("[RM_RUNTIME] sin agente");
     return { handled: true, sinAgente: true };
   }
 
-  const agente = normalizarAgenteRapido(snapshot.rm24h_agente_rapido);
+  const agente = normalizarAgenteRapido(agenteRaw);
   const camino = detectarCamino(agente, ctx.texto);
 
   if (camino) {
     const etiqueta = String(camino.nombre || camino.texto || camino.id || "").trim();
+    console.log("[RM_RUNTIME_DEBUG] camino_match", {
+      id: camino.id || null,
+      nombre: etiqueta || null,
+      next_count: Array.isArray(camino.next) ? camino.next.length : 0,
+    });
     console.log("[RM_RUNTIME] camino match", etiqueta || camino.id);
     await ejecutarNext(camino.next, ctx);
   } else {
+    console.log("[RM_RUNTIME_DEBUG] no_match", {
+      caminos_evaluados: (agente?.caminos || []).filter((c) => c.activo !== false)
+        .length,
+    });
     console.log("[RM_RUNTIME] fallback");
     await enviarFallbackAgente(agente, ctx);
   }

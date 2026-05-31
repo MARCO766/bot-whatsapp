@@ -1387,6 +1387,14 @@ async function procesarMensajeEntrante(
         policy_mode: rmContext.policy?.mode,
         disparado_en: rmContext.disparado_en,
       });
+      console.log("[RM_RUNTIME_DEBUG] entrando_procesarRespuestaRemarketing", {
+        lead: numero,
+        usuario: usuarioId,
+        conexion_whatsapp_id: conexionEntrante,
+        rm24h_id: rmContext.fila?.id,
+        flujo_id: rmContext.flujo_id,
+        texto: textoDebug.slice(0, 120),
+      });
       await procesarRespuestaRemarketing({
         numero,
         texto,
