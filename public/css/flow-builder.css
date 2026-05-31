@@ -2266,6 +2266,76 @@ body:has(#builderArea) {
   width: 100%;
 }
 
+.rm24-content-picker-wrap {
+  margin-top: 10px;
+}
+
+.rm24-content-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rm24-content-pick {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.03);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.rm24-content-pick:hover {
+  border-color: rgba(255, 122, 24, 0.45);
+  background: rgba(255, 122, 24, 0.06);
+}
+
+.rm24-content-pick--selected {
+  border-color: rgba(255, 122, 24, 0.75);
+  background: rgba(255, 122, 24, 0.1);
+  box-shadow: 0 0 0 1px rgba(255, 122, 24, 0.2);
+}
+
+.rm24-content-pick-icon {
+  font-size: 1.1rem;
+  line-height: 1.2;
+}
+
+.rm24-content-pick-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.rm24-content-pick-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.rm24-content-pick-resumen {
+  font-size: 0.72rem;
+  color: rgba(255, 255, 255, 0.55);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rm24-embudo-value-preview {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.72rem;
+  color: rgba(255, 255, 255, 0.55);
+  line-height: 1.35;
+}
+
 @media (max-width: 960px) {
   .rm24-config-workspace {
     grid-template-columns: 1fr;
