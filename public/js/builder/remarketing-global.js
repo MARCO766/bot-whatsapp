@@ -1522,6 +1522,11 @@ window.MacBotRemarketingGlobal = (function () {
     return lista;
   }
 
+  /** Estado del editor: conserva bloques vacíos mientras se edita. */
+  function mapearListaContenidosEditor(lista) {
+    return (lista || []).map(mapearItemContenidoUi).filter(Boolean);
+  }
+
   /** Solo para validación / resumen (descarta bloques vacíos). */
   function normalizarItemContenidoUi(item) {
     const m = mapearItemContenidoUi(item);
@@ -1644,6 +1649,14 @@ window.MacBotRemarketingGlobal = (function () {
       mensajeRemarketing = String(tmp.mensajeRemarketing || "");
     }
     return { contenidos: contenidos, mensajeRemarketing: mensajeRemarketing };
+  }
+
+  /** Estructura mínima en rama: no descarta borradores vacíos del editor. */
+  function asegurarConfigContenidoNodoEditor(raw) {
+    const cfg = raw && typeof raw === "object" ? Object.assign({}, raw) : {};
+    cfg.contenidos = mapearListaContenidosEditor(cfg.contenidos);
+    cfg.mensajeRemarketing = String(cfg.mensajeRemarketing ?? "");
+    return cfg;
   }
 
   let nodoActivo = null;
@@ -1833,11 +1846,7 @@ window.MacBotRemarketingGlobal = (function () {
       if (!nodo) {
         return { contenidos: [], mensajeRemarketing: "", nodo: null };
       }
-      if (!nodo.config || typeof nodo.config !== "object") {
-        nodo.config = normalizarConfigContenidoNodo({});
-      } else {
-        nodo.config = normalizarConfigContenidoNodo(nodo.config);
-      }
+      nodo.config = asegurarConfigContenidoNodoEditor(nodo.config);
       return {
         contenidos: nodo.config.contenidos,
         mensajeRemarketing: nodo.config.mensajeRemarketing || "",
@@ -1856,12 +1865,12 @@ window.MacBotRemarketingGlobal = (function () {
 
   function setContenidosStorePorContexto(ctx, lista, mensajeOpt) {
     const c = ctx || getContenidoContext();
-    const norm = (lista || []).map(normalizarItemContenidoUi).filter(Boolean);
+    const editorLista = mapearListaContenidosEditor(lista);
     if (c.scope === "branch") {
       const nodo = findNodoEnCaminoAgenteRapido(c.ramaKey, c.nodeId);
       if (!nodo) return;
-      const cfg = normalizarConfigContenidoNodo(
-        Object.assign({}, nodo.config, { contenidos: norm })
+      const cfg = asegurarConfigContenidoNodoEditor(
+        Object.assign({}, nodo.config, { contenidos: editorLista })
       );
       if (mensajeOpt !== undefined) {
         cfg.mensajeRemarketing = String(mensajeOpt);
@@ -1878,7 +1887,7 @@ window.MacBotRemarketingGlobal = (function () {
       configActiva.rm24h_agente_rapido = getAgenteRapidoActivo();
       return;
     }
-    configActiva.rm24h_contenidos = norm;
+    configActiva.rm24h_contenidos = editorLista;
     sincronizarMensajeRemarketingDesdeContenidos(configActiva);
   }
 
@@ -4111,14 +4120,8 @@ window.MacBotRemarketingGlobal = (function () {
     if (!esNodoContenidoSeleccionado() || getContenidoContext().scope === "main") {
       sincronizarMensajeRemarketingDesdeContenidos(configActiva);
     }
-    if (configActiva.rm24h_agente_rapido) {
-      if (miniFlujoTieneNodoAgenteRapido()) {
-        configActiva.rm24h_agente_rapido = normalizarAgenteRapidoConfig(
-          configActiva.rm24h_agente_rapido
-        );
-      } else {
-        delete configActiva.rm24h_agente_rapido;
-      }
+    if (configActiva.rm24h_agente_rapido && !miniFlujoTieneNodoAgenteRapido()) {
+      delete configActiva.rm24h_agente_rapido;
     }
     if (configActiva.rm24h_lector_pagos) {
       if (miniFlujoTieneNodoLectorPagos()) {
