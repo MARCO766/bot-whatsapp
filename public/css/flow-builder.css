@@ -4034,6 +4034,10 @@ body:has(#builderArea) {
   color: #6b7280;
 }
 
+.panel-nodo--rm24h .rm24-rm-context-duration {
+  margin: 10px 0 0 46px;
+}
+
 .panel-nodo--rm24h .rm24-field,
 .panel-nodo--rm24h .rm24h-field {
   margin-bottom: 0;

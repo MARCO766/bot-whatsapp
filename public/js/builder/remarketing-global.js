@@ -15,6 +15,10 @@ window.MacBotRemarketingGlobal = (function () {
       mensajeRemarketing: "",
       rm24h_contenidos: [],
       modoContextual: false,
+      rm_context_policy: {
+        mode: "until_conversion",
+        duration: { value: 24, unit: "hours" },
+      },
     };
   }
 
@@ -2058,6 +2062,73 @@ window.MacBotRemarketingGlobal = (function () {
     return { ...fallback };
   }
 
+  const RM_CONTEXT_POLICY_MODES = [
+    "until_conversion",
+    "time_window",
+    "allow_normal_triggers",
+  ];
+
+  function normalizarUnidadRmContextPolicy(unidad) {
+    const s = String(unidad || "")
+      .toLowerCase()
+      .trim();
+    if (
+      s === "minuto" ||
+      s === "minutos" ||
+      s === "min" ||
+      s === "minute" ||
+      s === "minutes"
+    ) {
+      return "minutes";
+    }
+    if (s === "hora" || s === "horas" || s === "h" || s === "hour" || s === "hours") {
+      return "hours";
+    }
+    if (
+      s === "dia" ||
+      s === "días" ||
+      s === "dias" ||
+      s === "day" ||
+      s === "days"
+    ) {
+      return "days";
+    }
+    return null;
+  }
+
+  function unidadRmContextPolicyAUi(unit) {
+    if (unit === "minutes") return "minutos";
+    if (unit === "hours") return "horas";
+    if (unit === "days") return "dias";
+    return "horas";
+  }
+
+  function unidadUiARmContextPolicy(unidad) {
+    const u = normalizarUnidadTiempoInactividad(unidad);
+    if (u === "minutos") return "minutes";
+    if (u === "horas") return "hours";
+    if (u === "dias") return "days";
+    return "hours";
+  }
+
+  function normalizarRmContextPolicy(raw) {
+    const fallback = {
+      mode: "until_conversion",
+      duration: { value: 24, unit: "hours" },
+    };
+    if (!raw || typeof raw !== "object") return Object.assign({}, fallback);
+
+    let mode = String(raw.mode || "").trim();
+    if (!RM_CONTEXT_POLICY_MODES.includes(mode)) mode = fallback.mode;
+
+    const dur = raw.duration && typeof raw.duration === "object" ? raw.duration : {};
+    const unit = normalizarUnidadRmContextPolicy(dur.unit) || fallback.duration.unit;
+    let value = parseInt(dur.value, 10);
+    if (!Number.isFinite(value) || value < 1) value = fallback.duration.value;
+
+    return { mode: mode, duration: { value: value, unit: unit } };
+  }
+
   function etiquetaTiempoInactividadResumen(tiempo) {
     const t = normalizarTiempoInactividad({ tiempoInactividad: tiempo });
     const v = t.valor;
@@ -2398,6 +2469,7 @@ window.MacBotRemarketingGlobal = (function () {
     cfg.detenerSiResponde = false;
     cfg.reiniciarAlResponder = true;
     cfg.detenerEnConversion = true;
+    cfg.rm_context_policy = normalizarRmContextPolicy(cfg.rm_context_policy);
     return cfg;
   }
 
@@ -2801,6 +2873,60 @@ window.MacBotRemarketingGlobal = (function () {
       '<span class="rm24-switch-track" aria-hidden="true"></span>' +
       '<span class="rm24-switch-label">Detener al llegar a Conversión</span></label>' +
       '<p class="rm24h-hint rm24-rule-hint">SÍ (fijo en Fase 1)</p></div></section>'
+    );
+  }
+
+  function htmlEditorBloqueComportamientoRm(policy) {
+    const p = normalizarRmContextPolicy(policy);
+    const uiUnidad = unidadRmContextPolicyAUi(p.duration.unit);
+    const isUntilConversion = p.mode === "until_conversion";
+    const isTimeWindow = p.mode === "time_window";
+    const isAllowTriggers = p.mode === "allow_normal_triggers";
+
+    return (
+      '<section class="rm24-section rm24-section--rules rm24-section--bloque-editor rm24-section--rm-context">' +
+      '<h5 class="rm24-section-title">COMPORTAMIENTO EN REMARKETING</h5>' +
+      '<div class="rm24-rule">' +
+      '<label class="rm24-switch rm24h-toggle">' +
+      '<input type="checkbox" id="rm24hRmContextUntilConversion" data-rm-context-mode="until_conversion"' +
+      (isUntilConversion ? " checked" : "") +
+      '><span class="rm24-switch-track" aria-hidden="true"></span>' +
+      '<span class="rm24-switch-label">Permanecer hasta compra o Fin RM</span></label>' +
+      '<p class="rm24h-hint rm24-rule-hint">El lead queda dentro del remarketing hasta comprar o terminar el mini flujo.</p></div>' +
+      '<div class="rm24-rule">' +
+      '<label class="rm24-switch rm24h-toggle">' +
+      '<input type="checkbox" id="rm24hRmContextTimeWindow" data-rm-context-mode="time_window"' +
+      (isTimeWindow ? " checked" : "") +
+      '><span class="rm24-switch-track" aria-hidden="true"></span>' +
+      '<span class="rm24-switch-label">Permanecer solo un tiempo</span></label>' +
+      '<p class="rm24h-hint rm24-rule-hint">El lead sale del remarketing después de un tiempo.</p>' +
+      '<div id="rm24hRmContextDurationWrap" class="rm24-rm-context-duration"' +
+      (isTimeWindow ? "" : " hidden") +
+      '><div class="rm24-tiempo-grid">' +
+      '<div class="rm24h-field rm24-field">' +
+      "<label for=\"rm24hRmContextDurationValor\">Tiempo</label>" +
+      '<input type="number" id="rm24hRmContextDurationValor" class="rm24-input" min="1" step="1" inputmode="numeric" value="' +
+      esc(String(p.duration.value)) +
+      '"></div>' +
+      '<div class="rm24h-field rm24-field">' +
+      "<label for=\"rm24hRmContextDurationUnidad\">Unidad</label>" +
+      '<select id="rm24hRmContextDurationUnidad" class="rm24-input rm24-tiempo-unidad">' +
+      '<option value="minutos"' +
+      (uiUnidad === "minutos" ? " selected" : "") +
+      ">Minutos</option>" +
+      '<option value="horas"' +
+      (uiUnidad === "horas" ? " selected" : "") +
+      ">Horas</option>" +
+      '<option value="dias"' +
+      (uiUnidad === "dias" ? " selected" : "") +
+      ">Días</option></select></div></div></div></div>' +
+      '<div class="rm24-rule">' +
+      '<label class="rm24-switch rm24h-toggle">' +
+      '<input type="checkbox" id="rm24hRmContextAllowTriggers" data-rm-context-mode="allow_normal_triggers"' +
+      (isAllowTriggers ? " checked" : "") +
+      '><span class="rm24-switch-track" aria-hidden="true"></span>' +
+      '<span class="rm24-switch-label">Permitir volver al flujo normal</span></label>' +
+      '<p class="rm24h-hint rm24-rule-hint">Si el lead escribe una palabra activadora de otro flujo, sale del RM.</p></div></section>'
     );
   }
 
@@ -3461,8 +3587,12 @@ window.MacBotRemarketingGlobal = (function () {
       : configActiva.tiempoInactividad || { valor: 23, unidad: "horas" };
 
     if (rm24hBloqueSeleccionado === "espera") {
-      mount.innerHTML = htmlEditorBloqueEspera(tiempo) + htmlEditorBloqueReglas();
+      mount.innerHTML =
+        htmlEditorBloqueEspera(tiempo) +
+        htmlEditorBloqueReglas() +
+        htmlEditorBloqueComportamientoRm(configActiva.rm_context_policy);
       bindTiempoPanelEvents();
+      bindComportamientoRmPanelEvents();
       actualizarHintTiempoPanel(configActiva.tiempoInactividad || tiempo);
       return;
     }
@@ -3656,6 +3786,46 @@ window.MacBotRemarketingGlobal = (function () {
     });
   }
 
+  function leerRmContextPolicyDesdePanel() {
+    const untilEl = document.getElementById("rm24hRmContextUntilConversion");
+    const timeEl = document.getElementById("rm24hRmContextTimeWindow");
+    const triggersEl = document.getElementById("rm24hRmContextAllowTriggers");
+
+    let mode = "until_conversion";
+    if (timeEl?.checked) mode = "time_window";
+    else if (triggersEl?.checked) mode = "allow_normal_triggers";
+    else if (untilEl?.checked) mode = "until_conversion";
+
+    const uiUnidad =
+      normalizarUnidadTiempoInactividad(
+        document.getElementById("rm24hRmContextDurationUnidad")?.value
+      ) || "horas";
+    const valorEl = document.getElementById("rm24hRmContextDurationValor");
+    let value = parseInt(valorEl?.value, 10);
+    if (!Number.isFinite(value) || value < 1) value = 24;
+
+    return normalizarRmContextPolicy({
+      mode: mode,
+      duration: {
+        value: value,
+        unit: unidadUiARmContextPolicy(uiUnidad),
+      },
+    });
+  }
+
+  function setRmContextModeEnPanel(mode) {
+    const modes = {
+      until_conversion: document.getElementById("rm24hRmContextUntilConversion"),
+      time_window: document.getElementById("rm24hRmContextTimeWindow"),
+      allow_normal_triggers: document.getElementById("rm24hRmContextAllowTriggers"),
+    };
+    Object.keys(modes).forEach(function (key) {
+      if (modes[key]) modes[key].checked = key === mode;
+    });
+    const durationWrap = document.getElementById("rm24hRmContextDurationWrap");
+    if (durationWrap) durationWrap.hidden = mode !== "time_window";
+  }
+
   function renderPresetsTiempoPanel(tiempo) {
     const t = normalizarTiempoInactividad({ tiempoInactividad: tiempo });
     const mount = document.getElementById("rm24hTiempoPresets");
@@ -3722,6 +3892,7 @@ window.MacBotRemarketingGlobal = (function () {
           return item.uid && item.type;
         });
     }
+    config.rm_context_policy = normalizarRmContextPolicy(parsed.rm_context_policy);
     sincronizarHorasLegacyDesdeTiempo(config);
 
     sincronizarMensajeRemarketingDesdeContenidos(config);
@@ -5284,6 +5455,66 @@ window.MacBotRemarketingGlobal = (function () {
     });
   }
 
+  function bindComportamientoRmPanelEvents() {
+    const mount = document.getElementById("panelNodoContenido");
+    if (!mount) return;
+
+    if (mount._rm24hRmContextChange) {
+      mount.removeEventListener("change", mount._rm24hRmContextChange);
+    }
+    if (mount._rm24hRmContextInput) {
+      mount.removeEventListener("input", mount._rm24hRmContextInput);
+    }
+    if (mount._rm24hRmContextBlur) {
+      mount.removeEventListener("blur", mount._rm24hRmContextBlur, true);
+    }
+
+    mount._rm24hRmContextChange = function (ev) {
+      const input = ev.target;
+      if (input.matches("[data-rm-context-mode]")) {
+        const mode = input.getAttribute("data-rm-context-mode");
+        if (!input.checked) {
+          setRmContextModeEnPanel(
+            configActiva.rm_context_policy?.mode || "until_conversion"
+          );
+          return;
+        }
+        setRmContextModeEnPanel(mode);
+        onComportamientoRmPanelChange();
+        return;
+      }
+      if (input.id === "rm24hRmContextDurationUnidad") {
+        onComportamientoRmPanelChange();
+      }
+    };
+
+    mount._rm24hRmContextInput = function (ev) {
+      if (ev.target.id !== "rm24hRmContextDurationValor") return;
+      const cleaned = String(ev.target.value || "").replace(/\D/g, "");
+      if (cleaned !== ev.target.value) ev.target.value = cleaned;
+      onComportamientoRmPanelChange();
+    };
+
+    mount._rm24hRmContextBlur = function (ev) {
+      if (ev.target.id !== "rm24hRmContextDurationValor") return;
+      const uiUnidad =
+        normalizarUnidadTiempoInactividad(
+          document.getElementById("rm24hRmContextDurationUnidad")?.value
+        ) || "horas";
+      normalizarInputTiempoValor(ev.target, uiUnidad);
+      onComportamientoRmPanelChange();
+    };
+
+    mount.addEventListener("change", mount._rm24hRmContextChange);
+    mount.addEventListener("input", mount._rm24hRmContextInput);
+    mount.addEventListener("blur", mount._rm24hRmContextBlur, true);
+  }
+
+  function onComportamientoRmPanelChange() {
+    syncDesdePanel();
+    persistirContenidosEnNodo();
+  }
+
   function onTiempoPanelCommit() {
     const unidad =
       normalizarUnidadTiempoInactividad(
@@ -5312,6 +5543,9 @@ window.MacBotRemarketingGlobal = (function () {
     configActiva.reiniciarAlResponder = true;
     configActiva.detenerEnConversion = true;
     configActiva.modoContextual = false;
+    if (document.getElementById("rm24hRmContextUntilConversion")) {
+      configActiva.rm_context_policy = leerRmContextPolicyDesdePanel();
+    }
     if (esNodoContenidoSeleccionado()) {
       leerContenidosDesdePanel();
     }
