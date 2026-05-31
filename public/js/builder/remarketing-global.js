@@ -60,6 +60,9 @@ window.MacBotRemarketingGlobal = (function () {
     if (tipo === "contenido") {
       config = normalizarConfigContenidoNodo(config);
     }
+    if (tipo === "etiqueta") {
+      config = normalizarEtiquetaConfig(config);
+    }
     return {
       type: tipo,
       id: String(item.id || crearUidNodoRamaAgenteRapido()),
@@ -100,6 +103,79 @@ window.MacBotRemarketingGlobal = (function () {
     { value: "registrar_conversion", label: "Registrar conversión" },
     { value: "finalizar_rm", label: "Finalizar RM" },
   ];
+
+  const RM24H_ETIQUETA_COLORES = [
+    { value: "red", label: "Rojo", hex: "#ef4444" },
+    { value: "orange", label: "Naranja", hex: "#f97316" },
+    { value: "yellow", label: "Amarillo", hex: "#eab308" },
+    { value: "lime", label: "Lima", hex: "#84cc16" },
+    { value: "green", label: "Verde", hex: "#22c55e" },
+    { value: "turquoise", label: "Turquesa", hex: "#14b8a6" },
+    { value: "cyan", label: "Cyan", hex: "#06b6d4" },
+    { value: "blue", label: "Azul", hex: "#3b82f6" },
+    { value: "indigo", label: "Índigo", hex: "#6366f1" },
+    { value: "purple", label: "Morado", hex: "#a855f7" },
+    { value: "pink", label: "Rosa", hex: "#ec4899" },
+    { value: "brown", label: "Marrón", hex: "#92400e" },
+    { value: "gray", label: "Gris", hex: "#6b7280" },
+    { value: "black", label: "Negro", hex: "#1f2937" },
+  ];
+
+  const RM24H_ETIQUETA_ACCIONES = [
+    { value: "add", label: "Añadir etiqueta" },
+    { value: "remove", label: "Quitar etiqueta" },
+  ];
+
+  function crearEtiquetaConfigVacia() {
+    return { nombre: "", color: "orange", accion: "add" };
+  }
+
+  function normalizarEtiquetaColor(val) {
+    const v = String(val || "orange")
+      .toLowerCase()
+      .trim();
+    return RM24H_ETIQUETA_COLORES.some(function (c) {
+      return c.value === v;
+    })
+      ? v
+      : "orange";
+  }
+
+  function normalizarEtiquetaAccion(val) {
+    const v = String(val || "add")
+      .toLowerCase()
+      .trim();
+    return RM24H_ETIQUETA_ACCIONES.some(function (a) {
+      return a.value === v;
+    })
+      ? v
+      : "add";
+  }
+
+  function normalizarEtiquetaConfig(raw) {
+    const cfg = raw && typeof raw === "object" ? raw : {};
+    return {
+      nombre: String(cfg.nombre ?? "").trim(),
+      color: normalizarEtiquetaColor(cfg.color),
+      accion: normalizarEtiquetaAccion(cfg.accion),
+    };
+  }
+
+  function getEtiquetaColorHex(colorKey) {
+    const v = normalizarEtiquetaColor(colorKey);
+    const found = RM24H_ETIQUETA_COLORES.find(function (c) {
+      return c.value === v;
+    });
+    return found ? found.hex : "#f97316";
+  }
+
+  function etiquetaRmAccionLabel(val) {
+    const v = normalizarEtiquetaAccion(val);
+    const found = RM24H_ETIQUETA_ACCIONES.find(function (a) {
+      return a.value === v;
+    });
+    return found ? found.label : v;
+  }
 
   function crearUidCaminoAgenteRapido() {
     return "rm_ar_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 6);
@@ -436,7 +512,8 @@ window.MacBotRemarketingGlobal = (function () {
     return (
       t === "contenido" ||
       t === "agente_rapido" ||
-      t === "lector_pagos"
+      t === "lector_pagos" ||
+      t === "etiqueta"
     );
   }
 
@@ -486,6 +563,11 @@ window.MacBotRemarketingGlobal = (function () {
           : configActiva.rm24h_lector_pagos;
       return resumenLectorPagosEmbudo(lp);
     }
+    if (tipo === "etiqueta") {
+      const cfg = getEtiquetaConfigDesdeNodo(node, context);
+      if (!cfg.nombre) return "Sin nombre";
+      return cfg.nombre + " · " + etiquetaRmAccionLabel(cfg.accion);
+    }
     if (!nodoRmTieneEditor(tipo)) {
       return "Sin configurar";
     }
@@ -497,7 +579,89 @@ window.MacBotRemarketingGlobal = (function () {
       resumen === "Sin contenido configurado" ||
       resumen === "0 caminos" ||
       resumen === "Configurar validación de pago" ||
-      resumen === "Sin configurar"
+      resumen === "Sin configurar" ||
+      resumen === "Sin nombre"
+    );
+  }
+
+  function getEtiquetaConfigDesdeNodo(node, context) {
+    if (context?.scope === "branch") {
+      return normalizarEtiquetaConfig(node?.config);
+    }
+    const uid = context?.uid || node?.uid;
+    if (uid) {
+      const n = getMiniFlujoNodo(uid);
+      if (n && n.tipo === "etiqueta") {
+        return normalizarEtiquetaConfig(n.config);
+      }
+    }
+    return normalizarEtiquetaConfig(node?.config);
+  }
+
+  function htmlRmEtiquetaBadge(nombre, colorKey, opts) {
+    const o = opts || {};
+    const cfg = normalizarEtiquetaConfig({ nombre: nombre, color: colorKey });
+    const hex = getEtiquetaColorHex(cfg.color);
+    const label = cfg.nombre || "Sin nombre";
+    const cls =
+      "rm24-etiqueta-badge" +
+      (o.compact ? " rm24-etiqueta-badge--compact" : "") +
+      (!cfg.nombre ? " rm24-etiqueta-badge--empty" : "");
+    return (
+      '<span class="' +
+      cls +
+      '" style="--rm24-etiqueta-color:' +
+      esc(hex) +
+      '">' +
+      esc(label) +
+      "</span>"
+    );
+  }
+
+  function htmlRmEtiquetaColorSwatches(selectedColor) {
+    const sel = normalizarEtiquetaColor(selectedColor);
+    return (
+      '<div class="rm24-etiqueta-swatches" role="radiogroup" aria-label="Color de etiqueta">' +
+      RM24H_ETIQUETA_COLORES.map(function (c) {
+        const active = c.value === sel ? " rm24-etiqueta-swatch--active" : "";
+        return (
+          '<button type="button" class="rm24-etiqueta-swatch' +
+          active +
+          '" role="radio"' +
+          (c.value === sel ? ' aria-checked="true"' : ' aria-checked="false"') +
+          ' data-rm24-etiqueta-color="' +
+          esc(c.value) +
+          '" title="' +
+          esc(c.label) +
+          '" style="--rm24-swatch-color:' +
+          esc(c.hex) +
+          '">' +
+          '<span class="rm24-etiqueta-swatch-check" aria-hidden="true">✓</span></button>'
+        );
+      }).join("") +
+      "</div>"
+    );
+  }
+
+  function htmlRmEtiquetaAccionToggle(selectedAccion) {
+    const sel = normalizarEtiquetaAccion(selectedAccion);
+    return (
+      '<div class="rm24-etiqueta-acciones" role="radiogroup" aria-label="Acción de etiqueta">' +
+      RM24H_ETIQUETA_ACCIONES.map(function (a) {
+        const active = a.value === sel ? " rm24-etiqueta-accion-btn--active" : "";
+        return (
+          '<button type="button" class="rm24-etiqueta-accion-btn' +
+          active +
+          '" role="radio"' +
+          (a.value === sel ? ' aria-checked="true"' : ' aria-checked="false"') +
+          ' data-rm24-etiqueta-accion="' +
+          esc(a.value) +
+          '">' +
+          esc(a.label) +
+          "</button>"
+        );
+      }).join("") +
+      "</div>"
     );
   }
 
@@ -595,6 +759,7 @@ window.MacBotRemarketingGlobal = (function () {
           "</span>"
         : "") +
       (o.hint ? '<span class="rm24-wf-card-hint">' + esc(o.hint) + "</span>" : "") +
+      (o.extraHtml ? o.extraHtml : "") +
       (o.innerBadge
         ? '<span class="rm24-wf-fallback-badge">' + esc(o.innerBadge) + "</span>"
         : "") +
@@ -747,6 +912,42 @@ window.MacBotRemarketingGlobal = (function () {
         context.total
       );
     }
+    if (tipo === "etiqueta") {
+      const cat = getCatalogoNodoRm24("etiqueta") || {
+        icon: "🏷",
+        label: "Etiqueta",
+        kind: "action",
+      };
+      const selId = miniNodoSelectId(context);
+      const selected =
+        o.selected === selId || o.selected === true || rm24hBloqueSeleccionado === selId;
+      const cfg = getEtiquetaConfigDesdeNodo(node, context);
+      const dragging =
+        context.scope === "main" && rm24hDragNodoIndex === context.nodeIndex;
+      const attrs =
+        context.scope === "branch"
+          ? 'data-rm24-ar-select="' + esc(selId) + '"'
+          : 'data-rm24-nodo-uid="' + esc(context.uid) + '"';
+      return (
+        '<div class="rm24-wf-step" role="listitem">' +
+        '<div class="rm24-wf-step-inner">' +
+        htmlWfCard({
+          kind: cat.kind,
+          icon: cat.icon,
+          title: cat.label,
+          subtitle: etiquetaRmAccionLabel(cfg.accion),
+          subtitleMuted: !cfg.nombre,
+          extraHtml: htmlRmEtiquetaBadge(cfg.nombre, cfg.color, { compact: true }),
+          selected: selected,
+          showEditingPill: true,
+          dragging: dragging,
+          draggable: context.scope === "main",
+          attrs: attrs,
+        }) +
+        htmlWfStepActions(htmlWfMiniNodoActions(context)) +
+        "</div></div>"
+      );
+    }
     const cat = getCatalogoNodoRm24(tipo) || {
       icon: "📎",
       label: tipo,
@@ -893,7 +1094,9 @@ window.MacBotRemarketingGlobal = (function () {
           ? normalizarConfigContenidoNodo({})
           : cat.tipo === "lector_pagos"
             ? normalizarLectorPagosNodo(null).config
-            : {},
+            : cat.tipo === "etiqueta"
+              ? normalizarEtiquetaConfig({})
+              : {},
     });
     if (!norm) return;
     const idx = Math.max(0, Math.min(Number(insertIndex) || 0, lista.length));
@@ -1266,6 +1469,7 @@ window.MacBotRemarketingGlobal = (function () {
   let rm24hBloqueSeleccionado = "espera";
   let rm24hContenidoContext = { scope: "main" };
   let rm24hLectorPagosContext = { scope: "main" };
+  let rm24hEtiquetaContext = { scope: "main" };
   let rm24hMiniFlujoNodos = [];
   let rm24hMiniFlujoUidSeq = 0;
   let rm24hDragNodoIndex = null;
@@ -1319,6 +1523,52 @@ window.MacBotRemarketingGlobal = (function () {
       return;
     }
     configActiva.rm24h_lector_pagos = norm;
+  }
+
+  function crearEtiquetaContextMain(uid) {
+    return { scope: "main", uid: uid };
+  }
+
+  function crearEtiquetaContextBranch(ramaKey, nodeId) {
+    return { scope: "branch", ramaKey: ramaKey, nodeId: nodeId };
+  }
+
+  function getEtiquetaPorContexto(ctx) {
+    const c = ctx || rm24hEtiquetaContext || crearEtiquetaContextMain();
+    if (c.scope === "branch") {
+      const nodo = findNodoEnCaminoAgenteRapido(c.ramaKey, c.nodeId);
+      if (!nodo) return normalizarEtiquetaConfig({});
+      return normalizarEtiquetaConfig(nodo.config);
+    }
+    const n = getMiniFlujoNodo(c.uid);
+    return normalizarEtiquetaConfig(n?.config);
+  }
+
+  function setEtiquetaPorContexto(ctx, cfg) {
+    const c = ctx || rm24hEtiquetaContext || crearEtiquetaContextMain();
+    const norm = normalizarEtiquetaConfig(cfg);
+    if (c.scope === "branch") {
+      const nodo = findNodoEnCaminoAgenteRapido(c.ramaKey, c.nodeId);
+      if (!nodo) return;
+      nodo.config = norm;
+      nodo.type = "etiqueta";
+      configActiva.rm24h_agente_rapido = getAgenteRapidoActivo();
+      return;
+    }
+    const n = getMiniFlujoNodo(c.uid);
+    if (n && n.tipo === "etiqueta") {
+      n.config = norm;
+    }
+  }
+
+  function serializarMiniFlujoParaConfig() {
+    return rm24hMiniFlujoNodos.map(function (n) {
+      const item = { uid: n.uid, type: n.tipo };
+      if (n.tipo === "etiqueta") {
+        item.config = normalizarEtiquetaConfig(n.config);
+      }
+      return item;
+    });
   }
 
   function crearContenidoContextMain() {
@@ -1416,6 +1666,7 @@ window.MacBotRemarketingGlobal = (function () {
       if (tipo === "contenido") {
         setContenidoContext(crearContenidoContextBranch(arSel.ramaKey, arSel.nodeId));
         rm24hLectorPagosContext = crearLectorPagosContextMain();
+        rm24hEtiquetaContext = crearEtiquetaContextMain();
         return;
       }
       if (tipo === "lector_pagos") {
@@ -1424,6 +1675,13 @@ window.MacBotRemarketingGlobal = (function () {
           arSel.nodeId
         );
         setContenidoContext(crearContenidoContextMain());
+        rm24hEtiquetaContext = crearEtiquetaContextMain();
+        return;
+      }
+      if (tipo === "etiqueta") {
+        rm24hEtiquetaContext = crearEtiquetaContextBranch(arSel.ramaKey, arSel.nodeId);
+        setContenidoContext(crearContenidoContextMain());
+        rm24hLectorPagosContext = crearLectorPagosContextMain();
         return;
       }
     }
@@ -1433,6 +1691,9 @@ window.MacBotRemarketingGlobal = (function () {
     }
     if (n && n.tipo === "lector_pagos") {
       rm24hLectorPagosContext = crearLectorPagosContextMain();
+    }
+    if (n && n.tipo === "etiqueta") {
+      rm24hEtiquetaContext = crearEtiquetaContextMain(n.uid);
     }
   }
 
@@ -1756,6 +2017,16 @@ window.MacBotRemarketingGlobal = (function () {
     return !!(n && n.tipo === "lector_pagos");
   }
 
+  function esNodoEtiquetaSeleccionado() {
+    const arSel = parseSeleccionAgenteRapido(rm24hBloqueSeleccionado);
+    if (arSel && arSel.kind === "node") {
+      const nodo = findNodoEnCaminoAgenteRapido(arSel.ramaKey, arSel.nodeId);
+      return String(nodo?.type || nodo?.tipo || "").toLowerCase() === "etiqueta";
+    }
+    const n = getMiniFlujoNodo(rm24hBloqueSeleccionado);
+    return !!(n && n.tipo === "etiqueta");
+  }
+
   function agenteRapidoTieneConfig(cfg) {
     const ar = normalizarAgenteRapidoConfig(cfg?.rm24h_agente_rapido);
     return (
@@ -1768,24 +2039,58 @@ window.MacBotRemarketingGlobal = (function () {
   /** Restaura nodos del mini flujo desde config guardada (sin schema nuevo). */
   function hydrateMiniFlujoDesdeConfig(config) {
     const cfg = config || configActiva;
+
+    if (Array.isArray(cfg.rm24h_mini_flujo) && cfg.rm24h_mini_flujo.length > 0) {
+      rm24hMiniFlujoNodos = cfg.rm24h_mini_flujo.map(function (item) {
+        const tipo = String(item.type || item.tipo || "").toLowerCase();
+        const node = {
+          uid: String(item.uid || crearUidMiniFlujoNodo()),
+          tipo: tipo,
+        };
+        if (tipo === "etiqueta") {
+          node.config = normalizarEtiquetaConfig(item.config);
+        }
+        return node;
+      });
+    } else {
+      if (!miniFlujoTieneNodoContenido()) {
+        rm24hMiniFlujoNodos.push({
+          uid: crearUidMiniFlujoNodo(),
+          tipo: "contenido",
+        });
+      }
+
+      if (agenteRapidoTieneConfig(cfg) && !miniFlujoTieneNodoAgenteRapido()) {
+        rm24hMiniFlujoNodos.push({
+          uid: crearUidMiniFlujoNodo(),
+          tipo: "agente_rapido",
+        });
+      }
+
+      if (lectorPagosTieneConfig(cfg) && !miniFlujoTieneNodoLectorPagos()) {
+        rm24hMiniFlujoNodos.push({
+          uid: crearUidMiniFlujoNodo(),
+          tipo: "lector_pagos",
+        });
+      }
+    }
+
     const tieneContenido =
       (Array.isArray(cfg.rm24h_contenidos) && cfg.rm24h_contenidos.length > 0) ||
       String(cfg.mensajeRemarketing || "").trim().length > 0;
 
-    if (!miniFlujoTieneNodoContenido()) {
-      rm24hMiniFlujoNodos.push({
+    if (tieneContenido && !miniFlujoTieneNodoContenido()) {
+      rm24hMiniFlujoNodos.unshift({
         uid: crearUidMiniFlujoNodo(),
         tipo: "contenido",
       });
     }
-
     if (agenteRapidoTieneConfig(cfg) && !miniFlujoTieneNodoAgenteRapido()) {
       rm24hMiniFlujoNodos.push({
         uid: crearUidMiniFlujoNodo(),
         tipo: "agente_rapido",
       });
     }
-
     if (lectorPagosTieneConfig(cfg) && !miniFlujoTieneNodoLectorPagos()) {
       rm24hMiniFlujoNodos.push({
         uid: crearUidMiniFlujoNodo(),
@@ -1825,6 +2130,11 @@ window.MacBotRemarketingGlobal = (function () {
       cfg.rm24h_lector_pagos = normalizarLectorPagosNodo(cfg.rm24h_lector_pagos);
     } else {
       delete cfg.rm24h_lector_pagos;
+    }
+    if (rm24hMiniFlujoNodos.length) {
+      cfg.rm24h_mini_flujo = serializarMiniFlujoParaConfig();
+    } else {
+      delete cfg.rm24h_mini_flujo;
     }
     cfg.detenerSiResponde = false;
     cfg.reiniciarAlResponder = true;
@@ -1936,8 +2246,12 @@ window.MacBotRemarketingGlobal = (function () {
     }
     const idx = Math.max(0, Math.min(Number(insertIndex) || 0, rm24hMiniFlujoNodos.length));
     const uid = crearUidMiniFlujoNodo();
-    rm24hMiniFlujoNodos.splice(idx, 0, { uid: uid, tipo: cat.tipo });
-    if (cat.tipo === "lector_pagos" && nodoActivo) {
+    const nodeEntry = { uid: uid, tipo: cat.tipo };
+    if (cat.tipo === "etiqueta") {
+      nodeEntry.config = crearEtiquetaConfigVacia();
+    }
+    rm24hMiniFlujoNodos.splice(idx, 0, nodeEntry);
+    if ((cat.tipo === "lector_pagos" || cat.tipo === "etiqueta") && nodoActivo) {
       persistirConfigPanelEnNodo();
     }
     selectRm24Bloque(uid);
@@ -2062,7 +2376,12 @@ window.MacBotRemarketingGlobal = (function () {
 
   function htmlMiniFlujoNodo(nodo, stepNum, resumen, selected, nodeIndex, total) {
     return renderMiniNodoRm(
-      { type: nodo.tipo, tipo: nodo.tipo, uid: nodo.uid },
+      {
+        type: nodo.tipo,
+        tipo: nodo.tipo,
+        uid: nodo.uid,
+        config: nodo.config,
+      },
       crearMiniNodoContextMain(nodo.uid, nodeIndex, total),
       {
         stepNum: stepNum,
@@ -2290,6 +2609,9 @@ window.MacBotRemarketingGlobal = (function () {
       }
       return htmlEditorBloqueAgenteRapido();
     }
+    if (tipo === "etiqueta") {
+      return htmlEditorBloqueEtiqueta(context);
+    }
     return htmlEditorBloqueNodoFuturo(tipo);
   }
 
@@ -2319,6 +2641,14 @@ window.MacBotRemarketingGlobal = (function () {
       }
       mount.innerHTML = htmlEditorBloqueAgenteRapido();
       renderAgenteRapidoCaminos();
+      return;
+    }
+    if (tipo === "etiqueta") {
+      rm24hEtiquetaContext =
+        context?.scope === "branch"
+          ? crearEtiquetaContextBranch(context.ramaKey, context.nodeId)
+          : crearEtiquetaContextMain(context?.uid || rm24hBloqueSeleccionado);
+      mount.innerHTML = htmlEditorBloqueEtiqueta(rm24hEtiquetaContext);
       return;
     }
     mount.innerHTML = htmlEditorBloqueNodoFuturo(tipo);
@@ -2664,6 +2994,64 @@ window.MacBotRemarketingGlobal = (function () {
     });
   }
 
+  function htmlEditorBloqueEtiqueta(context) {
+    const ctx = context || rm24hEtiquetaContext || crearEtiquetaContextMain();
+    const cfg = getEtiquetaPorContexto(ctx);
+    const storageHint =
+      ctx.scope === "branch"
+        ? "Se guarda en <code>caminos[].next[]</code> como <code>{ type: &quot;etiqueta&quot;, config }</code>"
+        : "Se guarda en <code>rm24h_mini_flujo</code>";
+    return (
+      '<section class="rm24-section rm24-section--etiqueta rm24-section--bloque-editor">' +
+      '<header class="rm24-ar-hero">' +
+      '<div class="rm24-ar-hero__top">' +
+      '<h5 class="rm24-ar-hero__title">🏷 Etiqueta RM</h5></div>' +
+      '<p class="rm24h-hint rm24-ar-hero__desc">Aplica o quita una etiqueta CRM al lead durante el remarketing.</p></header>' +
+      '<div class="rm24h-field rm24-field">' +
+      '<label for="rm24hEtiquetaNombre">1. Nombre etiqueta</label>' +
+      '<input type="text" id="rm24hEtiquetaNombre" class="rm24-input" placeholder="Ej: Cliente caliente RM" value="' +
+      esc(cfg.nombre) +
+      '"></div>' +
+      '<div class="rm24h-field rm24-field">' +
+      "<label>2. Color</label>" +
+      htmlRmEtiquetaColorSwatches(cfg.color) +
+      '<input type="hidden" id="rm24hEtiquetaColor" value="' +
+      esc(cfg.color) +
+      '"></div>' +
+      '<div class="rm24h-field rm24-field rm24-etiqueta-preview-wrap">' +
+      "<label>Vista previa</label>" +
+      '<div id="rm24hEtiquetaPreview">' +
+      htmlRmEtiquetaBadge(cfg.nombre || "Cliente caliente RM", cfg.color) +
+      "</div></div>" +
+      '<div class="rm24h-field rm24-field">' +
+      "<label>3. Acción</label>" +
+      htmlRmEtiquetaAccionToggle(cfg.accion) +
+      '<input type="hidden" id="rm24hEtiquetaAccion" value="' +
+      esc(cfg.accion) +
+      '"></div>' +
+      '<p class="rm24h-hint rm24-etiqueta-storage-hint">' +
+      storageHint +
+      "</p></section>"
+    );
+  }
+
+  function actualizarPreviewEtiquetaPanel() {
+    const preview = document.getElementById("rm24hEtiquetaPreview");
+    if (!preview) return;
+    const nombre = String(document.getElementById("rm24hEtiquetaNombre")?.value ?? "").trim();
+    const color = document.getElementById("rm24hEtiquetaColor")?.value || "orange";
+    preview.innerHTML = htmlRmEtiquetaBadge(nombre || "Sin nombre", color);
+  }
+
+  function syncEtiquetaDesdePanel() {
+    const ctx = rm24hEtiquetaContext || crearEtiquetaContextMain();
+    setEtiquetaPorContexto(ctx, {
+      nombre: String(document.getElementById("rm24hEtiquetaNombre")?.value ?? ""),
+      color: document.getElementById("rm24hEtiquetaColor")?.value,
+      accion: document.getElementById("rm24hEtiquetaAccion")?.value,
+    });
+  }
+
   function htmlEditorBloqueNodoFuturo(tipo) {
     const cat = getCatalogoNodoRm24(tipo);
     const label = cat?.label || "Nodo RM";
@@ -2760,6 +3148,13 @@ window.MacBotRemarketingGlobal = (function () {
     if (nodo.tipo === "lector_pagos") {
       mountEditorMiniNodoRm(
         { type: "lector_pagos", tipo: "lector_pagos" },
+        crearMiniNodoContextMain(nodo.uid, 0, rm24hMiniFlujoNodos.length)
+      );
+      return;
+    }
+    if (nodo.tipo === "etiqueta") {
+      mountEditorMiniNodoRm(
+        { type: "etiqueta", tipo: "etiqueta", config: nodo.config, uid: nodo.uid },
         crearMiniNodoContextMain(nodo.uid, 0, rm24hMiniFlujoNodos.length)
       );
       return;
@@ -2930,6 +3325,23 @@ window.MacBotRemarketingGlobal = (function () {
     }
     if (parsed.rm24h_lector_pagos) {
       config.rm24h_lector_pagos = normalizarLectorPagosNodo(parsed.rm24h_lector_pagos);
+    }
+    if (Array.isArray(parsed.rm24h_mini_flujo)) {
+      config.rm24h_mini_flujo = parsed.rm24h_mini_flujo
+        .map(function (item) {
+          const tipo = String(item.type || item.tipo || "").toLowerCase();
+          const out = {
+            uid: String(item.uid || ""),
+            type: tipo,
+          };
+          if (tipo === "etiqueta") {
+            out.config = normalizarEtiquetaConfig(item.config);
+          }
+          return out;
+        })
+        .filter(function (item) {
+          return item.uid && item.type;
+        });
     }
     sincronizarHorasLegacyDesdeTiempo(config);
 
@@ -3315,6 +3727,9 @@ window.MacBotRemarketingGlobal = (function () {
     if (esNodoLectorPagosSeleccionado()) {
       syncLectorPagosDesdePanel();
     }
+    if (esNodoEtiquetaSeleccionado()) {
+      syncEtiquetaDesdePanel();
+    }
   }
 
   function persistirConfigPanelEnNodo() {
@@ -3340,6 +3755,11 @@ window.MacBotRemarketingGlobal = (function () {
       } else {
         delete configActiva.rm24h_lector_pagos;
       }
+    }
+    if (rm24hMiniFlujoNodos.length) {
+      configActiva.rm24h_mini_flujo = serializarMiniFlujoParaConfig();
+    } else {
+      delete configActiva.rm24h_mini_flujo;
     }
     guardarConfigEnNodo(nodoActivo, configActiva);
     if (typeof window.macbotRecordHistoryDebounced === "function") {
@@ -3837,6 +4257,39 @@ window.MacBotRemarketingGlobal = (function () {
     }
 
     mount._rm24hOnClick = function (ev) {
+      const colorSwatch = ev.target.closest("[data-rm24-etiqueta-color]");
+      if (colorSwatch) {
+        ev.preventDefault();
+        const val = colorSwatch.getAttribute("data-rm24-etiqueta-color");
+        const hidden = document.getElementById("rm24hEtiquetaColor");
+        if (hidden) hidden.value = val;
+        document.querySelectorAll(".rm24-etiqueta-swatch").forEach(function (btn) {
+          const active = btn === colorSwatch;
+          btn.classList.toggle("rm24-etiqueta-swatch--active", active);
+          btn.setAttribute("aria-checked", active ? "true" : "false");
+        });
+        syncEtiquetaDesdePanel();
+        actualizarPreviewEtiquetaPanel();
+        persistirConfigPanelEnNodo();
+        return;
+      }
+
+      const accionBtn = ev.target.closest("[data-rm24-etiqueta-accion]");
+      if (accionBtn) {
+        ev.preventDefault();
+        const val = accionBtn.getAttribute("data-rm24-etiqueta-accion");
+        const hidden = document.getElementById("rm24hEtiquetaAccion");
+        if (hidden) hidden.value = val;
+        document.querySelectorAll(".rm24-etiqueta-accion-btn").forEach(function (btn) {
+          const active = btn === accionBtn;
+          btn.classList.toggle("rm24-etiqueta-accion-btn--active", active);
+          btn.setAttribute("aria-checked", active ? "true" : "false");
+        });
+        syncEtiquetaDesdePanel();
+        persistirConfigPanelEnNodo();
+        return;
+      }
+
       const wfAddToggle = ev.target.closest("[data-rm24-wf-add-toggle]");
       if (wfAddToggle) {
         ev.preventDefault();
@@ -4079,6 +4532,13 @@ window.MacBotRemarketingGlobal = (function () {
         actualizarEmbudoRmPanel();
         return;
       }
+      if (ev.target.closest(".rm24-section--etiqueta")) {
+        syncEtiquetaDesdePanel();
+        actualizarPreviewEtiquetaPanel();
+        persistirConfigPanelEnNodo();
+        actualizarEmbudoRmPanel();
+        return;
+      }
       const fileInput = ev.target.closest(".rm24-contenido-file");
       if (fileInput?.files?.[0]) {
         const card = fileInput.closest(".rm24-contenido-item");
@@ -4109,6 +4569,13 @@ window.MacBotRemarketingGlobal = (function () {
       }
       if (ev.target.closest(".rm24-section--lector-pagos")) {
         syncLectorPagosDesdePanel();
+        persistirConfigPanelEnNodo();
+        actualizarEmbudoRmPanel();
+        return;
+      }
+      if (ev.target.closest(".rm24-section--etiqueta")) {
+        syncEtiquetaDesdePanel();
+        actualizarPreviewEtiquetaPanel();
         persistirConfigPanelEnNodo();
         actualizarEmbudoRmPanel();
         return;

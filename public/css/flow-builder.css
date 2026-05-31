@@ -4160,6 +4160,131 @@ body:has(#builderArea) {
   color: #ffedd5;
 }
 
+/* Etiqueta RM — tag picker y badge */
+.panel-nodo--rm24h .rm24-etiqueta-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.panel-nodo--rm24h .rm24-etiqueta-swatch {
+  position: relative;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 2px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  background: var(--rm24-swatch-color, #f97316);
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
+}
+
+.panel-nodo--rm24h .rm24-etiqueta-swatch:hover {
+  transform: scale(1.08);
+  border-color: rgba(255, 255, 255, 0.35);
+}
+
+.panel-nodo--rm24h .rm24-etiqueta-swatch--active {
+  transform: scale(1.12);
+  border-color: #fff;
+  box-shadow:
+    0 0 0 2px rgba(255, 122, 24, 0.55),
+    0 0 14px rgba(255, 122, 24, 0.45);
+}
+
+.panel-nodo--rm24h .rm24-etiqueta-swatch-check {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 800;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+  opacity: 0;
+  transform: scale(0.7);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.panel-nodo--rm24h .rm24-etiqueta-swatch--active .rm24-etiqueta-swatch-check {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.panel-nodo--rm24h .rm24-etiqueta-acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.panel-nodo--rm24h .rm24-etiqueta-accion-btn {
+  flex: 1 1 140px;
+  padding: 9px 12px;
+  border: 1px solid rgba(255, 122, 24, 0.28);
+  border-radius: 10px;
+  background: rgba(255, 122, 24, 0.08);
+  color: #fdba74;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.panel-nodo--rm24h .rm24-etiqueta-accion-btn:hover {
+  background: rgba(255, 122, 24, 0.16);
+  border-color: rgba(255, 122, 24, 0.45);
+}
+
+.panel-nodo--rm24h .rm24-etiqueta-accion-btn--active {
+  background: rgba(255, 122, 24, 0.22);
+  border-color: rgba(255, 122, 24, 0.65);
+  color: #ffedd5;
+  box-shadow: 0 0 12px rgba(255, 122, 24, 0.25);
+}
+
+.panel-nodo--rm24h .rm24-etiqueta-preview-wrap {
+  margin-top: 2px;
+}
+
+.panel-nodo--rm24h .rm24-etiqueta-storage-hint {
+  margin-top: 8px;
+  font-size: 11px;
+}
+
+.rm24-etiqueta-badge {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  margin-top: 6px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: var(--rm24-etiqueta-color, #f97316);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+
+.rm24-etiqueta-badge--compact {
+  margin-top: 4px;
+  padding: 4px 10px;
+  font-size: 11px;
+}
+
+.rm24-etiqueta-badge--empty {
+  background: rgba(148, 163, 184, 0.22);
+  color: #cbd5e1;
+  border: 1px dashed rgba(148, 163, 184, 0.35);
+  box-shadow: none;
+}
+
 .panel-nodo--rm24h .rm24-config-footer {
   flex-shrink: 0;
   margin-top: 4px;
