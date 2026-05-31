@@ -57,6 +57,9 @@ window.MacBotRemarketingGlobal = (function () {
     if (tipo === "lector_pagos") {
       config = normalizarLectorPagosNodo({ type: "lector_pagos", config: config }).config;
     }
+    if (tipo === "contenido") {
+      config = normalizarConfigContenidoNodo(config);
+    }
     return {
       type: tipo,
       id: String(item.id || crearUidNodoRamaAgenteRapido()),
@@ -433,7 +436,9 @@ window.MacBotRemarketingGlobal = (function () {
       return resumenLectorPagosEmbudo(nodo);
     }
     if (tipo === "contenido") {
-      return "Configuración pendiente · solo UI";
+      const cfg = normalizarConfigContenidoNodo(nodo.config);
+      const resumen = resumenContenidoEmbudo(cfg.contenidos);
+      return resumen.vacio ? "Sin contenido configurado" : resumen.linea;
     }
     const cat = getCatalogoNodoRm24(tipo);
     if (cat && !cat.runtime) return "Configuración pendiente · solo UI";
@@ -790,7 +795,7 @@ window.MacBotRemarketingGlobal = (function () {
     const norm = normalizarNodoRamaAgenteRapido({
       type: cat.tipo,
       id: crearUidNodoRamaAgenteRapido(),
-      config: {},
+      config: cat.tipo === "contenido" ? normalizarConfigContenidoNodo({}) : {},
     });
     if (!norm) return;
     const idx = Math.max(0, Math.min(Number(insertIndex) || 0, lista.length));
@@ -1142,11 +1147,26 @@ window.MacBotRemarketingGlobal = (function () {
     return config;
   }
 
+  function normalizarConfigContenidoNodo(raw) {
+    const cfg = raw && typeof raw === "object" ? raw : {};
+    const contenidos = (Array.isArray(cfg.contenidos) ? cfg.contenidos : [])
+      .map(normalizarItemContenidoUi)
+      .filter(Boolean);
+    let mensajeRemarketing = String(cfg.mensajeRemarketing ?? "");
+    if (!mensajeRemarketing && contenidos.length) {
+      const tmp = { rm24h_contenidos: contenidos, mensajeRemarketing: "" };
+      sincronizarMensajeRemarketingDesdeContenidos(tmp);
+      mensajeRemarketing = String(tmp.mensajeRemarketing || "");
+    }
+    return { contenidos: contenidos, mensajeRemarketing: mensajeRemarketing };
+  }
+
   let nodoActivo = null;
   let configActiva = crearConfigVacia();
   let rm24hSubidaEnCurso = false;
   let rm24hPasoSeleccionado = 0;
   let rm24hBloqueSeleccionado = "espera";
+  let rm24hContenidoContext = { scope: "main" };
   let rm24hMiniFlujoNodos = [];
   let rm24hMiniFlujoUidSeq = 0;
   let rm24hDragNodoIndex = null;
@@ -1164,6 +1184,108 @@ window.MacBotRemarketingGlobal = (function () {
       configActiva.rm24h_lector_pagos = normalizarLectorPagosNodo(null);
     }
     return configActiva.rm24h_lector_pagos;
+  }
+
+  function crearContenidoContextMain() {
+    return { scope: "main" };
+  }
+
+  function crearContenidoContextBranch(ramaKey, nodeId) {
+    return { scope: "branch", ramaKey: ramaKey, nodeId: nodeId };
+  }
+
+  function getContenidoContext() {
+    return rm24hContenidoContext || crearContenidoContextMain();
+  }
+
+  function setContenidoContext(ctx) {
+    rm24hContenidoContext = ctx || crearContenidoContextMain();
+  }
+
+  function findNodoEnCaminoAgenteRapido(ramaKey, nodeId) {
+    const ar = getAgenteRapidoActivo();
+    const lista =
+      ramaKey === "default"
+        ? ar.default?.next || []
+        : (ar.caminos || []).find(function (c) {
+            return c.id === ramaKey;
+          })?.next || [];
+    return (
+      lista.find(function (n) {
+        return n.id === nodeId;
+      }) || null
+    );
+  }
+
+  function getContenidosStorePorContexto(ctx) {
+    const c = ctx || getContenidoContext();
+    if (c.scope === "branch") {
+      const nodo = findNodoEnCaminoAgenteRapido(c.ramaKey, c.nodeId);
+      if (!nodo) {
+        return { contenidos: [], mensajeRemarketing: "", nodo: null };
+      }
+      if (!nodo.config || typeof nodo.config !== "object") {
+        nodo.config = normalizarConfigContenidoNodo({});
+      } else {
+        nodo.config = normalizarConfigContenidoNodo(nodo.config);
+      }
+      return {
+        contenidos: nodo.config.contenidos,
+        mensajeRemarketing: nodo.config.mensajeRemarketing || "",
+        nodo: nodo,
+      };
+    }
+    if (!Array.isArray(configActiva.rm24h_contenidos)) {
+      configActiva.rm24h_contenidos = [];
+    }
+    return {
+      contenidos: configActiva.rm24h_contenidos,
+      mensajeRemarketing: configActiva.mensajeRemarketing || "",
+      nodo: null,
+    };
+  }
+
+  function setContenidosStorePorContexto(ctx, lista, mensajeOpt) {
+    const c = ctx || getContenidoContext();
+    const norm = (lista || []).map(normalizarItemContenidoUi).filter(Boolean);
+    if (c.scope === "branch") {
+      const nodo = findNodoEnCaminoAgenteRapido(c.ramaKey, c.nodeId);
+      if (!nodo) return;
+      const cfg = normalizarConfigContenidoNodo(
+        Object.assign({}, nodo.config, { contenidos: norm })
+      );
+      if (mensajeOpt !== undefined) {
+        cfg.mensajeRemarketing = String(mensajeOpt);
+      } else {
+        const tmp = {
+          rm24h_contenidos: cfg.contenidos,
+          mensajeRemarketing: cfg.mensajeRemarketing,
+        };
+        sincronizarMensajeRemarketingDesdeContenidos(tmp);
+        cfg.mensajeRemarketing = String(tmp.mensajeRemarketing || "");
+      }
+      nodo.config = cfg;
+      nodo.type = "contenido";
+      configActiva.rm24h_agente_rapido = getAgenteRapidoActivo();
+      return;
+    }
+    configActiva.rm24h_contenidos = norm;
+    sincronizarMensajeRemarketingDesdeContenidos(configActiva);
+  }
+
+  function syncContenidoContextDesdeSeleccion() {
+    const arSel = parseSeleccionAgenteRapido(rm24hBloqueSeleccionado);
+    if (arSel && arSel.kind === "node") {
+      const nodo = findNodoEnCaminoAgenteRapido(arSel.ramaKey, arSel.nodeId);
+      if (nodo && String(nodo.type || nodo.tipo || "").toLowerCase() === "contenido") {
+        setContenidoContext(crearContenidoContextBranch(arSel.ramaKey, arSel.nodeId));
+        return;
+      }
+    }
+    const n = getMiniFlujoNodo(rm24hBloqueSeleccionado);
+    if (n && n.tipo === "contenido") {
+      setContenidoContext(crearContenidoContextMain());
+    }
   }
 
   /** Catálogo de nodos agregables al mini flujo (solo UI, sin persistencia JSON). */
@@ -1428,6 +1550,7 @@ window.MacBotRemarketingGlobal = (function () {
     rm24hDragNodoIndex = null;
     rm24hDragContentIndex = null;
     rm24hBloqueSeleccionado = "espera";
+    setContenidoContext(crearContenidoContextMain());
   }
 
   function miniFlujoTieneNodoContenido() {
@@ -1570,6 +1693,11 @@ window.MacBotRemarketingGlobal = (function () {
   }
 
   function esNodoContenidoSeleccionado() {
+    const arSel = parseSeleccionAgenteRapido(rm24hBloqueSeleccionado);
+    if (arSel && arSel.kind === "node") {
+      const nodo = findNodoEnCaminoAgenteRapido(arSel.ramaKey, arSel.nodeId);
+      return String(nodo?.type || nodo?.tipo || "").toLowerCase() === "contenido";
+    }
     const n = getMiniFlujoNodo(rm24hBloqueSeleccionado);
     return !!(n && n.tipo === "contenido");
   }
@@ -1968,17 +2096,55 @@ window.MacBotRemarketingGlobal = (function () {
     );
   }
 
-  function htmlEditorBloqueContenido() {
+  function htmlEditorContenidoShell(context) {
+    const ctx = context || getContenidoContext();
+    const isBranch = ctx.scope === "branch";
+    let title = "Nodo Contenido";
+    if (isBranch) {
+      const camino = getCaminoAgenteRapidoPorRamaKey(ctx.ramaKey);
+      const nombre =
+        String(camino?.nombre || camino?.nombreCamino || ctx.ramaKey).trim() ||
+        ctx.ramaKey;
+      title = "Contenido · Camino: " + nombre;
+    }
+    const hint = isBranch
+      ? "Bloques de este nodo en el camino. Se guardan en <code>caminos[].next[].config</code> (no modifica <code>rm24h_contenidos</code> global)."
+      : "Bloques que se envían juntos tras la espera. Se guardan en <code>rm24h_contenidos</code> (compatible con RM24H actual).";
     return (
       '<section class="rm24-section rm24-section--contenidos rm24-section--bloque-editor">' +
-      '<h5 class="rm24-section-title">Nodo Contenido</h5>' +
-      '<p class="rm24h-hint rm24-contenidos-intro">Bloques que se envían juntos tras la espera. Se guardan en <code>rm24h_contenidos</code> (compatible con RM24H actual).</p>' +
+      '<h5 class="rm24-section-title">' +
+      esc(title) +
+      "</h5>" +
+      '<p class="rm24h-hint rm24-contenidos-intro">' +
+      hint +
+      "</p>" +
       '<div id="rm24hContenidosError" class="rm24-contenidos-error" hidden></div>' +
       htmlRm24AddPasoControl() +
       '<div id="rm24hContentPickerWrap" class="rm24-content-picker-wrap"></div>' +
       '<div id="rm24hStepEditor" class="rm24-step-editor rm24-step-editor--premium"></div>' +
       "</section>"
     );
+  }
+
+  function renderEditorContenido(context) {
+    setContenidoContext(context || crearContenidoContextMain());
+    const store = getContenidosStorePorContexto();
+    rm24hPasoSeleccionado = store.contenidos.length
+      ? indicePrimerContenidoEditable(store.contenidos)
+      : 0;
+    return htmlEditorContenidoShell(getContenidoContext());
+  }
+
+  function mountEditorContenido(context) {
+    const mount = document.getElementById("rm24hBloqueEditor");
+    if (!mount) return;
+    mount.innerHTML = renderEditorContenido(context);
+    renderRm24ContentPicker();
+    renderRm24StepEditor();
+  }
+
+  function htmlEditorBloqueContenido() {
+    return renderEditorContenido(crearContenidoContextMain());
   }
 
   function htmlEditorBloqueNodoRamaAgenteRapido(nodo, ramaKey) {
@@ -2376,6 +2542,10 @@ window.MacBotRemarketingGlobal = (function () {
   function renderRm24BloqueEditor() {
     const mount = document.getElementById("rm24hBloqueEditor");
     if (!mount) return;
+    if (document.getElementById("rm24hStepEditor")) {
+      syncEditorPasoToContenidos();
+    }
+    syncContenidoContextDesdeSeleccion();
     const tiempo = panelRemarketingAbierto()
       ? leerTiempoDesdePanel()
       : configActiva.tiempoInactividad || { valor: 23, unidad: "horas" };
@@ -2405,6 +2575,11 @@ window.MacBotRemarketingGlobal = (function () {
           return n.id === arSel.nodeId;
         });
         if (found) {
+          const tipoNodo = String(found.type || found.tipo || "").toLowerCase();
+          if (tipoNodo === "contenido") {
+            mountEditorContenido(crearContenidoContextBranch(arSel.ramaKey, arSel.nodeId));
+            return;
+          }
           mount.innerHTML = htmlEditorBloqueNodoRamaAgenteRapido(found, arSel.ramaKey);
           return;
         }
@@ -2422,9 +2597,7 @@ window.MacBotRemarketingGlobal = (function () {
       return;
     }
     if (nodo.tipo === "contenido") {
-      mount.innerHTML = htmlEditorBloqueContenido();
-      renderRm24ContentPicker();
-      renderRm24StepEditor();
+      mountEditorContenido(crearContenidoContextMain());
       return;
     }
     if (nodo.tipo === "agente_rapido") {
@@ -2831,9 +3004,9 @@ window.MacBotRemarketingGlobal = (function () {
     if (!card) return;
     const index = parseInt(card.dataset.index, 10);
     if (!Number.isFinite(index) || index < 0) return;
-    const lista = Array.isArray(configActiva.rm24h_contenidos)
-      ? configActiva.rm24h_contenidos.slice()
-      : [];
+    const ctx = getContenidoContext();
+    const store = getContenidosStorePorContexto(ctx);
+    const lista = store.contenidos.slice();
     if (index >= lista.length) return;
 
     const tipo = card.dataset.tipo;
@@ -2855,14 +3028,12 @@ window.MacBotRemarketingGlobal = (function () {
       }
     }
     lista[index] = item;
-    configActiva.rm24h_contenidos = lista;
+    setContenidosStorePorContexto(ctx, lista);
   }
 
   function leerContenidosDesdePanel() {
     syncEditorPasoToContenidos();
-    return Array.isArray(configActiva.rm24h_contenidos)
-      ? configActiva.rm24h_contenidos.slice()
-      : [];
+    return getRm24ContenidosActivos().slice();
   }
 
   function clampPasoSeleccionado(total) {
@@ -2892,19 +3063,17 @@ window.MacBotRemarketingGlobal = (function () {
   }
 
   function getRm24ContenidosActivos() {
-    if (!Array.isArray(configActiva.rm24h_contenidos)) {
-      configActiva.rm24h_contenidos = [];
-    }
-    return configActiva.rm24h_contenidos;
+    return getContenidosStorePorContexto().contenidos;
   }
 
   function addRm24ContentBlock(tipo) {
     const t = String(tipo || "texto").toLowerCase();
     const tipoNorm = t === "archivo" ? "documento" : t;
     toggleRm24AddPasoMenu(false);
+    const ctx = getContenidoContext();
     const lista = leerContenidosDesdePanel();
     lista.push(crearBloqueVacio(tipoNorm));
-    configActiva.rm24h_contenidos = lista;
+    setContenidosStorePorContexto(ctx, lista);
     rm24hPasoSeleccionado = lista.length - 1;
     renderRm24ContentBlocks();
     mostrarErrorContenidos("");
@@ -2920,23 +3089,25 @@ window.MacBotRemarketingGlobal = (function () {
   }
 
   function removeRm24ContentBlock(index) {
+    const ctx = getContenidoContext();
     const lista = leerContenidosDesdePanel();
     if (index < 0 || index >= lista.length) return;
     lista.splice(index, 1);
-    configActiva.rm24h_contenidos = lista;
+    setContenidosStorePorContexto(ctx, lista);
     clampPasoSeleccionado(lista.length);
     renderRm24ContentBlocks();
     persistirContenidosEnNodo();
   }
 
   function moveRm24ContentBlock(index, delta) {
+    const ctx = getContenidoContext();
     const lista = leerContenidosDesdePanel();
     const next = index + delta;
     if (index < 0 || index >= lista.length || next < 0 || next >= lista.length) return;
     const tmp = lista[index];
     lista[index] = lista[next];
     lista[next] = tmp;
-    configActiva.rm24h_contenidos = lista;
+    setContenidosStorePorContexto(ctx, lista);
     if (rm24hPasoSeleccionado === index) {
       rm24hPasoSeleccionado = next;
     } else if (rm24hPasoSeleccionado === next) {
@@ -2947,6 +3118,7 @@ window.MacBotRemarketingGlobal = (function () {
   }
 
   function reorderRm24ContentBlock(fromIndex, toIndex) {
+    const ctx = getContenidoContext();
     const lista = leerContenidosDesdePanel();
     if (
       fromIndex < 0 ||
@@ -2960,7 +3132,7 @@ window.MacBotRemarketingGlobal = (function () {
     const selectedId = rm24hPasoSeleccionado;
     const item = lista.splice(fromIndex, 1)[0];
     lista.splice(toIndex, 0, item);
-    configActiva.rm24h_contenidos = lista;
+    setContenidosStorePorContexto(ctx, lista);
     if (selectedId === fromIndex) {
       rm24hPasoSeleccionado = toIndex;
     } else if (fromIndex < selectedId && toIndex >= selectedId) {
@@ -2973,11 +3145,11 @@ window.MacBotRemarketingGlobal = (function () {
   }
 
   function updateRm24ContentBlock(index, field, value) {
+    const ctx = getContenidoContext();
     const lista = leerContenidosDesdePanel();
     if (index < 0 || index >= lista.length) return;
     lista[index][field] = value;
-    configActiva.rm24h_contenidos = lista;
-    sincronizarMensajeRemarketingDesdeContenidos(configActiva);
+    setContenidosStorePorContexto(ctx, lista);
     persistirContenidosEnNodo();
   }
 
@@ -2996,7 +3168,9 @@ window.MacBotRemarketingGlobal = (function () {
   function persistirConfigPanelEnNodo() {
     if (!nodoActivo) return;
     syncMiniFlujoEditorToConfig();
-    sincronizarMensajeRemarketingDesdeContenidos(configActiva);
+    if (!esNodoContenidoSeleccionado() || getContenidoContext().scope === "main") {
+      sincronizarMensajeRemarketingDesdeContenidos(configActiva);
+    }
     if (configActiva.rm24h_agente_rapido) {
       if (miniFlujoTieneNodoAgenteRapido()) {
         configActiva.rm24h_agente_rapido = normalizarAgenteRapidoConfig(
@@ -3183,7 +3357,7 @@ window.MacBotRemarketingGlobal = (function () {
         if (fn) fn.value = file.name || "archivo.pdf";
       }
 
-      configActiva.rm24h_contenidos = leerContenidosDesdePanel();
+      leerContenidosDesdePanel();
       renderRm24ContentBlocks();
       persistirContenidosEnNodo();
     } catch (error) {
@@ -4131,8 +4305,9 @@ window.MacBotRemarketingGlobal = (function () {
     configActiva.reiniciarAlResponder = true;
     configActiva.detenerEnConversion = true;
     configActiva.modoContextual = false;
-    configActiva.rm24h_contenidos = leerContenidosDesdePanel();
-    sincronizarMensajeRemarketingDesdeContenidos(configActiva);
+    if (esNodoContenidoSeleccionado()) {
+      leerContenidosDesdePanel();
+    }
     if (esNodoAgenteRapidoSeleccionado()) {
       syncAgenteRapidoDesdePanel();
     }
