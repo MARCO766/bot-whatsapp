@@ -43,6 +43,9 @@ const {
 const {
   procesarRespuestaRemarketingStub,
 } = require("./remarketing24h/procesarRespuestaRemarketingStub");
+const {
+  debeBloquearActivadoresNormales,
+} = require("./remarketing24h/rmContextPolicy");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
@@ -1274,10 +1277,31 @@ async function procesarMensajeEntrante(
     return true;
   }
 
+  const textoDebug = String(texto || "").trim();
+  console.log("[RM_DEBUG] paso=1 before_resetbot", {
+    numero,
+    usuarioId,
+    texto: textoDebug.slice(0, 80),
+    conexionWhatsappId: opts.conexionWhatsappId || null,
+    messageId: messageId || null,
+  });
+
   if (esComandoResetFlujo(texto)) {
     await resetearFlujoLead(numero, usuarioId, opts.conexionWhatsappId || null);
+    console.log("[RM_DEBUG] paso=2 after_resetbot", {
+      numero,
+      usuarioId,
+      conexionWhatsappId: opts.conexionWhatsappId || null,
+      nota: "return true — no continúa a activador ni RM context",
+    });
     return true;
   }
+
+  console.log("[RM_DEBUG] paso=2 after_resetbot", {
+    numero,
+    texto: textoDebug.slice(0, 80),
+    nota: "no era resetbot — continúa pipeline",
+  });
 
   if (opts?.messageType === "image") {
     const lecturaPago = await procesarImagenLectorPago({
@@ -1319,11 +1343,39 @@ async function procesarMensajeEntrante(
   }
 
   const conexionEntrante = opts.conexionWhatsappId || null;
+  console.log("[RM_DEBUG] paso=3 before_obtenerContextoRemarketingPostEnvio", {
+    numero,
+    usuarioId,
+    conexionWhatsappId: conexionEntrante,
+    texto: textoDebug.slice(0, 80),
+  });
   try {
     const rmContext = await obtenerContextoRemarketingPostEnvio({
       usuarioId,
       clienteNumero: numero,
       conexionWhatsappId: conexionEntrante,
+    });
+    const debeBloquearActivadoresRM =
+      rmContext?.fila && rmContext?.policy
+        ? debeBloquearActivadoresNormales(
+            rmContext.policy,
+            rmContext.disparado_en || rmContext.fila?.disparado_en
+          )
+        : null;
+    console.log("[RM_DEBUG] paso=4 rmContext =", rmContext
+      ? {
+          bloquearActivadores: rmContext.bloquearActivadores,
+          flujo_id: rmContext.flujo_id,
+          disparado_en: rmContext.disparado_en,
+          rm24h_id: rmContext.fila?.id,
+          policy_mode: rmContext.policy?.mode,
+          policy_duration: rmContext.policy?.duration,
+          fila_estado: rmContext.fila?.estado,
+          fila_motivo: rmContext.fila?.motivo_cancelacion,
+        }
+      : null);
+    console.log("[RM_DEBUG] paso=5 bloquear =", rmContext?.bloquearActivadores ?? null, {
+      debeBloquearActivadoresRM,
     });
     if (rmContext?.bloquearActivadores) {
       console.log("[RM_CONTEXT] Lead en remarketing, bloqueando activadores normales", {
@@ -1343,6 +1395,10 @@ async function procesarMensajeEntrante(
         fila: rmContext.fila,
         policy: rmContext.policy,
       });
+      console.log("[RM_DEBUG] paso=7 activador_result = skipped", {
+        motivo: "RM context bloqueó activadores",
+        texto: textoDebug.slice(0, 80),
+      });
       return true;
     }
   } catch (err) {
@@ -1350,8 +1406,14 @@ async function procesarMensajeEntrante(
       "[RM_CONTEXT] error evaluando contexto post-envío:",
       err.response?.data || err.message
     );
+    console.log("[RM_DEBUG] paso=4 rmContext = error", err.response?.data || err.message);
   }
 
+  console.log("[RM_DEBUG] paso=6 before_activador", textoDebug.slice(0, 80), {
+    numero,
+    usuarioId,
+    conexionWhatsappId: opts.conexionWhatsappId || null,
+  });
   console.log("[FLUJO] sin sesión IA pendiente → buscar activador");
   const activadorEjecutado = await buscarYEjecutarActivador(
     numero,
@@ -1360,6 +1422,9 @@ async function procesarMensajeEntrante(
     messageId,
     opts.conexionWhatsappId || null
   );
+  console.log("[RM_DEBUG] paso=7 activador_result =", activadorEjecutado, {
+    texto: textoDebug.slice(0, 80),
+  });
 
   if (!activadorEjecutado && usuarioId && numero) {
     try {
