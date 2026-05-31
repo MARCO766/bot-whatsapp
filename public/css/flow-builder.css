@@ -2729,6 +2729,23 @@ body:has(#builderArea) {
   padding-top: 8px;
 }
 
+.rm24-wf-step--camino-chain {
+  max-width: 228px;
+  width: 100%;
+}
+
+.rm24-wf-step-inner--camino {
+  max-width: 228px;
+}
+
+.rm24-wf-col-chain .rm24-wf-junction {
+  max-width: 228px;
+}
+
+.rm24-wf-col-chain .rm24-wf-step {
+  max-width: 228px;
+}
+
 .rm24-wf-fork-col {
   flex: 1 1 130px;
   max-width: 168px;
