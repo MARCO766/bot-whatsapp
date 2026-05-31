@@ -41,8 +41,8 @@ const {
   obtenerContextoRemarketingPostEnvio,
 } = require("./remarketing24h/rmContextPostEnvio");
 const {
-  procesarRespuestaRemarketingStub,
-} = require("./remarketing24h/procesarRespuestaRemarketingStub");
+  procesarRespuestaRemarketing,
+} = require("./remarketing24h/procesarRespuestaRemarketing");
 const {
   debeBloquearActivadoresNormales,
 } = require("./remarketing24h/rmContextPolicy");
@@ -1387,7 +1387,7 @@ async function procesarMensajeEntrante(
         policy_mode: rmContext.policy?.mode,
         disparado_en: rmContext.disparado_en,
       });
-      await procesarRespuestaRemarketingStub({
+      await procesarRespuestaRemarketing({
         numero,
         texto,
         usuarioId,
