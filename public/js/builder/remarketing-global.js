@@ -2919,7 +2919,7 @@ window.MacBotRemarketingGlobal = (function () {
       ">Horas</option>" +
       '<option value="dias"' +
       (uiUnidad === "dias" ? " selected" : "") +
-      ">Días</option></select></div></div></div></div>' +
+      ">Días</option></select></div></div></div></div>" +
       '<div class="rm24-rule">' +
       '<label class="rm24-switch rm24h-toggle">' +
       '<input type="checkbox" id="rm24hRmContextAllowTriggers" data-rm-context-mode="allow_normal_triggers"' +
