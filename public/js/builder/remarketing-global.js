@@ -124,6 +124,7 @@ window.MacBotRemarketingGlobal = (function () {
     btn.setAttribute("aria-expanded", show ? "true" : "false");
     btn.classList.toggle("rm24-add-paso-btn--open", show);
     wrap?.classList.toggle("rm24-add-paso-wrap--open", show);
+    if (show) toggleRm24AddNodoMenu(false);
   }
 
   function resumenPasoFunnel(item) {
@@ -299,20 +300,23 @@ window.MacBotRemarketingGlobal = (function () {
   let rm24hSubidaEnCurso = false;
   let rm24hPasoSeleccionado = 0;
   let rm24hBloqueSeleccionado = "espera";
+  let rm24hMiniFlujoNodos = [];
+  let rm24hMiniFlujoUidSeq = 0;
+  let rm24hDragNodoIndex = null;
 
-  /**
-   * Mini Flujo RM — catálogo visual (solo UI, Fase 1).
-   * Persistencia futura propuesta: config.rm24h_flujo (ver comentario en renderMiniFlujoRmHtml).
-   */
-  const RM24H_MINI_FLUJO_BLOQUES = [
-    { id: "espera", icon: "⏱", label: "Esperar inactividad", kind: "wait", activo: true },
-    { id: "contenido", icon: "📤", label: "Contenido", kind: "send", activo: true },
-    { id: "agente_rapido", icon: "🤖", label: "Agente rápido", kind: "action", futuro: true },
-    { id: "lector_pagos", icon: "💳", label: "Lector de pagos", kind: "action", futuro: true },
-    { id: "etiqueta", icon: "🏷️", label: "Etiqueta", kind: "action", futuro: true },
-    { id: "conversion", icon: "🎯", label: "Conversión", kind: "action", futuro: true },
-    { id: "fin", icon: "✅", label: "Fin", kind: "end", activo: true },
+  /** Catálogo de nodos agregables al mini flujo (solo UI, sin persistencia JSON). */
+  const RM24H_NODO_TIPOS = [
+    { tipo: "contenido", icon: "💬", label: "Contenido", kind: "send", runtime: true },
+    { tipo: "agente_rapido", icon: "⚡", label: "Agente rápido", kind: "action", runtime: false },
+    { tipo: "lector_pagos", icon: "💳", label: "Lector pagos", kind: "action", runtime: false },
+    { tipo: "etiqueta", icon: "🏷", label: "Etiqueta", kind: "action", runtime: false },
+    { tipo: "conversion", icon: "🎯", label: "Conversión", kind: "action", runtime: false },
   ];
+
+  const RM24H_BLOQUES_FIJOS = {
+    espera: { id: "espera", icon: "⏱", label: "Esperar inactividad", kind: "wait" },
+    fin: { id: "fin", icon: "✅", label: "Fin", kind: "end" },
+  };
 
   const RM24H_MEDIA_CLIENT = {
     imagen: {
@@ -545,47 +549,174 @@ window.MacBotRemarketingGlobal = (function () {
       '<span class="rm24-embudo-head-icon" aria-hidden="true">🔥</span>' +
       "<span>Mini flujo RM</span></div>" +
       '<div class="rm24-embudo-head-stats">' +
-      '<span class="rm24-embudo-stat" id="rm24hEmbudoPasoCount">0 contenidos</span>' +
+      '<span class="rm24-embudo-stat" id="rm24hEmbudoPasoCount">0 nodos</span>' +
       '<span class="rm24-embudo-stat rm24-embudo-stat--time" id="rm24hEmbudoTiempoTotal">Espera: —</span>' +
       "</div></div>" +
-      '<p class="rm24-embudo-intro">Recorrido vertical · selecciona un bloque para editarlo</p>' +
+      '<p class="rm24-embudo-intro">Espera y Fin fijos · construye el centro con nodos RM</p>' +
       '<div class="rm24-embudo-canvas">' +
       '<div class="rm24-embudo rm24-embudo--premium rm24-mini-flujo" id="rm24hEmbudoRm" role="list"></div>' +
       "</div></section>"
     );
   }
 
-  function resumenMiniFlujoBloque(bloqueId, contenidosRaw, tiempo) {
-    if (bloqueId === "espera") {
-      return etiquetaTiempoEmbudoCompacto(tiempo);
+  function resetMiniFlujoRmPanel() {
+    rm24hMiniFlujoNodos = [];
+    rm24hMiniFlujoUidSeq = 0;
+    rm24hDragNodoIndex = null;
+    rm24hBloqueSeleccionado = "espera";
+  }
+
+  function crearUidMiniFlujoNodo() {
+    rm24hMiniFlujoUidSeq += 1;
+    return "rmn_" + Date.now().toString(36) + "_" + rm24hMiniFlujoUidSeq;
+  }
+
+  function getCatalogoNodoRm24(tipo) {
+    return RM24H_NODO_TIPOS.find(function (n) {
+      return n.tipo === tipo;
+    });
+  }
+
+  function getMiniFlujoNodo(uid) {
+    return rm24hMiniFlujoNodos.find(function (n) {
+      return n.uid === uid;
+    });
+  }
+
+  function esNodoContenidoSeleccionado() {
+    const n = getMiniFlujoNodo(rm24hBloqueSeleccionado);
+    return !!(n && n.tipo === "contenido");
+  }
+
+  function htmlRm24AddNodoControl() {
+    return (
+      '<div class="rm24-add-paso-wrap rm24-add-paso-wrap--premium rm24-mini-flujo-add-wrap" id="rm24hAddNodoWrap">' +
+      '<button type="button" class="rm24-add-paso-btn rm24-add-paso-btn--premium rm24-mini-flujo-add-btn" id="rm24hAddNodoBtn" aria-expanded="false" aria-haspopup="dialog">' +
+      '<span class="rm24-add-paso-btn-icon" aria-hidden="true">＋</span>' +
+      "<span>Agregar nodo RM</span></button>" +
+      '<div class="rm24-add-paso-popover" id="rm24hAddNodoPopover" hidden>' +
+      '<div class="rm24-add-paso-popover-backdrop" data-rm24-close-add-nodo aria-hidden="true"></div>' +
+      '<div class="rm24-add-paso-menu rm24-add-paso-menu--premium" id="rm24hAddNodoMenu" role="menu">' +
+      '<p class="rm24-add-paso-menu-title">Elegir tipo de nodo</p>' +
+      RM24H_NODO_TIPOS.map(function (c) {
+        return (
+          '<button type="button" class="rm24-add-paso-menu-item" role="menuitem" data-add-nodo-tipo="' +
+          esc(c.tipo) +
+          '">' +
+          '<span class="rm24-add-paso-menu-icon" aria-hidden="true">' +
+          c.icon +
+          "</span>" +
+          '<span class="rm24-add-paso-menu-label">' +
+          esc(c.label) +
+          "</span>" +
+          (c.runtime ? "" : '<span class="rm24-future-badge">solo UI</span>') +
+          "</button>"
+        );
+      }).join("") +
+      "</div></div></div>"
+    );
+  }
+
+  function toggleRm24AddNodoMenu(open) {
+    const btn = document.getElementById("rm24hAddNodoBtn");
+    const menu = document.getElementById("rm24hAddNodoMenu");
+    const popover = document.getElementById("rm24hAddNodoPopover");
+    const wrap = document.getElementById("rm24hAddNodoWrap");
+    if (!btn || !menu || !popover) return;
+    const show = typeof open === "boolean" ? open : popover.hidden;
+    popover.hidden = !show;
+    menu.hidden = !show;
+    btn.setAttribute("aria-expanded", show ? "true" : "false");
+    btn.classList.toggle("rm24-add-paso-btn--open", show);
+    wrap?.classList.toggle("rm24-add-paso-wrap--open", show);
+    if (show) toggleRm24AddPasoMenu(false);
+  }
+
+  function addMiniFlujoNodo(tipo) {
+    const cat = getCatalogoNodoRm24(String(tipo || "").toLowerCase());
+    if (!cat) return;
+    toggleRm24AddNodoMenu(false);
+    const uid = crearUidMiniFlujoNodo();
+    rm24hMiniFlujoNodos.push({ uid: uid, tipo: cat.tipo });
+    selectRm24Bloque(uid);
+  }
+
+  function removeMiniFlujoNodo(uid) {
+    const idx = rm24hMiniFlujoNodos.findIndex(function (n) {
+      return n.uid === uid;
+    });
+    if (idx < 0) return;
+    rm24hMiniFlujoNodos.splice(idx, 1);
+    if (rm24hBloqueSeleccionado === uid) {
+      rm24hBloqueSeleccionado = rm24hMiniFlujoNodos.length
+        ? rm24hMiniFlujoNodos[Math.min(idx, rm24hMiniFlujoNodos.length - 1)].uid
+        : "espera";
     }
-    if (bloqueId === "contenido") {
+    renderRm24BloqueEditor();
+    actualizarEmbudoRmPanel();
+  }
+
+  function moveMiniFlujoNodo(uid, delta) {
+    const idx = rm24hMiniFlujoNodos.findIndex(function (n) {
+      return n.uid === uid;
+    });
+    const next = idx + delta;
+    if (idx < 0 || next < 0 || next >= rm24hMiniFlujoNodos.length) return;
+    const tmp = rm24hMiniFlujoNodos[idx];
+    rm24hMiniFlujoNodos[idx] = rm24hMiniFlujoNodos[next];
+    rm24hMiniFlujoNodos[next] = tmp;
+    renderRm24BloqueEditor();
+    actualizarEmbudoRmPanel();
+  }
+
+  function reorderMiniFlujoNodo(fromIndex, toIndex) {
+    if (
+      fromIndex < 0 ||
+      fromIndex >= rm24hMiniFlujoNodos.length ||
+      toIndex < 0 ||
+      toIndex >= rm24hMiniFlujoNodos.length ||
+      fromIndex === toIndex
+    ) {
+      return;
+    }
+    const item = rm24hMiniFlujoNodos.splice(fromIndex, 1)[0];
+    rm24hMiniFlujoNodos.splice(toIndex, 0, item);
+    renderRm24BloqueEditor();
+    actualizarEmbudoRmPanel();
+  }
+
+  function resumenMiniFlujoNodo(nodo, contenidosRaw) {
+    if (nodo.tipo === "contenido") {
       const resumen = resumenContenidoEmbudo(contenidosRaw);
       return resumen.vacio ? "Sin contenido configurado" : resumen.linea;
     }
-    if (bloqueId === "fin") {
-      return "Lead queda en remarketing · no vuelve al flujo";
-    }
-    return "Próxima fase · sin motor aún";
+    const cat = getCatalogoNodoRm24(nodo.tipo);
+    if (cat && !cat.runtime) return "Configuración pendiente · solo UI";
+    return "Listo";
   }
 
-  function htmlMiniFlujoBloque(bloque, stepNum, resumen, selected) {
-    const locked = !!bloque.futuro;
-    const muted = locked || resumen === "Sin contenido configurado";
-    const nodeKind = bloque.kind || "action";
+  function resumenMiniFlujoBloqueFijo(bloqueId, contenidosRaw, tiempo) {
+    if (bloqueId === "espera") return etiquetaTiempoEmbudoCompacto(tiempo);
+    if (bloqueId === "fin") return "Lead queda en remarketing · no vuelve al flujo";
+    return "";
+  }
+
+  function htmlMiniFlujoBloqueFijo(bloqueId, stepNum, resumen, selected) {
+    const bloque = RM24H_BLOQUES_FIJOS[bloqueId];
+    if (!bloque) return "";
+    const muted = bloqueId === "fin" ? false : false;
     return (
       '<div class="rm24-embudo-step" role="listitem">' +
       '<button type="button" class="rm24-embudo-node rm24-mini-flujo-node rm24-mini-flujo-node--' +
-      esc(nodeKind) +
+      esc(bloque.kind) +
+      " rm24-mini-flujo-node--fixed" +
       (selected ? " rm24-embudo-node--selected" : "") +
-      (locked ? " rm24-mini-flujo-node--locked" : "") +
       '" data-rm24-bloque-id="' +
       esc(bloque.id) +
       '" aria-current="' +
       (selected ? "step" : "false") +
       '">' +
       (selected ? '<span class="rm24-embudo-editing-pill">Editando</span>' : "") +
-      (locked ? '<span class="rm24-future-badge rm24-mini-flujo-badge">futuro</span>' : "") +
       '<span class="rm24-embudo-badge" aria-hidden="true">' +
       stepNum +
       "</span>" +
@@ -604,26 +735,108 @@ window.MacBotRemarketingGlobal = (function () {
     );
   }
 
-  function renderMiniFlujoRmHtml(contenidosRaw, tiempo, bloqueSeleccionado) {
+  function htmlMiniFlujoNodo(nodo, stepNum, resumen, selected, nodeIndex, total) {
+    const cat = getCatalogoNodoRm24(nodo.tipo) || {
+      icon: "📎",
+      label: nodo.tipo,
+      kind: "action",
+      runtime: false,
+    };
+    const muted =
+      resumen === "Sin contenido configurado" ||
+      resumen.indexOf("pendiente") >= 0;
+    const dragClass =
+      rm24hDragNodoIndex === nodeIndex ? " rm24-embudo-node--dragging" : "";
+    return (
+      '<div class="rm24-embudo-step" role="listitem">' +
+      '<div class="rm24-embudo-step-card">' +
+      '<button type="button" class="rm24-embudo-node rm24-mini-flujo-node rm24-mini-flujo-node--' +
+      esc(cat.kind) +
+      (selected ? " rm24-embudo-node--selected" : "") +
+      (!cat.runtime ? " rm24-mini-flujo-node--locked" : "") +
+      dragClass +
+      '" data-rm24-nodo-uid="' +
+      esc(nodo.uid) +
+      '" draggable="true" aria-current="' +
+      (selected ? "step" : "false") +
+      '">' +
+      (selected ? '<span class="rm24-embudo-editing-pill">Editando</span>' : "") +
+      (!cat.runtime ? '<span class="rm24-future-badge rm24-mini-flujo-badge">solo UI</span>' : "") +
+      '<span class="rm24-embudo-badge" aria-hidden="true">' +
+      stepNum +
+      "</span>" +
+      '<span class="rm24-embudo-icon" aria-hidden="true">' +
+      cat.icon +
+      "</span>" +
+      '<div class="rm24-embudo-body">' +
+      '<span class="rm24-embudo-label">' +
+      esc(cat.label) +
+      "</span>" +
+      '<span class="rm24-embudo-value' +
+      (muted ? " rm24-embudo-value--muted" : "") +
+      '">' +
+      esc(resumen) +
+      "</span></div></button>" +
+      '<div class="rm24-embudo-step-hover-actions" aria-label="Acciones del nodo">' +
+      '<button type="button" class="rm24-embudo-quick-action" data-rm24-nodo-uid="' +
+      esc(nodo.uid) +
+      '" title="Editar">✏</button>' +
+      '<button type="button" class="rm24-embudo-quick-action" data-rm24-nodo-move-up="' +
+      esc(nodo.uid) +
+      '" title="Subir"' +
+      (nodeIndex === 0 ? " disabled" : "") +
+      ">↑</button>" +
+      '<button type="button" class="rm24-embudo-quick-action" data-rm24-nodo-move-down="' +
+      esc(nodo.uid) +
+      '" title="Bajar"' +
+      (nodeIndex >= total - 1 ? " disabled" : "") +
+      ">↓</button>" +
+      '<button type="button" class="rm24-embudo-quick-action rm24-embudo-quick-action--danger" data-rm24-nodo-remove="' +
+      esc(nodo.uid) +
+      '" title="Eliminar">×</button></div></div></div>'
+    );
+  }
+
+  function renderMiniFlujoRmHtml(contenidosRaw, tiempo, seleccionado) {
     let html = "";
-    RM24H_MINI_FLUJO_BLOQUES.forEach(function (bloque, index) {
-      if (index > 0) html += htmlEmbudoConnector();
-      html += htmlMiniFlujoBloque(
-        bloque,
-        index + 1,
-        resumenMiniFlujoBloque(bloque.id, contenidosRaw, tiempo),
-        bloque.id === bloqueSeleccionado
+    let stepNum = 1;
+    html += htmlMiniFlujoBloqueFijo(
+      "espera",
+      stepNum++,
+      resumenMiniFlujoBloqueFijo("espera", contenidosRaw, tiempo),
+      seleccionado === "espera"
+    );
+    html += htmlEmbudoConnector();
+    rm24hMiniFlujoNodos.forEach(function (nodo, index) {
+      html += htmlMiniFlujoNodo(
+        nodo,
+        stepNum++,
+        resumenMiniFlujoNodo(nodo, contenidosRaw),
+        seleccionado === nodo.uid,
+        index,
+        rm24hMiniFlujoNodos.length
       );
+      html += htmlEmbudoConnector();
     });
+    html += htmlRm24AddNodoControl();
+    html += htmlEmbudoConnector();
+    html += htmlMiniFlujoBloqueFijo(
+      "fin",
+      stepNum,
+      resumenMiniFlujoBloqueFijo("fin", contenidosRaw, tiempo),
+      seleccionado === "fin"
+    );
     return html;
   }
 
   function selectRm24Bloque(bloqueId) {
-    const bloque = RM24H_MINI_FLUJO_BLOQUES.find(function (b) {
-      return b.id === bloqueId;
-    });
-    if (!bloque) return;
-    rm24hBloqueSeleccionado = bloque.id;
+    if (bloqueId === "espera" || bloqueId === "fin") {
+      rm24hBloqueSeleccionado = bloqueId;
+    } else if (getMiniFlujoNodo(bloqueId)) {
+      rm24hBloqueSeleccionado = bloqueId;
+    } else {
+      return;
+    }
     renderRm24BloqueEditor();
     actualizarEmbudoRmPanel();
     requestAnimationFrame(function () {
@@ -702,21 +915,19 @@ window.MacBotRemarketingGlobal = (function () {
     );
   }
 
-  function htmlEditorBloqueFuturo(bloqueId) {
-    const bloque = RM24H_MINI_FLUJO_BLOQUES.find(function (b) {
-      return b.id === bloqueId;
-    });
-    const label = bloque?.label || "Bloque";
+  function htmlEditorBloqueNodoFuturo(tipo) {
+    const cat = getCatalogoNodoRm24(tipo);
+    const label = cat?.label || "Nodo RM";
     return (
       '<section class="rm24-section rm24-section--bloque-editor rm24-section--bloque-futuro">' +
       '<h5 class="rm24-section-title">' +
       esc(label) +
       "</h5>" +
-      '<p class="rm24h-hint">Este bloque forma parte del Mini Flujo RM, pero aún no tiene motor en runtime.</p>' +
+      '<p class="rm24h-hint">Nodo del mini flujo RM · solo UI por ahora.</p>' +
       '<div class="rm24-bloque-futuro-card">' +
       '<span class="rm24-future-badge">UI preparada · motor pendiente</span>' +
-      "<p>En Fase 1 el envío sigue siendo: espera → contenido → fin automático.</p>" +
-      "<p>No se guarda configuración extra todavía.</p></div></section>"
+      "<p>Este nodo aún no ejecuta acciones en runtime.</p>" +
+      "<p>El envío actual sigue usando <strong>rm24h_contenidos</strong> cuando hay nodo Contenido configurado.</p></div></section>"
     );
   }
 
@@ -746,17 +957,23 @@ window.MacBotRemarketingGlobal = (function () {
       actualizarHintTiempoPanel(configActiva.tiempoInactividad || tiempo);
       return;
     }
-    if (rm24hBloqueSeleccionado === "contenido") {
+    if (rm24hBloqueSeleccionado === "fin") {
+      mount.innerHTML = htmlEditorBloqueFin();
+      return;
+    }
+    const nodo = getMiniFlujoNodo(rm24hBloqueSeleccionado);
+    if (!nodo) {
+      rm24hBloqueSeleccionado = "espera";
+      renderRm24BloqueEditor();
+      return;
+    }
+    if (nodo.tipo === "contenido") {
       mount.innerHTML = htmlEditorBloqueContenido();
       renderRm24ContentPicker();
       renderRm24StepEditor();
       return;
     }
-    if (rm24hBloqueSeleccionado === "fin") {
-      mount.innerHTML = htmlEditorBloqueFin();
-      return;
-    }
-    mount.innerHTML = htmlEditorBloqueFuturo(rm24hBloqueSeleccionado);
+    mount.innerHTML = htmlEditorBloqueNodoFuturo(nodo.tipo);
   }
 
   function htmlEmbudoConnector() {
@@ -785,12 +1002,15 @@ window.MacBotRemarketingGlobal = (function () {
     const contenidos = obtenerContenidosParaEmbudo();
     const pasoCountEl = document.getElementById("rm24hEmbudoPasoCount");
     const tiempoTotalEl = document.getElementById("rm24hEmbudoTiempoTotal");
-    if (pasoCountEl) pasoCountEl.textContent = contarContenidosEmbudo(contenidos);
+    const nNodos = rm24hMiniFlujoNodos.length;
+    if (pasoCountEl) {
+      pasoCountEl.textContent = nNodos + " nodo" + (nNodos === 1 ? "" : "s");
+    }
     if (tiempoTotalEl) {
       tiempoTotalEl.textContent = "Espera: " + calcularTiempoEsperaEmbudo(tiempo);
     }
 
-    if (rm24hBloqueSeleccionado === "contenido") {
+    if (esNodoContenidoSeleccionado()) {
       const editableCount = (contenidos || []).filter(esContenidoEditableRm24).length;
       clampPasoSeleccionado(editableCount);
       if (
@@ -1734,7 +1954,7 @@ window.MacBotRemarketingGlobal = (function () {
   }
 
   function renderRm24ContentBlocks() {
-    if (rm24hBloqueSeleccionado === "contenido") {
+    if (esNodoContenidoSeleccionado()) {
       renderRm24ContentPicker();
       renderRm24StepEditor();
     }
@@ -1754,8 +1974,43 @@ window.MacBotRemarketingGlobal = (function () {
     if (mount._rm24hOnInput) {
       mount.removeEventListener("input", mount._rm24hOnInput);
     }
+    if (mount._rm24hOnDragStart) {
+      mount.removeEventListener("dragstart", mount._rm24hOnDragStart);
+    }
+    if (mount._rm24hOnDragOver) {
+      mount.removeEventListener("dragover", mount._rm24hOnDragOver);
+    }
+    if (mount._rm24hOnDrop) {
+      mount.removeEventListener("drop", mount._rm24hOnDrop);
+    }
+    if (mount._rm24hOnDragEnd) {
+      mount.removeEventListener("dragend", mount._rm24hOnDragEnd);
+    }
 
     mount._rm24hOnClick = function (ev) {
+      const addNodoBtn = ev.target.closest("#rm24hAddNodoBtn");
+      if (addNodoBtn) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        toggleRm24AddNodoMenu();
+        return;
+      }
+
+      const addNodoTipoBtn = ev.target.closest("[data-add-nodo-tipo]");
+      if (addNodoTipoBtn) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        addMiniFlujoNodo(addNodoTipoBtn.getAttribute("data-add-nodo-tipo"));
+        return;
+      }
+
+      if (ev.target.closest("[data-rm24-close-add-nodo]")) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        toggleRm24AddNodoMenu(false);
+        return;
+      }
+
       const addBtn = ev.target.closest("#rm24hAddPasoBtn");
       if (addBtn) {
         ev.preventDefault();
@@ -1776,6 +2031,38 @@ window.MacBotRemarketingGlobal = (function () {
         ev.preventDefault();
         ev.stopPropagation();
         toggleRm24AddPasoMenu(false);
+        return;
+      }
+
+      const nodoRemoveBtn = ev.target.closest("[data-rm24-nodo-remove]");
+      if (nodoRemoveBtn) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        removeMiniFlujoNodo(nodoRemoveBtn.getAttribute("data-rm24-nodo-remove"));
+        return;
+      }
+
+      const nodoMoveUpBtn = ev.target.closest("[data-rm24-nodo-move-up]");
+      if (nodoMoveUpBtn && !nodoMoveUpBtn.disabled) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        moveMiniFlujoNodo(nodoMoveUpBtn.getAttribute("data-rm24-nodo-move-up"), -1);
+        return;
+      }
+
+      const nodoMoveDownBtn = ev.target.closest("[data-rm24-nodo-move-down]");
+      if (nodoMoveDownBtn && !nodoMoveDownBtn.disabled) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        moveMiniFlujoNodo(nodoMoveDownBtn.getAttribute("data-rm24-nodo-move-down"), 1);
+        return;
+      }
+
+      const nodoBtn = ev.target.closest("[data-rm24-nodo-uid]");
+      if (nodoBtn) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        selectRm24Bloque(nodoBtn.getAttribute("data-rm24-nodo-uid"));
         return;
       }
 
@@ -1870,15 +2157,78 @@ window.MacBotRemarketingGlobal = (function () {
       persistirContenidosEnNodo();
     };
 
+    mount._rm24hOnDragStart = function (ev) {
+      const step = ev.target.closest(
+        ".rm24-mini-flujo-node[draggable='true'][data-rm24-nodo-uid]"
+      );
+      if (!step) return;
+      const uid = step.getAttribute("data-rm24-nodo-uid");
+      rm24hDragNodoIndex = rm24hMiniFlujoNodos.findIndex(function (n) {
+        return n.uid === uid;
+      });
+      step.classList.add("rm24-embudo-node--dragging");
+      if (ev.dataTransfer) {
+        ev.dataTransfer.effectAllowed = "move";
+        ev.dataTransfer.setData("text/plain", String(rm24hDragNodoIndex));
+      }
+    };
+
+    mount._rm24hOnDragOver = function (ev) {
+      const step = ev.target.closest("[data-rm24-nodo-uid][draggable='true']");
+      if (!step) return;
+      ev.preventDefault();
+      if (ev.dataTransfer) ev.dataTransfer.dropEffect = "move";
+      document.querySelectorAll(".rm24-embudo-node--drop-target").forEach(function (el) {
+        el.classList.remove("rm24-embudo-node--drop-target");
+      });
+      step.classList.add("rm24-embudo-node--drop-target");
+    };
+
+    mount._rm24hOnDrop = function (ev) {
+      const step = ev.target.closest("[data-rm24-nodo-uid][draggable='true']");
+      if (!step) return;
+      ev.preventDefault();
+      const from =
+        rm24hDragNodoIndex != null
+          ? rm24hDragNodoIndex
+          : parseInt(ev.dataTransfer?.getData("text/plain"), 10);
+      const uid = step.getAttribute("data-rm24-nodo-uid");
+      const to = rm24hMiniFlujoNodos.findIndex(function (n) {
+        return n.uid === uid;
+      });
+      document.querySelectorAll(".rm24-embudo-node--drop-target").forEach(function (el) {
+        el.classList.remove("rm24-embudo-node--drop-target");
+      });
+      if (Number.isFinite(from) && Number.isFinite(to)) {
+        reorderMiniFlujoNodo(from, to);
+      }
+    };
+
+    mount._rm24hOnDragEnd = function () {
+      rm24hDragNodoIndex = null;
+      document.querySelectorAll(".rm24-embudo-node--dragging").forEach(function (el) {
+        el.classList.remove("rm24-embudo-node--dragging");
+      });
+      document.querySelectorAll(".rm24-embudo-node--drop-target").forEach(function (el) {
+        el.classList.remove("rm24-embudo-node--drop-target");
+      });
+    };
+
     mount.addEventListener("click", mount._rm24hOnClick);
     mount.addEventListener("change", mount._rm24hOnChange);
     mount.addEventListener("input", mount._rm24hOnInput);
+    mount.addEventListener("dragstart", mount._rm24hOnDragStart);
+    mount.addEventListener("dragover", mount._rm24hOnDragOver);
+    mount.addEventListener("drop", mount._rm24hOnDrop);
+    mount.addEventListener("dragend", mount._rm24hOnDragEnd);
 
     if (!mount._rm24hDocClick) {
       mount._rm24hDocClick = function (ev) {
         if (!panelRemarketingAbierto()) return;
         if (ev.target.closest("#rm24hAddPasoWrap")) return;
+        if (ev.target.closest("#rm24hAddNodoWrap")) return;
         toggleRm24AddPasoMenu(false);
+        toggleRm24AddNodoMenu(false);
       };
       document.addEventListener("click", mount._rm24hDocClick);
     }
@@ -1937,7 +2287,7 @@ window.MacBotRemarketingGlobal = (function () {
 
     nodoActivo = nodo;
     rm24hPasoSeleccionado = 0;
-    rm24hBloqueSeleccionado = "espera";
+    resetMiniFlujoRmPanel();
     hydrateRm24ContentBlocksFromNode(nodo);
     sincronizarHorasLegacyDesdeTiempo(configActiva);
 
@@ -2130,7 +2480,7 @@ window.MacBotRemarketingGlobal = (function () {
     nodoActivo = null;
     configActiva = crearConfigVacia();
     rm24hPasoSeleccionado = 0;
-    rm24hBloqueSeleccionado = "espera";
+    resetMiniFlujoRmPanel();
     const panelShell = document.getElementById("panelNodo");
     panelShell?.classList.remove(
       "panel-nodo--rm24h",

@@ -2383,6 +2383,21 @@ body:has(#builderArea) {
   position: relative;
 }
 
+.rm24-mini-flujo-node--fixed {
+  cursor: pointer;
+}
+
+.rm24-mini-flujo-add-wrap {
+  display: flex;
+  justify-content: center;
+  padding: 4px 0;
+}
+
+.rm24-mini-flujo-add-btn {
+  width: 100%;
+  max-width: 100%;
+}
+
 .rm24-bloque-futuro-card,
 .rm24-section--bloque-fin .rm24-mini-flujo-fin-list {
   margin-top: 10px;
