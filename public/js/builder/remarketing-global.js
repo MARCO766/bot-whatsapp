@@ -293,6 +293,140 @@ window.MacBotRemarketingGlobal = (function () {
     return resumenCaminosAgenteRapidoEmbudo(arRaw);
   }
 
+  const RM24H_LECTOR_MONEDAS = ["Bs", "USD", "MXN", "CLP", "COP", "PEN", "ARS"];
+
+  const RM24H_ACCION_PAGO_VALIDO = [
+    { value: "ir_a_conversion", label: "Ir a conversión" },
+    { value: "aplicar_etiqueta", label: "Aplicar etiqueta" },
+    { value: "enviar_contenido", label: "Enviar contenido" },
+    { value: "finalizar_rm", label: "Finalizar RM" },
+  ];
+
+  function crearUidLectorPagos() {
+    return "rm_pay_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 6);
+  }
+
+  function crearLectorPagosConfigVacia() {
+    return {
+      activo: false,
+      producto: "",
+      montoEsperado: 0,
+      moneda: "Bs",
+      verificarMonto: true,
+      verificarFecha: false,
+      revisionManualSiFalla: true,
+      accionPagoValido: "ir_a_conversion",
+      mensajePagoNoValido:
+        "No pude validar el comprobante 😅 ¿puedes enviarlo más claro?",
+      tiempoMaximoEspera: { valor: 24, unidad: "horas" },
+    };
+  }
+
+  function normalizarUnidadTiempoEsperaLector(unidad) {
+    const s = String(unidad || "")
+      .toLowerCase()
+      .trim();
+    if (s === "minuto" || s === "minutos" || s === "min") return "minutos";
+    if (s === "hora" || s === "horas" || s === "h") return "horas";
+    if (s === "dia" || s === "días" || s === "dias" || s === "day" || s === "days") {
+      return "dias";
+    }
+    return null;
+  }
+
+  function normalizarTiempoMaximoEsperaLector(raw) {
+    const fallback = { valor: 24, unidad: "horas" };
+    if (!raw || typeof raw !== "object") return { ...fallback };
+    const unidad = normalizarUnidadTiempoEsperaLector(raw.unidad) || fallback.unidad;
+    const valor = parseInt(raw.valor, 10);
+    if (!Number.isFinite(valor) || valor < 1) return { valor: fallback.valor, unidad: unidad };
+    return { valor: valor, unidad: unidad };
+  }
+
+  function normalizarAccionPagoValido(val) {
+    const v = String(val || "ir_a_conversion").trim();
+    return RM24H_ACCION_PAGO_VALIDO.some(function (a) {
+      return a.value === v;
+    })
+      ? v
+      : "ir_a_conversion";
+  }
+
+  function normalizarMonedaLectorPagos(val) {
+    const v = String(val || "Bs").trim();
+    return RM24H_LECTOR_MONEDAS.indexOf(v) >= 0 ? v : "Bs";
+  }
+
+  function normalizarLectorPagosConfig(raw) {
+    const base = crearLectorPagosConfigVacia();
+    if (!raw || typeof raw !== "object") return base;
+    const monto = parseFloat(raw.montoEsperado ?? raw.monto_esperado);
+    return {
+      activo: raw.activo === true,
+      producto: String(raw.producto ?? "").trim(),
+      montoEsperado: Number.isFinite(monto) && monto >= 0 ? monto : base.montoEsperado,
+      moneda: normalizarMonedaLectorPagos(raw.moneda ?? raw.monedaEsperada),
+      verificarMonto: raw.verificarMonto !== false,
+      verificarFecha: raw.verificarFecha === true,
+      revisionManualSiFalla: raw.revisionManualSiFalla !== false,
+      accionPagoValido: normalizarAccionPagoValido(raw.accionPagoValido),
+      mensajePagoNoValido: String(
+        raw.mensajePagoNoValido ?? base.mensajePagoNoValido
+      ).trim(),
+      tiempoMaximoEspera: normalizarTiempoMaximoEsperaLector(
+        raw.tiempoMaximoEspera || raw.tiempo_maximo_espera
+      ),
+    };
+  }
+
+  function normalizarLectorPagosNodo(raw) {
+    if (!raw || typeof raw !== "object") {
+      return {
+        type: "lector_pagos",
+        id: crearUidLectorPagos(),
+        config: crearLectorPagosConfigVacia(),
+      };
+    }
+    return {
+      type: "lector_pagos",
+      id: String(raw.id || crearUidLectorPagos()),
+      config: normalizarLectorPagosConfig(raw.config),
+    };
+  }
+
+  function lectorPagosTieneConfig(cfg) {
+    return !!(cfg && cfg.rm24h_lector_pagos && typeof cfg.rm24h_lector_pagos === "object");
+  }
+
+  function lectorPagosEstaConfigurado(lpRaw) {
+    const lp = normalizarLectorPagosNodo(lpRaw);
+    const c = lp.config;
+    return (
+      c.activo ||
+      String(c.producto || "").trim().length > 0 ||
+      (Number.isFinite(c.montoEsperado) && c.montoEsperado > 0)
+    );
+  }
+
+  function resumenLectorPagosEmbudo(lpRaw) {
+    const lp = normalizarLectorPagosNodo(lpRaw);
+    const c = lp.config;
+    if (!lectorPagosEstaConfigurado(lp)) {
+      return "Configurar validación de pago";
+    }
+    const partes = [];
+    if (String(c.producto || "").trim()) {
+      partes.push("Producto: " + String(c.producto).trim());
+    }
+    if (Number.isFinite(c.montoEsperado) && c.montoEsperado > 0) {
+      partes.push("Monto: " + c.montoEsperado + " " + c.moneda);
+    }
+    if (c.activo) {
+      partes.push("OCR activo");
+    }
+    return partes.length ? partes.join(" · ") : "Configurar validación de pago";
+  }
+
   function previewTextoCorto(texto, max) {
     const t = String(texto || "").trim();
     if (!t) return "";
@@ -1020,11 +1154,18 @@ window.MacBotRemarketingGlobal = (function () {
     return configActiva.rm24h_agente_rapido;
   }
 
+  function getLectorPagosActivo() {
+    if (!configActiva.rm24h_lector_pagos) {
+      configActiva.rm24h_lector_pagos = normalizarLectorPagosNodo(null);
+    }
+    return configActiva.rm24h_lector_pagos;
+  }
+
   /** Catálogo de nodos agregables al mini flujo (solo UI, sin persistencia JSON). */
   const RM24H_NODO_TIPOS = [
     { tipo: "contenido", icon: "💬", label: "Contenido", kind: "send", runtime: true },
     { tipo: "agente_rapido", icon: "⚡", label: "Agente rápido", kind: "action", runtime: false },
-    { tipo: "lector_pagos", icon: "💳", label: "Lector pagos", kind: "action", runtime: false },
+    { tipo: "lector_pagos", icon: "💳", label: "Lector de pagos", kind: "action", runtime: false },
     { tipo: "etiqueta", icon: "🏷", label: "Etiqueta", kind: "action", runtime: false },
     { tipo: "conversion", icon: "🎯", label: "Conversión", kind: "action", runtime: false },
     { tipo: "fin_rm", icon: "✅", label: "Fin RM", kind: "end", runtime: false },
@@ -1308,9 +1449,26 @@ window.MacBotRemarketingGlobal = (function () {
     });
   }
 
+  function miniFlujoTieneNodoLectorPagos() {
+    return rm24hMiniFlujoNodos.some(function (n) {
+      return n.tipo === "lector_pagos";
+    });
+  }
+
+  function findNodoLectorPagosMiniFlujo() {
+    return rm24hMiniFlujoNodos.find(function (n) {
+      return n.tipo === "lector_pagos";
+    });
+  }
+
   function esNodoAgenteRapidoSeleccionado() {
     const n = getMiniFlujoNodo(rm24hBloqueSeleccionado);
     return !!(n && n.tipo === "agente_rapido");
+  }
+
+  function esNodoLectorPagosSeleccionado() {
+    const n = getMiniFlujoNodo(rm24hBloqueSeleccionado);
+    return !!(n && n.tipo === "lector_pagos");
   }
 
   function agenteRapidoTieneConfig(cfg) {
@@ -1343,6 +1501,13 @@ window.MacBotRemarketingGlobal = (function () {
       });
     }
 
+    if (lectorPagosTieneConfig(cfg) && !miniFlujoTieneNodoLectorPagos()) {
+      rm24hMiniFlujoNodos.push({
+        uid: crearUidMiniFlujoNodo(),
+        tipo: "lector_pagos",
+      });
+    }
+
     if (tieneContenido) {
       const nodoContenido = findNodoContenidoMiniFlujo();
       if (nodoContenido) {
@@ -1351,6 +1516,9 @@ window.MacBotRemarketingGlobal = (function () {
     } else if (agenteRapidoTieneConfig(cfg)) {
       const nodoAr = findNodoAgenteRapidoMiniFlujo();
       if (nodoAr) rm24hBloqueSeleccionado = nodoAr.uid;
+    } else if (lectorPagosTieneConfig(cfg)) {
+      const nodoLp = findNodoLectorPagosMiniFlujo();
+      if (nodoLp) rm24hBloqueSeleccionado = nodoLp.uid;
     }
   }
 
@@ -1367,6 +1535,11 @@ window.MacBotRemarketingGlobal = (function () {
       cfg.rm24h_agente_rapido = normalizarAgenteRapidoConfig(cfg.rm24h_agente_rapido);
     } else {
       delete cfg.rm24h_agente_rapido;
+    }
+    if (miniFlujoTieneNodoLectorPagos()) {
+      cfg.rm24h_lector_pagos = normalizarLectorPagosNodo(cfg.rm24h_lector_pagos);
+    } else {
+      delete cfg.rm24h_lector_pagos;
     }
     cfg.detenerSiResponde = false;
     cfg.reiniciarAlResponder = true;
@@ -1461,9 +1634,22 @@ window.MacBotRemarketingGlobal = (function () {
         configActiva.rm24h_agente_rapido = crearAgenteRapidoVacio();
       }
     }
+    if (cat.tipo === "lector_pagos") {
+      const existente = findNodoLectorPagosMiniFlujo();
+      if (existente) {
+        selectRm24Bloque(existente.uid);
+        return;
+      }
+      if (!configActiva.rm24h_lector_pagos) {
+        configActiva.rm24h_lector_pagos = normalizarLectorPagosNodo(null);
+      }
+    }
     const idx = Math.max(0, Math.min(Number(insertIndex) || 0, rm24hMiniFlujoNodos.length));
     const uid = crearUidMiniFlujoNodo();
     rm24hMiniFlujoNodos.splice(idx, 0, { uid: uid, tipo: cat.tipo });
+    if (cat.tipo === "lector_pagos" && nodoActivo) {
+      persistirConfigPanelEnNodo();
+    }
     selectRm24Bloque(uid);
   }
 
@@ -1484,6 +1670,10 @@ window.MacBotRemarketingGlobal = (function () {
     }
     if (removido && removido.tipo === "agente_rapido") {
       delete configActiva.rm24h_agente_rapido;
+      persistirConfigPanelEnNodo();
+    }
+    if (removido && removido.tipo === "lector_pagos") {
+      delete configActiva.rm24h_lector_pagos;
       persistirConfigPanelEnNodo();
     }
     rm24hMiniFlujoNodos.splice(idx, 1);
@@ -1532,6 +1722,9 @@ window.MacBotRemarketingGlobal = (function () {
     }
     if (nodo.tipo === "agente_rapido") {
       return resumenAgenteRapidoEmbudo(configActiva.rm24h_agente_rapido);
+    }
+    if (nodo.tipo === "lector_pagos") {
+      return resumenLectorPagosEmbudo(configActiva.rm24h_lector_pagos);
     }
     const cat = getCatalogoNodoRm24(nodo.tipo);
     if (cat && !cat.runtime) return "Configuración pendiente · solo UI";
@@ -1598,6 +1791,7 @@ window.MacBotRemarketingGlobal = (function () {
     const muted =
       resumen === "Sin contenido configurado" ||
       resumen === "0 caminos" ||
+      resumen === "Configurar validación de pago" ||
       resumen.indexOf("pendiente") >= 0;
     const dragging = rm24hDragNodoIndex === nodeIndex;
     return (
@@ -2004,6 +2198,147 @@ window.MacBotRemarketingGlobal = (function () {
     persistirConfigPanelEnNodo();
   }
 
+  function htmlSelectAccionPagoValido(value, className) {
+    const cls = className || "rm24-input";
+    const v = normalizarAccionPagoValido(value);
+    return (
+      '<select class="' +
+      cls +
+      '" id="rm24hLectorPagosAccionValido">' +
+      RM24H_ACCION_PAGO_VALIDO.map(function (a) {
+        return (
+          '<option value="' +
+          esc(a.value) +
+          '"' +
+          (a.value === v ? " selected" : "") +
+          ">" +
+          esc(a.label) +
+          "</option>"
+        );
+      }).join("") +
+      "</select>"
+    );
+  }
+
+  function htmlEditorBloqueLectorPagos() {
+    const lp = getLectorPagosActivo();
+    const c = normalizarLectorPagosConfig(lp.config);
+    const tiempo = c.tiempoMaximoEspera;
+    return (
+      '<section class="rm24-section rm24-section--lector-pagos rm24-section--bloque-editor">' +
+      '<header class="rm24-ar-hero">' +
+      '<div class="rm24-ar-hero__top">' +
+      '<h5 class="rm24-ar-hero__title">💳 Lector de pagos</h5>' +
+      '<span class="rm24-future-badge">Solo config · motor pendiente</span></div>' +
+      '<p class="rm24h-hint rm24-ar-hero__desc">Detecta comprobantes enviados por el lead dentro del remarketing.</p></header>' +
+      '<div class="rm24h-field rm24-field">' +
+      '<label class="rm24-switch rm24h-toggle">' +
+      '<input type="checkbox" id="rm24hLectorPagosActivo"' +
+      (c.activo ? " checked" : "") +
+      '><span class="rm24-switch-track" aria-hidden="true"></span>' +
+      '<span class="rm24-switch-label">Activar lector</span></label></div>' +
+      '<div class="rm24h-field rm24-field">' +
+      '<label for="rm24hLectorPagosProducto">Producto</label>' +
+      '<input type="text" id="rm24hLectorPagosProducto" class="rm24-input" placeholder="Ej: Papercraft" value="' +
+      esc(c.producto) +
+      '"></div>' +
+      '<div class="rm24-tiempo-grid">' +
+      '<div class="rm24h-field rm24-field">' +
+      '<label for="rm24hLectorPagosMonto">Monto esperado</label>' +
+      '<input type="number" id="rm24hLectorPagosMonto" class="rm24-input" min="0" step="0.01" inputmode="decimal" value="' +
+      esc(String(c.montoEsperado)) +
+      '"></div>' +
+      '<div class="rm24h-field rm24-field">' +
+      '<label for="rm24hLectorPagosMoneda">Moneda</label>' +
+      '<select id="rm24hLectorPagosMoneda" class="rm24-input">' +
+      RM24H_LECTOR_MONEDAS.map(function (m) {
+        return (
+          '<option value="' +
+          esc(m) +
+          '"' +
+          (m === c.moneda ? " selected" : "") +
+          ">" +
+          esc(m) +
+          "</option>"
+        );
+      }).join("") +
+      "</select></div></div>" +
+      '<fieldset class="rm24h-field rm24-field rm24-lector-validacion">' +
+      "<legend>Validación</legend>" +
+      '<label class="rm24-ar-ruta-enabled-wrap">' +
+      '<input type="checkbox" id="rm24hLectorPagosVerificarMonto"' +
+      (c.verificarMonto ? " checked" : "") +
+      "> Verificar monto</label>" +
+      '<label class="rm24-ar-ruta-enabled-wrap">' +
+      '<input type="checkbox" id="rm24hLectorPagosVerificarFecha"' +
+      (c.verificarFecha ? " checked" : "") +
+      "> Verificar fecha del comprobante</label>" +
+      '<label class="rm24-ar-ruta-enabled-wrap">' +
+      '<input type="checkbox" id="rm24hLectorPagosRevisionManual"' +
+      (c.revisionManualSiFalla ? " checked" : "") +
+      "> Permitir revisión manual si falla</label></fieldset>" +
+      '<div class="rm24h-field rm24-field">' +
+      "<label for=\"rm24hLectorPagosAccionValido\">Si pago válido</label>" +
+      htmlSelectAccionPagoValido(c.accionPagoValido, "rm24-input") +
+      "</div>" +
+      '<div class="rm24h-field rm24-field">' +
+      '<label for="rm24hLectorPagosMensajeInvalido">Si pago no válido</label>' +
+      '<textarea id="rm24hLectorPagosMensajeInvalido" class="rm24-input rm24-textarea" rows="3" placeholder="Mensaje al lead si no se valida el comprobante">' +
+      esc(c.mensajePagoNoValido) +
+      "</textarea></div>" +
+      '<div class="rm24h-field rm24-field">' +
+      "<label>Tiempo máximo de espera</label>" +
+      '<div class="rm24-tiempo-grid">' +
+      '<div class="rm24h-field rm24-field">' +
+      '<label for="rm24hLectorPagosEsperaValor">Valor</label>' +
+      '<input type="number" id="rm24hLectorPagosEsperaValor" class="rm24-input" min="1" step="1" inputmode="numeric" value="' +
+      esc(String(tiempo.valor)) +
+      '"></div>' +
+      '<div class="rm24h-field rm24-field">' +
+      '<label for="rm24hLectorPagosEsperaUnidad">Unidad</label>' +
+      '<select id="rm24hLectorPagosEsperaUnidad" class="rm24-input rm24-tiempo-unidad">' +
+      '<option value="minutos"' +
+      (tiempo.unidad === "minutos" ? " selected" : "") +
+      ">Minutos</option>" +
+      '<option value="horas"' +
+      (tiempo.unidad === "horas" ? " selected" : "") +
+      ">Horas</option>" +
+      '<option value="dias"' +
+      (tiempo.unidad === "dias" ? " selected" : "") +
+      ">Días</option></select></div></div></div>" +
+      '<p class="rm24h-hint">ID nodo: <code>' +
+      esc(lp.id) +
+      "</code> · Se guarda en <code>rm24h_lector_pagos</code></p></section>"
+    );
+  }
+
+  function syncLectorPagosDesdePanel() {
+    const prev = getLectorPagosActivo();
+    const monto = parseFloat(document.getElementById("rm24hLectorPagosMonto")?.value);
+    configActiva.rm24h_lector_pagos = normalizarLectorPagosNodo({
+      type: "lector_pagos",
+      id: prev.id,
+      config: {
+        activo: !!document.getElementById("rm24hLectorPagosActivo")?.checked,
+        producto: String(document.getElementById("rm24hLectorPagosProducto")?.value ?? ""),
+        montoEsperado: Number.isFinite(monto) && monto >= 0 ? monto : 0,
+        moneda: document.getElementById("rm24hLectorPagosMoneda")?.value,
+        verificarMonto: !!document.getElementById("rm24hLectorPagosVerificarMonto")?.checked,
+        verificarFecha: !!document.getElementById("rm24hLectorPagosVerificarFecha")?.checked,
+        revisionManualSiFalla:
+          !!document.getElementById("rm24hLectorPagosRevisionManual")?.checked,
+        accionPagoValido: document.getElementById("rm24hLectorPagosAccionValido")?.value,
+        mensajePagoNoValido: String(
+          document.getElementById("rm24hLectorPagosMensajeInvalido")?.value ?? ""
+        ),
+        tiempoMaximoEspera: {
+          valor: document.getElementById("rm24hLectorPagosEsperaValor")?.value,
+          unidad: document.getElementById("rm24hLectorPagosEsperaUnidad")?.value,
+        },
+      },
+    });
+  }
+
   function htmlEditorBloqueNodoFuturo(tipo) {
     const cat = getCatalogoNodoRm24(tipo);
     const label = cat?.label || "Nodo RM";
@@ -2093,6 +2428,10 @@ window.MacBotRemarketingGlobal = (function () {
       }
       mount.innerHTML = htmlEditorBloqueAgenteRapido();
       renderAgenteRapidoCaminos();
+      return;
+    }
+    if (nodo.tipo === "lector_pagos") {
+      mount.innerHTML = htmlEditorBloqueLectorPagos();
       return;
     }
     mount.innerHTML = htmlEditorBloqueNodoFuturo(nodo.tipo);
@@ -2258,6 +2597,9 @@ window.MacBotRemarketingGlobal = (function () {
     });
     if (parsed.rm24h_agente_rapido) {
       config.rm24h_agente_rapido = normalizarAgenteRapidoConfig(parsed.rm24h_agente_rapido);
+    }
+    if (parsed.rm24h_lector_pagos) {
+      config.rm24h_lector_pagos = normalizarLectorPagosNodo(parsed.rm24h_lector_pagos);
     }
     sincronizarHorasLegacyDesdeTiempo(config);
 
@@ -2641,6 +2983,9 @@ window.MacBotRemarketingGlobal = (function () {
     if (esNodoAgenteRapidoSeleccionado()) {
       syncAgenteRapidoDesdePanel();
     }
+    if (esNodoLectorPagosSeleccionado()) {
+      syncLectorPagosDesdePanel();
+    }
   }
 
   function persistirConfigPanelEnNodo() {
@@ -2654,6 +2999,15 @@ window.MacBotRemarketingGlobal = (function () {
         );
       } else {
         delete configActiva.rm24h_agente_rapido;
+      }
+    }
+    if (configActiva.rm24h_lector_pagos) {
+      if (miniFlujoTieneNodoLectorPagos()) {
+        configActiva.rm24h_lector_pagos = normalizarLectorPagosNodo(
+          configActiva.rm24h_lector_pagos
+        );
+      } else {
+        delete configActiva.rm24h_lector_pagos;
       }
     }
     guardarConfigEnNodo(nodoActivo, configActiva);
@@ -3386,6 +3740,12 @@ window.MacBotRemarketingGlobal = (function () {
         actualizarEmbudoRmPanel();
         return;
       }
+      if (ev.target.closest(".rm24-section--lector-pagos")) {
+        syncLectorPagosDesdePanel();
+        persistirConfigPanelEnNodo();
+        actualizarEmbudoRmPanel();
+        return;
+      }
       const fileInput = ev.target.closest(".rm24-contenido-file");
       if (fileInput?.files?.[0]) {
         const card = fileInput.closest(".rm24-contenido-item");
@@ -3410,6 +3770,12 @@ window.MacBotRemarketingGlobal = (function () {
     mount._rm24hOnInput = function (ev) {
       if (ev.target.closest(".rm24-section--agente-rapido")) {
         syncAgenteRapidoDesdePanel();
+        persistirConfigPanelEnNodo();
+        actualizarEmbudoRmPanel();
+        return;
+      }
+      if (ev.target.closest(".rm24-section--lector-pagos")) {
+        syncLectorPagosDesdePanel();
         persistirConfigPanelEnNodo();
         actualizarEmbudoRmPanel();
         return;
@@ -3764,6 +4130,9 @@ window.MacBotRemarketingGlobal = (function () {
     if (esNodoAgenteRapidoSeleccionado()) {
       syncAgenteRapidoDesdePanel();
     }
+    if (esNodoLectorPagosSeleccionado()) {
+      syncLectorPagosDesdePanel();
+    }
   }
 
   function onPanelChange() {
@@ -3802,6 +4171,9 @@ window.MacBotRemarketingGlobal = (function () {
     }
     if (esNodoAgenteRapidoSeleccionado()) {
       renderAgenteRapidoCaminos();
+    }
+    if (esNodoLectorPagosSeleccionado()) {
+      syncLectorPagosDesdePanel();
     }
     actualizarEmbudoRmPanel();
     alert("Remarketing Global guardado. Recuerda guardar el flujo completo.");
