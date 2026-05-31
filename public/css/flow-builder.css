@@ -4285,6 +4285,36 @@ body:has(#builderArea) {
   box-shadow: none;
 }
 
+.rm24-conversion-valor-badge {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  margin-top: 6px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: rgba(57, 255, 20, 0.14);
+  color: #39ff14;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border: 1px solid rgba(57, 255, 20, 0.28);
+}
+
+.rm24-conversion-valor-badge--compact {
+  margin-top: 4px;
+  padding: 4px 10px;
+  font-size: 11px;
+}
+
+.panel-nodo--rm24h .rm24-conversion-storage-hint {
+  margin-top: 8px;
+  font-size: 11px;
+  opacity: 0.72;
+}
+
 .panel-nodo--rm24h .rm24-config-footer {
   flex-shrink: 0;
   margin-top: 4px;

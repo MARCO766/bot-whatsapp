@@ -63,9 +63,15 @@ window.MacBotRemarketingGlobal = (function () {
     if (tipo === "etiqueta") {
       config = normalizarEtiquetaConfig(config);
     }
+    if (tipo === "conversion") {
+      config = normalizarConversionConfig(config);
+    }
     return {
       type: tipo,
-      id: String(item.id || crearUidNodoRamaAgenteRapido()),
+      id: String(
+        item.id ||
+          (tipo === "conversion" ? crearUidNodoConversion() : crearUidNodoRamaAgenteRapido())
+      ),
       config: config,
     };
   }
@@ -76,6 +82,10 @@ window.MacBotRemarketingGlobal = (function () {
 
   function crearUidNodoRamaAgenteRapido() {
     return "rm_rn_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 6);
+  }
+
+  function crearUidNodoConversion() {
+    return "rm_conv_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 6);
   }
 
   function palabrasClaveToArray(raw) {
@@ -124,6 +134,20 @@ window.MacBotRemarketingGlobal = (function () {
   const RM24H_ETIQUETA_ACCIONES = [
     { value: "add", label: "Añadir etiqueta" },
     { value: "remove", label: "Quitar etiqueta" },
+  ];
+
+  const RM24H_CONVERSION_MONEDAS = ["Bs", "USD", "MXN", "CLP", "COP", "PEN", "ARS"];
+
+  const RM24H_CONVERSION_TIPOS = [
+    { value: "venta", label: "Venta" },
+    { value: "upsell", label: "Upsell" },
+    { value: "downsell", label: "Downsell" },
+    { value: "recuperacion", label: "Recuperación" },
+  ];
+
+  const RM24H_CONVERSION_DESPUES = [
+    { value: "finalizar_rm", label: "Finalizar RM" },
+    { value: "continuar", label: "Continuar al siguiente nodo" },
   ];
 
   function crearEtiquetaConfigVacia() {
@@ -175,6 +199,84 @@ window.MacBotRemarketingGlobal = (function () {
       return a.value === v;
     });
     return found ? found.label : v;
+  }
+
+  function crearConversionConfigVacia() {
+    return {
+      nombre: "",
+      producto: "",
+      valor: 0,
+      moneda: "Bs",
+      tipo: "venta",
+      despues: "finalizar_rm",
+    };
+  }
+
+  function normalizarConversionMoneda(val) {
+    const v = String(val || "Bs").trim();
+    return RM24H_CONVERSION_MONEDAS.indexOf(v) >= 0 ? v : "Bs";
+  }
+
+  function normalizarConversionTipo(val) {
+    const v = String(val || "venta")
+      .toLowerCase()
+      .trim();
+    return RM24H_CONVERSION_TIPOS.some(function (t) {
+      return t.value === v;
+    })
+      ? v
+      : "venta";
+  }
+
+  function normalizarConversionDespues(val) {
+    const v = String(val || "finalizar_rm")
+      .toLowerCase()
+      .trim();
+    return RM24H_CONVERSION_DESPUES.some(function (d) {
+      return d.value === v;
+    })
+      ? v
+      : "finalizar_rm";
+  }
+
+  function normalizarConversionConfig(raw) {
+    const cfg = raw && typeof raw === "object" ? raw : {};
+    const valorRaw = parseFloat(cfg.valor);
+    return {
+      nombre: String(cfg.nombre ?? "").trim(),
+      producto: String(cfg.producto ?? "").trim(),
+      valor: Number.isFinite(valorRaw) && valorRaw >= 0 ? valorRaw : 0,
+      moneda: normalizarConversionMoneda(cfg.moneda),
+      tipo: normalizarConversionTipo(cfg.tipo),
+      despues: normalizarConversionDespues(cfg.despues),
+    };
+  }
+
+  function conversionRmTipoLabel(val) {
+    const v = normalizarConversionTipo(val);
+    const found = RM24H_CONVERSION_TIPOS.find(function (t) {
+      return t.value === v;
+    });
+    return found ? found.label : v;
+  }
+
+  function conversionRmDespuesLabel(val) {
+    const v = normalizarConversionDespues(val);
+    const found = RM24H_CONVERSION_DESPUES.find(function (d) {
+      return d.value === v;
+    });
+    return found ? found.label : v;
+  }
+
+  function conversionRmEstaConfigurada(cfg) {
+    const norm = normalizarConversionConfig(cfg);
+    return norm.nombre.length > 0;
+  }
+
+  function conversionRmResumenValor(cfg) {
+    const norm = normalizarConversionConfig(cfg);
+    if (!norm.valor && norm.valor !== 0) return "";
+    return String(norm.valor) + " " + norm.moneda;
   }
 
   function crearUidCaminoAgenteRapido() {
@@ -513,7 +615,8 @@ window.MacBotRemarketingGlobal = (function () {
       t === "contenido" ||
       t === "agente_rapido" ||
       t === "lector_pagos" ||
-      t === "etiqueta"
+      t === "etiqueta" ||
+      t === "conversion"
     );
   }
 
@@ -568,6 +671,11 @@ window.MacBotRemarketingGlobal = (function () {
       if (!cfg.nombre) return "Sin nombre";
       return cfg.nombre + " · " + etiquetaRmAccionLabel(cfg.accion);
     }
+    if (tipo === "conversion") {
+      const cfg = getConversionConfigDesdeNodo(node, context);
+      if (!conversionRmEstaConfigurada(cfg)) return "Configurar conversión";
+      return cfg.nombre + " · " + conversionRmResumenValor(cfg);
+    }
     if (!nodoRmTieneEditor(tipo)) {
       return "Sin configurar";
     }
@@ -580,7 +688,8 @@ window.MacBotRemarketingGlobal = (function () {
       resumen === "0 caminos" ||
       resumen === "Configurar validación de pago" ||
       resumen === "Sin configurar" ||
-      resumen === "Sin nombre"
+      resumen === "Sin nombre" ||
+      resumen === "Configurar conversión"
     );
   }
 
@@ -596,6 +705,37 @@ window.MacBotRemarketingGlobal = (function () {
       }
     }
     return normalizarEtiquetaConfig(node?.config);
+  }
+
+  function getConversionConfigDesdeNodo(node, context) {
+    if (context?.scope === "branch") {
+      return normalizarConversionConfig(node?.config);
+    }
+    const uid = context?.uid || node?.uid;
+    if (uid) {
+      const n = getMiniFlujoNodo(uid);
+      if (n && n.tipo === "conversion") {
+        return normalizarConversionConfig(n.config);
+      }
+    }
+    return normalizarConversionConfig(node?.config);
+  }
+
+  function htmlRmConversionValorBadge(valor, moneda, opts) {
+    const o = opts || {};
+    const norm = normalizarConversionConfig({ valor: valor, moneda: moneda });
+    const texto = conversionRmResumenValor(norm);
+    const cls =
+      "rm24-conversion-valor-badge" +
+      (o.compact ? " rm24-conversion-valor-badge--compact" : "") +
+      (!texto ? " rm24-conversion-valor-badge--empty" : "");
+    return (
+      '<span class="' +
+      cls +
+      '">' +
+      esc(texto || "—") +
+      "</span>"
+    );
   }
 
   function htmlRmEtiquetaBadge(nombre, colorKey, opts) {
@@ -948,6 +1088,45 @@ window.MacBotRemarketingGlobal = (function () {
         "</div></div>"
       );
     }
+    if (tipo === "conversion") {
+      const cat = getCatalogoNodoRm24("conversion") || {
+        icon: "🎯",
+        label: "Conversión",
+        kind: "action",
+      };
+      const selId = miniNodoSelectId(context);
+      const selected =
+        o.selected === selId || o.selected === true || rm24hBloqueSeleccionado === selId;
+      const cfg = getConversionConfigDesdeNodo(node, context);
+      const configurada = conversionRmEstaConfigurada(cfg);
+      const dragging =
+        context.scope === "main" && rm24hDragNodoIndex === context.nodeIndex;
+      const attrs =
+        context.scope === "branch"
+          ? 'data-rm24-ar-select="' + esc(selId) + '"'
+          : 'data-rm24-nodo-uid="' + esc(context.uid) + '"';
+      return (
+        '<div class="rm24-wf-step" role="listitem">' +
+        '<div class="rm24-wf-step-inner">' +
+        htmlWfCard({
+          kind: cat.kind,
+          icon: cat.icon,
+          title: cat.label,
+          subtitle: configurada ? cfg.nombre : "Configurar conversión",
+          subtitleMuted: !configurada,
+          extraHtml: configurada
+            ? htmlRmConversionValorBadge(cfg.valor, cfg.moneda, { compact: true })
+            : "",
+          selected: selected,
+          showEditingPill: true,
+          dragging: dragging,
+          draggable: context.scope === "main",
+          attrs: attrs,
+        }) +
+        htmlWfStepActions(htmlWfMiniNodoActions(context)) +
+        "</div></div>"
+      );
+    }
     const cat = getCatalogoNodoRm24(tipo) || {
       icon: "📎",
       label: tipo,
@@ -1088,7 +1267,10 @@ window.MacBotRemarketingGlobal = (function () {
     if (!lista) return;
     const norm = normalizarNodoRamaAgenteRapido({
       type: cat.tipo,
-      id: crearUidNodoRamaAgenteRapido(),
+      id:
+        cat.tipo === "conversion"
+          ? crearUidNodoConversion()
+          : crearUidNodoRamaAgenteRapido(),
       config:
         cat.tipo === "contenido"
           ? normalizarConfigContenidoNodo({})
@@ -1096,7 +1278,9 @@ window.MacBotRemarketingGlobal = (function () {
             ? normalizarLectorPagosNodo(null).config
             : cat.tipo === "etiqueta"
               ? normalizarEtiquetaConfig({})
-              : {},
+              : cat.tipo === "conversion"
+                ? normalizarConversionConfig({})
+                : {},
     });
     if (!norm) return;
     const idx = Math.max(0, Math.min(Number(insertIndex) || 0, lista.length));
@@ -1470,6 +1654,7 @@ window.MacBotRemarketingGlobal = (function () {
   let rm24hContenidoContext = { scope: "main" };
   let rm24hLectorPagosContext = { scope: "main" };
   let rm24hEtiquetaContext = { scope: "main" };
+  let rm24hConversionContext = { scope: "main" };
   let rm24hMiniFlujoNodos = [];
   let rm24hMiniFlujoUidSeq = 0;
   let rm24hDragNodoIndex = null;
@@ -1561,11 +1746,50 @@ window.MacBotRemarketingGlobal = (function () {
     }
   }
 
+  function crearConversionContextMain(uid) {
+    return { scope: "main", uid: uid };
+  }
+
+  function crearConversionContextBranch(ramaKey, nodeId) {
+    return { scope: "branch", ramaKey: ramaKey, nodeId: nodeId };
+  }
+
+  function getConversionPorContexto(ctx) {
+    const c = ctx || rm24hConversionContext || crearConversionContextMain();
+    if (c.scope === "branch") {
+      const nodo = findNodoEnCaminoAgenteRapido(c.ramaKey, c.nodeId);
+      if (!nodo) return normalizarConversionConfig({});
+      return normalizarConversionConfig(nodo.config);
+    }
+    const n = getMiniFlujoNodo(c.uid);
+    return normalizarConversionConfig(n?.config);
+  }
+
+  function setConversionPorContexto(ctx, cfg) {
+    const c = ctx || rm24hConversionContext || crearConversionContextMain();
+    const norm = normalizarConversionConfig(cfg);
+    if (c.scope === "branch") {
+      const nodo = findNodoEnCaminoAgenteRapido(c.ramaKey, c.nodeId);
+      if (!nodo) return;
+      nodo.config = norm;
+      nodo.type = "conversion";
+      configActiva.rm24h_agente_rapido = getAgenteRapidoActivo();
+      return;
+    }
+    const n = getMiniFlujoNodo(c.uid);
+    if (n && n.tipo === "conversion") {
+      n.config = norm;
+    }
+  }
+
   function serializarMiniFlujoParaConfig() {
     return rm24hMiniFlujoNodos.map(function (n) {
       const item = { uid: n.uid, type: n.tipo };
       if (n.tipo === "etiqueta") {
         item.config = normalizarEtiquetaConfig(n.config);
+      }
+      if (n.tipo === "conversion") {
+        item.config = normalizarConversionConfig(n.config);
       }
       return item;
     });
@@ -1667,6 +1891,7 @@ window.MacBotRemarketingGlobal = (function () {
         setContenidoContext(crearContenidoContextBranch(arSel.ramaKey, arSel.nodeId));
         rm24hLectorPagosContext = crearLectorPagosContextMain();
         rm24hEtiquetaContext = crearEtiquetaContextMain();
+        rm24hConversionContext = crearConversionContextMain();
         return;
       }
       if (tipo === "lector_pagos") {
@@ -1676,12 +1901,21 @@ window.MacBotRemarketingGlobal = (function () {
         );
         setContenidoContext(crearContenidoContextMain());
         rm24hEtiquetaContext = crearEtiquetaContextMain();
+        rm24hConversionContext = crearConversionContextMain();
         return;
       }
       if (tipo === "etiqueta") {
         rm24hEtiquetaContext = crearEtiquetaContextBranch(arSel.ramaKey, arSel.nodeId);
         setContenidoContext(crearContenidoContextMain());
         rm24hLectorPagosContext = crearLectorPagosContextMain();
+        rm24hConversionContext = crearConversionContextMain();
+        return;
+      }
+      if (tipo === "conversion") {
+        rm24hConversionContext = crearConversionContextBranch(arSel.ramaKey, arSel.nodeId);
+        setContenidoContext(crearContenidoContextMain());
+        rm24hLectorPagosContext = crearLectorPagosContextMain();
+        rm24hEtiquetaContext = crearEtiquetaContextMain();
         return;
       }
     }
@@ -1694,6 +1928,9 @@ window.MacBotRemarketingGlobal = (function () {
     }
     if (n && n.tipo === "etiqueta") {
       rm24hEtiquetaContext = crearEtiquetaContextMain(n.uid);
+    }
+    if (n && n.tipo === "conversion") {
+      rm24hConversionContext = crearConversionContextMain(n.uid);
     }
   }
 
@@ -2027,6 +2264,16 @@ window.MacBotRemarketingGlobal = (function () {
     return !!(n && n.tipo === "etiqueta");
   }
 
+  function esNodoConversionSeleccionado() {
+    const arSel = parseSeleccionAgenteRapido(rm24hBloqueSeleccionado);
+    if (arSel && arSel.kind === "node") {
+      const nodo = findNodoEnCaminoAgenteRapido(arSel.ramaKey, arSel.nodeId);
+      return String(nodo?.type || nodo?.tipo || "").toLowerCase() === "conversion";
+    }
+    const n = getMiniFlujoNodo(rm24hBloqueSeleccionado);
+    return !!(n && n.tipo === "conversion");
+  }
+
   function agenteRapidoTieneConfig(cfg) {
     const ar = normalizarAgenteRapidoConfig(cfg?.rm24h_agente_rapido);
     return (
@@ -2049,6 +2296,9 @@ window.MacBotRemarketingGlobal = (function () {
         };
         if (tipo === "etiqueta") {
           node.config = normalizarEtiquetaConfig(item.config);
+        }
+        if (tipo === "conversion") {
+          node.config = normalizarConversionConfig(item.config);
         }
         return node;
       });
@@ -2250,8 +2500,14 @@ window.MacBotRemarketingGlobal = (function () {
     if (cat.tipo === "etiqueta") {
       nodeEntry.config = crearEtiquetaConfigVacia();
     }
+    if (cat.tipo === "conversion") {
+      nodeEntry.config = crearConversionConfigVacia();
+    }
     rm24hMiniFlujoNodos.splice(idx, 0, nodeEntry);
-    if ((cat.tipo === "lector_pagos" || cat.tipo === "etiqueta") && nodoActivo) {
+    if (
+      (cat.tipo === "lector_pagos" || cat.tipo === "etiqueta" || cat.tipo === "conversion") &&
+      nodoActivo
+    ) {
       persistirConfigPanelEnNodo();
     }
     selectRm24Bloque(uid);
@@ -2612,6 +2868,9 @@ window.MacBotRemarketingGlobal = (function () {
     if (tipo === "etiqueta") {
       return htmlEditorBloqueEtiqueta(context);
     }
+    if (tipo === "conversion") {
+      return htmlEditorBloqueConversion(context);
+    }
     return htmlEditorBloqueNodoFuturo(tipo);
   }
 
@@ -2649,6 +2908,14 @@ window.MacBotRemarketingGlobal = (function () {
           ? crearEtiquetaContextBranch(context.ramaKey, context.nodeId)
           : crearEtiquetaContextMain(context?.uid || rm24hBloqueSeleccionado);
       mount.innerHTML = htmlEditorBloqueEtiqueta(rm24hEtiquetaContext);
+      return;
+    }
+    if (tipo === "conversion") {
+      rm24hConversionContext =
+        context?.scope === "branch"
+          ? crearConversionContextBranch(context.ramaKey, context.nodeId)
+          : crearConversionContextMain(context?.uid || rm24hBloqueSeleccionado);
+      mount.innerHTML = htmlEditorBloqueConversion(rm24hConversionContext);
       return;
     }
     mount.innerHTML = htmlEditorBloqueNodoFuturo(tipo);
@@ -3052,6 +3319,99 @@ window.MacBotRemarketingGlobal = (function () {
     });
   }
 
+  function htmlEditorBloqueConversion(context) {
+    const ctx = context || rm24hConversionContext || crearConversionContextMain();
+    const cfg = getConversionPorContexto(ctx);
+    const storageHint =
+      ctx.scope === "branch"
+        ? "Se guarda en <code>caminos[].next[]</code> como <code>{ type: &quot;conversion&quot;, id, config }</code>"
+        : "Se guarda en <code>rm24h_mini_flujo</code>";
+    return (
+      '<section class="rm24-section rm24-section--conversion rm24-section--bloque-editor">' +
+      '<header class="rm24-ar-hero">' +
+      '<div class="rm24-ar-hero__top">' +
+      '<h5 class="rm24-ar-hero__title">🎯 Conversión RM</h5></div>' +
+      '<p class="rm24h-hint rm24-ar-hero__desc">Define la conversión que se registrará cuando el lead pase por este nodo (solo configuración; runtime pendiente).</p></header>' +
+      '<div class="rm24h-field rm24-field">' +
+      '<label for="rm24hConversionNombre">1. Nombre de conversión</label>' +
+      '<input type="text" id="rm24hConversionNombre" class="rm24-input" placeholder="Ej: Venta Papercraft RM" value="' +
+      esc(cfg.nombre) +
+      '"></div>' +
+      '<div class="rm24h-field rm24-field">' +
+      '<label for="rm24hConversionProducto">2. Producto</label>' +
+      '<input type="text" id="rm24hConversionProducto" class="rm24-input" placeholder="Ej: Papercraft 4000 plantillas" value="' +
+      esc(cfg.producto) +
+      '"></div>' +
+      '<div class="rm24-tiempo-grid">' +
+      '<div class="rm24h-field rm24-field">' +
+      '<label for="rm24hConversionValor">3. Valor</label>' +
+      '<input type="number" id="rm24hConversionValor" class="rm24-input" min="0" step="0.01" inputmode="decimal" placeholder="39" value="' +
+      esc(String(cfg.valor)) +
+      '"></div>' +
+      '<div class="rm24h-field rm24-field">' +
+      '<label for="rm24hConversionMoneda">4. Moneda</label>' +
+      '<select id="rm24hConversionMoneda" class="rm24-input">' +
+      RM24H_CONVERSION_MONEDAS.map(function (m) {
+        return (
+          '<option value="' +
+          esc(m) +
+          '"' +
+          (m === cfg.moneda ? " selected" : "") +
+          ">" +
+          esc(m) +
+          "</option>"
+        );
+      }).join("") +
+      "</select></div></div>" +
+      '<div class="rm24h-field rm24-field">' +
+      '<label for="rm24hConversionTipo">5. Tipo</label>' +
+      '<select id="rm24hConversionTipo" class="rm24-input">' +
+      RM24H_CONVERSION_TIPOS.map(function (t) {
+        return (
+          '<option value="' +
+          esc(t.value) +
+          '"' +
+          (t.value === cfg.tipo ? " selected" : "") +
+          ">" +
+          esc(t.label) +
+          "</option>"
+        );
+      }).join("") +
+      "</select></div>" +
+      '<div class="rm24h-field rm24-field">' +
+      '<label for="rm24hConversionDespues">6. Después de convertir</label>' +
+      '<select id="rm24hConversionDespues" class="rm24-input">' +
+      RM24H_CONVERSION_DESPUES.map(function (d) {
+        return (
+          '<option value="' +
+          esc(d.value) +
+          '"' +
+          (d.value === cfg.despues ? " selected" : "") +
+          ">" +
+          esc(d.label) +
+          "</option>"
+        );
+      }).join("") +
+      "</select></div>" +
+      '<p class="rm24h-hint rm24-conversion-storage-hint">' +
+      storageHint +
+      "</p></section>"
+    );
+  }
+
+  function syncConversionDesdePanel() {
+    const ctx = rm24hConversionContext || crearConversionContextMain();
+    const valorRaw = parseFloat(document.getElementById("rm24hConversionValor")?.value);
+    setConversionPorContexto(ctx, {
+      nombre: String(document.getElementById("rm24hConversionNombre")?.value ?? ""),
+      producto: String(document.getElementById("rm24hConversionProducto")?.value ?? ""),
+      valor: Number.isFinite(valorRaw) ? valorRaw : 0,
+      moneda: document.getElementById("rm24hConversionMoneda")?.value,
+      tipo: document.getElementById("rm24hConversionTipo")?.value,
+      despues: document.getElementById("rm24hConversionDespues")?.value,
+    });
+  }
+
   function htmlEditorBloqueNodoFuturo(tipo) {
     const cat = getCatalogoNodoRm24(tipo);
     const label = cat?.label || "Nodo RM";
@@ -3155,6 +3515,13 @@ window.MacBotRemarketingGlobal = (function () {
     if (nodo.tipo === "etiqueta") {
       mountEditorMiniNodoRm(
         { type: "etiqueta", tipo: "etiqueta", config: nodo.config, uid: nodo.uid },
+        crearMiniNodoContextMain(nodo.uid, 0, rm24hMiniFlujoNodos.length)
+      );
+      return;
+    }
+    if (nodo.tipo === "conversion") {
+      mountEditorMiniNodoRm(
+        { type: "conversion", tipo: "conversion", config: nodo.config, uid: nodo.uid },
         crearMiniNodoContextMain(nodo.uid, 0, rm24hMiniFlujoNodos.length)
       );
       return;
@@ -3336,6 +3703,9 @@ window.MacBotRemarketingGlobal = (function () {
           };
           if (tipo === "etiqueta") {
             out.config = normalizarEtiquetaConfig(item.config);
+          }
+          if (tipo === "conversion") {
+            out.config = normalizarConversionConfig(item.config);
           }
           return out;
         })
@@ -3729,6 +4099,9 @@ window.MacBotRemarketingGlobal = (function () {
     }
     if (esNodoEtiquetaSeleccionado()) {
       syncEtiquetaDesdePanel();
+    }
+    if (esNodoConversionSeleccionado()) {
+      syncConversionDesdePanel();
     }
   }
 
@@ -4539,6 +4912,12 @@ window.MacBotRemarketingGlobal = (function () {
         actualizarEmbudoRmPanel();
         return;
       }
+      if (ev.target.closest(".rm24-section--conversion")) {
+        syncConversionDesdePanel();
+        persistirConfigPanelEnNodo();
+        actualizarEmbudoRmPanel();
+        return;
+      }
       const fileInput = ev.target.closest(".rm24-contenido-file");
       if (fileInput?.files?.[0]) {
         const card = fileInput.closest(".rm24-contenido-item");
@@ -4576,6 +4955,12 @@ window.MacBotRemarketingGlobal = (function () {
       if (ev.target.closest(".rm24-section--etiqueta")) {
         syncEtiquetaDesdePanel();
         actualizarPreviewEtiquetaPanel();
+        persistirConfigPanelEnNodo();
+        actualizarEmbudoRmPanel();
+        return;
+      }
+      if (ev.target.closest(".rm24-section--conversion")) {
+        syncConversionDesdePanel();
         persistirConfigPanelEnNodo();
         actualizarEmbudoRmPanel();
         return;
