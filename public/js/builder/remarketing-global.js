@@ -2801,6 +2801,7 @@ window.MacBotRemarketingGlobal = (function () {
   }
 
   function selectRm24Bloque(bloqueId) {
+    flushEditorBloqueActualAlConfig();
     if (bloqueId === "espera" || bloqueId === "fin") {
       rm24hBloqueSeleccionado = bloqueId;
     } else if (esSeleccionAgenteRapido(bloqueId)) {
@@ -3582,9 +3583,7 @@ window.MacBotRemarketingGlobal = (function () {
       syncEditorPasoToContenidos();
     }
     syncMiniNodoContextDesdeSeleccion();
-    const tiempo = panelRemarketingAbierto()
-      ? leerTiempoDesdePanel()
-      : configActiva.tiempoInactividad || { valor: 23, unidad: "horas" };
+    const tiempo = obtenerTiempoInactividadActual();
 
     if (rm24hBloqueSeleccionado === "espera") {
       mount.innerHTML =
@@ -3687,9 +3686,7 @@ window.MacBotRemarketingGlobal = (function () {
     }
     embudo.classList.toggle("rm24-embudo--inactivo", !activo);
 
-    const tiempo = panelRemarketingAbierto()
-      ? leerTiempoDesdePanel()
-      : configActiva.tiempoInactividad || { valor: 23, unidad: "horas" };
+    const tiempo = obtenerTiempoInactividadActual();
 
     const contenidos = obtenerContenidosParaEmbudo();
     const pasoCountEl = document.getElementById("rm24hEmbudoPasoCount");
@@ -3754,6 +3751,49 @@ window.MacBotRemarketingGlobal = (function () {
     return config;
   }
 
+  function tiempoInactividadInputsEnPanel() {
+    return !!(
+      document.getElementById("rm24hTiempoUnidad") &&
+      document.getElementById("rm24hTiempoValor")
+    );
+  }
+
+  function syncTiempoInactividadDesdePanel() {
+    if (!panelRemarketingAbierto() || !tiempoInactividadInputsEnPanel()) return;
+    configActiva.tiempoInactividad = leerTiempoDesdePanel();
+    sincronizarHorasLegacyDesdeTiempo(configActiva);
+  }
+
+  function obtenerTiempoInactividadActual() {
+    if (panelRemarketingAbierto() && tiempoInactividadInputsEnPanel()) {
+      return leerTiempoDesdePanel();
+    }
+    return normalizarTiempoInactividad({
+      tiempoInactividad: configActiva.tiempoInactividad || { valor: 23, unidad: "horas" },
+    });
+  }
+
+  function flushEditorBloqueActualAlConfig() {
+    if (!panelRemarketingAbierto()) return;
+    if (document.getElementById("rm24hStepEditor")) {
+      syncEditorPasoToContenidos();
+    }
+    syncMiniNodoContextDesdeSeleccion();
+    syncTiempoInactividadDesdePanel();
+    if (document.getElementById("rm24hRmContextUntilConversion")) {
+      configActiva.rm_context_policy = leerRmContextPolicyDesdePanel();
+    }
+    if (esNodoContenidoSeleccionado()) {
+      leerContenidosDesdePanel();
+    }
+    if (esNodoAgenteRapidoSeleccionado()) {
+      syncAgenteRapidoDesdePanel();
+    }
+    if (esNodoLectorPagosSeleccionado()) {
+      syncLectorPagosDesdePanel();
+    }
+  }
+
   function clampHorasInactividad(val) {
     const n = parseInt(val, 10);
     if (!Number.isFinite(n)) return 23;
@@ -3775,11 +3815,15 @@ window.MacBotRemarketingGlobal = (function () {
   }
 
   function leerTiempoDesdePanel() {
-    const unidad =
-      normalizarUnidadTiempoInactividad(
-        document.getElementById("rm24hTiempoUnidad")?.value
-      ) || "horas";
+    const unidadEl = document.getElementById("rm24hTiempoUnidad");
     const valorEl = document.getElementById("rm24hTiempoValor");
+    if (!unidadEl || !valorEl) {
+      return normalizarTiempoInactividad({
+        tiempoInactividad: configActiva.tiempoInactividad || { valor: 23, unidad: "horas" },
+      });
+    }
+    const unidad =
+      normalizarUnidadTiempoInactividad(unidadEl.value) || "horas";
     const valor = normalizarInputTiempoValor(valorEl, unidad);
     return normalizarTiempoInactividad({
       tiempoInactividad: { valor: valor, unidad: unidad },
@@ -5525,7 +5569,7 @@ window.MacBotRemarketingGlobal = (function () {
   }
 
   function onTiempoPanelChange() {
-    syncDesdePanel();
+    syncTiempoInactividadDesdePanel();
     renderPresetsTiempoPanel(configActiva.tiempoInactividad);
     actualizarHintTiempoPanel(configActiva.tiempoInactividad);
     persistirContenidosEnNodo();
@@ -5537,8 +5581,7 @@ window.MacBotRemarketingGlobal = (function () {
     const activoEl = document.getElementById("rm24hActivo");
 
     if (activoEl) configActiva.activo = !!activoEl.checked;
-    configActiva.tiempoInactividad = leerTiempoDesdePanel();
-    sincronizarHorasLegacyDesdeTiempo(configActiva);
+    syncTiempoInactividadDesdePanel();
     configActiva.detenerSiResponde = false;
     configActiva.reiniciarAlResponder = true;
     configActiva.detenerEnConversion = true;
@@ -5564,6 +5607,7 @@ window.MacBotRemarketingGlobal = (function () {
 
   function guardarDesdePanel() {
     if (!nodoActivo) return;
+    flushEditorBloqueActualAlConfig();
     syncDesdePanel();
     if (configActiva.activo && !miniFlujoTieneNodoContenido()) {
       mostrarErrorContenidos(
@@ -5603,6 +5647,7 @@ window.MacBotRemarketingGlobal = (function () {
 
   function flushPanelToNode() {
     if (!nodoActivo) return;
+    flushEditorBloqueActualAlConfig();
     syncDesdePanel();
     guardarConfigEnNodo(nodoActivo, configActiva);
   }
@@ -5611,6 +5656,7 @@ window.MacBotRemarketingGlobal = (function () {
     const restaurando =
       typeof builderHistorial !== "undefined" && builderHistorial.restaurando;
     if (!restaurando && nodoActivo) {
+      flushEditorBloqueActualAlConfig();
       syncDesdePanel();
       guardarConfigEnNodo(nodoActivo, configActiva);
     }
