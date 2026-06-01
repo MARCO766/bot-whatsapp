@@ -2,6 +2,7 @@ import React, { useMemo, useState } from "react";
 import { useMetricas } from "./metricas/useMetricas";
 import { formatMoney, formatNum, formatPct, formatTendencia } from "./metricas/format";
 import FlujoCampanaSelect from "./metricas/FlujoCampanaSelect";
+import RevenuePremiumSection from "./metricas/revenue/RevenuePremiumSection";
 import ConexionLineaTabs from "./components/conexion/ConexionLineaTabs";
 import { useMetricasConexion } from "./hooks/useMetricasConexion";
 import { CONEXION_TODAS } from "./utils/conexionesInbox";
@@ -319,6 +320,12 @@ export default function Metricas() {
               </div>
             ))}
       </section>
+
+      <RevenuePremiumSection
+        flujoId={flujoId}
+        conexionSeleccionadaId={conexionSeleccionadaId}
+        conexionesLoading={conexionesLoading}
+      />
 
       <section className="bodyGrid">
         <div className="leftColumn">

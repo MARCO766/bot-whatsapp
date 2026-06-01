@@ -76,3 +76,7 @@ export function fetchMetricasHeatmap(params) {
 export function fetchFlujosLista() {
   return request("/api/metricas/flujos-lista");
 }
+
+export function fetchMetricasRevenueBreakdown(params) {
+  return request("/api/metricas/revenue-breakdown", params);
+}
