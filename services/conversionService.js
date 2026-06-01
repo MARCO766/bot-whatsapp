@@ -368,19 +368,27 @@ async function registrarConversionRemarketing(ctx, nodo) {
 
   let row;
   try {
-    console.log("[RM_CONV_TRACE] registrarConversion_identity", {
-      typeof_registrarConversion: typeof registrarConversion,
-      function_name: registrarConversion?.name,
-      function_string_start: String(registrarConversion).slice(0, 200),
-    });
+    console.log(
+      "[RM_CONV_TRACE] registrarConversion_identity " +
+        JSON.stringify(
+          {
+            typeof_registrarConversion: typeof registrarConversion,
+            function_name: registrarConversion?.name,
+            function_string_start: String(registrarConversion).slice(0, 500),
+          },
+          null,
+          2
+        )
+    );
     console.log("[RM_CONV_TRACE] before_call_registrarConversion", {
       typeof_registrarConversion: typeof registrarConversion,
       payload: payloadRegistrarConversion,
     });
     row = await registrarConversion(payloadRegistrarConversion);
-    console.log("[RM_CONV_TRACE] after_call_registrarConversion", {
-      result: row,
-    });
+    console.log(
+      "[RM_CONV_TRACE] after_call_registrarConversion " +
+        JSON.stringify(row, null, 2)
+    );
   } catch (e) {
     console.error("[RM_CONV_TRACE] registrarConversion_error", {
       message: e?.message,
