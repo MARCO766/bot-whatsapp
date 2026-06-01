@@ -282,6 +282,20 @@ function normalizeConexionWhatsappIdResponse(conexionWhatsappId) {
   return raw;
 }
 
+/** Alias ISO para revenue-breakdown (solo lectura; no modifica filas en DB). */
+const MONEDA_CANONICAL_METRICS = {
+  BS: "BOB",
+  BOB: "BOB",
+  USD: "USD",
+  CLP: "CLP",
+};
+
+function canonicalMonedaForMetrics(raw) {
+  const key = String(raw ?? "BOB").trim().toUpperCase() || "BOB";
+  if (MONEDA_CANONICAL_METRICS[key]) return MONEDA_CANONICAL_METRICS[key];
+  return key;
+}
+
 async function fetchConversionesParaBreakdown(
   usuarioId,
   desdeIso,
@@ -308,10 +322,7 @@ function aggregateRevenueBreakdown(rows) {
     const { origen, tipo } = resolveMetadataMetricas(row.metadata);
     if (!REVENUE_ORIGENES.includes(origen) || !REVENUE_TIPOS.includes(tipo)) return;
 
-    const mon = String(row.moneda || "BOB")
-      .trim()
-      .toUpperCase();
-    const moneda = mon || "BOB";
+    const moneda = canonicalMonedaForMetrics(row.moneda);
 
     if (!porMoneda[moneda]) {
       porMoneda[moneda] = emptyRevenueMonedaBucket();
