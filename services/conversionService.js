@@ -350,7 +350,7 @@ async function registrarConversionRemarketing(ctx, nodo) {
     metadata: metadataFinal,
   });
 
-  const row = await registrarConversion({
+  const payloadRegistrarConversion = {
     usuarioId,
     flujoId: flujoOrigenId,
     nodoId: rmNodeId,
@@ -360,7 +360,25 @@ async function registrarConversionRemarketing(ctx, nodo) {
     moneda,
     origen: "flujo",
     metadata: metadataFinal,
-  });
+  };
+
+  let row;
+  try {
+    console.log("[RM_CONV_TRACE] before_call_registrarConversion", {
+      typeof_registrarConversion: typeof registrarConversion,
+      payload: payloadRegistrarConversion,
+    });
+    row = await registrarConversion(payloadRegistrarConversion);
+    console.log("[RM_CONV_TRACE] after_call_registrarConversion", {
+      result: row,
+    });
+  } catch (e) {
+    console.error("[RM_CONV_TRACE] registrarConversion_error", {
+      message: e?.message,
+      stack: e?.stack,
+    });
+    throw e;
+  }
 
   if (!row?.id) return row;
 
