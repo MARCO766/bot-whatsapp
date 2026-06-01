@@ -177,8 +177,66 @@ function parseConversionFromNodo(nodo) {
   };
 }
 
+/**
+ * Conversión real desde nodo type=conversion del mini flujo RM.
+ * Reutiliza crm_conversiones y registrarConversion; metadata marca origen remarketing.
+ */
+async function registrarConversionRemarketing(ctx, nodo) {
+  const cfg =
+    nodo?.config && typeof nodo.config === "object" ? nodo.config : {};
+  const fila = ctx?.fila || null;
+  const usuarioId = ctx?.usuarioId || fila?.usuario_id || null;
+  const clienteNumero = ctx?.numero || fila?.cliente_numero || null;
+  const conexionWhatsappId = normalizarConexionId(
+    ctx?.conexionWhatsappId || fila?.conexion_whatsapp_id
+  );
+  const flujoOrigenId = fila?.flujo_id ? String(fila.flujo_id) : null;
+  const rm24hId = fila?.id || null;
+  const rmNodeId =
+    String(nodo?.id || nodo?.uid || "").trim() || null;
+
+  if (!usuarioId || !clienteNumero) {
+    console.log("[RM_RUNTIME] conversion_rm_omitida", {
+      motivo: "faltan_usuario_o_cliente",
+      rm24h_id: rm24hId,
+      rm_node_id: rmNodeId,
+    });
+    return null;
+  }
+
+  const valor = normalizarValor(cfg.valor ?? 0);
+  const moneda = normalizarMonedaISO(cfg.moneda ?? "USD");
+
+  return registrarConversion({
+    usuarioId,
+    flujoId: flujoOrigenId,
+    nodoId: rmNodeId,
+    clienteNumero,
+    conexionWhatsappId,
+    valor,
+    moneda,
+    origen: "flujo",
+    metadata: {
+      origen: "remarketing",
+      tipo_venta: "remarketing",
+      rm24h_id: rm24hId,
+      rm_node_id: rmNodeId,
+      flujo_origen_id: flujoOrigenId,
+      cliente_numero: String(clienteNumero).trim(),
+      usuario_id: usuarioId,
+      conexion_whatsapp_id: conexionWhatsappId,
+      nombre: String(cfg.nombre ?? "").trim() || null,
+      producto: String(cfg.producto ?? "").trim() || null,
+      tipo: String(cfg.tipo ?? "venta").trim() || null,
+      source: "rm_conversion_node",
+      trigger: "remarketing_mini_flow",
+    },
+  });
+}
+
 module.exports = {
   registrarConversion,
+  registrarConversionRemarketing,
   parseConversionFromNodo,
   normalizarOrigen,
   normalizarMonedaISO,

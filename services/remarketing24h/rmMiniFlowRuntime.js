@@ -3,6 +3,7 @@ const {
   normalizarItemContenido,
 } = require("./rm24hContenidos");
 const { iniciarLectorPagoRemarketing } = require("./rmLectorPagoHelper");
+const { registrarConversionRemarketing } = require("../conversionService");
 const repo = require("./remarketing24hRepository");
 const { normalizarConexionId } = repo;
 const { ESTADOS_RM24H, MOTIVOS_RM24H } = require("./constants");
@@ -351,10 +352,31 @@ async function ejecutarNext(nextNodes, ctx) {
         id: nodo?.id || null,
         config: nodo?.config || null,
       });
-      console.log("[RM_RUNTIME] nodo no implementado todavía", {
-        type: tipo || "(sin tipo)",
-        id: nodo?.id || null,
+      console.log("[RM_RUNTIME] conversion_rm_start", {
+        rm24h_id: ctx.fila?.id || null,
+        rm_node_id: nodo?.id || nodo?.uid || null,
+        lead: ctx.numero || null,
+        config: nodo?.config || null,
       });
+
+      const row = await registrarConversionRemarketing(ctx, nodo);
+
+      console.log("[RM_RUNTIME] conversion_rm_ok", {
+        rm24h_id: ctx.fila?.id || null,
+        rm_node_id: nodo?.id || nodo?.uid || null,
+        conversion_id: row?.id || null,
+        valor: row?.valor ?? nodo?.config?.valor ?? null,
+        moneda: row?.moneda ?? nodo?.config?.moneda ?? null,
+        producto: nodo?.config?.producto || null,
+      });
+
+      const despues = String(nodo?.config?.despues || "finalizar_rm")
+        .toLowerCase()
+        .trim();
+      if (despues === "finalizar_rm") {
+        await cerrarContextoRmPorFin(ctx);
+        return;
+      }
       continue;
     }
     if (tipo === "fin_rm" || tipo === "fin") {
