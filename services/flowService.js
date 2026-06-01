@@ -1390,37 +1390,115 @@ async function procesarMensajeEntrante(
     console.log("[RM_DEBUG] paso=5 bloquear =", rmContext?.bloquearActivadores ?? null, {
       debeBloquearActivadoresRM,
     });
-    if (rmContext?.bloquearActivadores) {
-      console.log("[RM_CONTEXT] Lead en remarketing, bloqueando activadores normales", {
-        lead: numero,
-        usuario: usuarioId,
-        conexion_whatsapp_id: conexionEntrante,
-        rm24h_id: rmContext.fila?.id,
-        flujo_id: rmContext.flujo_id,
-        policy_mode: rmContext.policy?.mode,
-        disparado_en: rmContext.disparado_en,
-      });
-      console.log("[RM_RUNTIME_DEBUG] entrando_procesarRespuestaRemarketing", {
-        lead: numero,
-        usuario: usuarioId,
-        conexion_whatsapp_id: conexionEntrante,
-        rm24h_id: rmContext.fila?.id,
-        flujo_id: rmContext.flujo_id,
-        texto: textoDebug.slice(0, 120),
-      });
-      await procesarRespuestaRemarketing({
-        numero,
-        texto,
-        usuarioId,
-        conexionWhatsappId: conexionEntrante,
-        fila: rmContext.fila,
-        policy: rmContext.policy,
-      });
-      console.log("[RM_DEBUG] paso=7 activador_result = skipped", {
-        motivo: "RM context bloqueó activadores",
-        texto: textoDebug.slice(0, 80),
-      });
-      return true;
+
+    if (rmContext?.fila?.id) {
+      const policyMode = rmContext.policy?.mode;
+
+      if (policyMode === "allow_normal_triggers") {
+        console.log(
+          "[RM_CONTEXT] allow_normal_triggers: intentando activador normal",
+          {
+            lead: numero,
+            usuario: usuarioId,
+            conexion_whatsapp_id: conexionEntrante,
+            rm24h_id: rmContext.fila.id,
+            flujo_id: rmContext.flujo_id,
+            texto: textoDebug.slice(0, 80),
+          }
+        );
+
+        const activadorPrioritario = await buscarYEjecutarActivador(
+          numero,
+          texto,
+          usuarioId,
+          messageId,
+          opts.conexionWhatsappId || null
+        );
+
+        if (activadorPrioritario) {
+          try {
+            const filaInvalidada = await repoRm24h.invalidarPostEnvioPorResetbot({
+              usuario_id: usuarioId,
+              cliente_numero: numero,
+              conexion_whatsapp_id: opts.conexionWhatsappId ?? null,
+            });
+            console.log("[RM_CONTEXT] activador normal encontrado, cerrando RM", {
+              rm24h_id: filaInvalidada?.id || rmContext.fila.id,
+              lead: numero,
+              usuario: usuarioId,
+              conexion_whatsapp_id: opts.conexionWhatsappId ?? null,
+            });
+          } catch (errInv) {
+            console.log(
+              "[RM_CONTEXT] error cerrando contexto RM tras activador normal:",
+              errInv.response?.data || errInv.message
+            );
+          }
+          console.log("[RM_DEBUG] paso=7 activador_result =", true, {
+            motivo: "allow_normal_triggers + activador normal",
+            texto: textoDebug.slice(0, 80),
+          });
+          return true;
+        }
+
+        console.log(
+          "[RM_CONTEXT] sin activador normal, procesando mini flujo RM",
+          {
+            lead: numero,
+            usuario: usuarioId,
+            conexion_whatsapp_id: conexionEntrante,
+            rm24h_id: rmContext.fila.id,
+            flujo_id: rmContext.flujo_id,
+            texto: textoDebug.slice(0, 80),
+          }
+        );
+        await procesarRespuestaRemarketing({
+          numero,
+          texto,
+          usuarioId,
+          conexionWhatsappId: conexionEntrante,
+          fila: rmContext.fila,
+          policy: rmContext.policy,
+        });
+        console.log("[RM_DEBUG] paso=7 activador_result = skipped", {
+          motivo: "allow_normal_triggers sin activador → mini flujo RM",
+          texto: textoDebug.slice(0, 80),
+        });
+        return true;
+      }
+
+      if (rmContext.bloquearActivadores) {
+        console.log("[RM_CONTEXT] Lead en remarketing, bloqueando activadores normales", {
+          lead: numero,
+          usuario: usuarioId,
+          conexion_whatsapp_id: conexionEntrante,
+          rm24h_id: rmContext.fila?.id,
+          flujo_id: rmContext.flujo_id,
+          policy_mode: rmContext.policy?.mode,
+          disparado_en: rmContext.disparado_en,
+        });
+        console.log("[RM_RUNTIME_DEBUG] entrando_procesarRespuestaRemarketing", {
+          lead: numero,
+          usuario: usuarioId,
+          conexion_whatsapp_id: conexionEntrante,
+          rm24h_id: rmContext.fila?.id,
+          flujo_id: rmContext.flujo_id,
+          texto: textoDebug.slice(0, 120),
+        });
+        await procesarRespuestaRemarketing({
+          numero,
+          texto,
+          usuarioId,
+          conexionWhatsappId: conexionEntrante,
+          fila: rmContext.fila,
+          policy: rmContext.policy,
+        });
+        console.log("[RM_DEBUG] paso=7 activador_result = skipped", {
+          motivo: "RM context bloqueó activadores",
+          texto: textoDebug.slice(0, 80),
+        });
+        return true;
+      }
     }
   } catch (err) {
     console.log(
@@ -1446,34 +1524,6 @@ async function procesarMensajeEntrante(
   console.log("[RM_DEBUG] paso=7 activador_result =", activadorEjecutado, {
     texto: textoDebug.slice(0, 80),
   });
-
-  if (
-    activadorEjecutado &&
-    rmContext?.fila?.id &&
-    rmContext?.policy?.mode === "allow_normal_triggers"
-  ) {
-    try {
-      const filaInvalidada = await repoRm24h.invalidarPostEnvioPorResetbot({
-        usuario_id: usuarioId,
-        cliente_numero: numero,
-        conexion_whatsapp_id: opts.conexionWhatsappId ?? null,
-      });
-      if (filaInvalidada?.id) {
-        console.log("[RM_CONTEXT] contexto RM cerrado por activador normal", {
-          rm24h_id: filaInvalidada.id,
-          lead: numero,
-          usuario: usuarioId,
-          conexion_whatsapp_id: opts.conexionWhatsappId ?? null,
-          policy_mode: rmContext.policy?.mode,
-        });
-      }
-    } catch (err) {
-      console.log(
-        "[RM_CONTEXT] error cerrando contexto RM tras activador normal:",
-        err.response?.data || err.message
-      );
-    }
-  }
 
   if (!activadorEjecutado && usuarioId && numero) {
     try {
