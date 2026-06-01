@@ -202,6 +202,178 @@ async function fetchConversionesEnRango(usuarioId, desdeIso, hastaIso, flujoId, 
   return Array.isArray(rows) ? rows : [];
 }
 
+const REVENUE_TIPOS = ["venta", "upsell", "downsell", "recuperacion"];
+const REVENUE_ORIGENES = ["flujo", "remarketing"];
+
+const TIPO_LEGACY_BREAKDOWN = {
+  venta_remarketing: "venta",
+  upsell_remarketing: "upsell",
+  downsell_remarketing: "downsell",
+  recuperacion_remarketing: "recuperacion",
+};
+
+function roundIngresos(n) {
+  const v = Number(n);
+  if (!Number.isFinite(v)) return 0;
+  return Math.round(v * 100) / 100;
+}
+
+function emptyRevenueCelda() {
+  return { cantidad: 0, ingresos: 0 };
+}
+
+function emptyRevenueOrigenBucket() {
+  const bucket = {};
+  REVENUE_TIPOS.forEach((t) => {
+    bucket[t] = emptyRevenueCelda();
+  });
+  return bucket;
+}
+
+function emptyRevenueMonedaBucket() {
+  return {
+    total: emptyRevenueCelda(),
+    flujo: emptyRevenueOrigenBucket(),
+    remarketing: emptyRevenueOrigenBucket(),
+  };
+}
+
+function normalizarTipoRevenue(tipo) {
+  const t = String(tipo ?? "")
+    .trim()
+    .toLowerCase();
+  if (t === "remarketing") return "venta";
+  return REVENUE_TIPOS.includes(t) ? t : "venta";
+}
+
+/** Normalización read-only para breakdown (metadata.origen + metadata.tipo). */
+function resolveMetadataMetricas(metadata) {
+  const meta =
+    metadata && typeof metadata === "object" && !Array.isArray(metadata) ? metadata : {};
+
+  const tipoRaw = meta.tipo != null && String(meta.tipo).trim() !== "" ? meta.tipo : meta.tipo_venta;
+  const tipoLower = String(tipoRaw ?? "")
+    .trim()
+    .toLowerCase();
+
+  if (TIPO_LEGACY_BREAKDOWN[tipoLower]) {
+    return { origen: "remarketing", tipo: TIPO_LEGACY_BREAKDOWN[tipoLower] };
+  }
+  if (/_remarketing$/.test(tipoLower)) {
+    const base = tipoLower.replace(/_remarketing$/, "");
+    if (REVENUE_TIPOS.includes(base)) {
+      return { origen: "remarketing", tipo: base };
+    }
+  }
+
+  const origenMeta = String(meta.origen ?? "")
+    .trim()
+    .toLowerCase();
+  const origen = origenMeta === "remarketing" ? "remarketing" : "flujo";
+  const tipo = normalizarTipoRevenue(tipoRaw);
+
+  return { origen, tipo };
+}
+
+function normalizeConexionWhatsappIdResponse(conexionWhatsappId) {
+  const raw =
+    conexionWhatsappId == null ? "" : String(conexionWhatsappId).trim();
+  if (!raw || raw === CONEXION_TODAS) return null;
+  return raw;
+}
+
+async function fetchConversionesParaBreakdown(
+  usuarioId,
+  desdeIso,
+  hastaIso,
+  flujoId,
+  conexionWhatsappId = null
+) {
+  let filter = `${buildUsuarioFilter(usuarioId)}${buildConexionFilter(conexionWhatsappId)}&${buildDateFilter(desdeIso, hastaIso)}&order=creado_en.asc`;
+  if (flujoId) filter += `&flujo_id=eq.${encodeURIComponent(flujoId)}`;
+
+  const rows = await supabaseSelect(
+    "crm_conversiones",
+    filter,
+    "id,valor,moneda,creado_en,flujo_id,conexion_whatsapp_id,metadata"
+  );
+  if (rows === null) return null;
+  return Array.isArray(rows) ? rows : [];
+}
+
+function aggregateRevenueBreakdown(rows) {
+  const porMoneda = {};
+
+  (rows || []).forEach((row) => {
+    const { origen, tipo } = resolveMetadataMetricas(row.metadata);
+    if (!REVENUE_ORIGENES.includes(origen) || !REVENUE_TIPOS.includes(tipo)) return;
+
+    const mon = String(row.moneda || "BOB")
+      .trim()
+      .toUpperCase();
+    const moneda = mon || "BOB";
+
+    if (!porMoneda[moneda]) {
+      porMoneda[moneda] = emptyRevenueMonedaBucket();
+    }
+
+    const v = parseFloat(row.valor);
+    const valor = Number.isFinite(v) && v >= 0 ? v : 0;
+
+    const bucket = porMoneda[moneda];
+    bucket.total.cantidad += 1;
+    bucket.total.ingresos += valor;
+    bucket[origen][tipo].cantidad += 1;
+    bucket[origen][tipo].ingresos += valor;
+  });
+
+  Object.keys(porMoneda).forEach((moneda) => {
+    const b = porMoneda[moneda];
+    b.total.ingresos = roundIngresos(b.total.ingresos);
+    REVENUE_ORIGENES.forEach((origen) => {
+      REVENUE_TIPOS.forEach((tipo) => {
+        b[origen][tipo].ingresos = roundIngresos(b[origen][tipo].ingresos);
+      });
+    });
+  });
+
+  return porMoneda;
+}
+
+async function computeRevenueBreakdown(usuarioId, query = {}) {
+  const rango = parseRango(query);
+  const flujoId = query.flujo_id || query.flujoId || null;
+  const conexionWhatsappId =
+    query.conexion_whatsapp_id ?? query.conexionWhatsappId ?? null;
+
+  logMetricasMulti(conexionWhatsappId, "computeRevenueBreakdown");
+
+  const rows = await fetchConversionesParaBreakdown(
+    usuarioId,
+    rango.desde,
+    rango.hasta,
+    flujoId,
+    conexionWhatsappId
+  );
+
+  if (rows === null) {
+    throw new Error("No se pudieron cargar conversiones para revenue-breakdown");
+  }
+
+  const porMoneda = aggregateRevenueBreakdown(rows);
+
+  return {
+    ok: true,
+    periodo: rango.periodo,
+    desde: rango.desde,
+    hasta: rango.hasta,
+    flujoId,
+    conexionWhatsappId: normalizeConexionWhatsappIdResponse(conexionWhatsappId),
+    porMoneda,
+    source: "supabase",
+  };
+}
+
 async function fetchSeguimientosEnRango(usuarioId, desdeIso, hastaIso, flujoId, conexionWhatsappId = null) {
   let filter = `${buildUsuarioFilter(usuarioId)}${buildConexionFilter(conexionWhatsappId)}&${buildDateFilter(desdeIso, hastaIso)}`;
   if (flujoId) filter += `&flujo_id=eq.${encodeURIComponent(flujoId)}`;
@@ -664,5 +836,6 @@ module.exports = {
   computeFlujos,
   computeDiagnostico,
   computeHeatmap,
+  computeRevenueBreakdown,
   fetchFlujosList,
 };

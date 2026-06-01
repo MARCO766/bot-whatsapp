@@ -11,6 +11,7 @@ const {
   computeFlujos,
   computeDiagnostico,
   computeHeatmap,
+  computeRevenueBreakdown,
   fetchFlujosList,
 } = require("../services/metricasService");
 
@@ -92,6 +93,21 @@ router.get("/api/metricas/heatmap", protegerApi, async (req, res) => {
   } catch (error) {
     console.log("[metricasApi] heatmap:", error.message);
     res.status(500).json({ ok: false, error: "No se pudo cargar el heatmap" });
+  }
+});
+
+// GET /api/metricas/revenue-breakdown — ventas por metadata.origen × metadata.tipo × moneda
+router.get("/api/metricas/revenue-breakdown", protegerApi, async (req, res) => {
+  try {
+    const data = await computeRevenueBreakdown(req.session.usuario.id, queryOpts(req));
+    console.log("[METRICAS_RM] revenue_breakdown ok");
+    res.json(data);
+  } catch (error) {
+    console.log("[METRICAS_RM] revenue_breakdown error", error.message);
+    res.status(500).json({
+      ok: false,
+      error: "No se pudo cargar el desglose de ingresos",
+    });
   }
 });
 
