@@ -67,6 +67,10 @@ async function registrarConversion({
   origen = "flujo",
   metadata = {},
 }) {
+  console.log("[CONV_TRACE] registrarConversion_REAL_ENTRY", {
+    __filename,
+  });
+
   console.log("[CONV_TRACE] registrarConversion_start", {
     valor,
     moneda,
@@ -364,6 +368,11 @@ async function registrarConversionRemarketing(ctx, nodo) {
 
   let row;
   try {
+    console.log("[RM_CONV_TRACE] registrarConversion_identity", {
+      typeof_registrarConversion: typeof registrarConversion,
+      function_name: registrarConversion?.name,
+      function_string_start: String(registrarConversion).slice(0, 200),
+    });
     console.log("[RM_CONV_TRACE] before_call_registrarConversion", {
       typeof_registrarConversion: typeof registrarConversion,
       payload: payloadRegistrarConversion,
@@ -398,3 +407,8 @@ module.exports = {
   normalizarMonedaISO,
   ORIGENES_VALIDOS,
 };
+
+console.log("[CONV_TRACE] registrarConversion_file_loaded", {
+  __filename,
+  exported_keys: Object.keys(module.exports || {}),
+});
