@@ -177,6 +177,61 @@ function parseConversionFromNodo(nodo) {
   };
 }
 
+function buildMetadataRemarketingRm({
+  cfg = {},
+  rm24hId = null,
+  rmNodeId = null,
+  flujoOrigenId = null,
+}) {
+  return {
+    origen: "remarketing",
+    tipo_venta: "remarketing",
+    rm24h_id: rm24hId != null ? String(rm24hId) : "",
+    rm_node_id: rmNodeId != null ? String(rmNodeId) : "",
+    flujo_origen_id: flujoOrigenId != null ? String(flujoOrigenId) : "",
+    producto: String(cfg.producto ?? "").trim(),
+    nombre: String(cfg.nombre ?? "").trim(),
+    tipo: String(cfg.tipo ?? "venta").trim() || "venta",
+  };
+}
+
+function metadataRemarketingPersistida(row, esperada) {
+  const actual =
+    row?.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
+      ? row.metadata
+      : {};
+  return (
+    actual.origen === esperada.origen &&
+    actual.tipo_venta === esperada.tipo_venta
+  );
+}
+
+async function persistirMetadataRemarketing(conversionId, metadataRm) {
+  if (!SUPABASE_URL || !SUPABASE_KEY || !conversionId) return null;
+  try {
+    const res = await axios.patch(
+      `${SUPABASE_URL}/rest/v1/crm_conversiones?id=eq.${encodeURIComponent(
+        String(conversionId)
+      )}`,
+      { metadata: metadataRm },
+      { headers: headers() }
+    );
+    const row = Array.isArray(res.data) ? res.data[0] : res.data;
+    console.log("[RM_RUNTIME] conversion_rm_metadata_ok", {
+      conversion_id: conversionId,
+      origen: row?.metadata?.origen ?? metadataRm.origen,
+      tipo_venta: row?.metadata?.tipo_venta ?? metadataRm.tipo_venta,
+    });
+    return row || { id: conversionId, metadata: metadataRm };
+  } catch (e) {
+    console.error(
+      "[RM_RUNTIME] conversion_rm_metadata_error",
+      e.response?.data || e.message
+    );
+    return null;
+  }
+}
+
 /**
  * Conversión real desde nodo type=conversion del mini flujo RM.
  * Reutiliza crm_conversiones y registrarConversion; metadata marca origen remarketing.
@@ -192,8 +247,7 @@ async function registrarConversionRemarketing(ctx, nodo) {
   );
   const flujoOrigenId = fila?.flujo_id ? String(fila.flujo_id) : null;
   const rm24hId = fila?.id || null;
-  const rmNodeId =
-    String(nodo?.id || nodo?.uid || "").trim() || null;
+  const rmNodeId = String(nodo?.id || nodo?.uid || "").trim() || null;
 
   if (!usuarioId || !clienteNumero) {
     console.log("[RM_RUNTIME] conversion_rm_omitida", {
@@ -206,8 +260,16 @@ async function registrarConversionRemarketing(ctx, nodo) {
 
   const valor = normalizarValor(cfg.valor ?? 0);
   const moneda = normalizarMonedaISO(cfg.moneda ?? "USD");
+  const metadataRm = buildMetadataRemarketingRm({
+    cfg,
+    rm24hId,
+    rmNodeId,
+    flujoOrigenId,
+  });
 
-  return registrarConversion({
+  console.log("[RM_RUNTIME] conversion_rm_metadata", JSON.stringify(metadataRm));
+
+  const row = await registrarConversion({
     usuarioId,
     flujoId: flujoOrigenId,
     nodoId: rmNodeId,
@@ -216,22 +278,17 @@ async function registrarConversionRemarketing(ctx, nodo) {
     valor,
     moneda,
     origen: "flujo",
-    metadata: {
-      origen: "remarketing",
-      tipo_venta: "remarketing",
-      rm24h_id: rm24hId,
-      rm_node_id: rmNodeId,
-      flujo_origen_id: flujoOrigenId,
-      cliente_numero: String(clienteNumero).trim(),
-      usuario_id: usuarioId,
-      conexion_whatsapp_id: conexionWhatsappId,
-      nombre: String(cfg.nombre ?? "").trim() || null,
-      producto: String(cfg.producto ?? "").trim() || null,
-      tipo: String(cfg.tipo ?? "venta").trim() || null,
-      source: "rm_conversion_node",
-      trigger: "remarketing_mini_flow",
-    },
+    metadata: metadataRm,
   });
+
+  if (!row?.id) return row;
+
+  if (metadataRemarketingPersistida(row, metadataRm)) {
+    return row;
+  }
+
+  const patched = await persistirMetadataRemarketing(row.id, metadataRm);
+  return patched || row;
 }
 
 module.exports = {
