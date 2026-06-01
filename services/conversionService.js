@@ -67,29 +67,8 @@ async function registrarConversion({
   origen = "flujo",
   metadata = {},
 }) {
-  console.log("[CONV_TRACE] registrarConversion_REAL_ENTRY", {
-    __filename,
-  });
-
-  console.log("[CONV_TRACE] registrarConversion_start", {
-    valor,
-    moneda,
-    origen,
-    metadata,
-  });
-
   if (!SUPABASE_URL || !SUPABASE_KEY || !usuarioId || !clienteNumero) {
     return null;
-  }
-
-  if (
-    metadata != null &&
-    (typeof metadata !== "object" || Array.isArray(metadata))
-  ) {
-    console.log("[CONV_TRACE] metadata_overwrite_point", {
-      motivo: "metadata_invalido_reemplazado_por_objeto_vacio",
-      metadata_recibido: metadata,
-    });
   }
 
   const payload = {
@@ -107,7 +86,6 @@ async function registrarConversion({
         : {},
   };
 
-  console.log("[CONV_TRACE] insert_payload", payload);
   console.log("[CONVERSION] payload", JSON.stringify(payload));
 
   try {
@@ -117,11 +95,6 @@ async function registrarConversion({
       { headers: headers() }
     );
     const row = Array.isArray(res.data) ? res.data[0] : res.data;
-    console.log("[CONV_TRACE] insert_result", {
-      id: row?.id || null,
-      metadata: row?.metadata ?? null,
-      error: null,
-    });
     console.log("[CONVERSION] insert ok", {
       id: row?.id || null,
       cliente: payload.cliente_numero,
@@ -133,11 +106,6 @@ async function registrarConversion({
     });
     return row;
   } catch (e) {
-    console.log("[CONV_TRACE] insert_result", {
-      id: null,
-      metadata: null,
-      error: e.response?.data || e.message,
-    });
     console.error(
       "[CONVERSION] insert error",
       e.response?.data || e.message
@@ -269,18 +237,6 @@ async function persistirMetadataRemarketing(conversionId, metadataRm) {
  * Reutiliza crm_conversiones y registrarConversion; metadata marca origen remarketing.
  */
 async function registrarConversionRemarketing(ctx, nodo) {
-  console.log("[RM_CONV_TRACE] registrarConversionRemarketing_start", {
-    ctx_keys: ctx && typeof ctx === "object" ? Object.keys(ctx) : [],
-    ctx_usuarioId: ctx?.usuarioId ?? null,
-    ctx_numero: ctx?.numero ?? null,
-    ctx_conexionWhatsappId: ctx?.conexionWhatsappId ?? null,
-    ctx_rm24h_id: ctx?.rm24h_id ?? null,
-    ctx_fila_id: ctx?.fila?.id ?? null,
-    ctx_fila_flujo_id: ctx?.fila?.flujo_id ?? null,
-    "nodo.id": nodo?.id || nodo?.uid || null,
-    "nodo.config": nodo?.config ?? null,
-  });
-
   const cfg =
     nodo?.config && typeof nodo.config === "object" ? nodo.config : {};
   const fila = ctx?.fila || null;
@@ -345,15 +301,6 @@ async function registrarConversionRemarketing(ctx, nodo) {
     "[RM_CONVERSION_DEBUG] metadata_final",
     JSON.stringify(metadataFinal)
   );
-  console.log("[RM_CONV_TRACE] metadata_final", metadataFinal);
-
-  console.log("[RM_CONV_TRACE] payload_to_registrarConversion", {
-    valor,
-    moneda,
-    origen: "flujo",
-    metadata: metadataFinal,
-  });
-
   const payloadRegistrarConversion = {
     usuarioId,
     flujoId: flujoOrigenId,
@@ -368,32 +315,8 @@ async function registrarConversionRemarketing(ctx, nodo) {
 
   let row;
   try {
-    console.log(
-      "[RM_CONV_TRACE] registrarConversion_identity " +
-        JSON.stringify(
-          {
-            typeof_registrarConversion: typeof registrarConversion,
-            function_name: registrarConversion?.name,
-            function_string_start: String(registrarConversion).slice(0, 500),
-          },
-          null,
-          2
-        )
-    );
-    console.log("[RM_CONV_TRACE] before_call_registrarConversion", {
-      typeof_registrarConversion: typeof registrarConversion,
-      payload: payloadRegistrarConversion,
-    });
     row = await registrarConversion(payloadRegistrarConversion);
-    console.log(
-      "[RM_CONV_TRACE] after_call_registrarConversion " +
-        JSON.stringify(row, null, 2)
-    );
   } catch (e) {
-    console.error("[RM_CONV_TRACE] registrarConversion_error", {
-      message: e?.message,
-      stack: e?.stack,
-    });
     throw e;
   }
 
@@ -415,8 +338,3 @@ module.exports = {
   normalizarMonedaISO,
   ORIGENES_VALIDOS,
 };
-
-console.log("[CONV_TRACE] registrarConversion_file_loaded", {
-  __filename,
-  exported_keys: Object.keys(module.exports || {}),
-});

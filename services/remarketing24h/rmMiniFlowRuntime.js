@@ -359,15 +359,6 @@ async function ejecutarNext(nextNodes, ctx) {
         config: nodo?.config || null,
       });
 
-      console.log("[RM_CONV_TRACE] runtime_node", {
-        "node.id": nodo?.id || nodo?.uid || null,
-        "node.type": nodo?.type || nodo?.tipo || null,
-        "node.config": nodo?.config || null,
-        "ctx.rm24h_id": ctx?.rm24h_id ?? null,
-        "ctx.fila?.id": ctx.fila?.id ?? null,
-        "ctx.fila?.flujo_id": ctx.fila?.flujo_id ?? null,
-      });
-
       const row = await registrarConversionRemarketing(ctx, nodo);
 
       console.log("[RM_RUNTIME] conversion_rm_ok", {
