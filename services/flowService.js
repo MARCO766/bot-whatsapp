@@ -47,9 +47,6 @@ const {
 const {
   procesarRespuestaRemarketing,
 } = require("./remarketing24h/procesarRespuestaRemarketing");
-const {
-  debeBloquearActivadoresNormales,
-} = require("./remarketing24h/rmContextPolicy");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
@@ -1282,30 +1279,11 @@ async function procesarMensajeEntrante(
   }
 
   const textoDebug = String(texto || "").trim();
-  console.log("[RM_DEBUG] paso=1 before_resetbot", {
-    numero,
-    usuarioId,
-    texto: textoDebug.slice(0, 80),
-    conexionWhatsappId: opts.conexionWhatsappId || null,
-    messageId: messageId || null,
-  });
 
   if (esComandoResetFlujo(texto)) {
     await resetearFlujoLead(numero, usuarioId, opts.conexionWhatsappId || null);
-    console.log("[RM_DEBUG] paso=2 after_resetbot", {
-      numero,
-      usuarioId,
-      conexionWhatsappId: opts.conexionWhatsappId || null,
-      nota: "return true — no continúa a activador ni RM context",
-    });
     return true;
   }
-
-  console.log("[RM_DEBUG] paso=2 after_resetbot", {
-    numero,
-    texto: textoDebug.slice(0, 80),
-    nota: "no era resetbot — continúa pipeline",
-  });
 
   if (opts?.messageType === "image") {
     const lecturaPago = await procesarImagenLectorPago({
@@ -1355,12 +1333,6 @@ async function procesarMensajeEntrante(
   }
 
   const conexionEntrante = opts.conexionWhatsappId || null;
-  console.log("[RM_DEBUG] paso=3 before_obtenerContextoRemarketingPostEnvio", {
-    numero,
-    usuarioId,
-    conexionWhatsappId: conexionEntrante,
-    texto: textoDebug.slice(0, 80),
-  });
   let rmContext = null;
   try {
     rmContext = await obtenerContextoRemarketingPostEnvio({
@@ -1368,29 +1340,6 @@ async function procesarMensajeEntrante(
       clienteNumero: numero,
       conexionWhatsappId: conexionEntrante,
     });
-    const debeBloquearActivadoresRM =
-      rmContext?.fila && rmContext?.policy
-        ? debeBloquearActivadoresNormales(
-            rmContext.policy,
-            rmContext.disparado_en || rmContext.fila?.disparado_en
-          )
-        : null;
-    console.log("[RM_DEBUG] paso=4 rmContext =", rmContext
-      ? {
-          bloquearActivadores: rmContext.bloquearActivadores,
-          flujo_id: rmContext.flujo_id,
-          disparado_en: rmContext.disparado_en,
-          rm24h_id: rmContext.fila?.id,
-          policy_mode: rmContext.policy?.mode,
-          policy_duration: rmContext.policy?.duration,
-          fila_estado: rmContext.fila?.estado,
-          fila_motivo: rmContext.fila?.motivo_cancelacion,
-        }
-      : null);
-    console.log("[RM_DEBUG] paso=5 bloquear =", rmContext?.bloquearActivadores ?? null, {
-      debeBloquearActivadoresRM,
-    });
-
     if (rmContext?.fila?.id) {
       const policyMode = rmContext.policy?.mode;
 
@@ -1434,10 +1383,6 @@ async function procesarMensajeEntrante(
               errInv.response?.data || errInv.message
             );
           }
-          console.log("[RM_DEBUG] paso=7 activador_result =", true, {
-            motivo: "allow_normal_triggers + activador normal",
-            texto: textoDebug.slice(0, 80),
-          });
           return true;
         }
 
@@ -1459,10 +1404,6 @@ async function procesarMensajeEntrante(
           conexionWhatsappId: conexionEntrante,
           fila: rmContext.fila,
           policy: rmContext.policy,
-        });
-        console.log("[RM_DEBUG] paso=7 activador_result = skipped", {
-          motivo: "allow_normal_triggers sin activador → mini flujo RM",
-          texto: textoDebug.slice(0, 80),
         });
         return true;
       }
@@ -1493,14 +1434,6 @@ async function procesarMensajeEntrante(
           policy_mode: rmContext.policy?.mode,
           disparado_en: rmContext.disparado_en,
         });
-        console.log("[RM_RUNTIME_DEBUG] entrando_procesarRespuestaRemarketing", {
-          lead: numero,
-          usuario: usuarioId,
-          conexion_whatsapp_id: conexionEntrante,
-          rm24h_id: rmContext.fila?.id,
-          flujo_id: rmContext.flujo_id,
-          texto: textoDebug.slice(0, 120),
-        });
         await procesarRespuestaRemarketing({
           numero,
           texto,
@@ -1508,10 +1441,6 @@ async function procesarMensajeEntrante(
           conexionWhatsappId: conexionEntrante,
           fila: rmContext.fila,
           policy: rmContext.policy,
-        });
-        console.log("[RM_DEBUG] paso=7 activador_result = skipped", {
-          motivo: "RM context bloqueó activadores",
-          texto: textoDebug.slice(0, 80),
         });
         return true;
       }
@@ -1521,14 +1450,8 @@ async function procesarMensajeEntrante(
       "[RM_CONTEXT] error evaluando contexto post-envío:",
       err.response?.data || err.message
     );
-    console.log("[RM_DEBUG] paso=4 rmContext = error", err.response?.data || err.message);
   }
 
-  console.log("[RM_DEBUG] paso=6 before_activador", textoDebug.slice(0, 80), {
-    numero,
-    usuarioId,
-    conexionWhatsappId: opts.conexionWhatsappId || null,
-  });
   console.log("[FLUJO] sin sesión IA pendiente → buscar activador");
   const activadorEjecutado = await buscarYEjecutarActivador(
     numero,
@@ -1537,10 +1460,6 @@ async function procesarMensajeEntrante(
     messageId,
     opts.conexionWhatsappId || null
   );
-  console.log("[RM_DEBUG] paso=7 activador_result =", activadorEjecutado, {
-    texto: textoDebug.slice(0, 80),
-  });
-
   if (!activadorEjecutado && usuarioId && numero) {
     try {
       await resetearRemarketing24h({

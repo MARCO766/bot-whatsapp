@@ -297,10 +297,6 @@ async function registrarConversionRemarketing(ctx, nodo) {
   };
 
   console.log("[RM_RUNTIME] conversion_rm_metadata", JSON.stringify(metadataFinal));
-  console.log(
-    "[RM_CONVERSION_DEBUG] metadata_final",
-    JSON.stringify(metadataFinal)
-  );
   const payloadRegistrarConversion = {
     usuarioId,
     flujoId: flujoOrigenId,

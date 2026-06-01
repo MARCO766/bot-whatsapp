@@ -12,10 +12,6 @@ const {
 const { enviarTextoWhatsApp } = require("./whatsappService");
 const repoRm24h = require("./remarketing24h/remarketing24hRepository");
 const {
-  obtenerContextoRemarketingPostEnvio,
-} = require("./remarketing24h/rmContextPostEnvio");
-const { leerRmContextPolicyDesdeSnapshot } = require("./remarketing24h/rmContextPolicy");
-const {
   cancelarEsperaLectorPagoPorResetbot,
 } = require("./lectorPagoService");
 
@@ -109,95 +105,6 @@ function normalizarConexionIdReset(conexionWhatsappId) {
   return String(conexionWhatsappId).trim();
 }
 
-/** Diagnóstico temporal: estado RM que ve resetbot vs guard post-envío. */
-async function snapshotEstadoRmResetbotDebug(usuarioId, clienteNumero, conexionWhatsappId) {
-  const uid =
-    usuarioId != null && usuarioId !== "" ? String(usuarioId).trim() : null;
-  const num =
-    clienteNumero != null && String(clienteNumero).trim() !== ""
-      ? String(clienteNumero).trim()
-      : null;
-  const conexionId = normalizarConexionIdReset(conexionWhatsappId);
-
-  if (!uid || !num) {
-    return { omitido: "sin_usuario_o_cliente" };
-  }
-  if (!conexionId) {
-    return { omitido: "sin_conexion_whatsapp_id" };
-  }
-
-  const params = {
-    usuario_id: uid,
-    cliente_numero: num,
-    conexion_whatsapp_id: conexionId,
-  };
-
-  let filaPostEnvioGuard = null;
-  let filasVivasResetbotScope = [];
-  let rmContextGuard = null;
-
-  try {
-    const fila = await repoRm24h.buscarUltimaPostEnvio(params);
-    if (fila) {
-      const policy = leerRmContextPolicyDesdeSnapshot(fila.config_snapshot);
-      filaPostEnvioGuard = {
-        id: fila.id,
-        estado: fila.estado,
-        activo: fila.activo,
-        motivo_cancelacion: fila.motivo_cancelacion,
-        disparado_en: fila.disparado_en,
-        flujo_id: fila.flujo_id,
-        policy_mode: policy?.mode,
-      };
-    }
-  } catch (err) {
-    filaPostEnvioGuard = { error: err.response?.data || err.message };
-  }
-
-  try {
-    filasVivasResetbotScope = (await repoRm24h.listarReinicioPorCliente(
-      uid,
-      num,
-      conexionId
-    )).map((f) => ({
-      id: f.id,
-      estado: f.estado,
-      activo: f.activo,
-      motivo_cancelacion: f.motivo_cancelacion,
-      disparado_en: f.disparado_en,
-      flujo_id: f.flujo_id,
-    }));
-  } catch (err) {
-    filasVivasResetbotScope = [{ error: err.response?.data || err.message }];
-  }
-
-  try {
-    const ctx = await obtenerContextoRemarketingPostEnvio({
-      usuarioId: uid,
-      clienteNumero: num,
-      conexionWhatsappId: conexionId,
-    });
-    rmContextGuard = ctx
-      ? {
-          bloquearActivadores: ctx.bloquearActivadores,
-          flujo_id: ctx.flujo_id,
-          policy_mode: ctx.policy?.mode,
-          rm24h_id: ctx.fila?.id,
-          fila_estado: ctx.fila?.estado,
-          fila_motivo: ctx.fila?.motivo_cancelacion,
-        }
-      : null;
-  } catch (err) {
-    rmContextGuard = { error: err.response?.data || err.message };
-  }
-
-  return {
-    fila_post_envio_usada_por_guard: filaPostEnvioGuard,
-    filas_vivas_que_resetbot_puede_tocar: filasVivasResetbotScope,
-    obtenerContextoRemarketingPostEnvio: rmContextGuard,
-  };
-}
-
 /**
  * Tras envío exitoso de RM24H: corta automatización sin mensaje WA ni cancelar seguimientos CRM.
  */
@@ -261,18 +168,6 @@ async function resetearFlujoLead(numero, usuarioId, conexionWhatsappId = null) {
 
   if (uid) {
     try {
-      const estadoRmAntes = await snapshotEstadoRmResetbotDebug(uid, num, conexionId);
-      console.log("[RM_RESETBOT_DEBUG] before_reset", {
-        numero: num,
-        usuarioId: uid,
-        conexionWhatsappId: conexionId,
-        funciones: [
-          "invalidarPostEnvioPorResetbot",
-          "cancelarRemarketing24hPorResetbot",
-        ],
-        estadoRM: estadoRmAntes,
-      });
-
       const filaPostEnvioInvalidada = await repoRm24h.invalidarPostEnvioPorResetbot({
         usuario_id: uid,
         cliente_numero: num,
@@ -288,41 +183,17 @@ async function resetearFlujoLead(numero, usuarioId, conexionWhatsappId = null) {
       const {
         cancelarRemarketing24hPorResetbot,
       } = require("./remarketing24h/remarketing24hService");
-      const filasCanceladas = await cancelarRemarketing24hPorResetbot({
+      await cancelarRemarketing24hPorResetbot({
         usuario_id: uid,
         cliente_numero: num,
         conexion_whatsapp_id: conexionId,
       });
 
-      const estadoRmDespues = await snapshotEstadoRmResetbotDebug(uid, num, conexionId);
-      console.log("[RM_RESETBOT_DEBUG] after_reset", {
-        numero: num,
-        usuarioId: uid,
-        conexionWhatsappId: conexionId,
-        fila_post_envio_invalidada: filaPostEnvioInvalidada
-          ? {
-              id: filaPostEnvioInvalidada.id,
-              estado: filaPostEnvioInvalidada.estado,
-              activo: filaPostEnvioInvalidada.activo,
-              motivo_cancelacion: filaPostEnvioInvalidada.motivo_cancelacion,
-            }
-          : null,
-        filas_vivas_actualizadas_por_resetbot: filasCanceladas.length,
-        filas_resetbot_detalle: filasCanceladas.map((f) => ({
-          id: f.id,
-          estado: f.estado,
-          activo: f.activo,
-          motivo_cancelacion: f.motivo_cancelacion,
-          disparado_en: f.disparado_en,
-        })),
-        estadoRM: estadoRmDespues,
-      });
     } catch (err) {
       console.log(
         "[RESETBOT_RM24H] error:",
         err.response?.data || err.message
       );
-      console.log("[RM_RESETBOT_DEBUG] error", err.response?.data || err.message);
     }
   }
 

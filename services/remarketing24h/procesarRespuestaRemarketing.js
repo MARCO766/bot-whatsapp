@@ -15,16 +15,6 @@ async function procesarRespuestaRemarketing({
 }) {
   const preview = String(texto || "").slice(0, 120);
 
-  console.log("[RM_RUNTIME_DEBUG] procesarRespuestaRemarketing_start", {
-    lead: numero,
-    usuario: usuarioId,
-    conexion_whatsapp_id: conexionWhatsappId || null,
-    rm24h_id: fila?.id || null,
-    flujo_id: fila?.flujo_id || null,
-    policy_mode: policy?.mode || null,
-    texto_preview: preview,
-  });
-
   console.log("[RM_CONTEXT] procesarRespuestaRemarketing", {
     lead: numero,
     usuario: usuarioId,
@@ -50,25 +40,14 @@ async function procesarRespuestaRemarketing({
     }
   }
 
-  let runtimeResult = null;
   try {
-    console.log("[RM_RUNTIME_DEBUG] before_rmMiniFlowRuntime", {
-      lead: numero,
-      rm24h_id: fila?.id || null,
-      texto_preview: preview,
-    });
-    runtimeResult = await ejecutarMiniFlujoRm({
+    await ejecutarMiniFlujoRm({
       numero,
       texto,
       usuarioId,
       conexionWhatsappId,
       fila,
       policy,
-    });
-    console.log("[RM_RUNTIME_DEBUG] after_rmMiniFlowRuntime", {
-      lead: numero,
-      rm24h_id: fila?.id || null,
-      result: runtimeResult,
     });
   } catch (err) {
     console.log(
