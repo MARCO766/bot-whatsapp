@@ -2,6 +2,7 @@ const {
   enviarContenidosRemarketing,
   normalizarItemContenido,
 } = require("./rm24hContenidos");
+const { iniciarLectorPagoRemarketing } = require("./rmLectorPagoHelper");
 const repo = require("./remarketing24hRepository");
 const { normalizarConexionId } = repo;
 const { ESTADOS_RM24H, MOTIVOS_RM24H } = require("./constants");
@@ -339,10 +340,7 @@ async function ejecutarNext(nextNodes, ctx) {
         id: nodo?.id || null,
         config: nodo?.config || null,
       });
-      console.log("[RM_RUNTIME] nodo no implementado todavía", {
-        type: tipo || "(sin tipo)",
-        id: nodo?.id || null,
-      });
+      await iniciarLectorPagoRemarketing(ctx, nodo);
       continue;
     }
     if (tipo === "conversion") {

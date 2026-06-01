@@ -1,6 +1,19 @@
 const axios = require("axios");
 const { enviarTextoWhatsApp } = require("./whatsappService");
 
+const RM_LECTOR_FLUJO_PREFIX = "remarketing:";
+
+function esFlujoIdRemarketing(flujoId) {
+  return String(flujoId || "").startsWith(RM_LECTOR_FLUJO_PREFIX);
+}
+
+function parseRm24hIdDesdeFlujoRemarketing(flujoId) {
+  const s = String(flujoId || "");
+  if (!esFlujoIdRemarketing(s)) return null;
+  const id = s.slice(RM_LECTOR_FLUJO_PREFIX.length).trim();
+  return id || null;
+}
+
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
@@ -607,7 +620,16 @@ async function procesarImagenLectorPago({
       };
     }
 
-    console.log("[LECTOR_PAGO_V1] pago valido, entrega producto");
+    const esRemarketing = esFlujoIdRemarketing(estado.flujo_id);
+    if (esRemarketing) {
+      console.log("[LECTOR_PAGO_V1] pago valido en contexto remarketing", {
+        origen: "remarketing",
+        rm24h_id: parseRm24hIdDesdeFlujoRemarketing(estado.flujo_id),
+        rm_node_id: estado.nodo_id || null,
+      });
+    } else {
+      console.log("[LECTOR_PAGO_V1] pago valido, entrega producto");
+    }
 
     const patchValido = await axios.patch(
       `${SUPABASE_URL}/rest/v1/lector_pagos_estado?id=eq.${estado.id}&esperando_pago=eq.true`,
@@ -676,7 +698,12 @@ async function procesarImagenLectorPago({
     return {
       handled: true,
       valido: true,
-      continuarFlujo: true,
+      continuarFlujo: !esRemarketing,
+      origen: esRemarketing ? "remarketing" : "flujo",
+      rm24h_id: esRemarketing
+        ? parseRm24hIdDesdeFlujoRemarketing(estado.flujo_id)
+        : null,
+      rm_node_id: esRemarketing ? estado.nodo_id || null : null,
       flujoId: estado.flujo_id || null,
       nodoId: estado.nodo_id || null,
       conexionWhatsappId:
