@@ -260,6 +260,20 @@ async function registrarConversionRemarketing(ctx, nodo) {
 
   const valor = normalizarValor(cfg.valor ?? 0);
   const moneda = normalizarMonedaISO(cfg.moneda ?? "USD");
+
+  const metadataExistente = {
+    ...(nodo?.metadata &&
+    typeof nodo.metadata === "object" &&
+    !Array.isArray(nodo.metadata)
+      ? nodo.metadata
+      : {}),
+    ...(cfg.metadata &&
+    typeof cfg.metadata === "object" &&
+    !Array.isArray(cfg.metadata)
+      ? cfg.metadata
+      : {}),
+  };
+
   const metadataRm = buildMetadataRemarketingRm({
     cfg,
     rm24hId,
@@ -267,7 +281,26 @@ async function registrarConversionRemarketing(ctx, nodo) {
     flujoOrigenId,
   });
 
-  console.log("[RM_RUNTIME] conversion_rm_metadata", JSON.stringify(metadataRm));
+  const metadataFinal = {
+    ...metadataExistente,
+    ...metadataRm,
+    tipo:
+      String(
+        metadataExistente.tipo ?? cfg.tipo ?? metadataRm.tipo ?? "venta"
+      ).trim() || "venta",
+    cliente_numero: String(clienteNumero).trim(),
+    usuario_id: String(usuarioId),
+    conexion_whatsapp_id:
+      conexionWhatsappId != null ? String(conexionWhatsappId) : "",
+    origen: "remarketing",
+    tipo_venta: "remarketing",
+  };
+
+  console.log("[RM_RUNTIME] conversion_rm_metadata", JSON.stringify(metadataFinal));
+  console.log(
+    "[RM_CONVERSION_DEBUG] metadata_final",
+    JSON.stringify(metadataFinal)
+  );
 
   const row = await registrarConversion({
     usuarioId,
@@ -278,16 +311,16 @@ async function registrarConversionRemarketing(ctx, nodo) {
     valor,
     moneda,
     origen: "flujo",
-    metadata: metadataRm,
+    metadata: metadataFinal,
   });
 
   if (!row?.id) return row;
 
-  if (metadataRemarketingPersistida(row, metadataRm)) {
+  if (metadataRemarketingPersistida(row, metadataFinal)) {
     return row;
   }
 
-  const patched = await persistirMetadataRemarketing(row.id, metadataRm);
+  const patched = await persistirMetadataRemarketing(row.id, metadataFinal);
   return patched || row;
 }
 
