@@ -296,6 +296,55 @@ function canonicalMonedaForMetrics(raw) {
   return key;
 }
 
+function sumRevenueOrigenBucket(origenBucket) {
+  let cantidad = 0;
+  let ingresos = 0;
+  REVENUE_TIPOS.forEach((tipo) => {
+    const cell = origenBucket?.[tipo] || emptyRevenueCelda();
+    cantidad += Number(cell.cantidad) || 0;
+    ingresos += Number(cell.ingresos) || 0;
+  });
+  return { cantidad, ingresos: roundIngresos(ingresos) };
+}
+
+function revenuePct(part, whole) {
+  const p = Number(part) || 0;
+  const w = Number(whole) || 0;
+  if (w <= 0) return 0;
+  return roundIngresos((p / w) * 100);
+}
+
+function revenueTicket(ingresos, cantidad) {
+  const c = Number(cantidad) || 0;
+  if (c <= 0) return 0;
+  return roundIngresos((Number(ingresos) || 0) / c);
+}
+
+function buildRevenueKpis(bucket) {
+  const flujo = sumRevenueOrigenBucket(bucket.flujo);
+  const remarketing = sumRevenueOrigenBucket(bucket.remarketing);
+  const totalIngresos = roundIngresos(bucket.total.ingresos);
+  const totalCantidad = Number(bucket.total.cantidad) || 0;
+  const ingresosFlujo = flujo.ingresos;
+  const cantidadFlujo = flujo.cantidad;
+  const ingresosRemarketing = remarketing.ingresos;
+  const cantidadRemarketing = remarketing.cantidad;
+
+  return {
+    totalIngresos,
+    totalCantidad,
+    ingresosFlujo,
+    cantidadFlujo,
+    ingresosRemarketing,
+    cantidadRemarketing,
+    porcentajeIngresosRemarketing: revenuePct(ingresosRemarketing, totalIngresos),
+    porcentajeCantidadRemarketing: revenuePct(cantidadRemarketing, totalCantidad),
+    ticketPromedioTotal: revenueTicket(totalIngresos, totalCantidad),
+    ticketPromedioFlujo: revenueTicket(ingresosFlujo, cantidadFlujo),
+    ticketPromedioRemarketing: revenueTicket(ingresosRemarketing, cantidadRemarketing),
+  };
+}
+
 async function fetchConversionesParaBreakdown(
   usuarioId,
   desdeIso,
@@ -346,6 +395,12 @@ function aggregateRevenueBreakdown(rows) {
         b[origen][tipo].ingresos = roundIngresos(b[origen][tipo].ingresos);
       });
     });
+    porMoneda[moneda] = {
+      kpis: buildRevenueKpis(b),
+      total: b.total,
+      flujo: b.flujo,
+      remarketing: b.remarketing,
+    };
   });
 
   return porMoneda;
