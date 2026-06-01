@@ -6,6 +6,8 @@ const repo = require("./remarketing24hRepository");
 const {
   leerRmContextPolicyDesdeSnapshot,
   debeBloquearActivadoresNormales,
+  dentroVentanaTimeWindow,
+  finVentanaTimeWindowIso,
 } = require("./rmContextPolicy");
 
 /**
@@ -47,16 +49,36 @@ async function obtenerContextoRemarketingPostEnvio({
   }
 
   const policy = leerRmContextPolicyDesdeSnapshot(fila.config_snapshot);
+  const disparadoEn = fila.disparado_en;
   const bloquearActivadores = debeBloquearActivadoresNormales(
     policy,
-    fila.disparado_en
+    disparadoEn
   );
+
+  if (policy.mode === "time_window") {
+    const ventanaActiva = dentroVentanaTimeWindow(disparadoEn, policy);
+    const logBase = {
+      rm24h_id: fila.id,
+      lead: num,
+      usuario: uid,
+      conexion_whatsapp_id: conexionId,
+      disparado_en: disparadoEn,
+      duration: policy.duration,
+      ventana_fin: finVentanaTimeWindowIso(disparadoEn, policy),
+      bloquear_activadores: bloquearActivadores,
+    };
+    if (ventanaActiva) {
+      console.log("[RM_CONTEXT] time_window active", logBase);
+    } else {
+      console.log("[RM_CONTEXT] time_window expired", logBase);
+    }
+  }
 
   return {
     bloquearActivadores,
     fila,
     policy,
-    disparado_en: fila.disparado_en,
+    disparado_en: disparadoEn,
     flujo_id: fila.flujo_id,
   };
 }

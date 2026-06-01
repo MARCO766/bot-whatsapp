@@ -1467,7 +1467,23 @@ async function procesarMensajeEntrante(
         return true;
       }
 
-      if (rmContext.bloquearActivadores) {
+      if (
+        rmContext.policy?.mode === "time_window" &&
+        !rmContext.bloquearActivadores
+      ) {
+        console.log(
+          "[RM_CONTEXT] time_window expired: continuando a activador normal",
+          {
+            lead: numero,
+            usuario: usuarioId,
+            conexion_whatsapp_id: conexionEntrante,
+            rm24h_id: rmContext.fila.id,
+            flujo_id: rmContext.flujo_id,
+            disparado_en: rmContext.disparado_en,
+            duration: rmContext.policy?.duration,
+          }
+        );
+      } else if (rmContext.bloquearActivadores) {
         console.log("[RM_CONTEXT] Lead en remarketing, bloqueando activadores normales", {
           lead: numero,
           usuario: usuarioId,

@@ -63,19 +63,58 @@ function boolFromUnknown(value) {
   return null;
 }
 
-function resolverModeDesdeInterruptor(raw) {
-  if (!raw || typeof raw !== "object") return null;
-  const permitirRaw = raw.permitirVolverFlujoNormal;
+function leerActivarInterruptor(valor) {
+  if (valor && typeof valor === "object") {
+    return boolFromUnknown(valor.activar);
+  }
+  return boolFromUnknown(valor);
+}
 
-  if (permitirRaw && typeof permitirRaw === "object") {
-    const activar = boolFromUnknown(permitirRaw.activar);
-    if (activar === true) return "allow_normal_triggers";
-    if (activar === false) return "until_conversion";
+function extraerDurationDesdePolicyRaw(raw) {
+  if (!raw || typeof raw !== "object") {
+    return { ...POLICY_DEFAULT.duration };
   }
 
-  const activarPlano = boolFromUnknown(raw.permitirVolverFlujoNormal);
-  if (activarPlano === true) return "allow_normal_triggers";
-  if (activarPlano === false) return "until_conversion";
+  const candidates = [raw.permanecerSoloTiempo, raw.duration];
+  for (const src of candidates) {
+    if (!src || typeof src !== "object") continue;
+    const unit = normalizarUnidadDuration(src.unit ?? src.unidad);
+    const value = parseInt(src.value ?? src.valor, 10);
+    if (unit && Number.isFinite(value) && value >= 1) {
+      return { value, unit };
+    }
+  }
+
+  return { ...POLICY_DEFAULT.duration };
+}
+
+/**
+ * Prioridad: permitir volver ON → permanecer solo tiempo → permanecer hasta compra → mode explícito.
+ * permitirVolver OFF no debe pisar time_window si mode/interruptor de tiempo está activo.
+ */
+function resolverModeEfectivo(raw) {
+  if (!raw || typeof raw !== "object") return null;
+
+  const modeStr = String(raw.mode || "").trim();
+  const permitirActivar = leerActivarInterruptor(raw.permitirVolverFlujoNormal);
+  const soloTiempoActivar = leerActivarInterruptor(raw.permanecerSoloTiempo);
+  const hastaCompraActivar = leerActivarInterruptor(raw.permanecerHastaCompraOFinRM);
+
+  if (permitirActivar === true) return "allow_normal_triggers";
+
+  if (soloTiempoActivar === true || modeStr === "time_window") {
+    return "time_window";
+  }
+
+  if (hastaCompraActivar === true || modeStr === "until_conversion") {
+    return "until_conversion";
+  }
+
+  if (permitirActivar === false && !modeStr) {
+    return "until_conversion";
+  }
+
+  if (RM_CONTEXT_POLICY_MODES.includes(modeStr)) return modeStr;
 
   return null;
 }
@@ -90,32 +129,13 @@ function leerRmContextPolicyDesdeSnapshot(configSnapshot) {
     return { ...POLICY_DEFAULT };
   }
 
-  const modeDesdeInterruptor = resolverModeDesdeInterruptor(raw);
-  if (modeDesdeInterruptor) {
-    const durInt =
-      raw.duration && typeof raw.duration === "object" ? raw.duration : {};
-    const unitInt =
-      normalizarUnidadDuration(durInt.unit) || POLICY_DEFAULT.duration.unit;
-    let valueInt = parseInt(durInt.value, 10);
-    if (!Number.isFinite(valueInt) || valueInt < 1) {
-      valueInt = POLICY_DEFAULT.duration.value;
-    }
-    return { mode: modeDesdeInterruptor, duration: { value: valueInt, unit: unitInt } };
-  }
-
-  let mode = String(raw.mode || "").trim();
-  if (!RM_CONTEXT_POLICY_MODES.includes(mode)) {
+  const duration = extraerDurationDesdePolicyRaw(raw);
+  const mode = resolverModeEfectivo(raw);
+  if (!mode || !RM_CONTEXT_POLICY_MODES.includes(mode)) {
     return { ...POLICY_DEFAULT };
   }
 
-  const dur = raw.duration && typeof raw.duration === "object" ? raw.duration : {};
-  const unit = normalizarUnidadDuration(dur.unit) || POLICY_DEFAULT.duration.unit;
-  let value = parseInt(dur.value, 10);
-  if (!Number.isFinite(value) || value < 1) {
-    value = POLICY_DEFAULT.duration.value;
-  }
-
-  return { mode, duration: { value, unit } };
+  return { mode, duration };
 }
 
 function msDesdeRmContextDuration(duration) {
@@ -132,6 +152,12 @@ function dentroVentanaTimeWindow(disparadoEn, policy, ahoraMs = Date.now()) {
   if (!Number.isFinite(t0)) return false;
   const fin = t0 + msDesdeRmContextDuration(policy.duration);
   return ahoraMs < fin;
+}
+
+function finVentanaTimeWindowIso(disparadoEn, policy) {
+  const t0 = new Date(disparadoEn).getTime();
+  if (!Number.isFinite(t0)) return null;
+  return new Date(t0 + msDesdeRmContextDuration(policy.duration)).toISOString();
 }
 
 /**
@@ -158,5 +184,7 @@ module.exports = {
   leerRmContextPolicyDesdeSnapshot,
   debeBloquearActivadoresNormales,
   dentroVentanaTimeWindow,
+  finVentanaTimeWindowIso,
   msDesdeRmContextDuration,
+  extraerDurationDesdePolicyRaw,
 };
