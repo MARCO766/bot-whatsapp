@@ -16,6 +16,24 @@ const ORIGENES_VALIDOS = new Set([
   "webhook",
 ]);
 
+/** metadata.origen — canal para métricas (distinto de columna `origen`). */
+const ORIGENES_METADATA_VALIDOS = new Set(["flujo", "remarketing"]);
+
+/** metadata.tipo — tipo de conversión para métricas. */
+const TIPOS_CONVERSION_VALIDOS = new Set([
+  "venta",
+  "upsell",
+  "downsell",
+  "recuperacion",
+]);
+
+const TIPO_LEGACY_MAP = {
+  venta_remarketing: "venta",
+  upsell_remarketing: "upsell",
+  downsell_remarketing: "downsell",
+  recuperacion_remarketing: "recuperacion",
+};
+
 function headers(extra = {}) {
   return {
     apikey: SUPABASE_KEY,
@@ -29,6 +47,66 @@ function headers(extra = {}) {
 function normalizarOrigen(origen) {
   const o = String(origen || "flujo").trim().toLowerCase();
   return ORIGENES_VALIDOS.has(o) ? o : "flujo";
+}
+
+function normalizarTipoConversion(tipo) {
+  let t = String(tipo ?? "")
+    .trim()
+    .toLowerCase();
+  if (TIPO_LEGACY_MAP[t]) t = TIPO_LEGACY_MAP[t];
+  if (t === "remarketing") return "venta";
+  return TIPOS_CONVERSION_VALIDOS.has(t) ? t : "venta";
+}
+
+function normalizarOrigenMetadata(origen, { esRemarketing = false } = {}) {
+  if (esRemarketing) return "remarketing";
+  const o = String(origen ?? "")
+    .trim()
+    .toLowerCase();
+  return ORIGENES_METADATA_VALIDOS.has(o) ? o : "flujo";
+}
+
+function resolverTipoDesdeMetadata(metadata) {
+  if (metadata.tipo != null && String(metadata.tipo).trim() !== "") {
+    return metadata.tipo;
+  }
+  const tv = String(metadata.tipo_venta ?? "")
+    .trim()
+    .toLowerCase();
+  if (tv && tv !== "remarketing") return tv;
+  return "venta";
+}
+
+/**
+ * Estandariza metadata para métricas: origen (flujo|remarketing) + tipo (venta|upsell|…).
+ * Conserva el resto de claves (source, rm24h_id, etc.).
+ */
+function enriquecerMetadataConversion(metadata = {}, opts = {}) {
+  const base =
+    metadata && typeof metadata === "object" && !Array.isArray(metadata)
+      ? { ...metadata }
+      : {};
+  let esRemarketing =
+    opts.esRemarketing === true || base.origen === "remarketing";
+
+  let tipoInput = opts.tipo ?? resolverTipoDesdeMetadata(base);
+  const tipoLower = String(tipoInput ?? "")
+    .trim()
+    .toLowerCase();
+  if (TIPO_LEGACY_MAP[tipoLower]) {
+    esRemarketing = true;
+    tipoInput = TIPO_LEGACY_MAP[tipoLower];
+  } else if (/_remarketing$/.test(tipoLower)) {
+    esRemarketing = true;
+    tipoInput = tipoLower.replace(/_remarketing$/, "");
+  }
+
+  const tipo = normalizarTipoConversion(tipoInput);
+  const origen = normalizarOrigenMetadata(base.origen, { esRemarketing });
+
+  const out = { ...base, origen, tipo };
+  if (out.tipo_venta === "remarketing") delete out.tipo_venta;
+  return out;
 }
 
 function normalizarValor(valor) {
@@ -71,6 +149,12 @@ async function registrarConversion({
     return null;
   }
 
+  const metadataBase =
+    metadata && typeof metadata === "object" && !Array.isArray(metadata)
+      ? metadata
+      : {};
+  const metadataNormalizado = enriquecerMetadataConversion(metadataBase);
+
   const payload = {
     usuario_id: usuarioId,
     flujo_id: flujoId || null,
@@ -80,10 +164,7 @@ async function registrarConversion({
     valor: normalizarValor(valor),
     moneda: normalizarMonedaISO(moneda),
     origen: normalizarOrigen(origen),
-    metadata:
-      metadata && typeof metadata === "object" && !Array.isArray(metadata)
-        ? metadata
-        : {},
+    metadata: metadataNormalizado,
   };
 
   console.log("[CONVERSION] payload", JSON.stringify(payload));
@@ -183,16 +264,18 @@ function buildMetadataRemarketingRm({
   rmNodeId = null,
   flujoOrigenId = null,
 }) {
-  return {
-    origen: "remarketing",
-    tipo_venta: "remarketing",
-    rm24h_id: rm24hId != null ? String(rm24hId) : "",
-    rm_node_id: rmNodeId != null ? String(rmNodeId) : "",
-    flujo_origen_id: flujoOrigenId != null ? String(flujoOrigenId) : "",
-    producto: String(cfg.producto ?? "").trim(),
-    nombre: String(cfg.nombre ?? "").trim(),
-    tipo: String(cfg.tipo ?? "venta").trim() || "venta",
-  };
+  return enriquecerMetadataConversion(
+    {
+      origen: "remarketing",
+      rm24h_id: rm24hId != null ? String(rm24hId) : "",
+      rm_node_id: rmNodeId != null ? String(rmNodeId) : "",
+      flujo_origen_id: flujoOrigenId != null ? String(flujoOrigenId) : "",
+      producto: String(cfg.producto ?? "").trim(),
+      nombre: String(cfg.nombre ?? "").trim(),
+      tipo: cfg.tipo,
+    },
+    { esRemarketing: true, tipo: cfg.tipo }
+  );
 }
 
 function metadataRemarketingPersistida(row, esperada) {
@@ -201,8 +284,7 @@ function metadataRemarketingPersistida(row, esperada) {
       ? row.metadata
       : {};
   return (
-    actual.origen === esperada.origen &&
-    actual.tipo_venta === esperada.tipo_venta
+    actual.origen === esperada.origen && actual.tipo === esperada.tipo
   );
 }
 
@@ -220,7 +302,7 @@ async function persistirMetadataRemarketing(conversionId, metadataRm) {
     console.log("[RM_RUNTIME] conversion_rm_metadata_ok", {
       conversion_id: conversionId,
       origen: row?.metadata?.origen ?? metadataRm.origen,
-      tipo_venta: row?.metadata?.tipo_venta ?? metadataRm.tipo_venta,
+      tipo: row?.metadata?.tipo ?? metadataRm.tipo,
     });
     return row || { id: conversionId, metadata: metadataRm };
   } catch (e) {
@@ -281,20 +363,19 @@ async function registrarConversionRemarketing(ctx, nodo) {
     flujoOrigenId,
   });
 
-  const metadataFinal = {
-    ...metadataExistente,
-    ...metadataRm,
-    tipo:
-      String(
-        metadataExistente.tipo ?? cfg.tipo ?? metadataRm.tipo ?? "venta"
-      ).trim() || "venta",
-    cliente_numero: String(clienteNumero).trim(),
-    usuario_id: String(usuarioId),
-    conexion_whatsapp_id:
-      conexionWhatsappId != null ? String(conexionWhatsappId) : "",
-    origen: "remarketing",
-    tipo_venta: "remarketing",
-  };
+  const metadataFinal = enriquecerMetadataConversion(
+    {
+      ...metadataExistente,
+      ...metadataRm,
+      cliente_numero: String(clienteNumero).trim(),
+      usuario_id: String(usuarioId),
+      conexion_whatsapp_id:
+        conexionWhatsappId != null ? String(conexionWhatsappId) : "",
+      origen: "remarketing",
+      tipo: metadataExistente.tipo ?? cfg.tipo ?? metadataRm.tipo,
+    },
+    { esRemarketing: true, tipo: cfg.tipo ?? metadataRm.tipo }
+  );
 
   console.log("[RM_RUNTIME] conversion_rm_metadata", JSON.stringify(metadataFinal));
   const payloadRegistrarConversion = {
@@ -326,11 +407,36 @@ async function registrarConversionRemarketing(ctx, nodo) {
   return patched || row;
 }
 
+/** Ejemplos de metadata tras normalizar (diagnóstico / métricas futuras). */
+function ejemplosMetadataNormalizada() {
+  const flujo = enriquecerMetadataConversion({
+    source: "conversion_node",
+    nodeName: "Conversión principal",
+    trigger: "nodo_flujo",
+  });
+  const rm = enriquecerMetadataConversion(
+    {
+      rm24h_id: "abc-123",
+      rm_node_id: "rm_conv_1",
+      producto: "Pack premium",
+      nombre: "RM upsell",
+      tipo: "upsell",
+    },
+    { esRemarketing: true, tipo: "upsell" }
+  );
+  return { flujo, remarketing: rm };
+}
+
 module.exports = {
   registrarConversion,
   registrarConversionRemarketing,
   parseConversionFromNodo,
   normalizarOrigen,
   normalizarMonedaISO,
+  normalizarTipoConversion,
+  enriquecerMetadataConversion,
+  ejemplosMetadataNormalizada,
   ORIGENES_VALIDOS,
+  TIPOS_CONVERSION_VALIDOS,
+  ORIGENES_METADATA_VALIDOS,
 };
