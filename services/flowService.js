@@ -30,6 +30,9 @@ const {
   iniciarEsperaLectorPago,
   procesarImagenLectorPago,
 } = require("./lectorPagoService");
+const {
+  continuarMiniFlujoRmTrasPagoValido,
+} = require("./remarketing24h/rmMiniFlowRuntime");
 const { esTipoIA, resolverTipoRaw } = require("./seguimiento/detectarTipoNodo");
 const { obtenerConfigRemarketingGlobal } = require("./remarketing24h/parseRemarketingGlobalNode");
 const {
@@ -1324,7 +1327,15 @@ async function procesarMensajeEntrante(
         }
         await enviarTextoWhatsApp(numero, lecturaPago.mensaje, opEnvio);
       }
-      if (lecturaPago.valido && lecturaPago.continuarFlujo) {
+      if (lecturaPago.valido && lecturaPago.continuarFlujoRm) {
+        await continuarMiniFlujoRmTrasPagoValido({
+          rm24hId: lecturaPago.rm24h_id,
+          usuarioId,
+          clienteNumero: numero,
+          conexionWhatsappId:
+            lecturaPago.conexionWhatsappId || opts.conexionWhatsappId || null,
+        });
+      } else if (lecturaPago.valido && lecturaPago.continuarFlujo) {
         await continuarFlujoDesdeLectorPago(numero, usuarioId, lecturaPago);
       }
       return true;

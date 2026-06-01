@@ -1,6 +1,10 @@
+const axios = require("axios");
 const { iniciarEsperaLectorPago } = require("../lectorPagoService");
 const repo = require("./remarketing24hRepository");
 const { normalizarConexionId } = repo;
+
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
 
 const RM_LECTOR_FLUJO_PREFIX = "remarketing:";
 
@@ -31,11 +35,12 @@ function normalizarConfigLectorPagosRm(raw) {
     producto: "",
     montoEsperado: 0,
     moneda: "Bs",
+    linkEntrega: "",
     verificarMonto: true,
     verificarFecha: false,
     revisionManualSiFalla: true,
     mensajePagoNoValido:
-      "No pude validar el comprobante. Puedes enviarlo mas claro?",
+      "No pude validar el comprobante 😅 ¿puedes enviarlo más claro?",
     tiempoMaximoEspera: { valor: 24, unidad: "horas" },
   };
 
@@ -49,6 +54,9 @@ function normalizarConfigLectorPagosRm(raw) {
     montoEsperado:
       Number.isFinite(monto) && monto >= 0 ? monto : base.montoEsperado,
     moneda: String(raw.moneda ?? raw.monedaEsperada ?? base.moneda).trim() || base.moneda,
+    linkEntrega: String(
+      raw.linkEntrega ?? raw.link_entrega ?? raw.productoUrl ?? raw.producto_url ?? ""
+    ).trim(),
     verificarMonto: raw.verificarMonto !== false,
     verificarFecha: raw.verificarFecha === true,
     revisionManualSiFalla: raw.revisionManualSiFalla !== false,
@@ -69,7 +77,8 @@ function resolverConfigLectorPagosRm(ctx, node) {
     typeof nodeCfg === "object" &&
     (nodeCfg.montoEsperado != null ||
       nodeCfg.monto_esperado != null ||
-      String(nodeCfg.producto || "").trim())
+      String(nodeCfg.producto || "").trim() ||
+      String(nodeCfg.linkEntrega || nodeCfg.link_entrega || "").trim())
   ) {
     return normalizarConfigLectorPagosRm(nodeCfg);
   }
@@ -83,6 +92,47 @@ function resolverConfigLectorPagosRm(ctx, node) {
   return normalizarConfigLectorPagosRm(nodeCfg || {});
 }
 
+function serializarNodosPendingNext(nodos) {
+  return (Array.isArray(nodos) ? nodos : [])
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const tipo = String(item.type || item.tipo || "").toLowerCase();
+      if (!tipo) return null;
+      return {
+        type: tipo,
+        id: String(item.id || "").trim() || null,
+        config: item.config && typeof item.config === "object" ? item.config : {},
+      };
+    })
+    .filter(Boolean);
+}
+
+async function guardarPendingNextLectorRm(ctx, pendingNext, rmNodeId) {
+  if (!ctx?.fila?.id) return null;
+
+  const snap = leerSnapshot(ctx.fila);
+  const pending = serializarNodosPendingNext(pendingNext);
+  const configSnapshot = {
+    ...snap,
+    rm_lector_runtime: {
+      rm_node_id: rmNodeId,
+      pending_next: pending,
+    },
+  };
+
+  const actualizado = await repo.actualizarPorId(
+    ctx.fila.id,
+    { config_snapshot: configSnapshot },
+    ctx.fila
+  );
+
+  if (actualizado && ctx.fila) {
+    ctx.fila = actualizado;
+  }
+
+  return actualizado;
+}
+
 function buildPseudoNodoLectorPago(cfg) {
   const moneda = String(cfg.moneda || "Bs")
     .trim()
@@ -92,7 +142,7 @@ function buildPseudoNodoLectorPago(cfg) {
     data: {
       montoEsperado: cfg.verificarMonto !== false ? cfg.montoEsperado : 0,
       monedaEsperada: moneda,
-      productoTexto: cfg.producto || "",
+      productoUrl: cfg.linkEntrega || "",
       mensajePagoInvalido: cfg.mensajePagoNoValido || "",
     },
   };
@@ -101,7 +151,7 @@ function buildPseudoNodoLectorPago(cfg) {
 /**
  * Inicia espera del lector de pagos existente con contexto remarketing (sin tabla nueva).
  */
-async function iniciarLectorPagoRemarketing(ctx, node) {
+async function iniciarLectorPagoRemarketing(ctx, node, opts = {}) {
   const rm24hId = ctx?.fila?.id || null;
   const rmNodeId = String(node?.id || "").trim() || null;
   const usuarioId = ctx?.usuarioId || ctx?.fila?.usuario_id || null;
@@ -141,8 +191,13 @@ async function iniciarLectorPagoRemarketing(ctx, node) {
 
   const cfg = resolverConfigLectorPagosRm(ctx, node);
   const pseudoNodo = buildPseudoNodoLectorPago(cfg);
+  const pendingNext = serializarNodosPendingNext(opts.pendingNext);
 
   try {
+    if (pendingNext.length) {
+      await guardarPendingNextLectorRm(ctx, pendingNext, rmNodeId);
+    }
+
     const resultado = await iniciarEsperaLectorPago({
       usuarioId,
       clienteNumero,
@@ -161,12 +216,14 @@ async function iniciarLectorPagoRemarketing(ctx, node) {
       usuario: usuarioId,
       conexion_whatsapp_id: conexionWhatsappId,
       producto: cfg.producto || null,
+      linkEntrega: cfg.linkEntrega || null,
       montoEsperado: cfg.montoEsperado,
       moneda: cfg.moneda,
       verificarMonto: cfg.verificarMonto,
       verificarFecha: cfg.verificarFecha,
       revisionManualSiFalla: cfg.revisionManualSiFalla,
       tiempoMaximoEspera: cfg.tiempoMaximoEspera,
+      pending_next_count: pendingNext.length,
     });
 
     return {
@@ -190,6 +247,40 @@ async function iniciarLectorPagoRemarketing(ctx, node) {
   }
 }
 
+async function obtenerFilaRmPorId(rm24hId) {
+  if (!SUPABASE_URL || !SUPABASE_KEY || !rm24hId) return null;
+
+  const res = await axios.get(
+    `${SUPABASE_URL}/rest/v1/remarketing_global_24h?id=eq.${encodeURIComponent(
+      rm24hId
+    )}&select=*&limit=1`,
+    {
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`,
+      },
+    }
+  );
+
+  return res.data?.[0] || null;
+}
+
+async function limpiarPendingNextLectorRm(fila) {
+  if (!fila?.id) return fila;
+
+  const snap = leerSnapshot(fila);
+  if (!snap?.rm_lector_runtime) return fila;
+
+  const configSnapshot = { ...snap };
+  delete configSnapshot.rm_lector_runtime;
+
+  return repo.actualizarPorId(
+    fila.id,
+    { config_snapshot: configSnapshot },
+    fila
+  );
+}
+
 module.exports = {
   RM_LECTOR_FLUJO_PREFIX,
   buildFlujoIdRemarketing,
@@ -198,5 +289,10 @@ module.exports = {
   normalizarConfigLectorPagosRm,
   resolverConfigLectorPagosRm,
   buildPseudoNodoLectorPago,
+  serializarNodosPendingNext,
+  guardarPendingNextLectorRm,
   iniciarLectorPagoRemarketing,
+  obtenerFilaRmPorId,
+  limpiarPendingNextLectorRm,
+  leerSnapshot,
 };

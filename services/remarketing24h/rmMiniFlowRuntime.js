@@ -314,7 +314,8 @@ async function ejecutarNext(nextNodes, ctx) {
     })),
   });
 
-  for (const nodo of nodos) {
+  for (let i = 0; i < nodos.length; i++) {
+    const nodo = nodos[i];
     const tipo = String(nodo?.type || nodo?.tipo || "").toLowerCase();
     console.log("[RM_RUNTIME_DEBUG] ejecutar_next_nodo", {
       type: tipo || "(sin tipo)",
@@ -340,8 +341,10 @@ async function ejecutarNext(nextNodes, ctx) {
         id: nodo?.id || null,
         config: nodo?.config || null,
       });
-      await iniciarLectorPagoRemarketing(ctx, nodo);
-      continue;
+      await iniciarLectorPagoRemarketing(ctx, nodo, {
+        pendingNext: nodos.slice(i + 1),
+      });
+      return;
     }
     if (tipo === "conversion") {
       console.log("[RM_RUNTIME_DEBUG] conversion_detectada", {
@@ -472,6 +475,73 @@ async function ejecutarMiniFlujoRm(ctx) {
   return { handled: true };
 }
 
+/**
+ * Tras pago válido en lector RM: continúa nodos pendientes del mini flujo.
+ */
+async function continuarMiniFlujoRmTrasPagoValido({
+  rm24hId,
+  usuarioId,
+  clienteNumero,
+  conexionWhatsappId,
+}) {
+  const {
+    obtenerFilaRmPorId,
+    limpiarPendingNextLectorRm,
+    leerSnapshot: leerSnapRm,
+  } = require("./rmLectorPagoHelper");
+
+  if (!rm24hId || !usuarioId || !clienteNumero) {
+    console.log("[RM_RUNTIME] lector_pagos_continuar_omitido", {
+      motivo: "faltan_datos",
+      rm24h_id: rm24hId || null,
+    });
+    return { ok: false, motivo: "faltan_datos" };
+  }
+
+  let fila = await obtenerFilaRmPorId(rm24hId);
+  if (!fila?.id) {
+    console.log("[RM_RUNTIME] lector_pagos_continuar_omitido", {
+      motivo: "fila_no_encontrada",
+      rm24h_id: rm24hId,
+    });
+    return { ok: false, motivo: "fila_no_encontrada" };
+  }
+
+  const snap = leerSnapRm(fila);
+  const pending = Array.isArray(snap?.rm_lector_runtime?.pending_next)
+    ? snap.rm_lector_runtime.pending_next
+    : [];
+
+  fila = (await limpiarPendingNextLectorRm(fila)) || fila;
+
+  if (!pending.length) {
+    console.log("[RM_RUNTIME] lector_pagos_valido_sin_pending_next", {
+      rm24h_id: rm24hId,
+      lead: clienteNumero,
+    });
+    return { ok: true, sinPending: true };
+  }
+
+  const ctx = {
+    numero: clienteNumero,
+    usuarioId,
+    conexionWhatsappId:
+      normalizarConexionId(conexionWhatsappId) ||
+      normalizarConexionId(fila.conexion_whatsapp_id),
+    fila,
+  };
+
+  console.log("[RM_RUNTIME] lector_pagos_continuar_next", {
+    rm24h_id: rm24hId,
+    lead: clienteNumero,
+    pending_count: pending.length,
+    pending_types: pending.map((n) => String(n?.type || n?.tipo || "")),
+  });
+
+  await ejecutarNext(pending, ctx);
+  return { ok: true, pendingCount: pending.length };
+}
+
 module.exports = {
   leerSnapshot,
   buscarNodoAgenteRapidoEnMiniFlujo,
@@ -481,5 +551,6 @@ module.exports = {
   ejecutarNext,
   enviarFallbackAgente,
   cerrarContextoRmPorFin,
+  continuarMiniFlujoRmTrasPagoValido,
   ejecutarMiniFlujoRm,
 };

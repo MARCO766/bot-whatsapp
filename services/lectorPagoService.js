@@ -208,6 +208,7 @@ function buildPayloadEstadoLector({
   const extra = {};
   if (cfg.productoTexto) extra.producto_texto = cfg.productoTexto;
   if (cfg.productoUrl) extra.producto_url = cfg.productoUrl;
+  if (cfg.mensajeInvalido) extra.mensaje_pago_invalido = cfg.mensajeInvalido;
 
   return { ...base, ...extra };
 }
@@ -699,6 +700,7 @@ async function procesarImagenLectorPago({
       handled: true,
       valido: true,
       continuarFlujo: !esRemarketing,
+      continuarFlujoRm: esRemarketing,
       origen: esRemarketing ? "remarketing" : "flujo",
       rm24h_id: esRemarketing
         ? parseRm24hIdDesdeFlujoRemarketing(estado.flujo_id)

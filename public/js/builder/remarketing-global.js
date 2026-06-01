@@ -473,13 +473,6 @@ window.MacBotRemarketingGlobal = (function () {
 
   const RM24H_LECTOR_MONEDAS = ["Bs", "USD", "MXN", "CLP", "COP", "PEN", "ARS"];
 
-  const RM24H_ACCION_PAGO_VALIDO = [
-    { value: "ir_a_conversion", label: "Ir a conversión" },
-    { value: "aplicar_etiqueta", label: "Aplicar etiqueta" },
-    { value: "enviar_contenido", label: "Enviar contenido" },
-    { value: "finalizar_rm", label: "Finalizar RM" },
-  ];
-
   function crearUidLectorPagos() {
     return "rm_pay_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 6);
   }
@@ -490,10 +483,10 @@ window.MacBotRemarketingGlobal = (function () {
       producto: "",
       montoEsperado: 0,
       moneda: "Bs",
+      linkEntrega: "",
       verificarMonto: true,
       verificarFecha: false,
       revisionManualSiFalla: true,
-      accionPagoValido: "ir_a_conversion",
       mensajePagoNoValido:
         "No pude validar el comprobante 😅 ¿puedes enviarlo más claro?",
       tiempoMaximoEspera: { valor: 24, unidad: "horas" },
@@ -521,15 +514,6 @@ window.MacBotRemarketingGlobal = (function () {
     return { valor: valor, unidad: unidad };
   }
 
-  function normalizarAccionPagoValido(val) {
-    const v = String(val || "ir_a_conversion").trim();
-    return RM24H_ACCION_PAGO_VALIDO.some(function (a) {
-      return a.value === v;
-    })
-      ? v
-      : "ir_a_conversion";
-  }
-
   function normalizarMonedaLectorPagos(val) {
     const v = String(val || "Bs").trim();
     return RM24H_LECTOR_MONEDAS.indexOf(v) >= 0 ? v : "Bs";
@@ -544,10 +528,10 @@ window.MacBotRemarketingGlobal = (function () {
       producto: String(raw.producto ?? "").trim(),
       montoEsperado: Number.isFinite(monto) && monto >= 0 ? monto : base.montoEsperado,
       moneda: normalizarMonedaLectorPagos(raw.moneda ?? raw.monedaEsperada),
+      linkEntrega: String(raw.linkEntrega ?? raw.link_entrega ?? raw.productoUrl ?? "").trim(),
       verificarMonto: raw.verificarMonto !== false,
       verificarFecha: raw.verificarFecha === true,
       revisionManualSiFalla: raw.revisionManualSiFalla !== false,
-      accionPagoValido: normalizarAccionPagoValido(raw.accionPagoValido),
       mensajePagoNoValido: String(
         raw.mensajePagoNoValido ?? base.mensajePagoNoValido
       ).trim(),
@@ -3249,28 +3233,6 @@ window.MacBotRemarketingGlobal = (function () {
     persistirConfigPanelEnNodo();
   }
 
-  function htmlSelectAccionPagoValido(value, className) {
-    const cls = className || "rm24-input";
-    const v = normalizarAccionPagoValido(value);
-    return (
-      '<select class="' +
-      cls +
-      '" id="rm24hLectorPagosAccionValido">' +
-      RM24H_ACCION_PAGO_VALIDO.map(function (a) {
-        return (
-          '<option value="' +
-          esc(a.value) +
-          '"' +
-          (a.value === v ? " selected" : "") +
-          ">" +
-          esc(a.label) +
-          "</option>"
-        );
-      }).join("") +
-      "</select>"
-    );
-  }
-
   function htmlEditorBloqueLectorPagos(context) {
     const ctx = context || rm24hLectorPagosContext || crearLectorPagosContextMain();
     const lp = getLectorPagosPorContexto(ctx);
@@ -3285,26 +3247,26 @@ window.MacBotRemarketingGlobal = (function () {
       '<header class="rm24-ar-hero">' +
       '<div class="rm24-ar-hero__top">' +
       '<h5 class="rm24-ar-hero__title">💳 Lector de pagos</h5></div>' +
-      '<p class="rm24h-hint rm24-ar-hero__desc">Detecta comprobantes enviados por el lead dentro del remarketing.</p></header>' +
+      '<p class="rm24h-hint rm24-ar-hero__desc">Pago válido: envía link de entrega y continúa al siguiente nodo. Pago inválido: mensaje al lead y sigue esperando comprobante.</p></header>' +
       '<div class="rm24h-field rm24-field">' +
       '<label class="rm24-switch rm24h-toggle">' +
       '<input type="checkbox" id="rm24hLectorPagosActivo"' +
       (c.activo ? " checked" : "") +
       '><span class="rm24-switch-track" aria-hidden="true"></span>' +
-      '<span class="rm24-switch-label">Activar lector</span></label></div>' +
+      '<span class="rm24-switch-label">1. Activar lector</span></label></div>' +
       '<div class="rm24h-field rm24-field">' +
-      '<label for="rm24hLectorPagosProducto">Producto</label>' +
+      '<label for="rm24hLectorPagosProducto">2. Nombre / Producto</label>' +
       '<input type="text" id="rm24hLectorPagosProducto" class="rm24-input" placeholder="Ej: Papercraft" value="' +
       esc(c.producto) +
       '"></div>' +
       '<div class="rm24-tiempo-grid">' +
       '<div class="rm24h-field rm24-field">' +
-      '<label for="rm24hLectorPagosMonto">Monto esperado</label>' +
-      '<input type="number" id="rm24hLectorPagosMonto" class="rm24-input" min="0" step="0.01" inputmode="decimal" value="' +
+      '<label for="rm24hLectorPagosMonto">3. Precio / Monto esperado</label>' +
+      '<input type="number" id="rm24hLectorPagosMonto" class="rm24-input" min="0" step="0.01" inputmode="decimal" placeholder="Ej: 29" value="' +
       esc(String(c.montoEsperado)) +
       '"></div>' +
       '<div class="rm24h-field rm24-field">' +
-      '<label for="rm24hLectorPagosMoneda">Moneda</label>' +
+      '<label for="rm24hLectorPagosMoneda">4. Moneda</label>' +
       '<select id="rm24hLectorPagosMoneda" class="rm24-input">' +
       RM24H_LECTOR_MONEDAS.map(function (m) {
         return (
@@ -3318,8 +3280,13 @@ window.MacBotRemarketingGlobal = (function () {
         );
       }).join("") +
       "</select></div></div>" +
+      '<div class="rm24h-field rm24-field">' +
+      '<label for="rm24hLectorPagosLinkEntrega">5. Link de entrega del producto</label>' +
+      '<input type="url" id="rm24hLectorPagosLinkEntrega" class="rm24-input" placeholder="https://..." value="' +
+      esc(c.linkEntrega) +
+      '"></div>' +
       '<fieldset class="rm24h-field rm24-field rm24-lector-validacion">' +
-      "<legend>Validación</legend>" +
+      "<legend>6. Validación</legend>" +
       '<label class="rm24-ar-ruta-enabled-wrap">' +
       '<input type="checkbox" id="rm24hLectorPagosVerificarMonto"' +
       (c.verificarMonto ? " checked" : "") +
@@ -3333,16 +3300,12 @@ window.MacBotRemarketingGlobal = (function () {
       (c.revisionManualSiFalla ? " checked" : "") +
       "> Permitir revisión manual si falla</label></fieldset>" +
       '<div class="rm24h-field rm24-field">' +
-      "<label for=\"rm24hLectorPagosAccionValido\">Si pago válido</label>" +
-      htmlSelectAccionPagoValido(c.accionPagoValido, "rm24-input") +
-      "</div>" +
-      '<div class="rm24h-field rm24-field">' +
-      '<label for="rm24hLectorPagosMensajeInvalido">Si pago no válido</label>' +
-      '<textarea id="rm24hLectorPagosMensajeInvalido" class="rm24-input rm24-textarea" rows="3" placeholder="Mensaje al lead si no se valida el comprobante">' +
+      '<label for="rm24hLectorPagosMensajeInvalido">7. Mensaje si pago inválido</label>' +
+      '<textarea id="rm24hLectorPagosMensajeInvalido" class="rm24-input rm24-textarea" rows="3" placeholder="No pude validar el comprobante 😅 ¿puedes enviarlo más claro?">' +
       esc(c.mensajePagoNoValido) +
       "</textarea></div>" +
       '<div class="rm24h-field rm24-field">' +
-      "<label>Tiempo máximo de espera</label>" +
+      "<label>8. Tiempo máximo de espera</label>" +
       '<div class="rm24-tiempo-grid">' +
       '<div class="rm24h-field rm24-field">' +
       '<label for="rm24hLectorPagosEsperaValor">Valor</label>' +
@@ -3381,11 +3344,11 @@ window.MacBotRemarketingGlobal = (function () {
         producto: String(document.getElementById("rm24hLectorPagosProducto")?.value ?? ""),
         montoEsperado: Number.isFinite(monto) && monto >= 0 ? monto : 0,
         moneda: document.getElementById("rm24hLectorPagosMoneda")?.value,
+        linkEntrega: String(document.getElementById("rm24hLectorPagosLinkEntrega")?.value ?? "").trim(),
         verificarMonto: !!document.getElementById("rm24hLectorPagosVerificarMonto")?.checked,
         verificarFecha: !!document.getElementById("rm24hLectorPagosVerificarFecha")?.checked,
         revisionManualSiFalla:
           !!document.getElementById("rm24hLectorPagosRevisionManual")?.checked,
-        accionPagoValido: document.getElementById("rm24hLectorPagosAccionValido")?.value,
         mensajePagoNoValido: String(
           document.getElementById("rm24hLectorPagosMensajeInvalido")?.value ?? ""
         ),
