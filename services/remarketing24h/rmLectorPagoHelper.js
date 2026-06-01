@@ -33,9 +33,11 @@ function normalizarConfigLectorPagosRm(raw) {
   const base = {
     activo: false,
     producto: "",
+    nombreEsperado: "",
     montoEsperado: 0,
     moneda: "Bs",
     linkEntrega: "",
+    verificarNombre: true,
     verificarMonto: true,
     verificarFecha: false,
     revisionManualSiFalla: true,
@@ -51,12 +53,16 @@ function normalizarConfigLectorPagosRm(raw) {
   return {
     activo: raw.activo === true,
     producto: String(raw.producto ?? "").trim(),
+    nombreEsperado: String(
+      raw.nombreEsperado ?? raw.nombre_esperado ?? ""
+    ).trim(),
     montoEsperado:
       Number.isFinite(monto) && monto >= 0 ? monto : base.montoEsperado,
     moneda: String(raw.moneda ?? raw.monedaEsperada ?? base.moneda).trim() || base.moneda,
     linkEntrega: String(
       raw.linkEntrega ?? raw.link_entrega ?? raw.productoUrl ?? raw.producto_url ?? ""
     ).trim(),
+    verificarNombre: raw.verificarNombre !== false,
     verificarMonto: raw.verificarMonto !== false,
     verificarFecha: raw.verificarFecha === true,
     revisionManualSiFalla: raw.revisionManualSiFalla !== false,
@@ -78,6 +84,7 @@ function resolverConfigLectorPagosRm(ctx, node) {
     (nodeCfg.montoEsperado != null ||
       nodeCfg.monto_esperado != null ||
       String(nodeCfg.producto || "").trim() ||
+      String(nodeCfg.nombreEsperado || nodeCfg.nombre_esperado || "").trim() ||
       String(nodeCfg.linkEntrega || nodeCfg.link_entrega || "").trim())
   ) {
     return normalizarConfigLectorPagosRm(nodeCfg);
@@ -138,10 +145,14 @@ function buildPseudoNodoLectorPago(cfg) {
     .trim()
     .toLowerCase();
 
+  const verificarNombre = cfg.verificarNombre !== false;
+  const nombreEsperado = verificarNombre ? String(cfg.nombreEsperado || "").trim() : "";
+
   return {
     data: {
       montoEsperado: cfg.verificarMonto !== false ? cfg.montoEsperado : 0,
       monedaEsperada: moneda,
+      nombreEsperado,
       productoUrl: cfg.linkEntrega || "",
       mensajePagoInvalido: cfg.mensajePagoNoValido || "",
     },
@@ -216,7 +227,9 @@ async function iniciarLectorPagoRemarketing(ctx, node, opts = {}) {
       usuario: usuarioId,
       conexion_whatsapp_id: conexionWhatsappId,
       producto: cfg.producto || null,
+      nombreEsperado: cfg.nombreEsperado || null,
       linkEntrega: cfg.linkEntrega || null,
+      verificarNombre: cfg.verificarNombre,
       montoEsperado: cfg.montoEsperado,
       moneda: cfg.moneda,
       verificarMonto: cfg.verificarMonto,

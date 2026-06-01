@@ -66,7 +66,90 @@ function normalizeText(value) {
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
     .trim();
+}
+
+function tokenizeNombre(str) {
+  return normalizeText(str)
+    .replace(/\./g, " ")
+    .split(" ")
+    .map((t) => t.trim())
+    .filter(Boolean);
+}
+
+function tokensNombreSignificativos(tokens) {
+  return tokens.filter((t) => t.length >= 2);
+}
+
+function tokenNombreCoincide(tokenLeido, tokenEsperado) {
+  if (!tokenLeido || !tokenEsperado) return false;
+  if (tokenLeido === tokenEsperado) return true;
+  if (tokenLeido.length >= 2 && tokenEsperado.startsWith(tokenLeido)) return true;
+  if (tokenEsperado.length >= 2 && tokenLeido.startsWith(tokenEsperado)) return true;
+  if (tokenLeido.length === 1 && tokenEsperado.startsWith(tokenLeido)) return true;
+  if (tokenEsperado.length === 1 && tokenLeido.startsWith(tokenEsperado)) return true;
+  return false;
+}
+
+function contarTokensEsperadosEnLectura(tokensEsperados, tokensLeidos) {
+  const usados = new Set();
+  let count = 0;
+  for (const leido of tokensLeidos) {
+    for (let i = 0; i < tokensEsperados.length; i++) {
+      if (usados.has(i)) continue;
+      if (tokenNombreCoincide(leido, tokensEsperados[i])) {
+        usados.add(i);
+        count++;
+        break;
+      }
+    }
+  }
+  return count;
+}
+
+/** Coincidencia flexible: acentos, mayúsculas, iniciales y match parcial razonable. */
+function compararNombreFlexible(esperado, lectura) {
+  const esp = String(esperado || "").trim();
+  if (!esp) return true;
+
+  const lec = String(lectura || "").trim();
+  if (!lec) return false;
+
+  const espNorm = normalizeText(esp);
+  const lecNorm = normalizeText(lec);
+  if (lecNorm.includes(espNorm) || espNorm.includes(lecNorm)) return true;
+
+  const espTokens = tokensNombreSignificativos(tokenizeNombre(esp));
+  const lecTokens = tokenizeNombre(lec);
+  if (!espTokens.length) return true;
+
+  const coincidencias = contarTokensEsperadosEnLectura(espTokens, lecTokens);
+  const minRequeridas = Math.max(2, Math.ceil(espTokens.length * 0.5));
+  if (coincidencias >= minRequeridas) return true;
+
+  const lecSig = tokensNombreSignificativos(lecTokens);
+  if (lecSig.length >= 2) {
+    const todasEnEsperado = lecSig.every((lt) =>
+      espTokens.some((et) => tokenNombreCoincide(lt, et))
+    );
+    if (todasEnEsperado) return true;
+
+    if (espTokens.length >= 2) {
+      const firstEsp = espTokens[0];
+      const lastEsp = espTokens[espTokens.length - 1];
+      const firstLec = lecSig[0];
+      const lastLec = lecSig[lecSig.length - 1];
+      if (
+        tokenNombreCoincide(firstLec, firstEsp) &&
+        tokenNombreCoincide(lastLec, lastEsp)
+      ) {
+        return true;
+      }
+    }
+  }
+
+  return false;
 }
 
 function parseNodoConfig(nodo) {
@@ -512,7 +595,7 @@ function compararPago(estado, lectura) {
     : true;
 
   const nombreOk = esperadoNombre
-    ? normalizeText(lectura.nombre).includes(normalizeText(esperadoNombre))
+    ? compararNombreFlexible(esperadoNombre, lectura.nombre)
     : true;
 
   return {

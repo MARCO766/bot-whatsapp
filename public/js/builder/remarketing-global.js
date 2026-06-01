@@ -481,9 +481,11 @@ window.MacBotRemarketingGlobal = (function () {
     return {
       activo: false,
       producto: "",
+      nombreEsperado: "",
       montoEsperado: 0,
       moneda: "Bs",
       linkEntrega: "",
+      verificarNombre: true,
       verificarMonto: true,
       verificarFecha: false,
       revisionManualSiFalla: true,
@@ -526,9 +528,11 @@ window.MacBotRemarketingGlobal = (function () {
     return {
       activo: raw.activo === true,
       producto: String(raw.producto ?? "").trim(),
+      nombreEsperado: String(raw.nombreEsperado ?? raw.nombre_esperado ?? "").trim(),
       montoEsperado: Number.isFinite(monto) && monto >= 0 ? monto : base.montoEsperado,
       moneda: normalizarMonedaLectorPagos(raw.moneda ?? raw.monedaEsperada),
       linkEntrega: String(raw.linkEntrega ?? raw.link_entrega ?? raw.productoUrl ?? "").trim(),
+      verificarNombre: raw.verificarNombre !== false,
       verificarMonto: raw.verificarMonto !== false,
       verificarFecha: raw.verificarFecha === true,
       revisionManualSiFalla: raw.revisionManualSiFalla !== false,
@@ -566,6 +570,7 @@ window.MacBotRemarketingGlobal = (function () {
     return (
       c.activo ||
       String(c.producto || "").trim().length > 0 ||
+      String(c.nombreEsperado || "").trim().length > 0 ||
       (Number.isFinite(c.montoEsperado) && c.montoEsperado > 0)
     );
   }
@@ -579,6 +584,9 @@ window.MacBotRemarketingGlobal = (function () {
     const partes = [];
     if (String(c.producto || "").trim()) {
       partes.push("Producto: " + String(c.producto).trim());
+    }
+    if (String(c.nombreEsperado || "").trim()) {
+      partes.push("Nombre: " + String(c.nombreEsperado).trim());
     }
     if (Number.isFinite(c.montoEsperado) && c.montoEsperado > 0) {
       partes.push("Monto: " + c.montoEsperado + " " + c.moneda);
@@ -3259,14 +3267,19 @@ window.MacBotRemarketingGlobal = (function () {
       '<input type="text" id="rm24hLectorPagosProducto" class="rm24-input" placeholder="Ej: Papercraft" value="' +
       esc(c.producto) +
       '"></div>' +
+      '<div class="rm24h-field rm24-field">' +
+      '<label for="rm24hLectorPagosNombreEsperado">3. Nombre esperado en comprobante</label>' +
+      '<input type="text" id="rm24hLectorPagosNombreEsperado" class="rm24-input" placeholder="Ej: Marco Antonio Arias Perez" value="' +
+      esc(c.nombreEsperado) +
+      '"></div>' +
       '<div class="rm24-tiempo-grid">' +
       '<div class="rm24h-field rm24-field">' +
-      '<label for="rm24hLectorPagosMonto">3. Precio / Monto esperado</label>' +
+      '<label for="rm24hLectorPagosMonto">4. Precio / Monto esperado</label>' +
       '<input type="number" id="rm24hLectorPagosMonto" class="rm24-input" min="0" step="0.01" inputmode="decimal" placeholder="Ej: 29" value="' +
       esc(String(c.montoEsperado)) +
       '"></div>' +
       '<div class="rm24h-field rm24-field">' +
-      '<label for="rm24hLectorPagosMoneda">4. Moneda</label>' +
+      '<label for="rm24hLectorPagosMoneda">5. Moneda</label>' +
       '<select id="rm24hLectorPagosMoneda" class="rm24-input">' +
       RM24H_LECTOR_MONEDAS.map(function (m) {
         return (
@@ -3281,12 +3294,16 @@ window.MacBotRemarketingGlobal = (function () {
       }).join("") +
       "</select></div></div>" +
       '<div class="rm24h-field rm24-field">' +
-      '<label for="rm24hLectorPagosLinkEntrega">5. Link de entrega del producto</label>' +
+      '<label for="rm24hLectorPagosLinkEntrega">6. Link de entrega del producto</label>' +
       '<input type="url" id="rm24hLectorPagosLinkEntrega" class="rm24-input" placeholder="https://..." value="' +
       esc(c.linkEntrega) +
       '"></div>' +
       '<fieldset class="rm24h-field rm24-field rm24-lector-validacion">' +
-      "<legend>6. Validación</legend>" +
+      "<legend>7. Validación</legend>" +
+      '<label class="rm24-ar-ruta-enabled-wrap">' +
+      '<input type="checkbox" id="rm24hLectorPagosVerificarNombre"' +
+      (c.verificarNombre ? " checked" : "") +
+      "> Verificar nombre en comprobante</label>" +
       '<label class="rm24-ar-ruta-enabled-wrap">' +
       '<input type="checkbox" id="rm24hLectorPagosVerificarMonto"' +
       (c.verificarMonto ? " checked" : "") +
@@ -3300,12 +3317,12 @@ window.MacBotRemarketingGlobal = (function () {
       (c.revisionManualSiFalla ? " checked" : "") +
       "> Permitir revisión manual si falla</label></fieldset>" +
       '<div class="rm24h-field rm24-field">' +
-      '<label for="rm24hLectorPagosMensajeInvalido">7. Mensaje si pago inválido</label>' +
+      '<label for="rm24hLectorPagosMensajeInvalido">8. Mensaje si pago inválido</label>' +
       '<textarea id="rm24hLectorPagosMensajeInvalido" class="rm24-input rm24-textarea" rows="3" placeholder="No pude validar el comprobante 😅 ¿puedes enviarlo más claro?">' +
       esc(c.mensajePagoNoValido) +
       "</textarea></div>" +
       '<div class="rm24h-field rm24-field">' +
-      "<label>8. Tiempo máximo de espera</label>" +
+      "<label>9. Tiempo máximo de espera</label>" +
       '<div class="rm24-tiempo-grid">' +
       '<div class="rm24h-field rm24-field">' +
       '<label for="rm24hLectorPagosEsperaValor">Valor</label>' +
@@ -3342,9 +3359,13 @@ window.MacBotRemarketingGlobal = (function () {
       config: {
         activo: !!document.getElementById("rm24hLectorPagosActivo")?.checked,
         producto: String(document.getElementById("rm24hLectorPagosProducto")?.value ?? ""),
+        nombreEsperado: String(
+          document.getElementById("rm24hLectorPagosNombreEsperado")?.value ?? ""
+        ).trim(),
         montoEsperado: Number.isFinite(monto) && monto >= 0 ? monto : 0,
         moneda: document.getElementById("rm24hLectorPagosMoneda")?.value,
         linkEntrega: String(document.getElementById("rm24hLectorPagosLinkEntrega")?.value ?? "").trim(),
+        verificarNombre: !!document.getElementById("rm24hLectorPagosVerificarNombre")?.checked,
         verificarMonto: !!document.getElementById("rm24hLectorPagosVerificarMonto")?.checked,
         verificarFecha: !!document.getElementById("rm24hLectorPagosVerificarFecha")?.checked,
         revisionManualSiFalla:
