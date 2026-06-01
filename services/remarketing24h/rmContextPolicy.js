@@ -52,6 +52,34 @@ function parseConfigSnapshot(snapshot) {
   return {};
 }
 
+function boolFromUnknown(value) {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value !== 0;
+  if (typeof value === "string") {
+    const s = value.trim().toLowerCase();
+    if (["true", "1", "si", "sí", "on"].includes(s)) return true;
+    if (["false", "0", "no", "off"].includes(s)) return false;
+  }
+  return null;
+}
+
+function resolverModeDesdeInterruptor(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const permitirRaw = raw.permitirVolverFlujoNormal;
+
+  if (permitirRaw && typeof permitirRaw === "object") {
+    const activar = boolFromUnknown(permitirRaw.activar);
+    if (activar === true) return "allow_normal_triggers";
+    if (activar === false) return "until_conversion";
+  }
+
+  const activarPlano = boolFromUnknown(raw.permitirVolverFlujoNormal);
+  if (activarPlano === true) return "allow_normal_triggers";
+  if (activarPlano === false) return "until_conversion";
+
+  return null;
+}
+
 /**
  * Sin rm_context_policy en snapshot → allow_normal_triggers (flujos legacy).
  */
@@ -60,6 +88,19 @@ function leerRmContextPolicyDesdeSnapshot(configSnapshot) {
   const raw = cfg.rm_context_policy;
   if (!raw || typeof raw !== "object") {
     return { ...POLICY_DEFAULT };
+  }
+
+  const modeDesdeInterruptor = resolverModeDesdeInterruptor(raw);
+  if (modeDesdeInterruptor) {
+    const durInt =
+      raw.duration && typeof raw.duration === "object" ? raw.duration : {};
+    const unitInt =
+      normalizarUnidadDuration(durInt.unit) || POLICY_DEFAULT.duration.unit;
+    let valueInt = parseInt(durInt.value, 10);
+    if (!Number.isFinite(valueInt) || valueInt < 1) {
+      valueInt = POLICY_DEFAULT.duration.value;
+    }
+    return { mode: modeDesdeInterruptor, duration: { value: valueInt, unit: unitInt } };
   }
 
   let mode = String(raw.mode || "").trim();

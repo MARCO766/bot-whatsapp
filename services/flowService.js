@@ -40,6 +40,7 @@ const {
   resetearRemarketing24h,
   cancelarRemarketing24h,
 } = require("./remarketing24h/remarketing24hService");
+const repoRm24h = require("./remarketing24h/remarketing24hRepository");
 const {
   obtenerContextoRemarketingPostEnvio,
 } = require("./remarketing24h/rmContextPostEnvio");
@@ -1360,8 +1361,9 @@ async function procesarMensajeEntrante(
     conexionWhatsappId: conexionEntrante,
     texto: textoDebug.slice(0, 80),
   });
+  let rmContext = null;
   try {
-    const rmContext = await obtenerContextoRemarketingPostEnvio({
+    rmContext = await obtenerContextoRemarketingPostEnvio({
       usuarioId,
       clienteNumero: numero,
       conexionWhatsappId: conexionEntrante,
@@ -1444,6 +1446,34 @@ async function procesarMensajeEntrante(
   console.log("[RM_DEBUG] paso=7 activador_result =", activadorEjecutado, {
     texto: textoDebug.slice(0, 80),
   });
+
+  if (
+    activadorEjecutado &&
+    rmContext?.fila?.id &&
+    rmContext?.policy?.mode === "allow_normal_triggers"
+  ) {
+    try {
+      const filaInvalidada = await repoRm24h.invalidarPostEnvioPorResetbot({
+        usuario_id: usuarioId,
+        cliente_numero: numero,
+        conexion_whatsapp_id: opts.conexionWhatsappId ?? null,
+      });
+      if (filaInvalidada?.id) {
+        console.log("[RM_CONTEXT] contexto RM cerrado por activador normal", {
+          rm24h_id: filaInvalidada.id,
+          lead: numero,
+          usuario: usuarioId,
+          conexion_whatsapp_id: opts.conexionWhatsappId ?? null,
+          policy_mode: rmContext.policy?.mode,
+        });
+      }
+    } catch (err) {
+      console.log(
+        "[RM_CONTEXT] error cerrando contexto RM tras activador normal:",
+        err.response?.data || err.message
+      );
+    }
+  }
 
   if (!activadorEjecutado && usuarioId && numero) {
     try {
