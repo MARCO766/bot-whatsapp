@@ -9,7 +9,7 @@ import { CONEXION_TODAS } from "./utils/conexionesInbox";
 
 const PERIODOS = ["Hoy", "7 días", "30 días"];
 
-const META_PLACEHOLDER = "Conecta Meta Ads para ver esta métrica";
+const META_METRICS_PREVIEW = "ROAS, CTR, CPC, CPM y frecuencia";
 
 /** Fase 1 — ocultar secciones en UI; lógica, fetch y componentes siguen intactos */
 const UI_OCULTAR_FASE1 = {
@@ -40,11 +40,15 @@ function TrendBadge({ value }) {
   return <span className={`trend ${pos ? "up" : "down"}`}>{t}</span>;
 }
 
-function MiniChart({ data, keyField, color }) {
-  if (!data?.length) return <EmptyBlock title="Sin datos" hint="Aún no hay actividad en este periodo." />;
+function MiniChart({ data, keyField, color, formatValue }) {
+  if (!data?.length) {
+    return <div className="trendEmpty">Sin actividad en el periodo</div>;
+  }
   const max = Math.max(...data.map((d) => d[keyField] || 0), 1);
   const hasData = data.some((d) => (d[keyField] || 0) > 0);
-  if (!hasData) return <EmptyBlock title="Sin datos" hint="Aún no hay actividad en este periodo." />;
+  if (!hasData) return <div className="trendEmpty">Sin actividad en el periodo</div>;
+
+  const fmt = formatValue || ((v) => formatNum(v));
 
   return (
     <div className="miniChart">
@@ -52,15 +56,27 @@ function MiniChart({ data, keyField, color }) {
         <div
           key={d.fecha}
           className="miniBarCol"
-          title={`${d.fecha}: ${d[keyField]}`}
+          title={`${d.fecha}: ${fmt(d[keyField] || 0)}`}
         >
           <div
             className={`miniBar ${color}`}
-            style={{ height: `${Math.max(4, ((d[keyField] || 0) / max) * 100)}%` }}
+            style={{ height: `${Math.max(3, ((d[keyField] || 0) / max) * 100)}%` }}
           />
           <small>{d.fecha?.slice(5)}</small>
         </div>
       ))}
+    </div>
+  );
+}
+
+function TrendMetric({ label, total, data, keyField, color, formatValue }) {
+  return (
+    <div className="trendMetric">
+      <div className="trendMetricHead">
+        <span className="trendMetricLabel">{label}</span>
+        <strong className="trendMetricTotal">{total}</strong>
+      </div>
+      <MiniChart data={data} keyField={keyField} color={color} formatValue={formatValue} />
     </div>
   );
 }
@@ -90,15 +106,22 @@ function HeatmapGrid({ heatmap }) {
   );
 }
 
-function MetaMetricCard({ titulo, ayuda }) {
+function MetaAdsCompactCard({ conectado }) {
   return (
-    <div className="performanceCard metaPlaceholder">
-      <div>
-        <span>{titulo}</span>
-        <h3>—</h3>
-        <p>{ayuda}</p>
+    <div className="metaAdsCompact">
+      <div className="metaAdsCompactHead">
+        <span className="metaAdsIcon" aria-hidden="true">
+          ◆
+        </span>
+        <div>
+          <h3>Meta Ads</h3>
+          <p className="metaAdsStatus">{conectado ? "Pixel conectado" : "Integración pendiente"}</p>
+        </div>
+        <span className="metaSoonChip">Próximamente</span>
       </div>
-      <b className="warning">{META_PLACEHOLDER}</b>
+      <p className="metaAdsCopy">
+        Conecta Meta Ads para ver: <strong>{META_METRICS_PREVIEW}</strong>
+      </p>
     </div>
   );
 }
@@ -118,7 +141,7 @@ export default function Metricas() {
 
   const kpis = resumen?.kpis || {};
   const salud = resumen?.salud || { score: 0, label: "Sin datos" };
-  const metaAds = resumen?.metaAds || { conectado: false, mensaje: META_PLACEHOLDER };
+  const metaAds = resumen?.metaAds || { conectado: false };
 
   const mainCards = useMemo(
     () => [
@@ -197,11 +220,22 @@ export default function Metricas() {
   );
 
   const segCards = [
-    { label: "Pendientes", val: kpis.seguimientosActivos },
-    { label: "Enviados", val: kpis.seguimientosEnviados },
-    { label: "Cancelados", val: kpis.seguimientosCancelados },
-    { label: "Respondidos", val: kpis.seguimientosRespondidos },
+    { label: "Enviados", val: kpis.seguimientosEnviados, tone: "cyan" },
+    { label: "Respondidos", val: kpis.seguimientosRespondidos, tone: "green" },
+    { label: "Cancelados", val: kpis.seguimientosCancelados, tone: "muted" },
   ];
+
+  const diario = series?.diario || [];
+  const trendTotals = useMemo(() => {
+    const sum = (key) => diario.reduce((acc, d) => acc + (Number(d[key]) || 0), 0);
+    return {
+      leads: formatNum(sum("leads")),
+      ventas: formatNum(sum("ventas")),
+      ingresos: formatMoney(sum("ingresos"), kpis.moneda),
+    };
+  }, [diario, kpis.moneda]);
+
+  const insightTitulo = salud.score >= 60 ? "Embudo saludable" : "Optimiza el embudo";
 
   const flujoNombre = flujosLista.find((f) => f.id === flujoId)?.nombre;
   const conexionActiva = conexionesInbox.find(
@@ -335,8 +369,8 @@ export default function Metricas() {
         conexionesLoading={conexionesLoading}
       />
 
-      <section className="bodyGrid">
-        <div className="leftColumn">
+      <section className="dashBottom">
+        <div className="dashMain">
           {!UI_OCULTAR_FASE1.indicadoresClave && (
             <div className="panelCard">
               <div className="panelTop">
@@ -399,29 +433,39 @@ export default function Metricas() {
             </div>
           )}
 
-          <div className="panelCard">
-            <div className="panelTop">
+          <div className="panelCard panelCard--trend">
+            <div className="panelTop panelTop--compact">
               <div>
                 <h2>Tendencia diaria</h2>
-                <p>Leads, mensajes y ventas por día.</p>
+                <p>Leads, ventas e ingresos por día en el periodo.</p>
               </div>
             </div>
             {loading ? (
               <Skeleton className="chartSkel" />
             ) : (
-              <div className="chartsRow">
-                <div className="chartBox">
-                  <h4>Leads</h4>
-                  <MiniChart data={series?.diario} keyField="leads" color="green" />
-                </div>
-                <div className="chartBox">
-                  <h4>Mensajes</h4>
-                  <MiniChart data={series?.diario} keyField="mensajes" color="cyan" />
-                </div>
-                <div className="chartBox">
-                  <h4>Ventas</h4>
-                  <MiniChart data={series?.diario} keyField="ventas" color="purple" />
-                </div>
+              <div className="trendBusinessRow">
+                <TrendMetric
+                  label="Leads"
+                  total={trendTotals.leads}
+                  data={diario}
+                  keyField="leads"
+                  color="green"
+                />
+                <TrendMetric
+                  label="Ventas"
+                  total={trendTotals.ventas}
+                  data={diario}
+                  keyField="ventas"
+                  color="purple"
+                />
+                <TrendMetric
+                  label="Ingresos"
+                  total={trendTotals.ingresos}
+                  data={diario}
+                  keyField="ingresos"
+                  color="orange"
+                  formatValue={(v) => formatMoney(v, kpis.moneda)}
+                />
               </div>
             )}
           </div>
@@ -437,43 +481,43 @@ export default function Metricas() {
               {loading ? <Skeleton className="heatmapSkel" /> : <HeatmapGrid heatmap={heatmap?.heatmap} />}
             </div>
           )}
-        </div>
 
-        <div className="rightColumn">
-          <div className="panelCard moneyCard">
-            <span className="eyebrow">Meta Ads</span>
+          <div className="panelCard panelCard--diag">
+            <div className="panelTop panelTop--compact">
+              <h2>Diagnóstico inteligente</h2>
+            </div>
             {loading ? (
-              <Skeleton className="moneySkel" />
+              <Skeleton className="diagSkel" />
             ) : (
-              <>
-                <h2>{metaAds.conectado ? "Pixel conectado" : "Sin integración Ads"}</h2>
-                <p>{metaAds.mensaje}</p>
-                <div className="moneyList">
-                  <MetaMetricCard titulo="ROAS" ayuda="Ingresos / inversión publicitaria" />
-                  <MetaMetricCard titulo="CTR" ayuda="Clicks / impresiones" />
-                  <MetaMetricCard titulo="CPC" ayuda="Costo por click" />
-                </div>
-                <div className="moneyList" style={{ marginTop: 10 }}>
-                  <MetaMetricCard titulo="CPM" ayuda="Costo por mil impresiones" />
-                  <MetaMetricCard titulo="Frecuencia" ayuda="Veces que ven el anuncio" />
-                  <div className="metaNote">
-                    <span>Inversión</span>
-                    <strong>—</strong>
-                    <small>{META_PLACEHOLDER}</small>
+              <div className="diagnostico diagnostico--premium">
+                {(diagnostico?.items || []).map((d, i) => (
+                  <div className={`diagItem ${d.tipo}`} key={i}>
+                    <span className="diagIcon" aria-hidden="true">
+                      {d.tipo === "ok" ? "✓" : d.tipo === "alerta" ? "!" : "i"}
+                    </span>
+                    <p>{d.texto}</p>
                   </div>
-                </div>
-              </>
+                ))}
+              </div>
             )}
           </div>
+        </div>
 
-          <div className="panelCard">
-            <h2>Seguimientos</h2>
+        <aside className="dashAside">
+          <div className="panelCard panelCard--compact">
+            {loading ? <Skeleton className="metaSkel" /> : <MetaAdsCompactCard conectado={metaAds.conectado} />}
+          </div>
+
+          <div className="panelCard panelCard--compact">
+            <div className="panelTop panelTop--compact">
+              <h2>Seguimientos</h2>
+            </div>
             {loading ? (
               <Skeleton className="segSkel" />
             ) : (
-              <div className="segGrid">
+              <div className="segStrip">
                 {segCards.map((s) => (
-                  <div key={s.label} className="segItem">
+                  <div key={s.label} className={`segStripItem ${s.tone}`}>
                     <span>{s.label}</span>
                     <strong>{formatNum(s.val)}</strong>
                   </div>
@@ -482,31 +526,19 @@ export default function Metricas() {
             )}
           </div>
 
-          <div className="panelCard">
-            <h2>Diagnóstico inteligente</h2>
-            {loading ? (
-              <Skeleton className="diagSkel" />
-            ) : (
-              <div className="diagnostico">
-                {(diagnostico?.items || []).map((d, i) => (
-                  <div className={`diagItem ${d.tipo}`} key={i}>
-                    <span>{d.tipo === "ok" ? "✓" : d.tipo === "alerta" ? "!" : "i"}</span>
-                    <p>{d.texto}</p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="panelCard recommendation">
-            <span className="eyebrow">Recomendación</span>
+          <div className="panelCard panelCard--insight">
             {loading ? (
               <Skeleton className="recSkel" />
             ) : (
-              <>
-                <h2>{salud.score >= 60 ? "Embudo saludable" : "Optimiza el embudo"}</h2>
-                <p>{diagnostico?.recomendacion || "Revisa seguimientos y respuestas."}</p>
-              </>
+              <div className="insightCard">
+                <span className="insightEmoji" aria-hidden="true">
+                  💡
+                </span>
+                <div className="insightBody">
+                  <strong>{insightTitulo}</strong>
+                  <p>{diagnostico?.recomendacion || "Revisa seguimientos y respuestas."}</p>
+                </div>
+              </div>
             )}
           </div>
 
@@ -557,7 +589,7 @@ export default function Metricas() {
               )}
             </div>
           )}
-        </div>
+        </aside>
       </section>
     </div>
   );
@@ -565,7 +597,7 @@ export default function Metricas() {
 
 const styles = `
 .metricasMeta { min-height: 100%; color: #e5e7eb; }
-.hero { min-height: 200px; border-radius: 34px; padding: 30px; margin-bottom: 18px; background: radial-gradient(circle at 88% 18%, rgba(34,211,238,.28), transparent 28%), radial-gradient(circle at 15% 90%, rgba(168,85,247,.18), transparent 30%), linear-gradient(135deg, rgba(15,23,42,.86), rgba(6,182,212,.16)); border: 1px solid rgba(148,163,184,.16); display: flex; justify-content: space-between; align-items: center; gap: 24px; animation: fadeUp .35s ease both; }
+.hero { min-height: 148px; border-radius: 28px; padding: 22px 26px; margin-bottom: 14px; background: radial-gradient(circle at 88% 18%, rgba(34,211,238,.28), transparent 28%), radial-gradient(circle at 15% 90%, rgba(168,85,247,.18), transparent 30%), linear-gradient(135deg, rgba(15,23,42,.86), rgba(6,182,212,.16)); border: 1px solid rgba(148,163,184,.16); display: flex; justify-content: space-between; align-items: center; gap: 24px; animation: fadeUp .35s ease both; }
 .eyebrow { color: #67e8f9; font-size: 12px; font-weight: 1000; letter-spacing: 2.4px; text-transform: uppercase; }
 .hero h1 { margin: 12px 0; font-size: 36px; line-height: 1.05; letter-spacing: -1px; max-width: 800px; }
 .hero p { margin: 0; color: #b6c4d8; max-width: 720px; line-height: 1.55; }
@@ -575,7 +607,7 @@ const styles = `
 .scoreRing span { color: #94a3b8; font-size: 12px; }
 .heroScore b { color: #86efac; }
 .heroScore small { color: #94a3b8; }
-.controlBar { border-radius: 26px; padding: 16px; margin-bottom: 18px; background: rgba(15,23,42,.72); border: 1px solid rgba(148,163,184,.14); display: grid; grid-template-columns: 1fr auto auto; gap: 14px; align-items: end; }
+.controlBar { border-radius: 22px; padding: 14px; margin-bottom: 14px; background: rgba(15,23,42,.72); border: 1px solid rgba(148,163,184,.14); display: grid; grid-template-columns: 1fr auto auto; gap: 14px; align-items: end; }
 .selectorBox label { display: block; color: #94a3b8; font-size: 12px; margin-bottom: 7px; font-weight: 900; }
 .periodos { display: flex; gap: 8px; flex-wrap: wrap; }
 .periodos button { height: 42px; border: 0; border-radius: 14px; padding: 0 14px; color: white; background: rgba(255,255,255,.08); cursor: pointer; font-weight: 900; }
@@ -584,8 +616,8 @@ const styles = `
 .refreshBtn { height: 42px; border: 0; border-radius: 14px; padding: 0 16px; background: rgba(255,255,255,.1); color: white; font-weight: 900; cursor: pointer; }
 .liveBadge { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 14px; background: rgba(255,255,255,.06); }
 .liveDot { width: 10px; height: 10px; border-radius: 50%; background: #22c55e; box-shadow: 0 0 10px #22c55e; animation: pulse 1.5s infinite; }
-.mainGrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 18px; }
-.mainCard { min-height: 160px; border-radius: 28px; padding: 20px; position: relative; overflow: hidden; border: 1px solid rgba(148,163,184,.14); background: rgba(15,23,42,.72); animation: fadeUp .35s ease both; }
+.mainGrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 14px; }
+.mainCard { min-height: 148px; border-radius: 24px; padding: 18px; position: relative; overflow: hidden; border: 1px solid rgba(148,163,184,.14); background: rgba(15,23,42,.72); animation: fadeUp .35s ease both; }
 .mainCard.green { background: linear-gradient(135deg, rgba(34,197,94,.24), rgba(15,23,42,.78)); }
 .mainCard.cyan { background: linear-gradient(135deg, rgba(6,182,212,.24), rgba(15,23,42,.78)); }
 .mainCard.purple { background: linear-gradient(135deg, rgba(168,85,247,.24), rgba(15,23,42,.78)); }
@@ -599,12 +631,18 @@ const styles = `
 .trend.muted { color: #94a3b8; background: rgba(255,255,255,.06); }
 .mainCard h2 { margin: 16px 0 6px; font-size: 32px; position: relative; }
 .mainCard p { margin: 4px 0 0; color: #94a3b8; font-size: 13px; position: relative; }
-.bodyGrid { display: grid; grid-template-columns: 1.25fr .75fr; gap: 18px; }
-.leftColumn, .rightColumn { display: flex; flex-direction: column; gap: 18px; }
-.panelCard { border-radius: 28px; padding: 20px; background: rgba(15,23,42,.72); border: 1px solid rgba(148,163,184,.14); animation: fadeUp .35s ease both; }
-.panelTop { margin-bottom: 16px; }
-.panelTop h2, .panelCard h2 { margin: 0 0 6px; font-size: 20px; }
-.panelTop p { margin: 0; color: #94a3b8; font-size: 13px; }
+.dashBottom { display: grid; grid-template-columns: 1fr minmax(260px, 300px); gap: 14px; align-items: start; }
+.dashMain, .dashAside { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.panelCard { border-radius: 22px; padding: 16px 18px; background: rgba(15,23,42,.72); border: 1px solid rgba(148,163,184,.14); animation: fadeUp .35s ease both; }
+.panelCard--compact { padding: 14px 16px; }
+.panelCard--trend { padding-bottom: 14px; }
+.panelCard--diag { padding-bottom: 14px; }
+.panelCard--insight { padding: 12px 14px; background: linear-gradient(135deg, rgba(34,197,94,.07), rgba(15,23,42,.82)); border-color: rgba(34,197,94,.18); }
+.panelTop { margin-bottom: 12px; }
+.panelTop--compact { margin-bottom: 10px; }
+.panelTop h2, .panelCard h2 { margin: 0 0 4px; font-size: 17px; letter-spacing: -.2px; }
+.panelTop p { margin: 0; color: #94a3b8; font-size: 12px; line-height: 1.4; }
+.panelCard--compact h2 { font-size: 15px; margin: 0; }
 .performanceGrid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
 .performanceCard { padding: 16px; border-radius: 20px; background: rgba(255,255,255,.045); display: flex; justify-content: space-between; gap: 10px; }
 .performanceCard span { color: #94a3b8; font-size: 12px; font-weight: 900; }
@@ -624,37 +662,51 @@ const styles = `
 .funnelBar .green { background: linear-gradient(90deg, #22c55e, #84cc16); }
 .funnelBar .orange { background: linear-gradient(90deg, #f97316, #eab308); }
 .funnelBar .purple { background: linear-gradient(90deg, #a855f7, #ec4899); }
-.chartsRow { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
-.chartBox h4 { margin: 0 0 10px; color: #94a3b8; font-size: 12px; }
-.miniChart { display: flex; align-items: flex-end; gap: 4px; height: 100px; }
-.miniBarCol { flex: 1; display: flex; flex-direction: column; align-items: center; height: 100%; justify-content: flex-end; }
-.miniBar { width: 100%; min-height: 4px; border-radius: 6px 6px 2px 2px; transition: height .3s; }
-.miniBar.green { background: linear-gradient(180deg, #22c55e, #16a34a); }
+.trendBusinessRow { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.trendMetric { padding: 10px 12px; border-radius: 16px; background: rgba(255,255,255,.035); border: 1px solid rgba(148,163,184,.1); }
+.trendMetricHead { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.trendMetricLabel { font-size: 11px; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; color: #94a3b8; }
+.trendMetricTotal { font-size: 15px; color: #f1f5f9; letter-spacing: -.3px; }
+.trendEmpty { font-size: 11px; color: #64748b; text-align: center; padding: 18px 8px; min-height: 56px; display: flex; align-items: center; justify-content: center; }
+.miniChart { display: flex; align-items: flex-end; gap: 3px; height: 56px; }
+.miniBarCol { flex: 1; display: flex; flex-direction: column; align-items: center; height: 56px; justify-content: flex-end; min-width: 0; }
+.miniBar { width: 100%; max-width: 18px; min-height: 3px; border-radius: 4px 4px 2px 2px; transition: height .3s; }
+.miniBar.green { background: linear-gradient(180deg, #4ade80, #16a34a); }
 .miniBar.cyan { background: linear-gradient(180deg, #06b6d4, #0891b2); }
-.miniBar.purple { background: linear-gradient(180deg, #a855f7, #7c3aed); }
-.miniBarCol small { font-size: 9px; color: #64748b; margin-top: 4px; }
+.miniBar.purple { background: linear-gradient(180deg, #c084fc, #7c3aed); }
+.miniBar.orange { background: linear-gradient(180deg, #fb923c, #ea580c); }
+.miniBarCol small { font-size: 8px; color: #64748b; margin-top: 3px; }
 .heatmapGrid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; }
 .heatCell { padding: 8px 4px; border-radius: 10px; background: linear-gradient(135deg, #06b6d4, #22c55e); text-align: center; font-size: 11px; }
 .heatCell b { display: block; }
 .heatCell small { color: rgba(255,255,255,.8); }
-.moneyCard { background: radial-gradient(circle at 85% 12%, rgba(34,211,238,.12), transparent 32%), rgba(15,23,42,.72); }
-.moneyList { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
-.metaNote { padding: 10px; border-radius: 14px; background: rgba(255,255,255,.04); }
-.metaNote span { display: block; color: #94a3b8; font-size: 11px; }
-.metaNote strong { display: block; margin: 4px 0; }
-.metaNote small { color: #fdba74; font-size: 10px; line-height: 1.3; }
-.segGrid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 12px; }
-.segItem { padding: 12px; border-radius: 14px; background: rgba(255,255,255,.05); }
-.segItem span { color: #94a3b8; font-size: 12px; }
-.segItem strong { display: block; margin-top: 6px; font-size: 22px; }
-.diagnostico { margin-top: 12px; display: flex; flex-direction: column; gap: 10px; }
-.diagItem { display: flex; gap: 10px; padding: 12px; border-radius: 14px; background: rgba(255,255,255,.045); }
-.diagItem span { width: 24px; height: 24px; min-width: 24px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 12px; }
-.diagItem.ok span { background: #22c55e; color: #031827; }
-.diagItem.alerta span { background: #f97316; color: #031827; }
-.diagItem.info span { background: #06b6d4; color: #031827; }
-.diagItem p { margin: 0; color: #cbd5e1; font-size: 13px; line-height: 1.4; }
-.recommendation { background: radial-gradient(circle at 80% 12%, rgba(168,85,247,.15), transparent 32%), linear-gradient(135deg, rgba(34,197,94,.08), rgba(15,23,42,.75)); }
+.metaAdsCompact { display: flex; flex-direction: column; gap: 10px; }
+.metaAdsCompactHead { display: flex; align-items: flex-start; gap: 10px; }
+.metaAdsIcon { width: 36px; height: 36px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 14px; color: #67e8f9; background: linear-gradient(135deg, rgba(6,182,212,.2), rgba(59,130,246,.12)); border: 1px solid rgba(34,211,238,.25); flex-shrink: 0; }
+.metaAdsCompact h3 { margin: 0; font-size: 15px; }
+.metaAdsStatus { margin: 2px 0 0; font-size: 11px; color: #94a3b8; }
+.metaSoonChip { margin-left: auto; flex-shrink: 0; height: 26px; padding: 0 10px; border-radius: 999px; display: inline-flex; align-items: center; font-size: 10px; font-weight: 900; letter-spacing: .04em; text-transform: uppercase; color: #fde68a; background: rgba(234,179,8,.12); border: 1px solid rgba(234,179,8,.28); }
+.metaAdsCopy { margin: 0; font-size: 12px; line-height: 1.45; color: #94a3b8; }
+.metaAdsCopy strong { color: #cbd5e1; font-weight: 700; }
+.segStrip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.segStripItem { padding: 10px 8px; border-radius: 14px; text-align: center; background: rgba(255,255,255,.04); border: 1px solid rgba(148,163,184,.1); }
+.segStripItem span { display: block; color: #94a3b8; font-size: 10px; font-weight: 900; text-transform: uppercase; letter-spacing: .05em; }
+.segStripItem strong { display: block; margin-top: 5px; font-size: 20px; line-height: 1; color: #f8fafc; }
+.segStripItem.cyan { border-color: rgba(6,182,212,.22); background: linear-gradient(180deg, rgba(6,182,212,.1), rgba(255,255,255,.03)); }
+.segStripItem.green { border-color: rgba(34,197,94,.22); background: linear-gradient(180deg, rgba(34,197,94,.1), rgba(255,255,255,.03)); }
+.segStripItem.muted strong { color: #cbd5e1; }
+.diagnostico { display: flex; flex-direction: column; gap: 6px; }
+.diagnostico--premium .diagItem { padding: 8px 10px; border-radius: 12px; background: rgba(255,255,255,.04); border: 1px solid rgba(148,163,184,.08); }
+.diagItem { display: flex; gap: 8px; align-items: flex-start; }
+.diagIcon { width: 20px; height: 20px; min-width: 20px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 10px; }
+.diagItem.ok .diagIcon { background: #22c55e; color: #031827; }
+.diagItem.alerta .diagIcon { background: #f97316; color: #031827; }
+.diagItem.info .diagIcon { background: #06b6d4; color: #031827; }
+.diagItem p { margin: 0; color: #cbd5e1; font-size: 12px; line-height: 1.35; }
+.insightCard { display: flex; align-items: flex-start; gap: 10px; }
+.insightEmoji { font-size: 18px; line-height: 1; flex-shrink: 0; }
+.insightBody strong { display: block; font-size: 13px; color: #ecfdf5; margin-bottom: 3px; }
+.insightBody p { margin: 0; font-size: 11px; line-height: 1.35; color: #94a3b8; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .flowHighlights { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
 .flowHighlight { padding: 12px; border-radius: 14px; background: rgba(255,255,255,.05); }
 .flowHighlight small { color: #94a3b8; font-size: 11px; }
@@ -665,7 +717,7 @@ const styles = `
 .emptyBlock { text-align: center; padding: 28px 16px; color: #94a3b8; }
 .emptyBlock span { font-size: 28px; display: block; margin-bottom: 8px; }
 .emptyBlock strong { color: #e2e8f0; display: block; margin-bottom: 6px; }
-.skel, .skelCard, .perfSkel, .funnelSkel, .chartSkel, .heatmapSkel, .moneySkel, .segSkel, .diagSkel, .recSkel, .flowSkel, .scoreSkel {
+.skel, .skelCard, .perfSkel, .funnelSkel, .chartSkel, .heatmapSkel, .metaSkel, .segSkel, .diagSkel, .recSkel, .flowSkel, .scoreSkel {
   background: linear-gradient(90deg, rgba(255,255,255,.04) 25%, rgba(255,255,255,.1) 50%, rgba(255,255,255,.04) 75%);
   background-size: 200% 100%;
   animation: shimmer 1.2s infinite;
@@ -673,8 +725,13 @@ const styles = `
 }
 .skelCard { min-height: 160px; }
 .perfSkel { height: 90px; }
-.funnelSkel, .chartSkel { height: 120px; }
+.funnelSkel { height: 120px; }
+.chartSkel { height: 88px; }
 .heatmapSkel { height: 80px; }
+.metaSkel { height: 72px; }
+.segSkel { height: 52px; }
+.diagSkel { height: 72px; }
+.recSkel { height: 44px; }
 .errorPanel { margin: 40px auto; max-width: 480px; padding: 32px; text-align: center; border-radius: 24px; background: rgba(15,23,42,.9); border: 1px solid rgba(239,68,68,.3); }
 .errorPanel button { margin-top: 16px; height: 44px; padding: 0 20px; border: 0; border-radius: 14px; background: linear-gradient(135deg, #22c55e, #06b6d4); color: #031827; font-weight: 900; cursor: pointer; }
 @keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
@@ -682,6 +739,18 @@ const styles = `
 @keyframes growBar { from { width: 0; } }
 @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
 @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .5; } }
-@media (max-width: 1200px) { .mainGrid { grid-template-columns: repeat(2, 1fr); } .bodyGrid { grid-template-columns: 1fr; } .chartsRow { grid-template-columns: 1fr; } }
-@media (max-width: 760px) { .hero { flex-direction: column; align-items: flex-start; } .controlBar { grid-template-columns: 1fr; } .mainGrid, .performanceGrid, .moneyList, .heatmapGrid { grid-template-columns: 1fr; } .funnelRow { grid-template-columns: 1fr; } .hero h1 { font-size: 28px; } }
+@media (max-width: 1200px) {
+  .mainGrid { grid-template-columns: repeat(2, 1fr); }
+  .dashBottom { grid-template-columns: 1fr; }
+  .trendBusinessRow { grid-template-columns: 1fr; }
+}
+@media (max-width: 760px) {
+  .hero { flex-direction: column; align-items: flex-start; min-height: auto; }
+  .controlBar { grid-template-columns: 1fr; }
+  .mainGrid, .performanceGrid, .heatmapGrid, .segStrip { grid-template-columns: 1fr; }
+  .funnelRow { grid-template-columns: 1fr; }
+  .hero h1 { font-size: 28px; }
+  .metaAdsCompactHead { flex-wrap: wrap; }
+  .metaSoonChip { margin-left: 0; }
+}
 `;
