@@ -1,15 +1,15 @@
 import React, { useMemo, useState } from "react";
 import { useMetricas } from "./metricas/useMetricas";
+import { useMetaAdsStatus } from "./metricas/useMetaAdsStatus";
 import { formatMoney, formatNum, formatPct, formatTendencia } from "./metricas/format";
 import FlujoCampanaSelect from "./metricas/FlujoCampanaSelect";
 import RevenuePremiumSection from "./metricas/revenue/RevenuePremiumSection";
+import MetaAdsConnectModal, { MetaAdsCompactCard } from "./metricas/MetaAdsSection";
 import ConexionLineaTabs from "./components/conexion/ConexionLineaTabs";
 import { useMetricasConexion } from "./hooks/useMetricasConexion";
 import { CONEXION_TODAS } from "./utils/conexionesInbox";
 
 const PERIODOS = ["Hoy", "7 días", "30 días"];
-
-const META_METRICS_PREVIEW = "ROAS, CTR, CPC, CPM y frecuencia";
 
 /** Fase 1 — ocultar secciones en UI; lógica, fetch y componentes siguen intactos */
 const UI_OCULTAR_FASE1 = {
@@ -106,29 +106,10 @@ function HeatmapGrid({ heatmap }) {
   );
 }
 
-function MetaAdsCompactCard({ conectado }) {
-  return (
-    <div className="metaAdsCompact">
-      <div className="metaAdsCompactHead">
-        <span className="metaAdsIcon" aria-hidden="true">
-          ◆
-        </span>
-        <div>
-          <h3>Meta Ads</h3>
-          <p className="metaAdsStatus">{conectado ? "Pixel conectado" : "Integración pendiente"}</p>
-        </div>
-        <span className="metaSoonChip">Próximamente</span>
-      </div>
-      <p className="metaAdsCopy">
-        Conecta Meta Ads para ver: <strong>{META_METRICS_PREVIEW}</strong>
-      </p>
-    </div>
-  );
-}
-
 export default function Metricas() {
   const [periodo, setPeriodo] = useState("7 días");
   const [flujoId, setFlujoId] = useState("");
+  const [metaAdsModalOpen, setMetaAdsModalOpen] = useState(false);
   const {
     conexionesInbox,
     conexionSeleccionadaId,
@@ -138,10 +119,14 @@ export default function Metricas() {
   } = useMetricasConexion();
   const { resumen, funnel, series, flujos, diagnostico, heatmap, flujosLista, loading, error, reload } =
     useMetricas(periodo, flujoId, conexionSeleccionadaId, conexionesLoading);
+  const {
+    status: metaAdsStatus,
+    loading: metaAdsLoading,
+    reload: reloadMetaAds,
+  } = useMetaAdsStatus(conexionSeleccionadaId, conexionesLoading);
 
   const kpis = resumen?.kpis || {};
   const salud = resumen?.salud || { score: 0, label: "Sin datos" };
-  const metaAds = resumen?.metaAds || { conectado: false };
 
   const mainCards = useMemo(
     () => [
@@ -505,7 +490,15 @@ export default function Metricas() {
 
         <aside className="dashAside">
           <div className="panelCard panelCard--compact">
-            {loading ? <Skeleton className="metaSkel" /> : <MetaAdsCompactCard conectado={metaAds.conectado} />}
+            {loading ? (
+              <Skeleton className="metaSkel" />
+            ) : (
+              <MetaAdsCompactCard
+                status={metaAdsStatus}
+                loading={metaAdsLoading}
+                onConnect={() => setMetaAdsModalOpen(true)}
+              />
+            )}
           </div>
 
           <div className="panelCard panelCard--compact">
@@ -591,6 +584,13 @@ export default function Metricas() {
           )}
         </aside>
       </section>
+
+      <MetaAdsConnectModal
+        open={metaAdsModalOpen}
+        onClose={() => setMetaAdsModalOpen(false)}
+        conexionWhatsappId={conexionSeleccionadaId}
+        onSaved={reloadMetaAds}
+      />
     </div>
   );
 }
@@ -685,9 +685,36 @@ const styles = `
 .metaAdsIcon { width: 36px; height: 36px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 14px; color: #67e8f9; background: linear-gradient(135deg, rgba(6,182,212,.2), rgba(59,130,246,.12)); border: 1px solid rgba(34,211,238,.25); flex-shrink: 0; }
 .metaAdsCompact h3 { margin: 0; font-size: 15px; }
 .metaAdsStatus { margin: 2px 0 0; font-size: 11px; color: #94a3b8; }
-.metaSoonChip { margin-left: auto; flex-shrink: 0; height: 26px; padding: 0 10px; border-radius: 999px; display: inline-flex; align-items: center; font-size: 10px; font-weight: 900; letter-spacing: .04em; text-transform: uppercase; color: #fde68a; background: rgba(234,179,8,.12); border: 1px solid rgba(234,179,8,.28); }
+.metaAdsConnectChip { margin-left: auto; flex-shrink: 0; height: 28px; padding: 0 12px; border-radius: 999px; display: inline-flex; align-items: center; font-size: 10px; font-weight: 800; letter-spacing: .03em; text-transform: uppercase; color: #67e8f9; background: rgba(6,182,212,.12); border: 1px solid rgba(34,211,238,.35); cursor: pointer; transition: background .15s, border-color .15s; }
+.metaAdsConnectChip:hover { background: rgba(6,182,212,.2); border-color: rgba(34,211,238,.55); }
+.metaAdsStatusList { display: flex; flex-direction: column; gap: 8px; }
+.metaAdsStatusRow { display: flex; align-items: flex-start; gap: 8px; padding: 8px 10px; border-radius: 12px; background: rgba(255,255,255,.03); border: 1px solid rgba(148,163,184,.1); }
+.metaAdsStatusRow.ok { border-color: rgba(34,197,94,.22); background: rgba(34,197,94,.06); }
+.metaAdsStatusRow.pending { border-color: rgba(148,163,184,.12); }
+.metaAdsStatusDot { width: 20px; height: 20px; min-width: 20px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 900; background: rgba(148,163,184,.15); color: #94a3b8; }
+.metaAdsStatusRow.ok .metaAdsStatusDot { background: rgba(34,197,94,.25); color: #4ade80; }
+.metaAdsStatusText strong { display: block; font-size: 12px; color: #e2e8f0; }
+.metaAdsStatusText small { display: block; margin-top: 2px; font-size: 10px; line-height: 1.35; color: #94a3b8; word-break: break-all; }
+.metaAdsCompact--loading { font-size: 12px; color: #94a3b8; padding: 8px 0; }
 .metaAdsCopy { margin: 0; font-size: 12px; line-height: 1.45; color: #94a3b8; }
 .metaAdsCopy strong { color: #cbd5e1; font-weight: 700; }
+.metaAdsModalBackdrop { position: fixed; inset: 0; z-index: 1200; background: rgba(2,6,23,.72); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.metaAdsModal { width: min(440px, 100%); border-radius: 18px; padding: 20px; background: linear-gradient(180deg, #0f172a, #020617); border: 1px solid rgba(148,163,184,.18); box-shadow: 0 24px 60px rgba(0,0,0,.45); }
+.metaAdsModalHead { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.metaAdsModalHead h2 { margin: 0; font-size: 18px; color: #f8fafc; }
+.metaAdsModalClose { width: 32px; height: 32px; border: none; border-radius: 10px; background: rgba(255,255,255,.06); color: #cbd5e1; font-size: 22px; line-height: 1; cursor: pointer; }
+.metaAdsModalHint { margin: 0 0 14px; font-size: 12px; line-height: 1.45; color: #94a3b8; }
+.metaAdsModalHint code { font-size: 11px; color: #67e8f9; }
+.metaAdsModalForm { display: flex; flex-direction: column; gap: 12px; }
+.metaAdsModalForm label { display: flex; flex-direction: column; gap: 6px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: #94a3b8; }
+.metaAdsModalForm input { height: 40px; border-radius: 12px; border: 1px solid rgba(148,163,184,.2); background: rgba(15,23,42,.8); color: #f8fafc; padding: 0 12px; font-size: 13px; }
+.metaAdsOptional { font-weight: 500; text-transform: none; letter-spacing: 0; color: #64748b; }
+.metaAdsModalError { margin: 0; font-size: 12px; color: #fca5a5; }
+.metaAdsModalActions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+.metaAdsBtn { height: 36px; padding: 0 14px; border-radius: 10px; font-size: 12px; font-weight: 700; cursor: pointer; border: 1px solid transparent; }
+.metaAdsBtn.ghost { background: transparent; border-color: rgba(148,163,184,.25); color: #cbd5e1; }
+.metaAdsBtn.primary { background: linear-gradient(135deg, #06b6d4, #2563eb); color: #fff; }
+.metaAdsBtn:disabled { opacity: .6; cursor: not-allowed; }
 .segStrip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .segStripItem { padding: 10px 8px; border-radius: 14px; text-align: center; background: rgba(255,255,255,.04); border: 1px solid rgba(148,163,184,.1); }
 .segStripItem span { display: block; color: #94a3b8; font-size: 10px; font-weight: 900; text-transform: uppercase; letter-spacing: .05em; }
