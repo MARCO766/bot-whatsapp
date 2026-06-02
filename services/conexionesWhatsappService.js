@@ -90,8 +90,10 @@ async function guardarConexion(usuarioId, body) {
           ? String(pixel_id).trim() || null
           : existing?.pixel_id || null,
       capi_token:
-        capi_token !== undefined && capi_token !== null
-          ? String(capi_token).trim() || null
+        capi_token !== undefined &&
+        capi_token !== null &&
+        String(capi_token).trim()
+          ? String(capi_token).trim()
           : existing?.capi_token || null,
       activo: esPrimeraConexion,
     },
@@ -246,22 +248,26 @@ function maskToken(token) {
   return `${t.slice(0, 4)}${"*".repeat(8)}${t.slice(-4)}`;
 }
 
-/** Respuesta API (lista + activa); incluye token solo si includeToken */
-function mapConexionApi(row, { includeToken = false } = {}) {
+/** Respuesta API (lista + activa); nunca expone tokens completos */
+function mapConexionApi(row) {
   if (!row) return null;
   const ok = Boolean(row.token?.trim() && row.phone_id?.trim());
+  const token_masked = row.token ? maskToken(row.token) : null;
+  const capi_token_masked = row.capi_token ? maskToken(row.capi_token) : null;
   return {
     id: row.id,
     nombre: row.nombre || "",
     numero: row.numero || "",
     phone_id: row.phone_id || "",
     phoneNumberId: row.phone_id || "",
-    token: includeToken ? row.token || "" : undefined,
-    tokenMasked: row.token ? maskToken(row.token) : null,
+    token_masked,
+    capi_token_masked,
+    tokenMasked: token_masked,
+    capiTokenMasked: capi_token_masked,
+    tiene_token: Boolean(row.token?.trim()),
+    tiene_capi_token: Boolean(row.capi_token?.trim()),
     pixel_id: row.pixel_id || "",
     pixelId: row.pixel_id || "",
-    capi_token: includeToken ? row.capi_token || "" : undefined,
-    capiTokenMasked: row.capi_token ? maskToken(row.capi_token) : null,
     activo: row.activo !== false,
     conectado: ok,
     estado: ok ? "conectado" : "incompleto",

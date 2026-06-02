@@ -66,11 +66,13 @@ function buildWebhookInfo(req) {
 function metaFromConexion(row) {
   const pixelId = row?.pixel_id || "";
   const tieneCapi = Boolean(row?.capi_token?.trim());
+  const capi_token_masked = tieneCapi ? maskToken(row.capi_token) : null;
   return {
     pixelId,
     pixelNombre: row?.nombre || "",
     activo: Boolean(pixelId && tieneCapi),
-    capiTokenMasked: tieneCapi ? maskToken(row.capi_token) : null,
+    capi_token_masked,
+    capiTokenMasked: capi_token_masked,
     tieneCapiToken: tieneCapi,
   };
 }
@@ -130,8 +132,8 @@ async function getAjustesCompleto(usuarioId, req, sessionUsuario) {
     getConexionesUsuario(usuarioId),
   ]);
 
-  const conexionApi = mapConexionApi(rowActiva, { includeToken: true });
-  const lista = conexionesRows.map((row) => mapConexionApi(row, { includeToken: true }));
+  const conexionApi = mapConexionApi(rowActiva);
+  const lista = conexionesRows.map((row) => mapConexionApi(row));
   const metaAds = metaFromConexion(rowActiva);
 
   log("GET ajustes OK", { conectado: Boolean(conexionApi?.conectado) });
@@ -206,7 +208,7 @@ async function probarConexionAjustesPorId(usuarioId, conexionId, numero) {
 
 async function hacerPrincipalAjustes(usuarioId, conexionId) {
   const row = await hacerPrincipal(usuarioId, conexionId);
-  return { ok: true, conexionActiva: mapConexionApi(row, { includeToken: true }) };
+  return { ok: true, conexionActiva: mapConexionApi(row) };
 }
 
 async function probarMetaEvento(usuarioId) {

@@ -50,6 +50,12 @@ function abbrPhoneId(id) {
   return `${s.slice(0, 6)}…${s.slice(-4)}`;
 }
 
+function tokenConfiguredPlaceholder(masked) {
+  if (!masked) return "Pega el token de Meta";
+  const suffix = String(masked).slice(-4);
+  return `Token configurado ••••${suffix}`;
+}
+
 function estadoBadge(estado) {
   if (estado === "conectado") return <span className="waBadge waBadgeOk">🟢 Conectado</span>;
   if (estado === "error") return <span className="waBadge waBadgeErr">🔴 Error</span>;
@@ -129,18 +135,18 @@ export default function Ajustes() {
   async function handleSaveMeta(e) {
     e.preventDefault();
     const c = conexionActiva;
-    if (!c?.token && !meta.capiToken) {
+    if (!c?.conectado) {
       showToast("Primero configura WhatsApp con TOKEN y PHONE_ID", "error");
       return;
     }
-    const ok = await saveConexion({
+    const body = {
       nombre: c?.nombre || meta.pixelNombre,
       numero: c?.numero,
-      token: c?.token,
       phone_id: c?.phone_id || c?.phoneNumberId,
       pixel_id: meta.pixelId,
-      capi_token: meta.capiToken || c?.capi_token || undefined,
-    });
+    };
+    if (meta.capiToken?.trim()) body.capi_token = meta.capiToken.trim();
+    const ok = await saveConexion(body);
     if (ok) setMeta((m) => ({ ...m, capiToken: "" }));
   }
 
@@ -149,10 +155,12 @@ export default function Ajustes() {
       id: c?.id,
       nombre: c?.nombre || "",
       numero: c?.numero || "",
-      token: c?.token || "",
+      token: "",
+      token_masked: c?.token_masked || c?.tokenMasked || null,
       phone_id: c?.phone_id || c?.phoneNumberId || "",
       pixel_id: c?.pixel_id || c?.pixelId || "",
-      capi_token: c?.capi_token || "",
+      capi_token: "",
+      capi_token_masked: c?.capi_token_masked || c?.capiTokenMasked || null,
     });
     setShowToken(false);
     setShowCapi(false);
@@ -172,20 +180,34 @@ export default function Ajustes() {
 
   async function handleSaveConexion(e) {
     e.preventDefault();
-    const token = connForm.token || connForm.accessToken;
-    const phone_id = connForm.phone_id || connForm.phoneNumberId;
-    if (!token?.trim() || !phone_id?.trim()) {
-      showToast("TOKEN y PHONE_ID son obligatorios", "error");
+    const token = (connForm.token || connForm.accessToken || "").trim();
+    const phone_id = (connForm.phone_id || connForm.phoneNumberId || "").trim();
+    const esEdicion = Boolean(connForm.id);
+
+    if (!phone_id) {
+      showToast("PHONE_ID es obligatorio", "error");
       return;
     }
-    const ok = await saveConexion({
+    if (!esEdicion && !token) {
+      showToast("TOKEN es obligatorio en una conexión nueva", "error");
+      return;
+    }
+    if (esEdicion && !token && !connForm.token_masked && !connForm.tokenMasked) {
+      showToast("Indica el TOKEN o reconecta la conexión", "error");
+      return;
+    }
+
+    const body = {
       nombre: connForm.nombre,
       numero: connForm.numero,
-      token,
       phone_id,
       pixel_id: connForm.pixel_id,
-      capi_token: connForm.capi_token,
-    });
+    };
+    if (token) body.token = token;
+    const capi = (connForm.capi_token || "").trim();
+    if (capi) body.capi_token = capi;
+
+    const ok = await saveConexion(body);
     if (ok) setConnForm(null);
   }
 
@@ -322,13 +344,13 @@ export default function Ajustes() {
                       </div>
                     </div>
 
-                    {c.tokenMasked && (
+                    {(c.token_masked || c.tokenMasked) && (
                       <div className="waTokenRow">
-                        <code className="waTokenCode">{c.tokenMasked}</code>
+                        <code className="waTokenCode">{c.token_masked || c.tokenMasked}</code>
                         <button
                           type="button"
                           className="waBtnCopy"
-                          onClick={() => copyText(c.tokenMasked, showToast)}
+                          onClick={() => copyText(c.token_masked || c.tokenMasked, showToast)}
                           title="Copiar token enmascarado"
                         >
                           Copiar
@@ -397,13 +419,18 @@ export default function Ajustes() {
                 <input value={connForm.phone_id} onChange={(e) => setConnForm({ ...connForm, phone_id: e.target.value })} required />
               </div>
               <div className="ajField">
-                <label>Access Token {connForm.id && <span className="ajHint">(dejar vacío para mantener)</span>}</label>
+                <label>Access Token {connForm.id && <span className="ajHint">(vacío = mantener el actual)</span>}</label>
                 <div style={{ display: "flex", gap: 8 }}>
                   <input
                     type={showToken ? "text" : "password"}
                     value={connForm.token}
                     onChange={(e) => setConnForm({ ...connForm, token: e.target.value })}
-                    placeholder={connForm.id ? "••••••••" : "EAAxxxx..."}
+                    placeholder={
+                      connForm.id
+                        ? tokenConfiguredPlaceholder(connForm.token_masked || connForm.tokenMasked)
+                        : "EAAxxxx..."
+                    }
+                    autoComplete="off"
                     required={!connForm.id}
                     style={{ flex: 1 }}
                   />
@@ -445,13 +472,26 @@ export default function Ajustes() {
             </div>
           </div>
           <div className="ajField">
-            <label>CAPI Token {data?.meta?.tieneCapiToken && <span className="ajHint">(guardado: {data.meta.capiTokenMasked})</span>}</label>
+            <label>
+              CAPI Token{" "}
+              {data?.meta?.tieneCapiToken && (
+                <span className="ajHint">
+                  (guardado: {data.meta.capi_token_masked || data.meta.capiTokenMasked})
+                </span>
+              )}
+            </label>
             <div style={{ display: "flex", gap: 8 }}>
               <input
                 type={showCapi ? "text" : "password"}
                 value={meta.capiToken}
                 onChange={(e) => setMeta({ ...meta, capiToken: e.target.value })}
-                placeholder="Dejar vacío para mantener el actual"
+                placeholder={tokenConfiguredPlaceholder(
+                  data?.meta?.capi_token_masked ||
+                    data?.meta?.capiTokenMasked ||
+                    conexionActiva?.capi_token_masked ||
+                    conexionActiva?.capiTokenMasked
+                )}
+                autoComplete="off"
                 style={{ flex: 1 }}
               />
               <button type="button" className="ajBtn ghost" onClick={() => setShowCapi((v) => !v)}>
