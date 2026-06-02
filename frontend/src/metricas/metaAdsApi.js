@@ -2,6 +2,8 @@ import { resolveApiUrl } from "../flujos/apiBase";
 import { MetricasApiError } from "./api";
 import { CONEXION_TODAS } from "../utils/conexionesInbox";
 
+export { MetricasApiError };
+
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
 function buildQuery(params = {}) {
