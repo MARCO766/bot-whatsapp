@@ -8,7 +8,6 @@ import {
 import RevenueMonedaTabs from "./RevenueMonedaTabs";
 import RevenueKpiStrip from "./RevenueKpiStrip";
 import RevenueBreakdownColumn from "./RevenueBreakdownColumn";
-import RevenueDonutChart from "./RevenueDonutChart";
 
 function RevenueErrorCard({ message, onRetry }) {
   return (
@@ -104,8 +103,6 @@ export default function RevenuePremiumSection({
       ) : (
         <>
           <RevenueKpiStrip kpis={kpis} moneda={monedaActiva} loading={loading} />
-
-          <RevenueDonutChart kpis={kpis} moneda={monedaActiva} loading={loading} />
 
           <div className="revenueBreakdownGrid">
             <RevenueBreakdownColumn
