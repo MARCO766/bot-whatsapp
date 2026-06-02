@@ -17,6 +17,7 @@ export default function ChatWindow({
   onSent,
   onPatchMensaje,
   moverChatArriba,
+  onOpenTagModal,
 }) {
   const scrollRef = useRef(null);
   const [ventanaTick, setVentanaTick] = useState(0);
@@ -27,6 +28,11 @@ export default function ChatWindow({
   const bloqueado = panelActivo
     ? chatMeta?.bloqueado ?? chat?.bloqueado
     : false;
+  const conexionNombre = panelActivo
+    ? String(chat?.conexion_nombre || "").trim()
+    : "";
+  const conexionEtiqueta = conexionNombre || `ID ${String(conexionWhatsappId || "").slice(-6)}`;
+  const etiquetas = Array.isArray(chat?.etiquetas) ? chat.etiquetas.slice(0, 3) : [];
 
   const ventana = useMemo(
     () => calcularVentana24h(mensajes),
@@ -80,6 +86,65 @@ export default function ChatWindow({
     conexionTab === "__todas__" ||
     (conexionChat && conexionChat === conexionTab);
 
+  const miniContexto = useMemo(() => {
+    const data = { ...(chat || {}), ...(chatMeta || {}) };
+    const rows = [];
+
+    const ventasValor =
+      data.ventas_crm ??
+      data.ventas ??
+      data.crm_ventas ??
+      data.total_ventas ??
+      data.conversiones ??
+      null;
+    if (ventasValor != null && ventasValor !== "") {
+      rows.push({ key: "ventas", label: "Ventas CRM", value: String(ventasValor) });
+    }
+
+    const seguimientosValor =
+      data.seguimientos_pendientes ??
+      data.seguimientosPendientes ??
+      data.seguimientos_activos ??
+      data.seguimientos ??
+      null;
+    if (seguimientosValor != null && seguimientosValor !== "") {
+      rows.push({
+        key: "seguimientos",
+        label: "Seguimientos",
+        value: String(seguimientosValor),
+      });
+    }
+
+    const estadoBot =
+      data.bot_pausado != null
+        ? data.bot_pausado
+          ? "Bot pausado"
+          : "Bot activo"
+        : null;
+    const estadoIa =
+      data.ia_activa != null
+        ? data.ia_activa
+          ? "IA activa"
+          : "IA inactiva"
+        : null;
+    const estadoRm =
+      data.rm24h_activo != null
+        ? data.rm24h_activo
+          ? "RM24h activo"
+          : "RM24h inactivo"
+        : data.remarketing_activo != null
+          ? data.remarketing_activo
+            ? "RM activo"
+            : "RM inactivo"
+          : null;
+    const estados = [estadoBot, estadoIa, estadoRm].filter(Boolean).join(" · ");
+    if (estados) {
+      rows.push({ key: "estado", label: "Estado", value: estados });
+    }
+
+    return rows.slice(0, 3);
+  }, [chat, chatMeta]);
+
   if (!panelActivo || !numero || !conexionWhatsappId || !conexionCoincide) {
     return (
       <section className="chatWindow">
@@ -91,26 +156,73 @@ export default function ChatWindow({
   return (
     <section className="chatWindow">
       <header className="chatHeader">
-        <div className="chatUser">
-          <div className="bigAvatar">{(nombre || "?").charAt(0)}</div>
-          <div className="chatUserText">
-            <h2>{nombre}</h2>
-            <p>{numero}</p>
-            <small className="online">En línea</small>
+        <div className="chatHeaderMain">
+          <div className="chatUser">
+            <div className="bigAvatar">{(nombre || "?").charAt(0)}</div>
+            <div className="chatUserText">
+              <h2>{nombre}</h2>
+              <p>{numero}</p>
+              <small className="chatHeaderLine">Línea WhatsApp: {conexionEtiqueta}</small>
+            </div>
+          </div>
+          <span
+            className={`whatsappVentanaBadge ${
+              ventanaAbierta ? "whatsappVentanaBadge--open" : "whatsappVentanaBadge--closed"
+            }`}
+            title={
+              ventanaAbierta
+                ? "Puedes enviar mensajes manuales dentro de la ventana de 24h"
+                : "El lead debe responder para reabrir la ventana de 24h"
+            }
+          >
+            {etiquetaVentanaBadge(ventana)}
+          </span>
+        </div>
+
+        <div className="chatHeaderMeta">
+          {etiquetas.length > 0 && (
+            <div className="chatHeaderChips" aria-label="Etiquetas del lead">
+              {etiquetas.map((tag) => (
+                <span
+                  key={tag.nombre}
+                  className="chatHeaderChip"
+                  style={{
+                    backgroundColor: `${tag.color}24`,
+                    borderColor: `${tag.color}66`,
+                    color: "#e2e8f0",
+                  }}
+                >
+                  {tag.nombre}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {miniContexto.length > 0 && (
+            <div className="chatMiniContext" aria-label="Resumen CRM">
+              {miniContexto.map((item) => (
+                <span key={item.key} className="chatMiniItem">
+                  <strong>{item.label}:</strong> {item.value}
+                </span>
+              ))}
+            </div>
+          )}
+
+          <div className="chatQuickActions" aria-label="Acciones rápidas">
+            <button type="button" className="chatQuickBtn" onClick={() => onOpenTagModal?.(chat)}>
+              Etiquetas
+            </button>
+            <button type="button" className="chatQuickBtn" disabled>
+              Ver lead
+            </button>
+            <button type="button" className="chatQuickBtn" disabled>
+              Timeline
+            </button>
+            <button type="button" className="chatQuickBtn chatQuickBtn--warn" disabled>
+              Pausar bot
+            </button>
           </div>
         </div>
-        <span
-          className={`whatsappVentanaBadge ${
-            ventanaAbierta ? "whatsappVentanaBadge--open" : "whatsappVentanaBadge--closed"
-          }`}
-          title={
-            ventanaAbierta
-              ? "Puedes enviar mensajes manuales dentro de la ventana de 24h"
-              : "El lead debe responder para reabrir la ventana de 24h"
-          }
-        >
-          {etiquetaVentanaBadge(ventana)}
-        </span>
       </header>
 
       {bloqueado && (

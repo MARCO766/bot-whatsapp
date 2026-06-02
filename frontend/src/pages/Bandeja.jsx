@@ -139,6 +139,7 @@ export default function Bandeja({ onUnreadChange }) {
           onSent={inbox.appendMensaje}
           onPatchMensaje={inbox.patchMensaje}
           moverChatArriba={inbox.moverChatArriba}
+          onOpenTagModal={inbox.openTagModal}
         />
       </div>
 
