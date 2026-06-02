@@ -11,6 +11,14 @@ const PERIODOS = ["Hoy", "7 días", "30 días"];
 
 const META_PLACEHOLDER = "Conecta Meta Ads para ver esta métrica";
 
+/** Fase 1 — ocultar secciones en UI; lógica, fetch y componentes siguen intactos */
+const UI_OCULTAR_FASE1 = {
+  indicadoresClave: true,
+  embudoReal: true,
+  heatmapHorario: true,
+  metricasPorFlujo: true,
+};
+
 function Skeleton({ className = "" }) {
   return <div className={`skel ${className}`} />;
 }
@@ -329,63 +337,67 @@ export default function Metricas() {
 
       <section className="bodyGrid">
         <div className="leftColumn">
-          <div className="panelCard">
-            <div className="panelTop">
-              <div>
-                <h2>Indicadores clave</h2>
-                <p>Métricas internas del CRM en el periodo seleccionado.</p>
+          {!UI_OCULTAR_FASE1.indicadoresClave && (
+            <div className="panelCard">
+              <div className="panelTop">
+                <div>
+                  <h2>Indicadores clave</h2>
+                  <p>Métricas internas del CRM en el periodo seleccionado.</p>
+                </div>
               </div>
-            </div>
-            {loading ? (
-              <div className="performanceGrid">
-                {Array.from({ length: 4 }).map((_, i) => (
-                  <Skeleton key={i} className="perfSkel" />
-                ))}
-              </div>
-            ) : (
-              <div className="performanceGrid">
-                {performanceCards.map((item) => (
-                  <div className="performanceCard" key={item.titulo}>
-                    <div>
-                      <span>{item.titulo}</span>
-                      <h3>{item.valor}</h3>
-                      <p>{item.ayuda}</p>
+              {loading ? (
+                <div className="performanceGrid">
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <Skeleton key={i} className="perfSkel" />
+                  ))}
+                </div>
+              ) : (
+                <div className="performanceGrid">
+                  {performanceCards.map((item) => (
+                    <div className="performanceCard" key={item.titulo}>
+                      <div>
+                        <span>{item.titulo}</span>
+                        <h3>{item.valor}</h3>
+                        <p>{item.ayuda}</p>
+                      </div>
+                      <b className={item.color}>{item.estado}</b>
                     </div>
-                    <b className={item.color}>{item.estado}</b>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
-          <div className="panelCard">
-            <div className="panelTop">
-              <div>
-                <h2>Embudo real</h2>
-                <p>Leads → Conversaciones → Respuestas → Seguimientos → Ventas</p>
+          {!UI_OCULTAR_FASE1.embudoReal && (
+            <div className="panelCard">
+              <div className="panelTop">
+                <div>
+                  <h2>Embudo real</h2>
+                  <p>Leads → Conversaciones → Respuestas → Seguimientos → Ventas</p>
+                </div>
               </div>
+              {loading ? (
+                <Skeleton className="funnelSkel" />
+              ) : funnel?.vacio ? (
+                <EmptyBlock title="Embudo vacío" hint="Registra leads y conversaciones para ver el embudo." />
+              ) : (
+                <div className="funnel">
+                  {(funnel?.etapas || []).map((f) => (
+                    <div className="funnelRow" key={f.nombre}>
+                      <div className="funnelName">
+                        <strong>{f.nombre}</strong>
+                        <span>{formatNum(f.cantidad)}</span>
+                      </div>
+                      <div className="funnelBar">
+                        <div className={f.color} style={{ width: `${f.porcentaje}%` }} />
+                      </div>
+                      <b>{f.tasaVsLeads > 0 ? `${f.tasaVsLeads}%` : "—"}</b>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
-            {loading ? (
-              <Skeleton className="funnelSkel" />
-            ) : funnel?.vacio ? (
-              <EmptyBlock title="Embudo vacío" hint="Registra leads y conversaciones para ver el embudo." />
-            ) : (
-              <div className="funnel">
-                {(funnel?.etapas || []).map((f) => (
-                  <div className="funnelRow" key={f.nombre}>
-                    <div className="funnelName">
-                      <strong>{f.nombre}</strong>
-                      <span>{formatNum(f.cantidad)}</span>
-                    </div>
-                    <div className="funnelBar">
-                      <div className={f.color} style={{ width: `${f.porcentaje}%` }} />
-                    </div>
-                    <b>{f.tasaVsLeads > 0 ? `${f.tasaVsLeads}%` : "—"}</b>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          )}
 
           <div className="panelCard">
             <div className="panelTop">
@@ -414,15 +426,17 @@ export default function Metricas() {
             )}
           </div>
 
-          <div className="panelCard">
-            <div className="panelTop">
-              <div>
-                <h2>Heatmap horario</h2>
-                <p>Horas con más mensajes y leads (hora local del navegador).</p>
+          {!UI_OCULTAR_FASE1.heatmapHorario && (
+            <div className="panelCard">
+              <div className="panelTop">
+                <div>
+                  <h2>Heatmap horario</h2>
+                  <p>Horas con más mensajes y leads (hora local del navegador).</p>
+                </div>
               </div>
+              {loading ? <Skeleton className="heatmapSkel" /> : <HeatmapGrid heatmap={heatmap?.heatmap} />}
             </div>
-            {loading ? <Skeleton className="heatmapSkel" /> : <HeatmapGrid heatmap={heatmap?.heatmap} />}
-          </div>
+          )}
         </div>
 
         <div className="rightColumn">
@@ -496,51 +510,53 @@ export default function Metricas() {
             )}
           </div>
 
-          <div className="panelCard">
-            <h2>Métricas por flujo</h2>
-            {loading ? (
-              <Skeleton className="flowSkel" />
-            ) : flujos?.flujos?.length ? (
-              <div className="flowHighlights">
-                {flujos.destacados?.masLeads && (
-                  <div className="flowHighlight">
-                    <small>Más leads</small>
-                    <strong>{flujos.destacados.masLeads.nombre}</strong>
-                    <span>{formatNum(flujos.destacados.masLeads.leads)}</span>
-                  </div>
-                )}
-                {flujos.destacados?.masRespuestas && (
-                  <div className="flowHighlight">
-                    <small>Más respuestas</small>
-                    <strong>{flujos.destacados.masRespuestas.nombre}</strong>
-                    <span>{formatNum(flujos.destacados.masRespuestas.respuestas)}</span>
-                  </div>
-                )}
-                {flujos.destacados?.masConversiones && (
-                  <div className="flowHighlight">
-                    <small>Más conversiones</small>
-                    <strong>{flujos.destacados.masConversiones.nombre}</strong>
-                    <span>{formatNum(flujos.destacados.masConversiones.conversiones)}</span>
-                  </div>
-                )}
-                {flujos.destacados?.masPendientes && (
-                  <div className="flowHighlight warn">
-                    <small>Más pendientes</small>
-                    <strong>{flujos.destacados.masPendientes.nombre}</strong>
-                    <span>{formatNum(flujos.destacados.masPendientes.seguimientosPendientes)}</span>
-                  </div>
-                )}
-                {flujos.sinActividad?.length > 0 && (
-                  <div className="flowInactive">
-                    <small>Sin actividad ({flujos.sinActividad.length})</small>
-                    <p>{flujos.sinActividad.map((f) => f.nombre).join(", ")}</p>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <EmptyBlock title="Sin flujos" hint="Crea flujos en el módulo Flujos para ver ranking." />
-            )}
-          </div>
+          {!UI_OCULTAR_FASE1.metricasPorFlujo && (
+            <div className="panelCard">
+              <h2>Métricas por flujo</h2>
+              {loading ? (
+                <Skeleton className="flowSkel" />
+              ) : flujos?.flujos?.length ? (
+                <div className="flowHighlights">
+                  {flujos.destacados?.masLeads && (
+                    <div className="flowHighlight">
+                      <small>Más leads</small>
+                      <strong>{flujos.destacados.masLeads.nombre}</strong>
+                      <span>{formatNum(flujos.destacados.masLeads.leads)}</span>
+                    </div>
+                  )}
+                  {flujos.destacados?.masRespuestas && (
+                    <div className="flowHighlight">
+                      <small>Más respuestas</small>
+                      <strong>{flujos.destacados.masRespuestas.nombre}</strong>
+                      <span>{formatNum(flujos.destacados.masRespuestas.respuestas)}</span>
+                    </div>
+                  )}
+                  {flujos.destacados?.masConversiones && (
+                    <div className="flowHighlight">
+                      <small>Más conversiones</small>
+                      <strong>{flujos.destacados.masConversiones.nombre}</strong>
+                      <span>{formatNum(flujos.destacados.masConversiones.conversiones)}</span>
+                    </div>
+                  )}
+                  {flujos.destacados?.masPendientes && (
+                    <div className="flowHighlight warn">
+                      <small>Más pendientes</small>
+                      <strong>{flujos.destacados.masPendientes.nombre}</strong>
+                      <span>{formatNum(flujos.destacados.masPendientes.seguimientosPendientes)}</span>
+                    </div>
+                  )}
+                  {flujos.sinActividad?.length > 0 && (
+                    <div className="flowInactive">
+                      <small>Sin actividad ({flujos.sinActividad.length})</small>
+                      <p>{flujos.sinActividad.map((f) => f.nombre).join(", ")}</p>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <EmptyBlock title="Sin flujos" hint="Crea flujos en el módulo Flujos para ver ranking." />
+              )}
+            </div>
+          )}
         </div>
       </section>
     </div>
