@@ -1,8 +1,9 @@
-import React from "react";
+import React, { useState } from "react";
 import { useInbox, CONEXION_TODAS } from "../hooks/useInbox";
 import { sameConexionId } from "../utils/conexionesInbox";
 import ChatList from "../components/chat/ChatList";
 import ChatWindow from "../components/chat/ChatWindow";
+import ChatLeadPanel from "../components/chat/ChatLeadPanel";
 import TagModal from "../components/chat/TagModal";
 import BandejaLineaActiva from "../components/bandeja/BandejaLineaActiva";
 import "../styles/bandeja.css";
@@ -17,6 +18,7 @@ function etiquetaTabConexion(c) {
 
 export default function Bandeja({ onUnreadChange }) {
   const inbox = useInbox({ onUnreadChange });
+  const [crmAbierto, setCrmAbierto] = useState(false);
 
   if (
     inbox.loading &&
@@ -122,25 +124,54 @@ export default function Bandeja({ onUnreadChange }) {
           onFiltroEtiqueta={inbox.cambiarFiltroEtiqueta}
         />
 
-        <ChatWindow
-          key={`panel-${inbox.conexionSeleccionadaId || "sin"}-${inbox.selectedChat?.cliente_numero || ""}-${inbox.selectedChat?.conexion_whatsapp_id || ""}`}
-          panelActivo={inbox.panelActivo}
-          chat={inbox.chat}
-          chatMeta={inbox.chatMeta}
-          mensajes={inbox.mensajes}
-          cargando={inbox.cargandoChat}
-          conexionWhatsappId={
-            inbox.panelActivo
-              ? inbox.selectedChat?.conexion_whatsapp_id ||
-                inbox.selectedChat?.conexionWhatsappId
-              : null
-          }
-          conexionSeleccionada={inbox.conexionSeleccionadaId}
-          onSent={inbox.appendMensaje}
-          onPatchMensaje={inbox.patchMensaje}
-          moverChatArriba={inbox.moverChatArriba}
-          onOpenTagModal={inbox.openTagModal}
-        />
+        <div className={`bandejaChatArea ${crmAbierto ? "bandejaChatArea--crmOpen" : ""}`}>
+          <div className="bandejaChatMain">
+            <div className="bandejaChatToolbar">
+              <button
+                type="button"
+                className={`crmToggleBtn ${crmAbierto ? "crmToggleBtn--active" : ""}`}
+                onClick={() => setCrmAbierto((v) => !v)}
+                disabled={!inbox.panelActivo}
+              >
+                {crmAbierto ? "Ocultar CRM" : "CRM"}
+              </button>
+            </div>
+
+            <ChatWindow
+              key={`panel-${inbox.conexionSeleccionadaId || "sin"}-${inbox.selectedChat?.cliente_numero || ""}-${inbox.selectedChat?.conexion_whatsapp_id || ""}`}
+              panelActivo={inbox.panelActivo}
+              chat={inbox.chat}
+              chatMeta={inbox.chatMeta}
+              mensajes={inbox.mensajes}
+              cargando={inbox.cargandoChat}
+              conexionWhatsappId={
+                inbox.panelActivo
+                  ? inbox.selectedChat?.conexion_whatsapp_id ||
+                    inbox.selectedChat?.conexionWhatsappId
+                  : null
+              }
+              conexionSeleccionada={inbox.conexionSeleccionadaId}
+              onSent={inbox.appendMensaje}
+              onPatchMensaje={inbox.patchMensaje}
+              moverChatArriba={inbox.moverChatArriba}
+              onOpenTagModal={inbox.openTagModal}
+            />
+          </div>
+
+          <ChatLeadPanel
+            abierto={crmAbierto && inbox.panelActivo}
+            chat={inbox.chat}
+            chatMeta={inbox.chatMeta}
+            mensajes={inbox.mensajes}
+            conexionWhatsappId={
+              inbox.panelActivo
+                ? inbox.selectedChat?.conexion_whatsapp_id ||
+                  inbox.selectedChat?.conexionWhatsappId
+                : null
+            }
+            onClose={() => setCrmAbierto(false)}
+          />
+        </div>
       </div>
 
       <TagModal

@@ -287,6 +287,43 @@
   white-space: nowrap;
 }
 
+.chatInlineBadges {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+
+.chatWindowFlag,
+.chatRmFlag {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 2px 7px;
+  font-size: 10px;
+  font-weight: 700;
+  border: 1px solid transparent;
+}
+
+.chatWindowFlag--open {
+  background: rgba(22, 101, 52, 0.3);
+  border-color: rgba(74, 222, 128, 0.3);
+  color: #86efac;
+}
+
+.chatWindowFlag--closed {
+  background: rgba(127, 29, 29, 0.35);
+  border-color: rgba(248, 113, 113, 0.35);
+  color: #fca5a5;
+}
+
+.chatRmFlag {
+  background: rgba(76, 29, 149, 0.36);
+  border-color: rgba(167, 139, 250, 0.34);
+  color: #ddd6fe;
+}
+
 .bandejaError {
   padding: 14px 18px;
   border-radius: 16px;
@@ -315,6 +352,54 @@
   overflow: hidden;
 }
 
+.bandejaChatArea {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+  min-height: 0;
+  height: 100%;
+}
+
+.bandejaChatArea--crmOpen {
+  grid-template-columns: minmax(0, 1fr) minmax(250px, 300px);
+}
+
+.bandejaChatMain {
+  min-height: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.bandejaChatToolbar {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.crmToggleBtn {
+  border: 1px solid rgba(56, 189, 248, 0.38);
+  background: rgba(8, 47, 73, 0.55);
+  color: #bae6fd;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.crmToggleBtn--active {
+  border-color: rgba(34, 197, 94, 0.5);
+  background: rgba(20, 83, 45, 0.45);
+  color: #dcfce7;
+}
+
+.crmToggleBtn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .chatSidebar,
 .chatWindow {
   background: rgba(15, 23, 42, 0.92);
@@ -326,6 +411,114 @@
   min-height: 0;
   max-height: 100%;
   overflow: hidden;
+}
+
+.chatLeadPanel {
+  background: rgba(15, 23, 42, 0.92);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 20px;
+  padding: 10px;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.chatLeadPanelHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #e2e8f0;
+}
+
+.chatLeadPanelClose {
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  background: rgba(30, 41, 59, 0.8);
+  color: #cbd5e1;
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.chatLeadCard {
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  background: rgba(15, 23, 42, 0.62);
+  border-radius: 14px;
+  padding: 9px;
+}
+
+.chatLeadRow {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 8px;
+}
+
+.chatLeadRow:last-child {
+  margin-bottom: 0;
+}
+
+.chatLeadLabel {
+  color: #7c8ea6;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.chatLeadValue {
+  color: #e2e8f0;
+  font-size: 12px;
+  font-weight: 600;
+  word-break: break-word;
+}
+
+.chatLeadWindowBadge {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 4px 8px;
+}
+
+.chatLeadWindowBadge--open {
+  color: #bbf7d0;
+  background: rgba(22, 101, 52, 0.8);
+  border-color: rgba(74, 222, 128, 0.35);
+}
+
+.chatLeadWindowBadge--closed {
+  color: #fecaca;
+  background: rgba(127, 29, 29, 0.75);
+  border-color: rgba(248, 113, 113, 0.35);
+}
+
+.chatLeadTags {
+  margin-top: 6px;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.chatLeadTag {
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #e2e8f0;
+}
+
+.chatLeadEmpty {
+  margin: 6px 0 0;
+  color: #94a3b8;
+  font-size: 11px;
 }
 
 /* ─── Lista izquierda ─── */
@@ -521,6 +714,11 @@
   text-overflow: ellipsis;
 }
 
+.preview--premium {
+  margin-top: 6px;
+  color: #cbd5e1;
+}
+
 .chatItem.active .preview {
   color: #cbd5e1;
 }
@@ -541,6 +739,12 @@
   font-weight: 800;
   color: white;
   border: 1px solid transparent;
+}
+
+.tagMore {
+  background: rgba(51, 65, 85, 0.8);
+  border-color: rgba(148, 163, 184, 0.3);
+  color: #cbd5e1;
 }
 
 .blocked {
@@ -1393,6 +1597,11 @@
     grid-template-rows: minmax(200px, 32vh) minmax(0, 1fr);
   }
 
+  .bandejaChatArea--crmOpen {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) minmax(180px, 34vh);
+  }
+
   .chatSidebar {
     max-height: none;
     height: 100%;
@@ -1462,6 +1671,14 @@
 
   .audioCard {
     min-width: 200px;
+  }
+
+  .bandejaChatToolbar {
+    justify-content: stretch;
+  }
+
+  .crmToggleBtn {
+    width: 100%;
   }
 
   .chatHeader {
