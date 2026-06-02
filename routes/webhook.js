@@ -565,7 +565,9 @@ if (guardPausa.reactivado) {
   });
 }
 
-await enviarEventoMeta(usuarioIdWebhook, "Lead", from);
+await enviarEventoMeta(usuarioIdWebhook, "Lead", from, {
+  conexionWhatsappId,
+});
 
 console.log("🔎 ACTIVADOR — texto:", textoParaActivador, "| usuario:", usuarioIdWebhook);
 

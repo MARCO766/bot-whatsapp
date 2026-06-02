@@ -83,7 +83,8 @@ export function useAjustes() {
     probarWhatsapp: (numero) => run(() => probarWhatsapp(numero), "Prueba enviada"),
     probarWhatsappPorId: (id, numero) => run(() => probarWhatsappPorId(id, numero), "Prueba enviada"),
     hacerPrincipal: (id) => run(() => hacerPrincipalWhatsapp(id), "Conexión principal actualizada"),
-    probarMetaEvento: () => run(() => probarMeta(), "Evento de prueba enviado"),
+    probarMetaEvento: (opts) =>
+      run(() => probarMeta(opts && typeof opts === "object" ? opts : {}), "Evento de prueba enviado"),
     savePassword: (body) => run(() => cambiarPassword(body), "Contraseña actualizada"),
   };
 }

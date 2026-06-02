@@ -497,6 +497,18 @@ export default function Ajustes() {
                   <button type="submit" className="ajBtn primary" disabled={saving}>
                     Guardar
                   </button>
+                  {connForm.id && (
+                    <button
+                      type="button"
+                      className="ajBtn ghost"
+                      disabled={saving}
+                      onClick={() =>
+                        probarMetaEvento({ conexion_whatsapp_id: connForm.id })
+                      }
+                    >
+                      Enviar evento de prueba
+                    </button>
+                  )}
                   <button type="button" className="ajBtn ghost" onClick={() => setConnForm(null)}>
                     Cancelar
                   </button>

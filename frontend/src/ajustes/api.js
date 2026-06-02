@@ -51,8 +51,11 @@ export function cambiarPassword(body) {
   return request("/api/ajustes/password", { method: "POST", body: JSON.stringify(body) });
 }
 
-export function probarMeta() {
-  return request("/api/ajustes/meta/probar", { method: "POST", body: "{}" });
+export function probarMeta(body = {}) {
+  return request("/api/ajustes/meta/probar", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
 }
 
 export function guardarConexion(body) {

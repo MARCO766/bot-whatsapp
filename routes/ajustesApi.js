@@ -80,7 +80,13 @@ router.post("/api/ajustes/password", protegerApi, async (req, res) => {
 
 router.post("/api/ajustes/meta/probar", protegerApi, async (req, res) => {
   try {
-    res.json(await probarMetaEvento(uid(req)));
+    const body = req.body || {};
+    res.json(
+      await probarMetaEvento(uid(req), {
+        conexionWhatsappId:
+          body.conexion_whatsapp_id ?? body.conexionWhatsappId ?? null,
+      })
+    );
   } catch (error) {
     handleError(res, error, "POST meta probar");
   }

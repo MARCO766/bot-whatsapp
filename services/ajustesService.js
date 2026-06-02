@@ -218,8 +218,13 @@ async function hacerPrincipalAjustes(usuarioId, conexionId) {
   return { ok: true, conexionActiva: mapConexionApi(row) };
 }
 
-async function probarMetaEvento(usuarioId) {
-  await enviarEventoMeta(usuarioId, "Lead", "59170000000", { value: 0 });
+async function probarMetaEvento(usuarioId, opciones = {}) {
+  const conexionWhatsappId =
+    opciones.conexionWhatsappId ?? opciones.conexion_whatsapp_id ?? null;
+  await enviarEventoMeta(usuarioId, "Lead", "59170000000", {
+    value: 0,
+    conexionWhatsappId,
+  });
   return { ok: true, mensaje: "Evento enviado (revisa Events Manager en Meta)" };
 }
 
