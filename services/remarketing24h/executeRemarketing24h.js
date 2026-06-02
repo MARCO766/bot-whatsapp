@@ -12,6 +12,9 @@ const repo = require("./remarketing24hRepository");
 const { normalizarConexionId } = repo;
 const { finalizarFlujoLeadTrasRemarketing } = require("../resetFlujoLeadService");
 const { nowUtc } = require("../seguimiento/timestamps");
+const {
+  cancelarSeguimientosPendientesPorRemarketing,
+} = require("../seguimiento/seguimientoRepository");
 
 function ventanaWhatsAppAbierta(fila) {
   const ultimo = fila.ultimo_mensaje_lead_at;
@@ -110,6 +113,25 @@ async function cerrarTrasEnvio(fila, nuevosIntentos, ahora) {
     cliente: fila.cliente_numero,
     intentos: nuevosIntentos,
   });
+
+  try {
+    console.log("[RM24H_SEGUIMIENTOS] cancelando pendientes por RM enviado", {
+      usuario_id: fila.usuario_id,
+      cliente_numero: fila.cliente_numero,
+      conexion_whatsapp_id: conexionWhatsappDeFila(fila),
+    });
+    const cancelados = await cancelarSeguimientosPendientesPorRemarketing({
+      usuarioId: fila.usuario_id,
+      clienteNumero: fila.cliente_numero,
+      conexionWhatsappId: conexionWhatsappDeFila(fila),
+    });
+    console.log(`[RM24H_SEGUIMIENTOS] cancelados count=${cancelados}`);
+  } catch (err) {
+    console.log(
+      "[RM24H_SEGUIMIENTOS] error cancelando pendientes:",
+      err.response?.data || err.message
+    );
+  }
 
   try {
     await finalizarFlujoLeadTrasRemarketing(

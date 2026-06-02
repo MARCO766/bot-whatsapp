@@ -323,6 +323,34 @@ async function cancelarPendientesCliente(
   );
 }
 
+async function cancelarSeguimientosPendientesPorRemarketing({
+  usuarioId,
+  clienteNumero,
+  conexionWhatsappId,
+}) {
+  const usuario = usuarioId != null ? String(usuarioId).trim() : "";
+  const cliente = clienteNumero != null ? String(clienteNumero).trim() : "";
+  const conexion = normalizarConexionId(conexionWhatsappId);
+
+  if (!usuario || !cliente || !conexion) return 0;
+
+  const ahora = nowUtc();
+  const response = await axios.patch(
+    `${SUPABASE_URL}/rest/v1/seguimientos_programados?` +
+      `${filtrosClaveLead(cliente, usuario, conexion)}` +
+      `&estado=in.(${ESTADOS_SEGUIMIENTO.PENDIENTE},${ESTADOS_SEGUIMIENTO.PROCESANDO})`,
+    {
+      estado: ESTADOS_SEGUIMIENTO.CANCELADO,
+      cancelado_en: ahora,
+      actualizado_en: ahora,
+      error_detalle: "RM24H enviado",
+    },
+    { headers: headers({ Prefer: "return=representation" }) }
+  );
+
+  return (response.data || []).length;
+}
+
 async function clienteRespondioDespues(
   numero,
   usuarioId,
@@ -442,6 +470,7 @@ module.exports = {
   actualizarEstado,
   cancelarCampana,
   cancelarPendientesCliente,
+  cancelarSeguimientosPendientesPorRemarketing,
   clienteRespondioDespues,
   leadRespondioParaSeguimiento,
   listarPendientesRespondibles,
