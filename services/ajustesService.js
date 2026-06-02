@@ -177,7 +177,9 @@ async function patchAjustesGenerales() {
 }
 
 async function guardarConexionAjustes(usuarioId, body) {
+  const conexionId = body?.id || body?.conexionId || body?.conexion_id || null;
   const row = await guardarConexion(usuarioId, {
+    id: conexionId,
     nombre: body.nombre,
     numero: body.numero,
     token: body.token,
@@ -185,7 +187,12 @@ async function guardarConexionAjustes(usuarioId, body) {
     pixel_id: body.pixel_id || body.pixelId,
     capi_token: body.capi_token || body.capiToken,
   });
-  return { ok: true, conexion: mapConexionApi(row), conexionActiva: mapConexionApi(row) };
+  const activa = await getConexionActiva(usuarioId);
+  return {
+    ok: true,
+    conexion: mapConexionApi(row),
+    conexionActiva: mapConexionApi(activa),
+  };
 }
 
 async function desconectarConexionAjustes(usuarioId) {

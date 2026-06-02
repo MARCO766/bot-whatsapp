@@ -140,6 +140,7 @@ export default function Ajustes() {
       return;
     }
     const body = {
+      id: c?.id,
       nombre: c?.nombre || meta.pixelNombre,
       numero: c?.numero,
       phone_id: c?.phone_id || c?.phoneNumberId,
@@ -203,6 +204,7 @@ export default function Ajustes() {
       phone_id,
       pixel_id: connForm.pixel_id,
     };
+    if (connForm.id) body.id = connForm.id;
     if (token) body.token = token;
     const capi = (connForm.capi_token || "").trim();
     if (capi) body.capi_token = capi;

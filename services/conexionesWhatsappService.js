@@ -50,13 +50,42 @@ async function getConexionesUsuario(usuarioId) {
   }
 }
 
-/** Igual que POST /guardar-conexion (si falta token/phone_id, conserva la conexión activa) */
+async function getConexionPorId(usuarioId, conexionId) {
+  if (!usuarioId || !conexionId || !SUPABASE_URL || !SUPABASE_KEY) return null;
+  try {
+    const res = await axios.get(
+      `${SUPABASE_URL}/rest/v1/conexiones_whatsapp?id=eq.${encodeURIComponent(conexionId)}&usuario_id=eq.${encodeURIComponent(usuarioId)}&select=*&limit=1`,
+      { headers: supabaseHeaders() }
+    );
+    return res.data?.[0] || null;
+  } catch (error) {
+    log("getConexionPorId error:", error.response?.data || error.message);
+    return null;
+  }
+}
+
+function resolvePixelId(pixel_id, fallbackRow) {
+  if (pixel_id !== undefined && pixel_id !== null) {
+    return String(pixel_id).trim() || null;
+  }
+  return fallbackRow?.pixel_id || null;
+}
+
+function resolveCapiToken(capi_token, fallbackRow) {
+  if (
+    capi_token !== undefined &&
+    capi_token !== null &&
+    String(capi_token).trim()
+  ) {
+    return String(capi_token).trim();
+  }
+  return fallbackRow?.capi_token || null;
+}
+
+/** INSERT sin id; UPDATE con id. Token/phone vacíos conservan la fila editada o la activa. */
 async function guardarConexion(usuarioId, body) {
-  const [existing, conexiones] = await Promise.all([
-    getConexionActiva(usuarioId),
-    getConexionesUsuario(usuarioId),
-  ]);
   const {
+    id: conexionId,
     nombre,
     numero,
     token: tokenIn,
@@ -65,14 +94,61 @@ async function guardarConexion(usuarioId, body) {
     capi_token,
   } = body || {};
 
-  const token = (tokenIn && String(tokenIn).trim()) || existing?.token || "";
+  const [conexionActiva, conexiones] = await Promise.all([
+    getConexionActiva(usuarioId),
+    getConexionesUsuario(usuarioId),
+  ]);
+
+  let filaRef = conexionActiva;
+  if (conexionId) {
+    const rowEdit = await getConexionPorId(usuarioId, conexionId);
+    if (!rowEdit) {
+      const err = new Error("Conexión no encontrada");
+      err.status = 404;
+      throw err;
+    }
+    filaRef = rowEdit;
+  }
+
+  const token =
+    (tokenIn && String(tokenIn).trim()) ||
+    filaRef?.token ||
+    conexionActiva?.token ||
+    "";
   const phone_id =
-    (phoneIn && String(phoneIn).trim()) || existing?.phone_id || "";
+    (phoneIn && String(phoneIn).trim()) ||
+    filaRef?.phone_id ||
+    conexionActiva?.phone_id ||
+    "";
 
   if (!token || !phone_id) {
     const err = new Error("TOKEN y PHONE_ID son obligatorios");
     err.status = 400;
     throw err;
+  }
+
+  const datos = {
+    nombre: (nombre ?? filaRef?.nombre ?? conexionActiva?.nombre)?.trim() || "WhatsApp",
+    numero: (numero ?? filaRef?.numero ?? conexionActiva?.numero)?.trim() || "",
+    token: token.trim(),
+    phone_id: phone_id.trim(),
+    pixel_id: resolvePixelId(pixel_id, filaRef),
+    capi_token: resolveCapiToken(capi_token, filaRef),
+  };
+
+  if (conexionId) {
+    await axios.patch(
+      `${SUPABASE_URL}/rest/v1/conexiones_whatsapp?id=eq.${encodeURIComponent(conexionId)}&usuario_id=eq.${encodeURIComponent(usuarioId)}`,
+      datos,
+      {
+        headers: supabaseHeaders({
+          "Content-Type": "application/json",
+          Prefer: "return=minimal",
+        }),
+      }
+    );
+    log("guardarConexion UPDATE OK", { usuarioId, conexionId, phone_id: datos.phone_id });
+    return getConexionPorId(usuarioId, conexionId);
   }
 
   const esPrimeraConexion = conexiones.length === 0;
@@ -81,20 +157,7 @@ async function guardarConexion(usuarioId, body) {
     `${SUPABASE_URL}/rest/v1/conexiones_whatsapp`,
     {
       usuario_id: usuarioId,
-      nombre: (nombre ?? existing?.nombre)?.trim() || "WhatsApp",
-      numero: (numero ?? existing?.numero)?.trim() || "",
-      token: token.trim(),
-      phone_id: phone_id.trim(),
-      pixel_id:
-        pixel_id !== undefined && pixel_id !== null
-          ? String(pixel_id).trim() || null
-          : existing?.pixel_id || null,
-      capi_token:
-        capi_token !== undefined &&
-        capi_token !== null &&
-        String(capi_token).trim()
-          ? String(capi_token).trim()
-          : existing?.capi_token || null,
+      ...datos,
       activo: esPrimeraConexion,
     },
     {
@@ -105,7 +168,7 @@ async function guardarConexion(usuarioId, body) {
     }
   );
 
-  log("guardarConexion OK", { usuarioId, phone_id });
+  log("guardarConexion INSERT OK", { usuarioId, phone_id: datos.phone_id });
   return getConexionActiva(usuarioId);
 }
 
@@ -276,6 +339,7 @@ function mapConexionApi(row) {
 
 module.exports = {
   getConexionActiva,
+  getConexionPorId,
   getConexionesUsuario,
   guardarConexion,
   hacerPrincipal,
