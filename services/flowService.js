@@ -47,7 +47,10 @@ const {
 const {
   procesarRespuestaRemarketing,
 } = require("./remarketing24h/procesarRespuestaRemarketing");
-const { estaBotPausado } = require("./conversaciones/botPauseService");
+const {
+  estaBotPausado,
+  reactivarBotConversacion,
+} = require("./conversaciones/botPauseService");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
@@ -1288,20 +1291,14 @@ async function procesarMensajeEntrante(
   }
 
   const conexionEntranteGuard = opts.conexionWhatsappId || null;
-  if (
-    conexionEntranteGuard &&
-    (await estaBotPausado({
-      usuarioId,
-      clienteNumero: numero,
-      conexionWhatsappId: conexionEntranteGuard,
-    }))
-  ) {
-    console.log("[BOT_PAUSE] automatizacion omitida por pausa", {
-      usuario_id: usuarioId,
-      cliente_numero: numero,
-      conexion_whatsapp_id: conexionEntranteGuard,
-      origen: "flowService",
-    });
+  const guardPausa = await manejarGuardPausaBot({
+    usuarioId,
+    clienteNumero: numero,
+    conexionWhatsappId: conexionEntranteGuard,
+    texto: textoDebug,
+    origen: "flowService",
+  });
+  if (!guardPausa.continuar) {
     return true;
   }
 
@@ -1505,12 +1502,11 @@ function supabaseHeaders(extra = {}) {
 
 const {
   TIPOS,
+  resolveTipo,
   matchActivador,
   sortActivadores,
   sameConexionId,
 } = require("./activadorUtils");
-const { resolveEstado } = require("./flujosMetricsService");
-
 function normalizarTextoActivador(texto) {
   return String(texto || "")
     .toLowerCase()
@@ -1552,6 +1548,155 @@ async function registrarUsoActivador(activador) {
   }
 }
 
+async function cargarActivadoresActivos(usuarioId, conexionWhatsappId) {
+  const connEnc = encodeURIComponent(conexionWhatsappId);
+  try {
+    const responseActivadores = await axios.get(
+      `${SUPABASE_URL}/rest/v1/activadores?select=id,frase,flujo_id,activo,prioridad,coincidencia,veces_usado,repetible,tipo_activador,palabras_clave_array,conexion_whatsapp_id&activo=eq.true&usuario_id=eq.${usuarioId}&conexion_whatsapp_id=eq.${connEnc}`,
+      { headers: supabaseHeaders() }
+    );
+    return responseActivadores.data || [];
+  } catch (e) {
+    console.log(
+      "[ACTIVADOR] fallback sin columnas extendidas:",
+      e.response?.data?.message || e.message
+    );
+    const responseActivadores = await axios.get(
+      `${SUPABASE_URL}/rest/v1/activadores?select=id,frase,flujo_id,activo,repetible,conexion_whatsapp_id&activo=eq.true&usuario_id=eq.${usuarioId}&conexion_whatsapp_id=eq.${connEnc}`,
+      { headers: supabaseHeaders() }
+    );
+    return (responseActivadores.data || []).map((a) => ({
+      ...a,
+      prioridad: 0,
+      coincidencia: "contiene",
+      veces_usado: 0,
+      tipo_activador: "palabra_unica",
+      palabras_clave_array: [],
+    }));
+  }
+}
+
+async function resolverActivadorEntrante(
+  textoCliente,
+  usuarioId,
+  conexionWhatsappId,
+  opts = {}
+) {
+  if (!textoCliente || !usuarioId || !conexionWhatsappId) return null;
+
+  const textoNorm = normalizarTextoActivador(textoCliente);
+  if (!textoNorm) return null;
+
+  const activadores = await cargarActivadoresActivos(usuarioId, conexionWhatsappId);
+  if (!activadores.length) return null;
+
+  const ordenados = sortActivadores(activadores);
+  let activador = null;
+  let matchInfo = null;
+
+  for (const a of ordenados) {
+    if (opts.excluirCualquierMensaje && resolveTipo(a) === TIPOS.CUALQUIER) {
+      continue;
+    }
+    const result = matchActivador(textoNorm, a);
+    if (result.matched) {
+      activador = a;
+      matchInfo = result;
+      break;
+    }
+  }
+
+  if (!activador || !matchInfo) return null;
+
+  const flowId = activador.flujo_id;
+  if (!flowId || flowId === "undefined" || flowId === "null") return null;
+
+  if (
+    activador.conexion_whatsapp_id &&
+    !sameConexionId(activador.conexion_whatsapp_id, conexionWhatsappId)
+  ) {
+    return null;
+  }
+
+  const responseFlujo = await axios.get(
+    `${SUPABASE_URL}/rest/v1/flujos_builder?id=eq.${flowId}&usuario_id=eq.${usuarioId}&select=*`,
+    { headers: supabaseHeaders() }
+  );
+
+  const flujo = responseFlujo.data?.[0];
+  const flujoDatos = obtenerDatosFlujo(flujo);
+
+  if (!flujo || !flujoDatos) return null;
+
+  if (
+    conexionWhatsappId &&
+    (!flujo.conexion_whatsapp_id ||
+      !sameConexionId(flujo.conexion_whatsapp_id, conexionWhatsappId))
+  ) {
+    return null;
+  }
+
+  if (!flujoEstaActivo(flujo)) return null;
+
+  return { activador, matchInfo, flujo, flujoDatos, flowId };
+}
+
+async function buscarActivadorValido(textoCliente, usuarioId, conexionWhatsappId) {
+  const resolved = await resolverActivadorEntrante(
+    textoCliente,
+    usuarioId,
+    conexionWhatsappId,
+    { excluirCualquierMensaje: true }
+  );
+  return resolved?.activador || null;
+}
+
+async function manejarGuardPausaBot({
+  usuarioId,
+  clienteNumero,
+  conexionWhatsappId,
+  texto,
+  origen = "flowService",
+}) {
+  if (!conexionWhatsappId) return { continuar: true };
+
+  const pausado = await estaBotPausado({
+    usuarioId,
+    clienteNumero,
+    conexionWhatsappId,
+  });
+  if (!pausado) return { continuar: true };
+
+  const activador = await buscarActivadorValido(
+    texto,
+    usuarioId,
+    conexionWhatsappId
+  );
+  if (!activador) {
+    console.log("[BOT_PAUSE] automatizacion omitida por pausa", {
+      usuario_id: usuarioId,
+      cliente_numero: clienteNumero,
+      conexion_whatsapp_id: conexionWhatsappId,
+      origen,
+    });
+    return { continuar: false };
+  }
+
+  await reactivarBotConversacion({
+    usuarioId,
+    clienteNumero,
+    conexionWhatsappId,
+  });
+  console.log("[BOT_PAUSE] reactivado por activador", {
+    usuario_id: usuarioId,
+    cliente_numero: clienteNumero,
+    conexion_whatsapp_id: conexionWhatsappId,
+    activador_id: activador.id,
+    origen,
+  });
+  return { continuar: true, reactivado: true };
+}
+
 async function buscarYEjecutarActivador(
   numero,
   textoCliente,
@@ -1586,59 +1731,17 @@ async function buscarYEjecutarActivador(
     conexionWhatsappId
   );
 
-  const connEnc = encodeURIComponent(conexionWhatsappId);
-  let activadores = [];
-  try {
-    const responseActivadores = await axios.get(
-      `${SUPABASE_URL}/rest/v1/activadores?select=id,frase,flujo_id,activo,prioridad,coincidencia,veces_usado,repetible,tipo_activador,palabras_clave_array,conexion_whatsapp_id&activo=eq.true&usuario_id=eq.${usuarioId}&conexion_whatsapp_id=eq.${connEnc}`,
-      { headers: supabaseHeaders() }
-    );
-    activadores = responseActivadores.data || [];
-  } catch (e) {
-    console.log(
-      "[ACTIVADOR] fallback sin columnas extendidas:",
-      e.response?.data?.message || e.message
-    );
-    const responseActivadores = await axios.get(
-      `${SUPABASE_URL}/rest/v1/activadores?select=id,frase,flujo_id,activo,repetible,conexion_whatsapp_id&activo=eq.true&usuario_id=eq.${usuarioId}&conexion_whatsapp_id=eq.${connEnc}`,
-      { headers: supabaseHeaders() }
-    );
-    activadores = (responseActivadores.data || []).map((a) => ({
-      ...a,
-      prioridad: 0,
-      coincidencia: "contiene",
-      veces_usado: 0,
-      tipo_activador: "palabra_unica",
-      palabras_clave_array: [],
-    }));
-  }
-
-  if (!activadores.length) {
-    console.log(
-      "⚠️ ACTIVADOR — ningún activador activo para usuario/línea:",
-      usuarioId,
-      conexionWhatsappId
-    );
-    return false;
-  }
-
-  const ordenados = sortActivadores(activadores);
-  let activador = null;
-  let matchInfo = null;
-
-  for (const a of ordenados) {
-    const result = matchActivador(textoNorm, a);
-    if (result.matched) {
-      activador = a;
-      matchInfo = result;
-      break;
-    }
-  }
-
-  if (!activador || !matchInfo) {
+  const resolved = await resolverActivadorEntrante(
+    textoCliente,
+    usuarioId,
+    conexionWhatsappId
+  );
+  if (!resolved) {
     console.log("⚠️ ACTIVADOR — no encontrado para texto:", textoNorm);
     return false;
   }
+
+  const { activador, matchInfo, flujo, flujoDatos, flowId } = resolved;
 
   console.log("✅ ACTIVADOR ENCONTRADO:", {
     id: activador.id,
@@ -1647,12 +1750,6 @@ async function buscarYEjecutarActivador(
     tipo: matchInfo.tipo,
     detalle: matchInfo.detalle,
   });
-
-  const flowId = activador.flujo_id;
-  if (!flowId || flowId === "undefined" || flowId === "null") {
-    console.error("❌ Flow ID inválido:", flowId);
-    return false;
-  }
 
   if (matchInfo.tipo === TIPOS.CUALQUIER) {
     console.log(
@@ -1679,53 +1776,6 @@ async function buscarYEjecutarActivador(
     );
   }
 
-  const responseFlujo = await axios.get(
-    `${SUPABASE_URL}/rest/v1/flujos_builder?id=eq.${flowId}&usuario_id=eq.${usuarioId}&select=*`,
-    { headers: supabaseHeaders() }
-  );
-
-  const flujo = responseFlujo.data?.[0];
-  const flujoDatos = obtenerDatosFlujo(flujo);
-
-  if (!flujo || !flujoDatos) {
-    console.log("⚠️ FLUJO — no encontrado o sin datos:", flowId);
-    return false;
-  }
-
-  if (
-    conexionWhatsappId &&
-    (!flujo.conexion_whatsapp_id ||
-      !sameConexionId(flujo.conexion_whatsapp_id, conexionWhatsappId))
-  ) {
-    console.log(
-      "⚠️ ACTIVADOR — flujo no pertenece a esta línea, abortando:",
-      flowId,
-      "| flujo:",
-      flujo.conexion_whatsapp_id || "legacy",
-      "| mensaje:",
-      conexionWhatsappId
-    );
-    return false;
-  }
-
-  if (
-    activador.conexion_whatsapp_id &&
-    !sameConexionId(activador.conexion_whatsapp_id, conexionWhatsappId)
-  ) {
-    console.log("⚠️ ACTIVADOR — activador de otra línea, abortando:", activador.id);
-    return false;
-  }
-
-  if (!flujoEstaActivo(flujo)) {
-    console.log(
-      "⚠️ FLUJO — pausado/inactivo:",
-      flujo.nombre || flowId,
-      "| estado:",
-      resolveEstado(flujoDatos)
-    );
-    return false;
-  }
-
   console.log("✅ FLUJO ENCONTRADO:", flujo.nombre || "—", "| id:", flujo.id);
 
   await ejecutarFlujo(numero, flujoDatos, usuarioId, flujo.id, {
@@ -1742,6 +1792,8 @@ module.exports = {
   agregarEtiquetaCliente,
   ejecutarFlujo,
   buscarYEjecutarActivador,
+  buscarActivadorValido,
+  manejarGuardPausaBot,
   procesarMensajeEntrante,
   reanudarFlujoIAPendiente,
   registrarConversion,

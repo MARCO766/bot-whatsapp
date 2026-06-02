@@ -1042,6 +1042,14 @@
 .chatFlowToggle {
   position: relative;
   display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.chatFlowBtn--status {
+  cursor: default;
+  pointer-events: none;
 }
 
 .chatFlowBtn--active {

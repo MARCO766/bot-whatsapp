@@ -22,9 +22,7 @@ export default function ChatWindow({
   onPatchBotPause,
 }) {
   const scrollRef = useRef(null);
-  const flowMenuRef = useRef(null);
   const [ventanaTick, setVentanaTick] = useState(0);
-  const [flowMenuAbierto, setFlowMenuAbierto] = useState(false);
   const [flowLoading, setFlowLoading] = useState(false);
   const numero = panelActivo ? chat?.numero || chat?.cliente_numero : null;
   const nombre = panelActivo
@@ -95,28 +93,15 @@ export default function ChatWindow({
     chatMeta?.bot_pausado ?? chat?.bot_pausado
   );
 
-  useEffect(() => {
-    if (!flowMenuAbierto) return undefined;
-    const onDocClick = (e) => {
-      if (flowMenuRef.current && !flowMenuRef.current.contains(e.target)) {
-        setFlowMenuAbierto(false);
-      }
-    };
-    document.addEventListener("mousedown", onDocClick);
-    return () => document.removeEventListener("mousedown", onDocClick);
-  }, [flowMenuAbierto]);
-
   const aplicarBotPause = useCallback(
-    async (action, duration) => {
+    async (action) => {
       if (!numero || !conexionWhatsappId || flowLoading) return;
       setFlowLoading(true);
-      setFlowMenuAbierto(false);
       try {
         const data = await setBotPause({
           clienteNumero: numero,
           conexionWhatsappId,
           action,
-          duration,
         });
         onPatchBotPause?.({
           bot_pausado: data.bot_pausado,
@@ -254,56 +239,33 @@ export default function ChatWindow({
               Etiquetas
             </button>
 
-            <div className="chatFlowToggle" ref={flowMenuRef}>
-              <button
-                type="button"
-                className={`chatQuickBtn chatFlowBtn ${
-                  botPausado ? "chatFlowBtn--paused" : "chatFlowBtn--active"
-                }`}
-                disabled={flowLoading}
-                aria-expanded={flowMenuAbierto}
-                aria-haspopup="menu"
-                onClick={() => setFlowMenuAbierto((v) => !v)}
-              >
-                {botPausado ? "🔴 Flujo apagado" : "🟢 Flujo activo"}
-              </button>
-
-              {flowMenuAbierto && (
-                <div className="chatFlowMenu" role="menu">
-                  {!botPausado ? (
-                    <>
-                      <button
-                        type="button"
-                        role="menuitem"
-                        onClick={() => aplicarBotPause("pause", "1h")}
-                      >
-                        Apagar 1 hora
-                      </button>
-                      <button
-                        type="button"
-                        role="menuitem"
-                        onClick={() => aplicarBotPause("pause", "24h")}
-                      >
-                        Apagar 24 horas
-                      </button>
-                      <button
-                        type="button"
-                        role="menuitem"
-                        onClick={() => aplicarBotPause("pause", "indefinido")}
-                      >
-                        Apagar indefinido
-                      </button>
-                    </>
-                  ) : (
-                    <button
-                      type="button"
-                      role="menuitem"
-                      onClick={() => aplicarBotPause("resume")}
-                    >
-                      Reactivar flujo
-                    </button>
-                  )}
-                </div>
+            <div className="chatFlowToggle">
+              {botPausado ? (
+                <>
+                  <span
+                    className="chatQuickBtn chatFlowBtn chatFlowBtn--paused chatFlowBtn--status"
+                    aria-live="polite"
+                  >
+                    🔴 Flujo apagado
+                  </span>
+                  <button
+                    type="button"
+                    className="chatQuickBtn chatFlowBtn"
+                    disabled={flowLoading}
+                    onClick={() => aplicarBotPause("resume")}
+                  >
+                    Activar flujo
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  className="chatQuickBtn chatFlowBtn chatFlowBtn--active"
+                  disabled={flowLoading}
+                  onClick={() => aplicarBotPause("pause")}
+                >
+                  Apagar flujo
+                </button>
               )}
             </div>
           </div>

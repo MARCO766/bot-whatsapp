@@ -4,7 +4,10 @@ const router = express.Router();
 const axios = require("axios");
 
 const { enviarEventoMeta } = require("../services/metaService");
-const { procesarMensajeEntrante } = require("../services/flowService");
+const {
+  procesarMensajeEntrante,
+  manejarGuardPausaBot,
+} = require("../services/flowService");
 const {
   esComandoResetFlujo,
   resetearFlujoLead,
@@ -15,7 +18,6 @@ const {
 const {
   registrarRespuestaBotonSeguimiento,
 } = require("../services/seguimiento/registrarRespuestaBoton");
-const { estaBotPausado } = require("../services/conversaciones/botPauseService");
 const rt = require("../services/realtimeService");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -543,20 +545,24 @@ if (esComandoResetFlujo(textoParaActivador)) {
   return res.sendStatus(200);
 }
 
-if (
-  conexionWhatsappId &&
-  (await estaBotPausado({
-    usuarioId: usuarioIdWebhook,
-    clienteNumero: from,
-    conexionWhatsappId,
-  }))
-) {
-  console.log("[BOT_PAUSE] automatizacion omitida por pausa", {
-    usuario_id: usuarioIdWebhook,
+const guardPausa = await manejarGuardPausaBot({
+  usuarioId: usuarioIdWebhook,
+  clienteNumero: from,
+  conexionWhatsappId,
+  texto: textoParaActivador,
+  origen: "webhook",
+});
+if (!guardPausa.continuar) {
+  return res.sendStatus(200);
+}
+if (guardPausa.reactivado) {
+  rt.conversacionActualizada(req, usuarioIdWebhook, {
     cliente_numero: from,
     conexion_whatsapp_id: conexionWhatsappId,
+    bot_pausado: false,
+    bot_pausado_hasta: null,
+    bot_pausado_motivo: null,
   });
-  return res.sendStatus(200);
 }
 
 await enviarEventoMeta(usuarioIdWebhook, "Lead", from);

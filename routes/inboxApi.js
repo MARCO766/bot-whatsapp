@@ -21,8 +21,6 @@ const rt = require("../services/realtimeService");
 const {
   pausarBotConversacion,
   reactivarBotConversacion,
-  calcularHastaDesdeDuracion,
-  motivoDesdeDuracion,
 } = require("../services/conversaciones/botPauseService");
 
 function protegerApi(req, res, next) {
@@ -132,7 +130,6 @@ router.post("/api/inbox/bot-pause", protegerApi, async (req, res) => {
       cliente_numero: clienteNumero,
       conexion_whatsapp_id: conexionWhatsappId,
       action,
-      duration,
     } = req.body || {};
 
     if (!clienteNumero || !conexionWhatsappId) {
@@ -149,14 +146,12 @@ router.post("/api/inbox/bot-pause", protegerApi, async (req, res) => {
         conexionWhatsappId,
       });
     } else if (action === "pause") {
-      const hasta = calcularHastaDesdeDuracion(duration);
-      const motivo = motivoDesdeDuracion(duration);
       result = await pausarBotConversacion({
         usuarioId,
         clienteNumero,
         conexionWhatsappId,
-        hasta,
-        motivo,
+        hasta: null,
+        motivo: "manual",
       });
     } else {
       return res.status(400).json({ ok: false, error: "action inválida" });

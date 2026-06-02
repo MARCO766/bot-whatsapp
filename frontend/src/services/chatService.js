@@ -119,7 +119,6 @@ export async function setBotPause({
   clienteNumero,
   conexionWhatsappId,
   action,
-  duration,
 }) {
   return request("/api/inbox/bot-pause", {
     method: "POST",
@@ -127,7 +126,6 @@ export async function setBotPause({
       cliente_numero: clienteNumero,
       conexion_whatsapp_id: conexionWhatsappId,
       action,
-      duration,
     }),
   });
 }
