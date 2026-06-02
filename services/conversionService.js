@@ -200,6 +200,7 @@ function parseConversionFromNodo(nodo) {
   let valor = 0;
   let moneda = "USD";
   let origen = "flujo";
+  let tipo = "venta";
 
   const matchData = html.match(
     /<textarea[^>]*class="conversion-data"[^>]*>([\s\S]*?)<\/textarea>/i
@@ -214,6 +215,7 @@ function parseConversionFromNodo(nodo) {
       if (data.valor != null) valor = data.valor;
       if (data.moneda != null) moneda = data.moneda;
       if (data.origen != null) origen = data.origen;
+      if (data.tipo != null) tipo = data.tipo;
     } catch {
       /* inputs HTML como fallback */
     }
@@ -242,6 +244,11 @@ function parseConversionFromNodo(nodo) {
   );
   if (matchOrigen) origen = matchOrigen[1];
 
+  const matchTipo = html.match(
+    /class="conversion-tipo"[^>]*>[\s\S]*?<option[^>]*selected[^>]*value="([^"]*)"/i
+  );
+  if (matchTipo) tipo = matchTipo[1];
+
   if (nodo?.data && typeof nodo.data === "object") {
     if (nodo.data.valor != null) valor = nodo.data.valor;
     if (nodo.data.valor_venta != null) valor = nodo.data.valor_venta;
@@ -249,12 +256,14 @@ function parseConversionFromNodo(nodo) {
     if (nodo.data.moneda != null) moneda = nodo.data.moneda;
     if (nodo.data.currency != null) moneda = nodo.data.currency;
     if (nodo.data.origen != null) origen = nodo.data.origen;
+    if (nodo.data.tipo != null) tipo = nodo.data.tipo;
   }
 
   return {
     valor: normalizarValor(valor),
     moneda: normalizarMonedaISO(moneda),
     origen: normalizarOrigen(origen),
+    tipo: normalizarTipoConversion(tipo),
   };
 }
 

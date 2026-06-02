@@ -86,6 +86,32 @@ const CONVERSION_MONEDAS = [
   { v: "BRL", l: "Real brasileño" },
 ];
 
+const CONVERSION_TIPOS = [
+  { v: "venta", l: "Venta" },
+  { v: "upsell", l: "Upsell" },
+  { v: "downsell", l: "Downsell" },
+  { v: "recuperacion", l: "Recuperación" },
+];
+
+function normalizarConversionTipo(val) {
+  const v = String(val || "venta").toLowerCase().trim();
+  return CONVERSION_TIPOS.some((t) => t.v === v) ? v : "venta";
+}
+
+function conversionTipoLabel(val) {
+  const v = normalizarConversionTipo(val);
+  const found = CONVERSION_TIPOS.find((t) => t.v === v);
+  return found ? found.l : "Venta";
+}
+
+function opcionesSelectConversionTipo(tipoActual) {
+  const actual = normalizarConversionTipo(tipoActual);
+  return CONVERSION_TIPOS.map(({ v, l }) => {
+    const selected = actual === v ? " selected" : "";
+    return `<option value="${v}"${selected}>${l}</option>`;
+  }).join("");
+}
+
 function normalizarMonedaISO(raw){
   if(raw == null || raw === "") return "";
 
@@ -532,6 +558,9 @@ function agregarNodo(tipo){
         <select class="conversion-moneda node-select" tabindex="-1" aria-hidden="true">
           ${opcionesSelectConversionMoneda(null, "USD")}
         </select>
+        <select class="conversion-tipo node-select" tabindex="-1" aria-hidden="true">
+          ${opcionesSelectConversionTipo("venta")}
+        </select>
         <select class="conversion-origen node-select" tabindex="-1" aria-hidden="true">
           <option value="flujo" selected>Flujo (automático)</option>
           <option value="manual">Manual</option>
@@ -542,7 +571,7 @@ function agregarNodo(tipo){
           <option value="webhook">Webhook</option>
         </select>
       </div>
-      <textarea class="conversion-data" style="display:none;">{"valor":0,"moneda":"USD","origen":"flujo"}</textarea>
+      <textarea class="conversion-data" style="display:none;">{"valor":0,"moneda":"USD","tipo":"venta","origen":"flujo"}</textarea>
     `;
   }
 
@@ -2868,7 +2897,7 @@ function actualizarConversionMonedaSelect(select, monedaRaw){
 }
 
 function leerConversionDataDesdeNodo(nodo){
-  let data = { valor: 0, moneda: "", origen: "flujo" };
+  let data = { valor: 0, moneda: "", tipo: "venta", origen: "flujo" };
 
   try {
     const raw = nodo.querySelector(".conversion-data")?.value;
@@ -2877,6 +2906,7 @@ function leerConversionDataDesdeNodo(nodo){
 
   const inputValor = nodo.querySelector(".conversion-valor");
   const selMoneda = nodo.querySelector(".conversion-moneda");
+  const selTipo = nodo.querySelector(".conversion-tipo");
   const selOrigen = nodo.querySelector(".conversion-origen");
 
   if(inputValor && inputValor.value !== ""){
@@ -2892,11 +2922,16 @@ function leerConversionDataDesdeNodo(nodo){
     data.moneda = monedaSelect || monedaGuardada;
   }
 
+  if(selTipo && selTipo.value){
+    data.tipo = selTipo.value;
+  }
+
   if(selOrigen && selOrigen.value){
     data.origen = selOrigen.value;
   }
 
   data.moneda = normalizarMonedaISO(data.moneda) || "USD";
+  data.tipo = normalizarConversionTipo(data.tipo);
   return data;
 }
 
@@ -2905,7 +2940,8 @@ function renderConversionVisual(nodo, data){
 
   const valor = parseFloat(data.valor) || 0;
   const moneda = normalizarMonedaISO(data.moneda) || "USD";
-  const textoVenta = `Venta: ${valor} ${moneda}`;
+  const tipoLabel = conversionTipoLabel(data.tipo);
+  const textoVenta = `${tipoLabel}: ${valor} ${moneda}`;
 
   nodo.querySelectorAll(".conversion-venta").forEach((ventaEl) => {
     ventaEl.textContent = textoVenta;
@@ -2928,10 +2964,19 @@ function ensureConversionFieldsHidden(nodo){
     else nodo.appendChild(wrap);
   }
 
-  ["conversion-valor", "conversion-moneda", "conversion-origen"].forEach((cls) => {
+  ["conversion-valor", "conversion-moneda", "conversion-tipo", "conversion-origen"].forEach((cls) => {
     const el = nodo.querySelector("." + cls);
     if(el && el.parentElement !== wrap) wrap.appendChild(el);
   });
+
+  if(!nodo.querySelector(".conversion-tipo")){
+    const selTipo = document.createElement("select");
+    selTipo.className = "conversion-tipo node-select";
+    selTipo.setAttribute("tabindex", "-1");
+    selTipo.setAttribute("aria-hidden", "true");
+    selTipo.innerHTML = opcionesSelectConversionTipo("venta");
+    wrap.appendChild(selTipo);
+  }
 
   return wrap;
 }
@@ -2999,6 +3044,11 @@ function initConversionNodeUI(nodo){
 
   const data = leerConversionDataDesdeNodo(nodo);
   actualizarConversionMonedaSelect(nodo.querySelector(".conversion-moneda"), data.moneda);
+  const selTipo = nodo.querySelector(".conversion-tipo");
+  if(selTipo){
+    selTipo.innerHTML = opcionesSelectConversionTipo(data.tipo);
+    selTipo.value = normalizarConversionTipo(data.tipo);
+  }
   syncConversionDataToNodo(nodo, data);
 }
 
@@ -3009,6 +3059,7 @@ function syncConversionDataToNodo(nodo, dataOverride){
     ? {
         valor: parseFloat(dataOverride.valor) || 0,
         moneda: normalizarMonedaISO(dataOverride.moneda) || "USD",
+        tipo: normalizarConversionTipo(dataOverride.tipo),
         origen: dataOverride.origen || "flujo",
       }
     : leerConversionDataDesdeNodo(nodo);
@@ -3025,15 +3076,21 @@ function aplicarConversionDesdePanel(){
 
   const valor = parseFloat(document.getElementById("panelConversionValor")?.value) || 0;
   const moneda = normalizarMonedaISO(document.getElementById("panelConversionMoneda")?.value) || "USD";
+  const tipo = normalizarConversionTipo(document.getElementById("panelConversionTipo")?.value);
   const origen = document.getElementById("panelConversionOrigen")?.value || "flujo";
-  const data = { valor, moneda, origen };
+  const data = { valor, moneda, tipo, origen };
 
   const inputValor = nodo.querySelector(".conversion-valor");
   const selMoneda = nodo.querySelector(".conversion-moneda");
+  const selTipo = nodo.querySelector(".conversion-tipo");
   const selOrigen = nodo.querySelector(".conversion-origen");
 
   if(inputValor) inputValor.value = valor;
   actualizarConversionMonedaSelect(selMoneda, moneda);
+  if(selTipo){
+    selTipo.innerHTML = opcionesSelectConversionTipo(tipo);
+    selTipo.value = tipo;
+  }
   if(selOrigen) selOrigen.value = origen;
 
   syncConversionDataToNodo(nodo, data);
@@ -3042,11 +3099,13 @@ function aplicarConversionDesdePanel(){
 function bindPanelConversionLiveSync(){
   const valorEl = document.getElementById("panelConversionValor");
   const monedaEl = document.getElementById("panelConversionMoneda");
+  const tipoEl = document.getElementById("panelConversionTipo");
   const origenEl = document.getElementById("panelConversionOrigen");
 
   valorEl?.addEventListener("input", aplicarConversionDesdePanel);
   monedaEl?.addEventListener("input", aplicarConversionDesdePanel);
   monedaEl?.addEventListener("change", aplicarConversionDesdePanel);
+  tipoEl?.addEventListener("change", aplicarConversionDesdePanel);
   origenEl?.addEventListener("change", aplicarConversionDesdePanel);
 }
 
@@ -3076,7 +3135,13 @@ function renderPanelConversion(nodo){
       </select>
     </div>
     <div class="panel-campo">
-      <label>Origen (integraciones futuras)</label>
+      <label>Tipo de conversión</label>
+      <select id="panelConversionTipo">
+        ${opcionesSelectConversionTipo(data.tipo)}
+      </select>
+    </div>
+    <div class="panel-campo">
+      <label>Origen integración</label>
       <select id="panelConversionOrigen">
         <option value="flujo" ${data.origen === "flujo" ? "selected" : ""}>Flujo automático</option>
         <option value="manual" ${data.origen === "manual" ? "selected" : ""}>Manual</option>

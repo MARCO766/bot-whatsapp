@@ -543,7 +543,7 @@ async function ejecutarFlujo(
 
   async function ejecutarNodoConversion(nodo, ctx = {}) {
     const nodoId = nodo?.id || null;
-    const { valor, moneda, origen } = parseConversionFromNodo(nodo);
+    const { valor, moneda, origen, tipo } = parseConversionFromNodo(nodo);
     const nodeName =
       nodo?.data?.label ||
       nodo?.data?.nombre ||
@@ -578,6 +578,7 @@ async function ejecutarFlujo(
         nodeName,
         flujoNombre: opts.flujoNombre || null,
         trigger: "nodo_flujo",
+        tipo,
       },
     });
   }
