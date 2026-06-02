@@ -64,10 +64,10 @@ export default function RevenueKpiStrip({ kpis, moneda = "BOB", loading = false 
           <div className="shine" />
           <div className="cardTop">
             <div className="icon">{item.icono}</div>
+            <strong className="revenueKpiTitle">{item.titulo}</strong>
           </div>
           <h2>{k ? item.getValor(k) : formatRevenueMoney(0, moneda)}</h2>
-          <strong>{item.titulo}</strong>
-          <p>{k ? item.getDetalle(k) : "—"}</p>
+          <span className="revenueKpiChip">{k ? item.getDetalle(k) : "—"}</span>
         </div>
       ))}
     </div>

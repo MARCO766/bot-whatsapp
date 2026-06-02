@@ -58,41 +58,33 @@ export default function RevenuePremiumSection({
       <style>{sectionStyles}</style>
 
       <div className="revenuePremiumHead">
-        <div>
-          <span className="eyebrow">Revenue intelligence</span>
+        <div className="revenuePremiumTitleBlock">
           <h2 id="revenue-premium-title">💰 Ingresos Premium</h2>
           <p className="revenuePremiumHint">
-            Desglose por origen y tipo de conversión. Moneda y periodo independientes del embudo
-            clásico.
+            Inteligencia de ventas por flujo y remarketing
           </p>
         </div>
         <div className="revenuePremiumControls">
           {monedas.length > 0 && (
-            <div className="revenueControlGroup">
-              <label className="revenueControlLabel">Moneda</label>
-              <RevenueMonedaTabs
-                monedas={monedas}
-                value={monedaActiva}
-                onChange={setMonedaActiva}
-                disabled={loading || !!error}
-              />
-            </div>
+            <RevenueMonedaTabs
+              monedas={monedas}
+              value={monedaActiva}
+              onChange={setMonedaActiva}
+              disabled={loading || !!error}
+            />
           )}
-          <div className="revenueControlGroup">
-            <label className="revenueControlLabel">Periodo</label>
-            <div className="periodos">
-              {REVENUE_PERIODOS.map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  className={periodoApi === p.id ? "active" : ""}
-                  onClick={() => setPeriodoApi(p.id)}
-                  disabled={loading}
-                >
-                  {p.label}
-                </button>
-              ))}
-            </div>
+          <div className="periodos revenuePeriodos">
+            {REVENUE_PERIODOS.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                className={periodoApi === p.id ? "active" : ""}
+                onClick={() => setPeriodoApi(p.id)}
+                disabled={loading}
+              >
+                {p.label}
+              </button>
+            ))}
           </div>
         </div>
       </div>
@@ -126,6 +118,7 @@ export default function RevenuePremiumSection({
               origenBucket={bucket?.remarketing}
               moneda={monedaActiva}
               loading={loading}
+              rmRevenuePct={kpis?.porcentajeIngresosRemarketing}
             />
           </div>
         </>
@@ -136,128 +129,257 @@ export default function RevenuePremiumSection({
 
 const sectionStyles = `
 .revenuePremiumSection {
-  margin-bottom: 18px;
+  margin-bottom: 14px;
+  padding: 14px 16px;
+  border-radius: 20px;
   animation: fadeUp .35s ease both;
 }
 .revenuePremiumHead {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
-  gap: 20px;
+  align-items: center;
+  gap: 12px;
   flex-wrap: wrap;
-  margin-bottom: 18px;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(148,163,184,.08);
+}
+.revenuePremiumTitleBlock {
+  min-width: 0;
+  flex: 1 1 220px;
 }
 .revenuePremiumHead h2 {
-  margin: 8px 0 6px;
-  font-size: 22px;
+  margin: 0 0 3px;
+  font-size: 20px;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
 }
 .revenuePremiumHint {
   margin: 0;
   color: #94a3b8;
-  font-size: 13px;
-  max-width: 520px;
-  line-height: 1.45;
+  font-size: 12px;
+  line-height: 1.35;
 }
 .revenuePremiumControls {
   display: flex;
-  flex-direction: column;
-  gap: 12px;
-  align-items: flex-end;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+  flex: 0 1 auto;
 }
-.revenueControlGroup {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
+.revenuePremiumSection .revenuePeriodos,
+.revenuePremiumSection .revenueMonedaTabs {
   gap: 6px;
 }
-.revenueControlLabel {
-  color: #94a3b8;
+.revenuePremiumSection .revenuePeriodos button,
+.revenuePremiumSection .revenueMonedaTabs button {
+  height: 32px;
+  padding: 0 11px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 800;
+}
+.revenuePremiumSection .revenueKpiGrid {
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.revenuePremiumSection .revenueKpiGrid .mainCard {
+  min-height: 0;
+  padding: 10px 12px;
+  border-radius: 14px;
+}
+.revenuePremiumSection .revenueKpiGrid .mainCard h2 {
+  margin: 6px 0 2px;
+  font-size: 20px;
+  line-height: 1.15;
+}
+.revenuePremiumSection .revenueKpiGrid .cardTop {
+  margin-bottom: 0;
+  justify-content: space-between;
+  align-items: center;
+}
+.revenuePremiumSection .revenueKpiGrid .icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  font-size: 14px;
+}
+.revenuePremiumSection .revenueKpiTitle {
   font-size: 11px;
-  font-weight: 900;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  font-weight: 800;
+  color: #cbd5e1;
+  letter-spacing: 0.02em;
 }
-.revenueMonedaTabs {
-  justify-content: flex-end;
+.revenuePremiumSection .revenueKpiChip {
+  display: inline-flex;
+  align-items: center;
+  margin-top: 4px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #94a3b8;
+  background: rgba(255,255,255,.06);
+  border: 1px solid rgba(148,163,184,.1);
+  line-height: 1.3;
 }
-.revenueKpiGrid {
-  margin-bottom: 18px;
+.revenuePremiumSection .revenueKpiGrid .skelCard {
+  min-height: 72px;
 }
 .revenueBreakdownGrid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 16px;
+  gap: 10px;
 }
 .revenueBreakdownCol {
-  padding: 16px;
-  border-radius: 22px;
-  background: rgba(255,255,255,.03);
-  border: 1px solid rgba(148,163,184,.1);
+  padding: 12px;
+  border-radius: 16px;
+  background: linear-gradient(160deg, rgba(255,255,255,.045), rgba(15,23,42,.35));
+  border: 1px solid rgba(148,163,184,.12);
+}
+.revenueBreakdownColHead {
+  margin-bottom: 8px;
+}
+.revenueBreakdownColTitleRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
 }
 .revenueBreakdownColHead h3 {
-  margin: 0 0 4px;
-  font-size: 16px;
+  margin: 0 0 2px;
+  font-size: 14px;
+  font-weight: 900;
 }
 .revenueBreakdownColHead p {
-  margin: 0 0 10px;
+  margin: 0;
   color: #94a3b8;
-  font-size: 12px;
+  font-size: 11px;
+  line-height: 1.3;
+}
+.revenueRmBadge {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 9px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  white-space: nowrap;
+  color: #c4b5fd;
+  background: linear-gradient(135deg, rgba(168,85,247,.18), rgba(124,58,237,.1));
+  border: 1px solid rgba(168,85,247,.22);
 }
 .revenueBreakdownSubtotal {
   display: flex;
-  align-items: baseline;
-  gap: 10px;
-  margin-bottom: 14px;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 .revenueBreakdownSubtotal strong {
-  font-size: 18px;
+  font-size: 16px;
   color: #e2e8f0;
+  font-weight: 900;
 }
 .revenueBreakdownSubtotal span {
   color: #94a3b8;
-  font-size: 12px;
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.05);
 }
 .revenueTipoGrid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 10px;
+  gap: 8px;
 }
-.revenueTipoCard {
+.revenuePremiumSection .revenueTipoCard {
   flex-direction: column;
   align-items: flex-start;
+  padding: 10px 11px;
+  border-radius: 12px;
+  border: 1px solid rgba(148,163,184,.1);
+  min-height: 0;
 }
-.revenueTipoCard h3 {
-  font-size: 18px !important;
+.revenuePremiumSection .revenueTipoCard h3 {
+  margin: 4px 0 2px;
+  font-size: 15px !important;
+  font-weight: 900;
+  line-height: 1.2;
 }
-.revenueTipoCard--empty {
-  opacity: 0.55;
+.revenuePremiumSection .revenueTipoCard p {
+  font-size: 12px;
+  font-weight: 700;
+  color: #cbd5e1;
+}
+.revenuePremiumSection .revenueTipoLabel {
+  color: #94a3b8;
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.revenuePremiumSection .revenueTipoCard--venta {
+  background: linear-gradient(135deg, rgba(34,197,94,.12), rgba(6,182,212,.07));
+  border-color: rgba(34,197,94,.14);
+}
+.revenuePremiumSection .revenueTipoCard--upsell {
+  background: linear-gradient(135deg, rgba(168,85,247,.13), rgba(139,92,246,.06));
+  border-color: rgba(168,85,247,.14);
+}
+.revenuePremiumSection .revenueTipoCard--downsell {
+  background: linear-gradient(135deg, rgba(249,115,22,.12), rgba(234,88,12,.06));
+  border-color: rgba(249,115,22,.14);
+}
+.revenuePremiumSection .revenueTipoCard--recuperacion {
+  background: linear-gradient(135deg, rgba(59,130,246,.11), rgba(6,182,212,.08));
+  border-color: rgba(59,130,246,.14);
+}
+.revenuePremiumSection .revenueTipoCard--empty .revenueTipoMuted {
+  opacity: 0.42;
 }
 .revenueTipoSkel {
-  min-height: 90px;
+  min-height: 68px;
+  border-radius: 12px;
+}
+.revenuePremiumSection .emptyBlock {
+  padding: 20px 16px;
+  border-radius: 14px;
 }
 .revenueErrorCard {
   text-align: center;
-  padding: 28px 20px;
+  padding: 20px 16px;
+  border-radius: 14px;
   border-color: rgba(239,68,68,.25);
   background: linear-gradient(135deg, rgba(239,68,68,.08), rgba(15,23,42,.85));
 }
 .revenueErrorCard h2 {
-  margin: 10px 0 8px;
-  font-size: 18px;
+  margin: 8px 0 6px;
+  font-size: 16px;
 }
 .revenueErrorCard p {
   color: #94a3b8;
-  margin: 0 0 16px;
-  font-size: 13px;
+  margin: 0 0 12px;
+  font-size: 12px;
 }
 @media (max-width: 900px) {
   .revenueBreakdownGrid { grid-template-columns: 1fr; }
-  .revenuePremiumControls { align-items: stretch; width: 100%; }
-  .revenueControlGroup { align-items: stretch; }
-  .revenueMonedaTabs { justify-content: flex-start; }
+  .revenuePremiumHead { align-items: flex-start; }
+  .revenuePremiumControls {
+    width: 100%;
+    justify-content: flex-start;
+  }
 }
 @media (max-width: 760px) {
-  .revenueKpiGrid { grid-template-columns: 1fr; }
+  .revenuePremiumSection .revenueKpiGrid { grid-template-columns: repeat(2, 1fr); }
   .revenueTipoGrid { grid-template-columns: 1fr; }
+}
+@media (max-width: 480px) {
+  .revenuePremiumSection .revenueKpiGrid { grid-template-columns: 1fr; }
 }
 `;
