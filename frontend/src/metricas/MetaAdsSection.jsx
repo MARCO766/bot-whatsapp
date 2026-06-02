@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { saveMetaAdsConfig } from "./metaAdsApi";
+import { formatNum, formatPct } from "./format";
 import { apiConexionWhatsappParam } from "../utils/conexionesInbox";
 
 export default function MetaAdsConnectModal({ open, onClose, conexionWhatsappId, onSaved }) {
@@ -55,8 +56,8 @@ export default function MetaAdsConnectModal({ open, onClose, conexionWhatsappId,
           </button>
         </div>
         <p className="metaAdsModalHint">
-          Guarda tu cuenta publicitaria y token con permisos <code>ads_read</code>. Las métricas CTR,
-          CPC, CPM y ROAS se sincronizarán en una fase posterior.
+          Guarda tu cuenta publicitaria y token con permisos <code>ads_read</code> y{" "}
+          <code>read_insights</code>.
         </p>
         <form onSubmit={handleSubmit} className="metaAdsModalForm">
           <label>
@@ -118,14 +119,80 @@ function StatusRow({ label, ok, detail }) {
   );
 }
 
-export function MetaAdsCompactCard({ status, loading, onConnect }) {
-  if (loading) {
+function formatSpend(amount, currency) {
+  const v = Number(amount);
+  if (!Number.isFinite(v)) return "0";
+  const cur = currency ? String(currency).toUpperCase() : "";
+  const formatted = formatNum(Math.round(v * 100) / 100);
+  if (cur === "USD") return `$ ${formatted}`;
+  if (cur === "BOB" || cur === "BS") return `Bs ${formatted}`;
+  return cur ? `${cur} ${formatted}` : formatted;
+}
+
+function formatTimeAgo(iso) {
+  if (!iso) return null;
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return null;
+  const diffMin = Math.floor((Date.now() - t) / 60000);
+  if (diffMin < 1) return "hace un momento";
+  if (diffMin < 60) return `hace ${diffMin} min`;
+  const h = Math.floor(diffMin / 60);
+  if (h < 24) return `hace ${h} h`;
+  const d = Math.floor(h / 24);
+  return `hace ${d} d`;
+}
+
+function MetricMini({ label, value, hint }) {
+  return (
+    <div className="metaAdsMetricMini">
+      <span>{label}</span>
+      <strong>{value}</strong>
+      {hint ? <small>{hint}</small> : null}
+    </div>
+  );
+}
+
+function MetaAdsMetricsGrid({ insights }) {
+  const m = insights?.metrics || {};
+  const currency = insights?.meta?.account_currency;
+
+  return (
+    <div className="metaAdsMetricsGrid">
+      <MetricMini label="Inversión" value={formatSpend(m.spend, currency)} />
+      <MetricMini label="Impresiones" value={formatNum(m.impressions)} />
+      <MetricMini label="Alcance" value={formatNum(m.reach)} />
+      <MetricMini label="Clicks" value={formatNum(m.clicks)} />
+      <MetricMini label="CTR" value={formatPct(m.ctr)} />
+      <MetricMini label="CPC" value={formatSpend(m.cpc, currency)} />
+      <MetricMini label="CPM" value={formatSpend(m.cpm, currency)} />
+      <MetricMini label="Frecuencia" value={m.frequency != null ? String(m.frequency) : "—"} />
+      <MetricMini
+        label="ROAS híbrido"
+        value={m.roas_hibrido != null ? `${m.roas_hibrido}x` : "—"}
+        hint={m.mensaje_roas || (m.ingresos_crm > 0 ? `CRM ${formatNum(m.ingresos_crm)}` : null)}
+      />
+    </div>
+  );
+}
+
+export function MetaAdsCompactCard({
+  status,
+  statusLoading,
+  insights,
+  insightsLoading,
+  refreshing,
+  insightsError,
+  onConnect,
+  onRefresh,
+}) {
+  if (statusLoading) {
     return <div className="metaAdsCompact metaAdsCompact--loading">Cargando estado Meta Ads…</div>;
   }
 
   const pixel = status?.pixel || {};
   const capi = status?.capi || {};
   const ads = status?.ads || {};
+  const adsConectado = Boolean(ads.conectado);
 
   const pixelDetail = pixel.conectado
     ? pixel.pixel_id_masked
@@ -133,14 +200,26 @@ export function MetaAdsCompactCard({ status, loading, onConnect }) {
       : "Configurado"
     : "Pendiente en Ajustes → Meta Ads";
   const capiDetail = capi.conectado ? "Token CAPI guardado" : "Pendiente en Ajustes → Meta Ads";
-  const adsDetail = ads.conectado
-    ? ads.ad_account_id_masked
-      ? `${ads.ad_account_id_masked} · ${ads.mensaje || "Pendiente de sync"}`
-      : ads.mensaje || "Conectado"
-    : "Pendiente — conecta tu cuenta publicitaria";
+
+  const hasCache = Boolean(insights?.cached && insights?.metrics);
+  const syncedLabel = formatTimeAgo(insights?.synced_at);
+  const showMetrics = adsConectado && hasCache && !insightsLoading;
+
+  let adsDetail = "Pendiente — conecta tu cuenta publicitaria";
+  if (adsConectado) {
+    if (hasCache) {
+      adsDetail = ads.ad_account_id_masked
+        ? `${ads.ad_account_id_masked} · sincronizado`
+        : "Insights sincronizados";
+    } else {
+      adsDetail = ads.ad_account_id_masked
+        ? `${ads.ad_account_id_masked} · pendiente de sync`
+        : "Conectado — pendiente de sincronización";
+    }
+  }
 
   return (
-    <div className="metaAdsCompact">
+    <div className={`metaAdsCompact ${refreshing ? "metaAdsCompact--syncing" : ""}`}>
       <div className="metaAdsCompactHead">
         <span className="metaAdsIcon" aria-hidden="true">
           ◆
@@ -150,33 +229,70 @@ export function MetaAdsCompactCard({ status, loading, onConnect }) {
           <p className="metaAdsStatus">Estado de integración</p>
         </div>
         <button type="button" className="metaAdsConnectChip" onClick={onConnect}>
-          {ads.conectado ? "Actualizar Ads" : "Conectar Ads"}
+          {adsConectado ? "Actualizar Ads" : "Conectar Ads"}
         </button>
       </div>
 
       <div className="metaAdsStatusList">
         <StatusRow label="Pixel" ok={pixel.conectado} detail={pixelDetail} />
         <StatusRow label="CAPI" ok={capi.conectado} detail={capiDetail} />
-        <StatusRow
-          label="Ads Insights"
-          ok={ads.conectado}
-          detail={adsDetail}
-        />
+        <StatusRow label="Ads Insights" ok={adsConectado && hasCache} detail={adsDetail} />
       </div>
 
-      <p className="metaAdsCopy">
-        {ads.conectado ? (
-          <>
-            <strong>Métricas reales:</strong> pendiente de sincronización. CTR, CPC, CPM, Frecuencia y
-            ROAS requieren Ads API activa y sync de insights.
-          </>
-        ) : (
-          <>
-            CTR, CPC, CPM, Frecuencia y ROAS requieren <strong>Ads API</strong>. Pixel y CAPI ya
-            envían eventos; los números de campaña llegarán al conectar Ads.
-          </>
-        )}
-      </p>
+      {adsConectado ? (
+        <div className="metaAdsInsightsBlock">
+          {insightsLoading && !hasCache ? (
+            <p className="metaAdsSyncHint">Cargando insights desde caché…</p>
+          ) : null}
+
+          {!hasCache && !insightsLoading ? (
+            <>
+              <p className="metaAdsSyncHint">
+                <strong>Conectado — pendiente de sincronización.</strong> CTR, CPC, CPM, Frecuencia y
+                ROAS requieren Ads API.
+              </p>
+              <button
+                type="button"
+                className="metaAdsSyncBtn"
+                onClick={onRefresh}
+                disabled={refreshing}
+              >
+                {refreshing ? "Sincronizando…" : "Sincronizar ahora"}
+              </button>
+            </>
+          ) : null}
+
+          {showMetrics ? (
+            <>
+              <div className="metaAdsSyncMeta">
+                {syncedLabel ? (
+                  <span className="metaAdsSyncTime">Última sincronización: {syncedLabel}</span>
+                ) : null}
+                {insights?.stale ? <span className="metaAdsStaleBadge">Datos antiguos</span> : null}
+                <button
+                  type="button"
+                  className="metaAdsSyncBtn metaAdsSyncBtn--inline"
+                  onClick={onRefresh}
+                  disabled={refreshing}
+                >
+                  {refreshing ? "Sync…" : "Sincronizar"}
+                </button>
+              </div>
+              <MetaAdsMetricsGrid insights={insights} />
+              {insights?.mensaje ? <p className="metaAdsFootnote">{insights.mensaje}</p> : null}
+            </>
+          ) : null}
+
+          {refreshing ? <p className="metaAdsSyncHint">Consultando Meta Ads…</p> : null}
+        </div>
+      ) : (
+        <p className="metaAdsCopy">
+          CTR, CPC, CPM, Frecuencia y ROAS requieren <strong>Ads API</strong>. Pixel y CAPI ya envían
+          eventos; conecta Ads para ver inversión y rendimiento.
+        </p>
+      )}
+
+      {insightsError ? <p className="metaAdsModalError">{insightsError}</p> : null}
     </div>
   );
 }

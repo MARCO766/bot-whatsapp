@@ -280,4 +280,8 @@ module.exports = {
   maskToken,
   maskAdAccount,
   maskPixelId,
+  normalizeConexionId,
+  normalizeAdAccountId,
+  fetchMetaAdsConfigRow,
+  fetchMetaAdsConfigExact,
 };

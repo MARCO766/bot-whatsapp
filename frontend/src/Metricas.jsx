@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { useMetricas } from "./metricas/useMetricas";
 import { useMetaAdsStatus } from "./metricas/useMetaAdsStatus";
+import { useMetaAdsInsights } from "./metricas/useMetaAdsInsights";
 import { formatMoney, formatNum, formatPct, formatTendencia } from "./metricas/format";
 import FlujoCampanaSelect from "./metricas/FlujoCampanaSelect";
 import RevenuePremiumSection from "./metricas/revenue/RevenuePremiumSection";
@@ -121,9 +122,18 @@ export default function Metricas() {
     useMetricas(periodo, flujoId, conexionSeleccionadaId, conexionesLoading);
   const {
     status: metaAdsStatus,
-    loading: metaAdsLoading,
+    loading: metaAdsStatusLoading,
     reload: reloadMetaAds,
   } = useMetaAdsStatus(conexionSeleccionadaId, conexionesLoading);
+  const adsConectado = Boolean(metaAdsStatus?.ads?.conectado);
+  const {
+    insights: metaAdsInsights,
+    loading: metaAdsInsightsLoading,
+    refreshing: metaAdsRefreshing,
+    error: metaAdsInsightsError,
+    refresh: refreshMetaAdsInsights,
+    reload: reloadMetaAdsInsights,
+  } = useMetaAdsInsights(periodo, conexionSeleccionadaId, adsConectado, conexionesLoading);
 
   const kpis = resumen?.kpis || {};
   const salud = resumen?.salud || { score: 0, label: "Sin datos" };
@@ -495,8 +505,13 @@ export default function Metricas() {
             ) : (
               <MetaAdsCompactCard
                 status={metaAdsStatus}
-                loading={metaAdsLoading}
+                statusLoading={metaAdsStatusLoading}
+                insights={metaAdsInsights}
+                insightsLoading={metaAdsInsightsLoading}
+                refreshing={metaAdsRefreshing}
+                insightsError={metaAdsInsightsError}
                 onConnect={() => setMetaAdsModalOpen(true)}
+                onRefresh={refreshMetaAdsInsights}
               />
             )}
           </div>
@@ -589,7 +604,10 @@ export default function Metricas() {
         open={metaAdsModalOpen}
         onClose={() => setMetaAdsModalOpen(false)}
         conexionWhatsappId={conexionSeleccionadaId}
-        onSaved={reloadMetaAds}
+        onSaved={() => {
+          reloadMetaAds();
+          reloadMetaAdsInsights();
+        }}
       />
     </div>
   );
@@ -715,6 +733,23 @@ const styles = `
 .metaAdsBtn.ghost { background: transparent; border-color: rgba(148,163,184,.25); color: #cbd5e1; }
 .metaAdsBtn.primary { background: linear-gradient(135deg, #06b6d4, #2563eb); color: #fff; }
 .metaAdsBtn:disabled { opacity: .6; cursor: not-allowed; }
+.metaAdsInsightsBlock { display: flex; flex-direction: column; gap: 10px; margin-top: 4px; }
+.metaAdsSyncHint { margin: 0; font-size: 11px; line-height: 1.4; color: #94a3b8; }
+.metaAdsSyncHint strong { color: #cbd5e1; }
+.metaAdsSyncBtn { align-self: flex-start; height: 30px; padding: 0 12px; border-radius: 999px; border: 1px solid rgba(34,211,238,.35); background: rgba(6,182,212,.12); color: #67e8f9; font-size: 11px; font-weight: 800; cursor: pointer; }
+.metaAdsSyncBtn:hover:not(:disabled) { background: rgba(6,182,212,.22); }
+.metaAdsSyncBtn:disabled { opacity: .55; cursor: not-allowed; }
+.metaAdsSyncBtn--inline { height: 26px; padding: 0 10px; font-size: 10px; }
+.metaAdsSyncMeta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.metaAdsSyncTime { font-size: 10px; color: #64748b; }
+.metaAdsStaleBadge { font-size: 9px; font-weight: 900; text-transform: uppercase; letter-spacing: .04em; padding: 3px 8px; border-radius: 999px; color: #fde68a; background: rgba(234,179,8,.15); border: 1px solid rgba(234,179,8,.3); }
+.metaAdsMetricsGrid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.metaAdsMetricMini { padding: 8px 10px; border-radius: 12px; background: rgba(255,255,255,.04); border: 1px solid rgba(148,163,184,.1); }
+.metaAdsMetricMini span { display: block; font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: #64748b; }
+.metaAdsMetricMini strong { display: block; margin-top: 4px; font-size: 15px; line-height: 1.1; color: #f8fafc; }
+.metaAdsMetricMini small { display: block; margin-top: 3px; font-size: 9px; color: #94a3b8; }
+.metaAdsFootnote { margin: 0; font-size: 10px; color: #94a3b8; line-height: 1.35; }
+.metaAdsCompact--syncing { opacity: .92; }
 .segStrip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .segStripItem { padding: 10px 8px; border-radius: 14px; text-align: center; background: rgba(255,255,255,.04); border: 1px solid rgba(148,163,184,.1); }
 .segStripItem span { display: block; color: #94a3b8; font-size: 10px; font-weight: 900; text-transform: uppercase; letter-spacing: .05em; }

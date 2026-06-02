@@ -55,3 +55,11 @@ export function fetchMetaAdsStatus(params) {
 export function saveMetaAdsConfig(body) {
   return request("/api/meta-ads/config", { method: "POST", body });
 }
+
+export function fetchMetaAdsInsights(params) {
+  return request("/api/meta-ads/insights", { params });
+}
+
+export function refreshMetaAdsInsights(body) {
+  return request("/api/meta-ads/refresh", { method: "POST", body });
+}

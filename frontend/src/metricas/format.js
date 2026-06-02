@@ -47,6 +47,12 @@ export function periodoToApi(label) {
   return "7d";
 }
 
+/** Periodo Meta Ads Insights (7d / 30d / 90d). */
+export function periodoToMetaAdsApi(label) {
+  if (label === "30 días") return "30d";
+  return "7d";
+}
+
 export function periodoLabel(api) {
   if (api === "hoy") return "Hoy";
   if (api === "30d") return "30 días";

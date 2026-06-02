@@ -1,5 +1,5 @@
 /**
- * API Meta Ads — estado y configuración (sin insights Graph API todavía).
+ * API Meta Ads — estado, configuración e insights (cache + refresh manual).
  */
 const express = require("express");
 const router = express.Router();
@@ -7,6 +7,10 @@ const {
   getMetaAdsStatus,
   saveMetaAdsConfig,
 } = require("../services/metaAds/metaAdsConfigService");
+const {
+  getCachedInsights,
+  refreshInsights,
+} = require("../services/metaAds/metaAdsInsightsService");
 
 function protegerApi(req, res, next) {
   if (req.session?.usuario?.id) return next();
@@ -51,6 +55,33 @@ router.post("/api/meta-ads/config", protegerApi, async (req, res) => {
     res.json(data);
   } catch (error) {
     handleError(res, error, "config");
+  }
+});
+
+router.get("/api/meta-ads/insights", protegerApi, async (req, res) => {
+  try {
+    const data = await getCachedInsights({
+      usuarioId: uid(req),
+      conexionWhatsappId: req.query.conexion_whatsapp_id || null,
+      periodo: req.query.periodo || "7d",
+    });
+    res.json(data);
+  } catch (error) {
+    handleError(res, error, "insights");
+  }
+});
+
+router.post("/api/meta-ads/refresh", protegerApi, async (req, res) => {
+  try {
+    const body = req.body || {};
+    const data = await refreshInsights({
+      usuarioId: uid(req),
+      conexionWhatsappId: body.conexion_whatsapp_id ?? body.conexionWhatsappId ?? null,
+      periodo: body.periodo || "7d",
+    });
+    res.json(data);
+  } catch (error) {
+    handleError(res, error, "refresh");
   }
 });
 
