@@ -6,9 +6,11 @@ const COLOR_FLUJO_GLOW = "rgba(45, 212, 191, 0.28)";
 const COLOR_RM = "#a78bfa";
 const COLOR_RM_GLOW = "rgba(167, 139, 250, 0.26)";
 
-const SIZE = 188;
-const STROKE = 15;
+const SIZE = 206;
+const STROKE = 16;
 const GAP_PX = 3;
+const CHART_PX = 206;
+const CHART_PX_MOBILE = 184;
 
 function pctShare(part, whole) {
   const p = Number(part) || 0;
@@ -37,8 +39,6 @@ function DonutSvg({ flujoArc, rmArc, circumference, ready }) {
     <svg
       className="revenueDonutChart__svg"
       viewBox={`0 0 ${SIZE} ${SIZE}`}
-      width={SIZE}
-      height={SIZE}
       role="presentation"
       aria-hidden="true"
     >
@@ -94,18 +94,18 @@ function DonutSvg({ flujoArc, rmArc, circumference, ready }) {
   );
 }
 
-function LegendMiniCard({ variant, title, pct, money, ventas, dotClass }) {
+function LegendKpiCard({ variant, emoji, title, pct, money, ventas }) {
   return (
-    <li className={`revenueDonutChart__miniCard revenueDonutChart__miniCard--${variant}`}>
-      <div className="revenueDonutChart__miniCardTop">
-        <span className={`revenueDonutChart__dot ${dotClass}`} aria-hidden="true" />
-        <span className="revenueDonutChart__miniCardName">{title}</span>
-        <span className="revenueDonutChart__miniCardPct">{pct}%</span>
+    <li className={`revenueDonutChart__kpiCard revenueDonutChart__kpiCard--${variant}`}>
+      <div className="revenueDonutChart__kpiHead">
+        <span className="revenueDonutChart__kpiEmoji" aria-hidden="true">
+          {emoji}
+        </span>
+        <span className="revenueDonutChart__kpiTitle">{title}</span>
       </div>
-      <div className="revenueDonutChart__miniCardBody">
-        <strong>{money}</strong>
-        <span>{ventas}</span>
-      </div>
+      <span className="revenueDonutChart__kpiPct">{pct}%</span>
+      <strong className="revenueDonutChart__kpiMoney">{money}</strong>
+      <span className="revenueDonutChart__kpiVentas">{ventas}</span>
     </li>
   );
 }
@@ -216,21 +216,21 @@ export default function RevenueDonutChart({ kpis, moneda = "BOB", loading = fals
         </div>
 
         <ul className="revenueDonutChart__legend">
-          <LegendMiniCard
+          <LegendKpiCard
             variant="flujo"
+            emoji="🟢"
             title="Flujo normal"
             pct={pctFlujo}
             money={formatRevenueMoney(ingresosFlujo, moneda)}
             ventas={ventasLabel(cantidadFlujo)}
-            dotClass="revenueDonutChart__dot--flujo"
           />
-          <LegendMiniCard
+          <LegendKpiCard
             variant="rm"
+            emoji="🟣"
             title="Remarketing"
             pct={pctRm}
             money={formatRevenueMoney(ingresosRemarketing, moneda)}
             ventas={ventasLabel(cantidadRemarketing)}
-            dotClass="revenueDonutChart__dot--rm"
           />
         </ul>
       </div>
@@ -243,7 +243,7 @@ const DONUT_DRAW_FROM = 2 * Math.PI * ((SIZE - STROKE) / 2);
 const donutStyles = `
 .revenueDonutChart {
   margin-bottom: 10px;
-  padding: 11px 14px 12px;
+  padding: 10px 12px 11px;
   border-radius: 16px;
   background: linear-gradient(165deg, rgba(255,255,255,.045), rgba(15,23,42,.4));
   border: 1px solid rgba(148,163,184,.1);
@@ -257,7 +257,8 @@ const donutStyles = `
   to { opacity: 1; transform: translateY(0); }
 }
 .revenueDonutChart__skel {
-  min-height: 176px;
+  min-height: 168px;
+  max-width: 420px;
   border-radius: 12px;
   background: linear-gradient(
     90deg,
@@ -277,7 +278,7 @@ const donutStyles = `
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 .revenueDonutChart__title {
   margin: 0;
@@ -301,20 +302,25 @@ const donutStyles = `
   box-shadow: 0 0 12px ${COLOR_RM_GLOW};
 }
 .revenueDonutChart__body {
-  display: grid;
-  grid-template-columns: minmax(148px, 190px) minmax(0, 1fr);
-  gap: 10px 14px;
+  display: flex;
+  flex-direction: row;
   align-items: center;
+  justify-content: center;
+  gap: 14px;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 auto;
 }
 .revenueDonutChart__chartCol {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 .revenueDonutChart__chartWrap {
   position: relative;
-  width: 190px;
-  height: 190px;
+  width: ${CHART_PX}px;
+  height: ${CHART_PX}px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -347,8 +353,6 @@ const donutStyles = `
   z-index: 1;
   width: 100%;
   height: 100%;
-  max-width: 190px;
-  max-height: 190px;
 }
 .revenueDonutChart__track {
   stroke: rgba(30, 41, 59, 0.9);
@@ -379,7 +383,7 @@ const donutStyles = `
   justify-content: center;
   text-align: center;
   pointer-events: none;
-  padding: 0 14px;
+  padding: 0 16px;
   z-index: 2;
   gap: 1px;
 }
@@ -391,10 +395,10 @@ const donutStyles = `
   color: #64748b;
 }
 .revenueDonutChart__centerMoney {
-  font-size: 17px;
+  font-size: 18px;
   font-weight: 900;
   color: #f8fafc;
-  line-height: 1.15;
+  line-height: 1.12;
   letter-spacing: -0.02em;
 }
 .revenueDonutChart__centerVentas {
@@ -409,81 +413,69 @@ const donutStyles = `
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 7px;
+  flex: 0 1 auto;
   min-width: 0;
+  width: 188px;
 }
-.revenueDonutChart__miniCard {
-  padding: 9px 11px;
-  border-radius: 12px;
+.revenueDonutChart__kpiCard {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  padding: 8px 10px;
+  border-radius: 11px;
   border: 1px solid rgba(148,163,184,.1);
-  background: linear-gradient(160deg, rgba(255,255,255,.04), rgba(15,23,42,.28));
+  background: linear-gradient(165deg, rgba(255,255,255,.05), rgba(15,23,42,.32));
 }
-.revenueDonutChart__miniCard--flujo {
-  border-color: rgba(45, 212, 191, 0.12);
-  box-shadow: 0 0 20px rgba(45, 212, 191, 0.04);
+.revenueDonutChart__kpiCard--flujo {
+  border-color: rgba(45, 212, 191, 0.14);
+  box-shadow: 0 0 16px rgba(45, 212, 191, 0.05);
 }
-.revenueDonutChart__miniCard--rm {
-  border-color: rgba(167, 139, 250, 0.12);
-  box-shadow: 0 0 20px rgba(167, 139, 250, 0.04);
+.revenueDonutChart__kpiCard--rm {
+  border-color: rgba(167, 139, 250, 0.14);
+  box-shadow: 0 0 16px rgba(167, 139, 250, 0.05);
 }
-.revenueDonutChart__miniCardTop {
+.revenueDonutChart__kpiHead {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 6px;
-  min-width: 0;
+  gap: 5px;
+  margin-bottom: 2px;
+  width: 100%;
 }
-.revenueDonutChart__dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
+.revenueDonutChart__kpiEmoji {
+  font-size: 11px;
+  line-height: 1;
   flex-shrink: 0;
 }
-.revenueDonutChart__dot--flujo {
-  background: linear-gradient(135deg, #34d399, ${COLOR_FLUJO});
-  box-shadow: 0 0 8px ${COLOR_FLUJO_GLOW};
-}
-.revenueDonutChart__dot--rm {
-  background: linear-gradient(135deg, #8b5cf6, ${COLOR_RM});
-  box-shadow: 0 0 8px ${COLOR_RM_GLOW};
-}
-.revenueDonutChart__miniCardName {
-  flex: 1;
-  min-width: 0;
+.revenueDonutChart__kpiTitle {
   font-size: 11px;
   font-weight: 800;
   color: #cbd5e1;
-  line-height: 1.25;
-}
-.revenueDonutChart__miniCardPct {
-  flex-shrink: 0;
-  font-size: 14px;
-  font-weight: 900;
-  color: #f8fafc;
-  letter-spacing: -0.02em;
-}
-.revenueDonutChart__miniCardBody {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
-  padding-left: 17px;
-}
-.revenueDonutChart__miniCardBody strong {
-  font-size: 13px;
-  font-weight: 900;
-  color: #e2e8f0;
   line-height: 1.2;
 }
-.revenueDonutChart__miniCardBody span {
+.revenueDonutChart__kpiPct {
+  font-size: 18px;
+  font-weight: 900;
+  color: #f8fafc;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+.revenueDonutChart__kpiMoney {
+  font-size: 12px;
+  font-weight: 900;
+  color: #e2e8f0;
+  line-height: 1.25;
+}
+.revenueDonutChart__kpiVentas {
   font-size: 10px;
   font-weight: 700;
   color: #64748b;
-  white-space: nowrap;
+  line-height: 1.3;
 }
 .revenueDonutChart--empty {
   text-align: center;
-  min-height: 108px;
+  min-height: 100px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -496,17 +488,17 @@ const donutStyles = `
 }
 @media (max-width: 560px) {
   .revenueDonutChart__body {
-    grid-template-columns: 1fr;
+    flex-direction: column;
     gap: 12px;
+    width: 100%;
   }
   .revenueDonutChart__chartWrap {
-    width: 168px;
-    height: 168px;
-    margin: 0 auto;
+    width: ${CHART_PX_MOBILE}px;
+    height: ${CHART_PX_MOBILE}px;
   }
-  .revenueDonutChart__svg {
-    max-width: 168px;
-    max-height: 168px;
+  .revenueDonutChart__legend {
+    width: 100%;
+    max-width: 280px;
   }
 }
 `;
