@@ -3,6 +3,7 @@
  * Usado por /inbox (EJS) y /api/inbox (React Bandeja).
  */
 const axios = require("axios");
+const { pausaActivaDesdeFilas } = require("./conversaciones/botPauseService");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
@@ -60,6 +61,15 @@ function formatPreview(texto) {
   if (texto === "document") return "📄 Documento";
   if (texto === "video") return "🎥 Video";
   return String(texto).substring(0, 35);
+}
+
+function botPauseFieldsFromConv(conv) {
+  const estado = pausaActivaDesdeFilas(conv || {});
+  return {
+    bot_pausado: estado.activa,
+    bot_pausado_hasta: estado.bot_pausado_hasta,
+    bot_pausado_motivo: estado.bot_pausado_motivo,
+  };
 }
 
 async function loadConexionesInbox(usuarioId) {
@@ -259,6 +269,7 @@ async function loadInboxData(
       ultimoMensaje: formatPreview(previewRaw),
       ultimoMensajeEn: conv?.ultimo_mensaje_en || lastMsg?.creado_en || null,
       etiquetas: tags,
+      ...botPauseFieldsFromConv(conv),
     };
   });
 
@@ -296,7 +307,7 @@ async function loadChatMessages(usuarioId, numero, conexionWhatsappId = null) {
     ),
     conexionWhatsappId
       ? axios.get(
-          `${SUPABASE_URL}/rest/v1/conversaciones?usuario_id=eq.${usuarioId}&cliente_numero=eq.${encodeURIComponent(numero)}${filtroConexion}&select=id,conexion_whatsapp_id&limit=1`,
+          `${SUPABASE_URL}/rest/v1/conversaciones?usuario_id=eq.${usuarioId}&cliente_numero=eq.${encodeURIComponent(numero)}${filtroConexion}&select=id,conexion_whatsapp_id,bot_pausado,bot_pausado_hasta,bot_pausado_motivo&limit=1`,
           { headers: supabaseHeaders() }
         )
       : Promise.resolve({ data: [] }),
@@ -304,6 +315,7 @@ async function loadChatMessages(usuarioId, numero, conexionWhatsappId = null) {
 
   const cliente = responseCliente.data?.[0];
   const conv = responseConv.data?.[0];
+  const pauseFields = botPauseFieldsFromConv(conv);
   return {
     nombre: cliente?.nombre || numero,
     bloqueado: cliente?.estado === "bloqueado",
@@ -313,6 +325,7 @@ async function loadChatMessages(usuarioId, numero, conexionWhatsappId = null) {
     conexion_whatsapp_id: conexionWhatsappId,
     conversacionId: conv?.id || null,
     conversacion_id: conv?.id || null,
+    ...pauseFields,
     mensajes: responseMensajes.data || [],
   };
 }

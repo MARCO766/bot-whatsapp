@@ -8,6 +8,7 @@ const repo = require("./remarketing24hRepository");
 const { normalizarConexionId } = repo;
 const { ESTADOS_RM24H, MOTIVOS_RM24H } = require("./constants");
 const { nowUtc } = require("../seguimiento/timestamps");
+const { estaBotPausado } = require("../conversaciones/botPauseService");
 
 function escapeRegExp(str) {
   return String(str).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -376,6 +377,30 @@ async function enviarFallbackAgente(agente, ctx) {
  * Runtime Fase 1: agente rápido + nodos contenido en caminos[].next.
  */
 async function ejecutarMiniFlujoRm(ctx) {
+  const conexionCtx =
+    normalizarConexionId(ctx.conexionWhatsappId) ||
+    normalizarConexionId(ctx.fila?.conexion_whatsapp_id);
+
+  if (
+    conexionCtx &&
+    ctx.usuarioId &&
+    ctx.numero &&
+    (await estaBotPausado({
+      usuarioId: ctx.usuarioId,
+      clienteNumero: ctx.numero,
+      conexionWhatsappId: conexionCtx,
+    }))
+  ) {
+    console.log("[BOT_PAUSE] automatizacion omitida por pausa", {
+      origen: "rm_mini_flujo",
+      rm24h_id: ctx.fila?.id || null,
+      usuario_id: ctx.usuarioId,
+      cliente_numero: ctx.numero,
+      conexion_whatsapp_id: conexionCtx,
+    });
+    return { handled: true, omitidoPorPausa: true };
+  }
+
   const snapshot = leerSnapshot(ctx.fila);
   const miniFlow = snapshot.rm24h_mini_flujo;
   const agenteRaw = snapshot.rm24h_agente_rapido;
@@ -423,6 +448,27 @@ async function continuarMiniFlujoRmTrasPagoValido({
       rm24h_id: rm24hId || null,
     });
     return { ok: false, motivo: "faltan_datos" };
+  }
+
+  const conexionNorm =
+    normalizarConexionId(conexionWhatsappId) || null;
+
+  if (
+    conexionNorm &&
+    (await estaBotPausado({
+      usuarioId,
+      clienteNumero,
+      conexionWhatsappId: conexionNorm,
+    }))
+  ) {
+    console.log("[BOT_PAUSE] automatizacion omitida por pausa", {
+      origen: "rm_mini_flujo_continuar",
+      rm24h_id: rm24hId,
+      usuario_id: usuarioId,
+      cliente_numero: clienteNumero,
+      conexion_whatsapp_id: conexionNorm,
+    });
+    return { ok: false, motivo: "bot_pausado" };
   }
 
   let fila = await obtenerFilaRmPorId(rm24hId);

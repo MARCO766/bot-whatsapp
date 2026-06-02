@@ -155,6 +155,7 @@ export default function Bandeja({ onUnreadChange }) {
               onPatchMensaje={inbox.patchMensaje}
               moverChatArriba={inbox.moverChatArriba}
               onOpenTagModal={inbox.openTagModal}
+              onPatchBotPause={inbox.patchBotPause}
             />
           </div>
 

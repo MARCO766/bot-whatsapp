@@ -16,6 +16,7 @@ const {
 } = require("./seguimientoRepository");
 const { ESTADOS_SEGUIMIENTO } = require("./constants");
 const rt = require("../realtimeService");
+const { estaBotPausado } = require("../conversaciones/botPauseService");
 
 function emitirEstadoSeguimiento(io, item, estado) {
   if (!item?.usuario_id) return;
@@ -218,6 +219,26 @@ async function procesarSeguimientoItem(item, io) {
     mensaje_tipo: item.mensaje_tipo || null,
     estado: item.estado || null,
   });
+
+  if (
+    item.conexion_whatsapp_id &&
+    item.usuario_id &&
+    item.cliente_numero &&
+    (await estaBotPausado({
+      usuarioId: item.usuario_id,
+      clienteNumero: item.cliente_numero,
+      conexionWhatsappId: item.conexion_whatsapp_id,
+    }))
+  ) {
+    console.log("[BOT_PAUSE] automatizacion omitida por pausa", {
+      origen: "seguimiento_worker",
+      seguimiento_id: item.id,
+      usuario_id: item.usuario_id,
+      cliente_numero: item.cliente_numero,
+      conexion_whatsapp_id: item.conexion_whatsapp_id,
+    });
+    return { ok: false, motivo: "bot_pausado" };
+  }
 
   if (item.solo_si_no_respondio) {
     const conexionSeg =

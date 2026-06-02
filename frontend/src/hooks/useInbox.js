@@ -285,6 +285,9 @@ export function useInbox({ onUnreadChange } = {}) {
         conexion_whatsapp_id: data.conexion_whatsapp_id,
         conversacionId: data.conversacionId,
         conversacion_id: data.conversacion_id,
+        bot_pausado: data.bot_pausado,
+        bot_pausado_hasta: data.bot_pausado_hasta,
+        bot_pausado_motivo: data.bot_pausado_motivo,
       });
       setMensajes(data.mensajes || []);
     } catch (err) {
@@ -655,6 +658,19 @@ export function useInbox({ onUnreadChange } = {}) {
     );
   }, []);
 
+  const patchBotPause = useCallback((pausePatch) => {
+    const sel = selectedChatRef.current;
+    const tabId = conexionSeleccionadaIdRef.current;
+    if (!sel || !selectedChatMatchesTab(sel, tabId)) return;
+
+    setChatMeta((m) => (m ? { ...m, ...pausePatch } : m));
+    setChats((prev) =>
+      prev.map((c) =>
+        sameChat(c, sel) ? { ...c, ...pausePatch } : c
+      )
+    );
+  }, []);
+
   return {
     loading,
     error,
@@ -688,6 +704,7 @@ export function useInbox({ onUnreadChange } = {}) {
     eliminarChatHandler,
     appendMensaje,
     patchMensaje,
+    patchBotPause,
     moverChatArriba,
     reload: loadInbox,
     conexionesInbox,

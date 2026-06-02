@@ -18,6 +18,12 @@ const {
   supabaseHeaders,
 } = require("../services/inboxService");
 const rt = require("../services/realtimeService");
+const {
+  pausarBotConversacion,
+  reactivarBotConversacion,
+  calcularHastaDesdeDuracion,
+  motivoDesdeDuracion,
+} = require("../services/conversaciones/botPauseService");
 
 function protegerApi(req, res, next) {
   if (req.session?.usuario) return next();
@@ -116,6 +122,67 @@ router.get("/api/inbox/chat", protegerApi, async (req, res) => {
   } catch (error) {
     log("GET /api/inbox/chat ERROR", error.response?.data || error.message);
     res.status(500).json({ ok: false });
+  }
+});
+
+// POST /api/inbox/bot-pause
+router.post("/api/inbox/bot-pause", protegerApi, async (req, res) => {
+  try {
+    const {
+      cliente_numero: clienteNumero,
+      conexion_whatsapp_id: conexionWhatsappId,
+      action,
+      duration,
+    } = req.body || {};
+
+    if (!clienteNumero || !conexionWhatsappId) {
+      return res.status(400).json({ ok: false, error: "Datos incompletos" });
+    }
+
+    const usuarioId = req.session.usuario.id;
+    let result;
+
+    if (action === "resume") {
+      result = await reactivarBotConversacion({
+        usuarioId,
+        clienteNumero,
+        conexionWhatsappId,
+      });
+    } else if (action === "pause") {
+      const hasta = calcularHastaDesdeDuracion(duration);
+      const motivo = motivoDesdeDuracion(duration);
+      result = await pausarBotConversacion({
+        usuarioId,
+        clienteNumero,
+        conexionWhatsappId,
+        hasta,
+        motivo,
+      });
+    } else {
+      return res.status(400).json({ ok: false, error: "action inválida" });
+    }
+
+    if (!result?.ok) {
+      return res.status(400).json({ ok: false, error: result?.error || "Error" });
+    }
+
+    rt.conversacionActualizada(req, usuarioId, {
+      cliente_numero: clienteNumero,
+      conexion_whatsapp_id: conexionWhatsappId,
+      bot_pausado: result.bot_pausado,
+      bot_pausado_hasta: result.bot_pausado_hasta,
+      bot_pausado_motivo: result.bot_pausado_motivo,
+    });
+
+    res.json({
+      ok: true,
+      bot_pausado: result.bot_pausado,
+      bot_pausado_hasta: result.bot_pausado_hasta,
+      bot_pausado_motivo: result.bot_pausado_motivo,
+    });
+  } catch (error) {
+    log("bot-pause ERROR", error.response?.data || error.message);
+    res.status(500).json({ ok: false, error: "Error actualizando flujo" });
   }
 });
 

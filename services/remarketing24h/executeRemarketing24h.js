@@ -15,6 +15,7 @@ const { nowUtc } = require("../seguimiento/timestamps");
 const {
   cancelarSeguimientosPendientesPorRemarketing,
 } = require("../seguimiento/seguimientoRepository");
+const { estaBotPausado } = require("../conversaciones/botPauseService");
 
 function ventanaWhatsAppAbierta(fila) {
   const ultimo = fila.ultimo_mensaje_lead_at;
@@ -187,6 +188,23 @@ async function procesarPendienteDisparo(fila) {
   if (!conexionEnvio) {
     await cerrarSinConexionWhatsapp(fila);
     return { ok: false, motivo: MOTIVO_SIN_CONEXION };
+  }
+
+  if (
+    await estaBotPausado({
+      usuarioId: fila.usuario_id,
+      clienteNumero: fila.cliente_numero,
+      conexionWhatsappId: conexionEnvio,
+    })
+  ) {
+    console.log("[BOT_PAUSE] automatizacion omitida por pausa", {
+      origen: "rm24h_worker",
+      rm24h_id: fila.id,
+      usuario_id: fila.usuario_id,
+      cliente_numero: fila.cliente_numero,
+      conexion_whatsapp_id: conexionEnvio,
+    });
+    return { ok: false, motivo: "bot_pausado" };
   }
 
   const reservado = await repo.reservarParaEnvio(fila.id, fila);

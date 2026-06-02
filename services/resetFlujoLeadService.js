@@ -14,6 +14,7 @@ const repoRm24h = require("./remarketing24h/remarketing24hRepository");
 const {
   cancelarEsperaLectorPagoPorResetbot,
 } = require("./lectorPagoService");
+const { reactivarBotConversacion } = require("./conversaciones/botPauseService");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
@@ -214,6 +215,26 @@ async function resetearFlujoLead(numero, usuarioId, conexionWhatsappId = null) {
 
   await cancelarSeguimientosPendientesLead(num, uid, conexionId);
   await limpiarHistorialFlujoLead(num, uid, conexionId);
+
+  if (conexionId) {
+    try {
+      await reactivarBotConversacion({
+        usuarioId: uid,
+        clienteNumero: num,
+        conexionWhatsappId: conexionId,
+      });
+      console.log("[BOT_PAUSE] resetbot reactivo automatizacion", {
+        lead: num,
+        usuario: uid,
+        conexion_whatsapp_id: conexionId,
+      });
+    } catch (err) {
+      console.log(
+        "[BOT_PAUSE] resetbot reactivar error:",
+        err.response?.data || err.message
+      );
+    }
+  }
 
   console.log("[RESETBOT] flujo cancelado");
   console.log("[RESETBOT] esperando nuevo activador");

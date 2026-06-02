@@ -47,6 +47,7 @@ const {
 const {
   procesarRespuestaRemarketing,
 } = require("./remarketing24h/procesarRespuestaRemarketing");
+const { estaBotPausado } = require("./conversaciones/botPauseService");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
@@ -1283,6 +1284,24 @@ async function procesarMensajeEntrante(
 
   if (esComandoResetFlujo(texto)) {
     await resetearFlujoLead(numero, usuarioId, opts.conexionWhatsappId || null);
+    return true;
+  }
+
+  const conexionEntranteGuard = opts.conexionWhatsappId || null;
+  if (
+    conexionEntranteGuard &&
+    (await estaBotPausado({
+      usuarioId,
+      clienteNumero: numero,
+      conexionWhatsappId: conexionEntranteGuard,
+    }))
+  ) {
+    console.log("[BOT_PAUSE] automatizacion omitida por pausa", {
+      usuario_id: usuarioId,
+      cliente_numero: numero,
+      conexion_whatsapp_id: conexionEntranteGuard,
+      origen: "flowService",
+    });
     return true;
   }
 

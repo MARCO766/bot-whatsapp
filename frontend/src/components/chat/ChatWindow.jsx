@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import MessageBubble from "./MessageBubble";
 import ChatComposer from "./ChatComposer";
+import { setBotPause } from "../../services/chatService";
 import {
   calcularVentana24h,
   etiquetaVentanaBadge,
@@ -18,9 +19,13 @@ export default function ChatWindow({
   onPatchMensaje,
   moverChatArriba,
   onOpenTagModal,
+  onPatchBotPause,
 }) {
   const scrollRef = useRef(null);
+  const flowMenuRef = useRef(null);
   const [ventanaTick, setVentanaTick] = useState(0);
+  const [flowMenuAbierto, setFlowMenuAbierto] = useState(false);
+  const [flowLoading, setFlowLoading] = useState(false);
   const numero = panelActivo ? chat?.numero || chat?.cliente_numero : null;
   const nombre = panelActivo
     ? chatMeta?.nombre || chat?.nombre || numero
@@ -86,6 +91,47 @@ export default function ChatWindow({
     conexionTab === "__todas__" ||
     (conexionChat && conexionChat === conexionTab);
 
+  const botPausado = Boolean(
+    chatMeta?.bot_pausado ?? chat?.bot_pausado
+  );
+
+  useEffect(() => {
+    if (!flowMenuAbierto) return undefined;
+    const onDocClick = (e) => {
+      if (flowMenuRef.current && !flowMenuRef.current.contains(e.target)) {
+        setFlowMenuAbierto(false);
+      }
+    };
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, [flowMenuAbierto]);
+
+  const aplicarBotPause = useCallback(
+    async (action, duration) => {
+      if (!numero || !conexionWhatsappId || flowLoading) return;
+      setFlowLoading(true);
+      setFlowMenuAbierto(false);
+      try {
+        const data = await setBotPause({
+          clienteNumero: numero,
+          conexionWhatsappId,
+          action,
+          duration,
+        });
+        onPatchBotPause?.({
+          bot_pausado: data.bot_pausado,
+          bot_pausado_hasta: data.bot_pausado_hasta,
+          bot_pausado_motivo: data.bot_pausado_motivo,
+        });
+      } catch (err) {
+        console.error("[BOT_PAUSE] UI error:", err.message || err);
+      } finally {
+        setFlowLoading(false);
+      }
+    },
+    [numero, conexionWhatsappId, flowLoading, onPatchBotPause]
+  );
+
   const miniContexto = useMemo(() => {
     const data = { ...(chat || {}), ...(chatMeta || {}) };
     const rows = [];
@@ -115,12 +161,7 @@ export default function ChatWindow({
       });
     }
 
-    const estadoBot =
-      data.bot_pausado != null
-        ? data.bot_pausado
-          ? "Bot pausado"
-          : "Bot activo"
-        : null;
+    const estadoBot = botPausado ? "Flujo apagado" : "Flujo activo";
     const estadoIa =
       data.ia_activa != null
         ? data.ia_activa
@@ -143,7 +184,7 @@ export default function ChatWindow({
     }
 
     return rows.slice(0, 3);
-  }, [chat, chatMeta]);
+  }, [chat, chatMeta, botPausado]);
 
   if (!panelActivo || !numero || !conexionWhatsappId || !conexionCoincide) {
     return (
@@ -212,18 +253,68 @@ export default function ChatWindow({
             <button type="button" className="chatQuickBtn" onClick={() => onOpenTagModal?.(chat)}>
               Etiquetas
             </button>
-            <button type="button" className="chatQuickBtn" disabled>
-              Ver lead
-            </button>
-            <button type="button" className="chatQuickBtn" disabled>
-              Timeline
-            </button>
-            <button type="button" className="chatQuickBtn chatQuickBtn--warn" disabled>
-              Pausar bot
-            </button>
+
+            <div className="chatFlowToggle" ref={flowMenuRef}>
+              <button
+                type="button"
+                className={`chatQuickBtn chatFlowBtn ${
+                  botPausado ? "chatFlowBtn--paused" : "chatFlowBtn--active"
+                }`}
+                disabled={flowLoading}
+                aria-expanded={flowMenuAbierto}
+                aria-haspopup="menu"
+                onClick={() => setFlowMenuAbierto((v) => !v)}
+              >
+                {botPausado ? "🔴 Flujo apagado" : "🟢 Flujo activo"}
+              </button>
+
+              {flowMenuAbierto && (
+                <div className="chatFlowMenu" role="menu">
+                  {!botPausado ? (
+                    <>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => aplicarBotPause("pause", "1h")}
+                      >
+                        Apagar 1 hora
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => aplicarBotPause("pause", "24h")}
+                      >
+                        Apagar 24 horas
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => aplicarBotPause("pause", "indefinido")}
+                      >
+                        Apagar indefinido
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => aplicarBotPause("resume")}
+                    >
+                      Reactivar flujo
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </header>
+
+      {botPausado && (
+        <div className="botPauseBanner" role="status">
+          🔴 Automatización pausada — puedes responder manualmente
+        </div>
+      )}
 
       {bloqueado && (
         <div className="blockedBanner">Este contacto está bloqueado</div>

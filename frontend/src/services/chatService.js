@@ -115,6 +115,23 @@ export async function eliminarChat(numero, conexionWhatsappId) {
   return parseJson(res, url);
 }
 
+export async function setBotPause({
+  clienteNumero,
+  conexionWhatsappId,
+  action,
+  duration,
+}) {
+  return request("/api/inbox/bot-pause", {
+    method: "POST",
+    body: JSON.stringify({
+      cliente_numero: clienteNumero,
+      conexion_whatsapp_id: conexionWhatsappId,
+      action,
+      duration,
+    }),
+  });
+}
+
 export function sendMessageWithProgress(formData, onProgress) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();

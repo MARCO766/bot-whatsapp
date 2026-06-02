@@ -15,6 +15,7 @@ const {
 const {
   registrarRespuestaBotonSeguimiento,
 } = require("../services/seguimiento/registrarRespuestaBoton");
+const { estaBotPausado } = require("../services/conversaciones/botPauseService");
 const rt = require("../services/realtimeService");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -539,6 +540,22 @@ if (esComandoResetFlujo(textoParaActivador)) {
     `[RESETBOT_IN] numero=${from} usuarioId=${usuarioIdWebhook} conexionWhatsappId=${conexionWhatsappId}`
   );
   await resetearFlujoLead(from, usuarioIdWebhook, conexionWhatsappId);
+  return res.sendStatus(200);
+}
+
+if (
+  conexionWhatsappId &&
+  (await estaBotPausado({
+    usuarioId: usuarioIdWebhook,
+    clienteNumero: from,
+    conexionWhatsappId,
+  }))
+) {
+  console.log("[BOT_PAUSE] automatizacion omitida por pausa", {
+    usuario_id: usuarioIdWebhook,
+    cliente_numero: from,
+    conexion_whatsapp_id: conexionWhatsappId,
+  });
   return res.sendStatus(200);
 }
 

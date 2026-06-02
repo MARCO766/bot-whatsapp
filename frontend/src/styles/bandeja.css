@@ -1039,6 +1039,66 @@
   background: rgba(120, 53, 15, 0.32);
 }
 
+.chatFlowToggle {
+  position: relative;
+  display: inline-flex;
+}
+
+.chatFlowBtn--active {
+  border-color: rgba(34, 197, 94, 0.55);
+  background: rgba(21, 128, 61, 0.28);
+  color: #bbf7d0;
+}
+
+.chatFlowBtn--paused {
+  border-color: rgba(239, 68, 68, 0.55);
+  background: rgba(127, 29, 29, 0.38);
+  color: #fecaca;
+}
+
+.chatFlowMenu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 40;
+  min-width: 168px;
+  padding: 6px;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  background: rgba(15, 23, 42, 0.98);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.chatFlowMenu button {
+  border: none;
+  background: transparent;
+  color: #e2e8f0;
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.chatFlowMenu button:hover {
+  background: rgba(51, 65, 85, 0.65);
+}
+
+.botPauseBanner {
+  flex: 0 0 auto;
+  padding: 8px 16px;
+  background: rgba(127, 29, 29, 0.88);
+  text-align: center;
+  color: #fecaca;
+  font-weight: 700;
+  font-size: 13px;
+  border-bottom: 1px solid rgba(239, 68, 68, 0.35);
+}
+
 .blockedBanner {
   flex: 0 0 auto;
   padding: 8px 16px;
