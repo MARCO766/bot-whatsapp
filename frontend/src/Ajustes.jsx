@@ -43,11 +43,12 @@ function SwitchRow({ on, onToggle, label, hint }) {
   );
 }
 
-function abbrPhoneId(id) {
-  if (!id) return "—";
-  const s = String(id);
-  if (s.length <= 12) return s;
-  return `${s.slice(0, 6)}…${s.slice(-4)}`;
+function sortConexiones(list) {
+  return [...(list || [])].sort((a, b) => {
+    if (a.activo && !b.activo) return -1;
+    if (!a.activo && b.activo) return 1;
+    return 0;
+  });
 }
 
 function tokenConfiguredPlaceholder(masked) {
@@ -57,15 +58,26 @@ function tokenConfiguredPlaceholder(masked) {
 }
 
 function estadoBadge(estado) {
-  if (estado === "conectado") return <span className="waBadge waBadgeOk">🟢 Conectado</span>;
-  if (estado === "error") return <span className="waBadge waBadgeErr">🔴 Error</span>;
-  if (estado === "inactivo") return <span className="waBadge waBadgeMuted">⚪ Inactivo</span>;
-  return <span className="waBadge waBadgeWarn">🟡 Incompleto</span>;
+  if (estado === "conectado") return <span className="waBadge waBadgeOk">Conectado</span>;
+  if (estado === "error") return <span className="waBadge waBadgeErr">Error</span>;
+  if (estado === "inactivo") return <span className="waBadge waBadgeMuted">Inactivo</span>;
+  return <span className="waBadge waBadgeWarn">Incompleto</span>;
 }
 
-function rolBadge(activo) {
-  if (activo) return <span className="waBadge waBadgePrincipal">⭐ Principal</span>;
-  return <span className="waBadge waBadgeSecondary">⚪ Secundaria</span>;
+function pixelCapiChip(c) {
+  const hasPixel = Boolean(c?.pixel_id || c?.pixelId);
+  const hasCapi = Boolean(c?.tiene_capi_token || c?.capi_token_masked || c?.capiTokenMasked);
+  if (!hasPixel && !hasCapi) return null;
+  const parts = [];
+  if (hasPixel) parts.push("Pixel");
+  if (hasCapi) parts.push("CAPI");
+  return <span className="waChipMeta">{parts.join(" · ")}</span>;
+}
+
+function tituloModalConexion(form) {
+  if (!form?.id) return "Agregar nueva línea";
+  const nombre = (form.nombre || "").trim() || "Número";
+  return `Configurar ${nombre}`;
 }
 
 function copyText(text, showToast) {
@@ -99,7 +111,7 @@ export default function Ajustes() {
   const [pwd, setPwd] = useState({ actual: "", nueva: "", confirm: "" });
 
   const [connForm, setConnForm] = useState(null);
-  const [showToken, setShowToken] = useState(false);
+  const [webhookOpen, setWebhookOpen] = useState(false);
   const [showCapi, setShowCapi] = useState(false);
   const [testNumero, setTestNumero] = useState("");
 
@@ -163,8 +175,6 @@ export default function Ajustes() {
       capi_token: "",
       capi_token_masked: c?.capi_token_masked || c?.capiTokenMasked || null,
     });
-    setShowToken(false);
-    setShowCapi(false);
   }
 
   function abrirNuevaConexion() {
@@ -176,7 +186,6 @@ export default function Ajustes() {
       pixel_id: "",
       capi_token: "",
     });
-    setShowToken(false);
   }
 
   async function handleSaveConexion(e) {
@@ -302,99 +311,101 @@ export default function Ajustes() {
     }
 
     if (seccion === "whatsapp") {
+      const conexionesOrdenadas = sortConexiones(data?.conexionesWhatsapp);
+      const editandoId = connForm?.id ? String(connForm.id) : null;
+
       return (
         <>
-          <div className="ajCard">
-            <h2>Webhook global</h2>
-            <p className="ajHint">{webhook.instrucciones}</p>
-            <label className="ajHint">Webhook URL</label>
-            <code className="ajCode">{webhook.webhookUrl}</code>
-            <button type="button" className="ajBtn ghost" onClick={() => copyText(webhook.webhookUrl, showToast)}>Copiar URL</button>
-            <label className="ajHint" style={{ marginTop: 12 }}>Verify Token</label>
-            <code className="ajCode">{webhook.verifyToken}</code>
-            <button type="button" className="ajBtn ghost" onClick={() => copyText(webhook.verifyToken, showToast)}>Copiar token</button>
+          <div className={`waAccordion ${webhookOpen ? "open" : ""}`}>
+            <button
+              type="button"
+              className="waAccordionBtn"
+              onClick={() => setWebhookOpen((v) => !v)}
+              aria-expanded={webhookOpen}
+            >
+              <span>Webhook y verificación</span>
+              <span className="waAccordionChevron">▼</span>
+            </button>
+            {webhookOpen && (
+              <div className="waAccordionBody">
+                <p className="ajHint">{webhook.instrucciones}</p>
+                <label className="ajHint">Webhook URL</label>
+                <code className="ajCode">{webhook.webhookUrl}</code>
+                <button type="button" className="ajBtn ghost" onClick={() => copyText(webhook.webhookUrl, showToast)}>
+                  Copiar URL
+                </button>
+                <label className="ajHint" style={{ marginTop: 12 }}>Verify Token</label>
+                <code className="ajCode">{webhook.verifyToken}</code>
+                <button type="button" className="ajBtn ghost" onClick={() => copyText(webhook.verifyToken, showToast)}>
+                  Copiar token
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="ajCard waConnectionsWrap">
             <header className="waSectionHead">
-              <h2 className="waSectionTitle">Conexiones WhatsApp</h2>
-              <p className="waSectionSub">Administra varios números desde tu CRM</p>
+              <div className="waSectionHeadText">
+                <h2 className="waSectionTitle">Líneas WhatsApp</h2>
+                <p className="waSectionSub">Multi-número · principal primero</p>
+              </div>
+              <button type="button" className="waBtnAddLine" onClick={abrirNuevaConexion}>
+                + Agregar línea
+              </button>
             </header>
 
-            <div className="waConnGrid">
-              {(data?.conexionesWhatsapp || []).map((c) => (
-                <article key={c.id} className="waConnPremium">
-                  <div className="waConnPremiumInner">
-                    <div className="waConnTop">
-                      <h3 className="waConnName">{c.nombre || "WhatsApp"}</h3>
-                      <div className="waConnBadges">
+            <div className="waConnList">
+              {conexionesOrdenadas.length === 0 && (
+                <p className="waEmptyHint">Sin líneas conectadas. Usa «+ Agregar línea» para empezar.</p>
+              )}
+              {conexionesOrdenadas.map((c) => {
+                const isEditing = editandoId && String(c.id) === editandoId;
+                return (
+                  <article
+                    key={c.id}
+                    className={`waConnRow ${c.activo ? "waConnRowPrincipal" : ""} ${isEditing ? "waConnRowEditing" : ""}`}
+                  >
+                    <div className="waConnRowMain">
+                      <div className="waConnRowTop">
+                        <h3 className="waConnName">{c.nombre || "WhatsApp"}</h3>
+                        <span className="waConnNumero">{c.numero || "Sin número"}</span>
+                      </div>
+                      <div className="waConnRowMeta">
                         {estadoBadge(c.estado)}
-                        {rolBadge(c.activo)}
+                        {c.activo && <span className="waBadge waBadgePrincipal">Principal</span>}
+                        {isEditing && <span className="waBadge waBadgeEditing">Editando</span>}
+                        {pixelCapiChip(c)}
                       </div>
                     </div>
-
-                    <div className="waConnMeta">
-                      <div className="waConnMetaRow">
-                        <span className="waConnMetaLabel">Número</span>
-                        <span className="waConnMetaValue">{c.numero || "Sin número"}</span>
-                      </div>
-                      <div className="waConnMetaRow">
-                        <span className="waConnMetaLabel">Phone ID</span>
-                        <span className="waConnMetaValue mono" title={c.phone_id || c.phoneNumberId}>
-                          {abbrPhoneId(c.phone_id || c.phoneNumberId)}
-                        </span>
-                      </div>
-                    </div>
-
-                    {(c.token_masked || c.tokenMasked) && (
-                      <div className="waTokenRow">
-                        <code className="waTokenCode">{c.token_masked || c.tokenMasked}</code>
-                        <button
-                          type="button"
-                          className="waBtnCopy"
-                          onClick={() => copyText(c.token_masked || c.tokenMasked, showToast)}
-                          title="Copiar token enmascarado"
-                        >
-                          Copiar
-                        </button>
-                      </div>
-                    )}
-
-                    <div className="waConnActions">
-                      <button type="button" className="waBtn waBtnPrimary" onClick={() => abrirConfigurar(c)}>
+                    <div className="waConnRowActions">
+                      <button type="button" className="waActBtn waActBtnPrimary" onClick={() => abrirConfigurar(c)}>
                         Configurar
                       </button>
                       <button
                         type="button"
-                        className="waBtn waBtnGhost"
+                        className="waActBtn waActBtnGhost"
                         onClick={() => handleProbarId(c.id)}
                         disabled={saving}
                       >
-                        Probar conexión
+                        Probar
                       </button>
                       {!c.activo && (
                         <button
                           type="button"
-                          className="waBtn waBtnGhost"
+                          className="waActBtn waActBtnGhost"
                           onClick={() => handleHacerPrincipal(c.id)}
                           disabled={saving}
                         >
-                          Hacer principal
+                          Principal
                         </button>
                       )}
-                      <button type="button" className="waBtn waBtnDanger" onClick={() => handleDesconectarId(c.id)}>
+                      <button type="button" className="waActBtn waActBtnDanger" onClick={() => handleDesconectarId(c.id)}>
                         Desconectar
                       </button>
                     </div>
-                  </div>
-                </article>
-              ))}
-
-              <button type="button" className="waConnAdd" onClick={abrirNuevaConexion}>
-                <span className="waConnAddIcon">+</span>
-                <span className="waConnAddLabel">Conectar WhatsApp</span>
-                <span className="waConnAddHint">Agrega TOKEN y PHONE_ID de Meta</span>
-              </button>
+                  </article>
+                );
+              })}
             </div>
 
             <div className="ajField waTestField">
@@ -404,48 +415,94 @@ export default function Ajustes() {
           </div>
 
           {connForm && (
-            <form className="ajCard" onSubmit={handleSaveConexion}>
-              <h2>{connForm.id ? "Editar conexión" : "Nueva conexión"}</h2>
-              <div className="ajRow2">
-                <div className="ajField">
-                  <label>Nombre de conexión</label>
-                  <input value={connForm.nombre} onChange={(e) => setConnForm({ ...connForm, nombre: e.target.value })} required />
-                </div>
-                <div className="ajField">
-                  <label>Número visible</label>
-                  <input value={connForm.numero} onChange={(e) => setConnForm({ ...connForm, numero: e.target.value })} placeholder="+591..." />
-                </div>
-              </div>
-              <div className="ajField">
-                <label>Phone Number ID</label>
-                <input value={connForm.phone_id} onChange={(e) => setConnForm({ ...connForm, phone_id: e.target.value })} required />
-              </div>
-              <div className="ajField">
-                <label>Access Token {connForm.id && <span className="ajHint">(vacío = mantener el actual)</span>}</label>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <input
-                    type={showToken ? "text" : "password"}
-                    value={connForm.token}
-                    onChange={(e) => setConnForm({ ...connForm, token: e.target.value })}
-                    placeholder={
-                      connForm.id
-                        ? tokenConfiguredPlaceholder(connForm.token_masked || connForm.tokenMasked)
-                        : "EAAxxxx..."
-                    }
-                    autoComplete="off"
-                    required={!connForm.id}
-                    style={{ flex: 1 }}
-                  />
-                  <button type="button" className="ajBtn ghost" onClick={() => setShowToken((v) => !v)}>
-                    {showToken ? "Ocultar" : "Mostrar"}
+            <>
+              <div className="waModalBackdrop" onClick={() => setConnForm(null)} aria-hidden />
+              <form className="waModalPanel" onSubmit={handleSaveConexion} role="dialog" aria-modal="true">
+                <div className="waModalHead">
+                  <h2>{tituloModalConexion(connForm)}</h2>
+                  <button type="button" className="waModalClose" onClick={() => setConnForm(null)} aria-label="Cerrar">
+                    ×
                   </button>
                 </div>
-              </div>
-              <div className="ajBtnRow">
-                <button type="submit" className="ajBtn primary" disabled={saving}>Guardar conexión</button>
-                <button type="button" className="ajBtn ghost" onClick={() => setConnForm(null)}>Cancelar</button>
-              </div>
-            </form>
+                <div className="waModalBody">
+                  <div className="ajField">
+                    <label>Nombre</label>
+                    <input
+                      value={connForm.nombre}
+                      onChange={(e) => setConnForm({ ...connForm, nombre: e.target.value })}
+                      placeholder="Ventas, Soporte…"
+                      required
+                    />
+                  </div>
+                  <div className="ajField">
+                    <label>Número</label>
+                    <input
+                      value={connForm.numero}
+                      onChange={(e) => setConnForm({ ...connForm, numero: e.target.value })}
+                      placeholder="+591…"
+                    />
+                  </div>
+                  <div className="ajField">
+                    <label>Phone ID</label>
+                    <input
+                      value={connForm.phone_id}
+                      onChange={(e) => setConnForm({ ...connForm, phone_id: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <div className="ajField">
+                    <label>
+                      Access Token
+                      {connForm.id && <span className="ajHint"> (vacío = conservar)</span>}
+                    </label>
+                    <input
+                      type="password"
+                      value={connForm.token}
+                      onChange={(e) => setConnForm({ ...connForm, token: e.target.value })}
+                      placeholder={
+                        connForm.id
+                          ? tokenConfiguredPlaceholder(connForm.token_masked || connForm.tokenMasked)
+                          : "EAAxxxx…"
+                      }
+                      autoComplete="off"
+                      required={!connForm.id}
+                    />
+                  </div>
+                  <p className="waModalDivider">Meta Ads (opcional)</p>
+                  <div className="ajField">
+                    <label>Pixel ID</label>
+                    <input
+                      value={connForm.pixel_id}
+                      onChange={(e) => setConnForm({ ...connForm, pixel_id: e.target.value })}
+                      placeholder="ID del pixel"
+                    />
+                  </div>
+                  <div className="ajField">
+                    <label>
+                      CAPI Token
+                      {connForm.id && <span className="ajHint"> (vacío = conservar)</span>}
+                    </label>
+                    <input
+                      type="password"
+                      value={connForm.capi_token}
+                      onChange={(e) => setConnForm({ ...connForm, capi_token: e.target.value })}
+                      placeholder={tokenConfiguredPlaceholder(
+                        connForm.capi_token_masked || connForm.capiTokenMasked
+                      )}
+                      autoComplete="off"
+                    />
+                  </div>
+                </div>
+                <div className="waModalFoot">
+                  <button type="submit" className="ajBtn primary" disabled={saving}>
+                    Guardar
+                  </button>
+                  <button type="button" className="ajBtn ghost" onClick={() => setConnForm(null)}>
+                    Cancelar
+                  </button>
+                </div>
+              </form>
+            </>
           )}
         </>
       );
