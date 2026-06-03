@@ -41,11 +41,22 @@ function getAppUrl() {
   return raw.replace(/\/+$/, "");
 }
 
+function getSmtpSecure(port) {
+  const explicit = String(process.env.SMTP_SECURE || "").trim().toLowerCase();
+  if (explicit === "true") return true;
+  if (explicit === "false") return false;
+  if (port === 465) return true;
+  if (port === 587) return false;
+  return false;
+}
+
 function getTransporter() {
   if (transporter) return transporter;
 
   const host = String(process.env.SMTP_HOST || "").trim();
-  const port = Number(process.env.SMTP_PORT || 587);
+  const port = Number.isFinite(Number(process.env.SMTP_PORT))
+    ? Number(process.env.SMTP_PORT)
+    : 587;
   const user = String(process.env.SMTP_USER || "").trim();
   const pass = String(process.env.SMTP_PASS || "").trim();
 
@@ -57,8 +68,8 @@ function getTransporter() {
 
   transporter = nodemailer.createTransport({
     host,
-    port: Number.isFinite(port) ? port : 587,
-    secure: port === 465,
+    port,
+    secure: getSmtpSecure(port),
     auth: { user, pass },
   });
 
