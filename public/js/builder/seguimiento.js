@@ -745,6 +745,81 @@ window.MacBotSeguimiento = (function () {
     });
   }
 
+  function renderEstadoSeguimientosCliente(numero) {
+    const lista = document.getElementById("segEstadoClienteLista");
+    if (!lista) return;
+
+    const api = window.MacBotSeguimientoApi;
+    if (!api || typeof api.fetchSeguimientosCliente !== "function") {
+      lista.innerHTML =
+        '<p class="seg-panel-desc">Vista por línea no disponible.</p>';
+      return;
+    }
+
+    const n = String(numero || "").trim();
+    if (!n) {
+      lista.innerHTML =
+        '<p class="seg-panel-desc">Indica un número para ver seguimientos de esta línea.</p>';
+      return;
+    }
+
+    lista.innerHTML = '<p class="seg-panel-desc">Cargando…</p>';
+
+    api.fetchSeguimientosCliente(n).then(function (result) {
+      if (result.motivo === "sin_conexion") {
+        lista.innerHTML =
+          '<p class="seg-panel-desc">Selecciona la línea del flujo (URL con conexion_whatsapp_id) para ver seguimientos del lead.</p>';
+        return;
+      }
+
+      if (!result.ok) {
+        lista.innerHTML =
+          '<p class="seg-panel-desc">No se pudieron cargar seguimientos.</p>';
+        return;
+      }
+
+      if (!result.items.length) {
+        lista.innerHTML =
+          '<p class="seg-panel-desc">Sin seguimientos en esta línea para ese número.</p>';
+        return;
+      }
+
+      lista.innerHTML = result.items
+        .slice(0, 8)
+        .map(function (row) {
+          const paso = row.paso_index != null ? row.paso_index + 1 : "?";
+          const conn = row.conexion_whatsapp_id || result.conexion_whatsapp_id || "—";
+          return (
+            '<div class="seg-step-card">' +
+            "<strong>Paso " +
+            paso +
+            "</strong> · " +
+            esc(row.estado || "—") +
+            "<br><small>Línea: " +
+            esc(String(conn).slice(0, 8)) +
+            "…</small></div>"
+          );
+        })
+        .join("");
+    });
+  }
+
+  function initPreviewSeguimientosClientePanel() {
+    const input = document.getElementById("segPreviewNumero");
+    if (!input) return;
+
+    let debounceTimer = null;
+    input.addEventListener("input", function () {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(function () {
+        renderEstadoSeguimientosCliente(input.value);
+      }, 400);
+    });
+
+    const inicial = String(input.value || "").trim();
+    if (inicial) renderEstadoSeguimientosCliente(inicial);
+  }
+
   function renderPanel(nodo) {
     if (!nodo) return;
 
@@ -759,6 +834,11 @@ window.MacBotSeguimiento = (function () {
       '<div class="seg-panel">' +
       "<h4>⏱ Seguimiento CRM</h4>" +
       '<p class="seg-panel-desc">Automatiza recordatorios si el lead no responde.</p>' +
+      '<div class="seg-field seg-estado-linea">' +
+      "<label>Vista seguimientos del lead (solo esta línea)</label>" +
+      '<input type="text" id="segPreviewNumero" placeholder="Número WhatsApp del lead" autocomplete="off">' +
+      '<div id="segEstadoClienteLista" class="seg-steps-list"></div>' +
+      "</div>" +
       '<div class="seg-toggle-row">' +
       '<label class="seg-toggle"><input type="checkbox" id="segSoloNoRespondio"' +
       (configActiva.soloSiNoRespondio ? " checked" : "") +
@@ -786,6 +866,7 @@ window.MacBotSeguimiento = (function () {
 
     renderListaPasos();
     renderFormularioPaso();
+    initPreviewSeguimientosClientePanel();
     guardarConfigEnNodo(nodo, configActiva);
   }
 
@@ -834,6 +915,7 @@ window.MacBotSeguimiento = (function () {
     esNodoSeguimiento: esNodoSeguimiento,
     initNodoRecienCreado: initNodoRecienCreado,
     refrescarNodoCargado: refrescarNodoCargado,
+    renderEstadoSeguimientosCliente: renderEstadoSeguimientosCliente,
     abrirEditorSeguimiento: function (id) {
       const n = document.getElementById(id);
       if (n) renderPanel(n);
@@ -841,5 +923,19 @@ window.MacBotSeguimiento = (function () {
     flushPanelToNode: flushPanelToNode,
     clearPanelActivo: clearPanelActivo,
     getNodoActivo: getNodoActivo,
+    fetchSeguimientosCliente: function (numero) {
+      const api = window.MacBotSeguimientoApi;
+      if (!api) {
+        console.info(
+          "[SEGUIMIENTO_BUILDER] MacBotSeguimientoApi no cargado — omitiendo consulta"
+        );
+        return Promise.resolve({ ok: false, items: [], motivo: "api_no_cargada" });
+      }
+      return api.fetchSeguimientosCliente(numero);
+    },
+    obtenerConexionWhatsappIdBuilder: function () {
+      const api = window.MacBotSeguimientoApi;
+      return api ? api.obtenerConexionWhatsappIdBuilderContext() : null;
+    },
   };
 })();

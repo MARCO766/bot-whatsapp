@@ -738,6 +738,7 @@ ${tab === "flujos" && builder ? `
 <script type="application/json" id="macbot-builder-data">${JSON.stringify({
   flujoEditandoId: flujoId || "",
   flujoCargado: flujoActual ? flujoActual.data : null,
+  conexionWhatsappIdFlujo: flujoActual?.conexion_whatsapp_id || null,
   activadoresData: activadores || [],
   etiquetasData: etiquetas || [],
   supabaseUrl: supabaseUrl || "",
@@ -752,6 +753,7 @@ ${tab === "flujos" && builder ? `
 ${builder ? `
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="/js/builder/remarketing-global.js"></script>
+<script src="/js/builder/seguimiento-api.js"></script>
 <script src="/js/builder/seguimiento.js"></script>
 <script src="/js/builder/contenido.js"></script>
 <script src="/js/builder/ia.js"></script>

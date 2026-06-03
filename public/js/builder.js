@@ -18,6 +18,8 @@ function leerConexionWhatsappIdBuilder() {
   return String(raw).trim();
 }
 
+window.leerConexionWhatsappIdBuilder = leerConexionWhatsappIdBuilder;
+
 const activadoresData = MACBOT_BUILDER.activadoresData || [];
 const etiquetasData = MACBOT_BUILDER.etiquetasData || [];
 const CONEXION_TODAS = "__todas__";
