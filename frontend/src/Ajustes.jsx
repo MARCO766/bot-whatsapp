@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useAjustes } from "./ajustes/useAjustes";
 import { ajustesStyles } from "./ajustes/styles";
 import { logout } from "./ajustes/api";
+import { fetchMetaAdsStatus } from "./metricas/metaAdsApi";
 
 const SECCIONES = [
   { id: "perfil", label: "Perfil", icon: "👤" },
@@ -57,21 +58,47 @@ function tokenConfiguredPlaceholder(masked) {
   return `Token configurado ••••${suffix}`;
 }
 
-function estadoBadge(estado) {
-  if (estado === "conectado") return <span className="waBadge waBadgeOk">Conectado</span>;
-  if (estado === "error") return <span className="waBadge waBadgeErr">Error</span>;
-  if (estado === "inactivo") return <span className="waBadge waBadgeMuted">Inactivo</span>;
-  return <span className="waBadge waBadgeWarn">Incompleto</span>;
+function whatsappConectado(c) {
+  return Boolean(c?.conectado) || c?.estado === "conectado";
 }
 
-function pixelCapiChip(c) {
+function lineaTrackingBadges(c) {
+  const waOk = whatsappConectado(c);
   const hasPixel = Boolean(c?.pixel_id || c?.pixelId);
   const hasCapi = Boolean(c?.tiene_capi_token || c?.capi_token_masked || c?.capiTokenMasked);
-  if (!hasPixel && !hasCapi) return null;
-  const parts = [];
-  if (hasPixel) parts.push("Pixel");
-  if (hasCapi) parts.push("CAPI");
-  return <span className="waChipMeta">{parts.join(" · ")}</span>;
+  return (
+    <>
+      {waOk ? (
+        <span className="waBadge waBadgeOk">WhatsApp conectado</span>
+      ) : (
+        <span className="waBadge waBadgeWarn">WhatsApp pendiente</span>
+      )}
+      {hasPixel ? (
+        <span className="waBadge waBadgeOk">Pixel activo</span>
+      ) : (
+        <span className="waBadge waBadgeWarn">Pixel pendiente</span>
+      )}
+      {hasCapi ? (
+        <span className="waBadge waBadgeOk">CAPI activo</span>
+      ) : (
+        <span className="waBadge waBadgeWarn">CAPI pendiente</span>
+      )}
+    </>
+  );
+}
+
+function MetaAjustesStatusRow({ label, ok, detail }) {
+  return (
+    <div className={`metaAjustesStatusRow ${ok ? "ok" : "pending"}`}>
+      <span className="metaAjustesStatusDot" aria-hidden="true">
+        {ok ? "✓" : "○"}
+      </span>
+      <div className="metaAjustesStatusText">
+        <strong>{label}</strong>
+        <small>{detail}</small>
+      </div>
+    </div>
+  );
 }
 
 function tituloModalConexion(form) {
@@ -85,7 +112,7 @@ function copyText(text, showToast) {
   navigator.clipboard?.writeText(text).then(() => showToast("Copiado al portapapeles"));
 }
 
-export default function Ajustes() {
+export default function Ajustes({ cambiarVista }) {
   const {
     data,
     loading,
@@ -107,29 +134,46 @@ export default function Ajustes() {
   const [perfil, setPerfil] = useState({});
   const [auto, setAuto] = useState({});
   const [notif, setNotif] = useState({});
-  const [meta, setMeta] = useState({});
   const [pwd, setPwd] = useState({ actual: "", nueva: "", confirm: "" });
 
   const [connForm, setConnForm] = useState(null);
   const [webhookOpen, setWebhookOpen] = useState(false);
-  const [showCapi, setShowCapi] = useState(false);
   const [testNumero, setTestNumero] = useState("");
+  const [metaAdsStatus, setMetaAdsStatus] = useState(null);
+  const [metaAdsStatusLoading, setMetaAdsStatusLoading] = useState(false);
 
   useEffect(() => {
     if (!data) return;
     setPerfil({ ...data.perfil });
     setAuto({ ...data.automatizacion });
     setNotif({ ...data.notificaciones });
-    const c = data.conexionActiva || data.conexionesWhatsapp?.[0];
-    setMeta({
-      pixelId: data.meta?.pixelId || c?.pixel_id || c?.pixelId || "",
-      pixelNombre: data.meta?.pixelNombre || c?.nombre || "",
-      activo: data.meta?.activo || false,
-      capiToken: "",
-    });
   }, [data]);
 
   const conexionActiva = data?.conexionActiva || data?.conexionesWhatsapp?.[0] || null;
+
+  useEffect(() => {
+    if (seccion !== "meta" || !data) return;
+    let cancelled = false;
+    const connId = conexionActiva?.id;
+    const params = connId != null ? { conexion_whatsapp_id: String(connId) } : {};
+
+    async function loadMetaAdsStatus() {
+      setMetaAdsStatusLoading(true);
+      try {
+        const res = await fetchMetaAdsStatus(params);
+        if (!cancelled) setMetaAdsStatus(res);
+      } catch {
+        if (!cancelled) setMetaAdsStatus(null);
+      } finally {
+        if (!cancelled) setMetaAdsStatusLoading(false);
+      }
+    }
+
+    loadMetaAdsStatus();
+    return () => {
+      cancelled = true;
+    };
+  }, [seccion, data, conexionActiva?.id]);
   const webhook = data?.webhook || {};
   async function handleSavePerfil(e) {
     e.preventDefault();
@@ -144,23 +188,9 @@ export default function Ajustes() {
     showToast("Preferencias de notificaciones (próximamente en servidor)");
   }
 
-  async function handleSaveMeta(e) {
-    e.preventDefault();
-    const c = conexionActiva;
-    if (!c?.conectado) {
-      showToast("Primero configura WhatsApp con TOKEN y PHONE_ID", "error");
-      return;
-    }
-    const body = {
-      id: c?.id,
-      nombre: c?.nombre || meta.pixelNombre,
-      numero: c?.numero,
-      phone_id: c?.phone_id || c?.phoneNumberId,
-      pixel_id: meta.pixelId,
-    };
-    if (meta.capiToken?.trim()) body.capi_token = meta.capiToken.trim();
-    const ok = await saveConexion(body);
-    if (ok) setMeta((m) => ({ ...m, capiToken: "" }));
+  function irAMetricasMetaAds() {
+    if (cambiarVista) cambiarVista("metricas");
+    else showToast("Abre Métricas desde el menú lateral", "error");
   }
 
   function abrirConfigurar(c = conexionActiva) {
@@ -371,10 +401,9 @@ export default function Ajustes() {
                         <span className="waConnNumero">{c.numero || "Sin número"}</span>
                       </div>
                       <div className="waConnRowMeta">
-                        {estadoBadge(c.estado)}
+                        {lineaTrackingBadges(c)}
                         {c.activo && <span className="waBadge waBadgePrincipal">Principal</span>}
                         {isEditing && <span className="waBadge waBadgeEditing">Editando</span>}
-                        {pixelCapiChip(c)}
                       </div>
                     </div>
                     <div className="waConnRowActions">
@@ -425,90 +454,96 @@ export default function Ajustes() {
                   </button>
                 </div>
                 <div className="waModalBody">
-                  <div className="ajField">
-                    <label>Nombre</label>
-                    <input
-                      value={connForm.nombre}
-                      onChange={(e) => setConnForm({ ...connForm, nombre: e.target.value })}
-                      placeholder="Ventas, Soporte…"
-                      required
-                    />
-                  </div>
-                  <div className="ajField">
-                    <label>Número</label>
-                    <input
-                      value={connForm.numero}
-                      onChange={(e) => setConnForm({ ...connForm, numero: e.target.value })}
-                      placeholder="+591…"
-                    />
-                  </div>
-                  <div className="ajField">
-                    <label>Phone ID</label>
-                    <input
-                      value={connForm.phone_id}
-                      onChange={(e) => setConnForm({ ...connForm, phone_id: e.target.value })}
-                      required
-                    />
-                  </div>
-                  <div className="ajField">
-                    <label>
-                      Access Token
-                      {connForm.id && <span className="ajHint"> (vacío = conservar)</span>}
-                    </label>
-                    <input
-                      type="password"
-                      value={connForm.token}
-                      onChange={(e) => setConnForm({ ...connForm, token: e.target.value })}
-                      placeholder={
-                        connForm.id
-                          ? tokenConfiguredPlaceholder(connForm.token_masked || connForm.tokenMasked)
-                          : "EAAxxxx…"
-                      }
-                      autoComplete="off"
-                      required={!connForm.id}
-                    />
-                  </div>
-                  <p className="waModalDivider">Meta Ads (opcional)</p>
-                  <div className="ajField">
-                    <label>Pixel ID</label>
-                    <input
-                      value={connForm.pixel_id}
-                      onChange={(e) => setConnForm({ ...connForm, pixel_id: e.target.value })}
-                      placeholder="ID del pixel"
-                    />
-                  </div>
-                  <div className="ajField">
-                    <label>
-                      CAPI Token
-                      {connForm.id && <span className="ajHint"> (vacío = conservar)</span>}
-                    </label>
-                    <input
-                      type="password"
-                      value={connForm.capi_token}
-                      onChange={(e) => setConnForm({ ...connForm, capi_token: e.target.value })}
-                      placeholder={tokenConfiguredPlaceholder(
-                        connForm.capi_token_masked || connForm.capiTokenMasked
-                      )}
-                      autoComplete="off"
-                    />
-                  </div>
+                  <section className="waModalGroup">
+                    <h3 className="waModalGroupTitle">WhatsApp API</h3>
+                    <div className="ajField">
+                      <label>Número</label>
+                      <input
+                        value={connForm.numero}
+                        onChange={(e) => setConnForm({ ...connForm, numero: e.target.value })}
+                        placeholder="+591…"
+                      />
+                    </div>
+                    <div className="ajField">
+                      <label>Phone ID</label>
+                      <input
+                        value={connForm.phone_id}
+                        onChange={(e) => setConnForm({ ...connForm, phone_id: e.target.value })}
+                        required
+                      />
+                    </div>
+                    <div className="ajField">
+                      <label>
+                        Access Token
+                        {connForm.id && <span className="ajHint"> (vacío = conservar)</span>}
+                      </label>
+                      <input
+                        type="password"
+                        value={connForm.token}
+                        onChange={(e) => setConnForm({ ...connForm, token: e.target.value })}
+                        placeholder={
+                          connForm.id
+                            ? tokenConfiguredPlaceholder(connForm.token_masked || connForm.tokenMasked)
+                            : "EAAxxxx…"
+                        }
+                        autoComplete="off"
+                        required={!connForm.id}
+                      />
+                    </div>
+                    <div className="ajField">
+                      <label>Nombre de la línea</label>
+                      <input
+                        value={connForm.nombre}
+                        onChange={(e) => setConnForm({ ...connForm, nombre: e.target.value })}
+                        placeholder="Ventas, Soporte…"
+                        required
+                      />
+                    </div>
+                  </section>
+                  <section className="waModalGroup">
+                    <h3 className="waModalGroupTitle">Tracking Meta de esta línea</h3>
+                    <p className="waModalGroupHint">
+                      Pixel y CAPI de esta línea. No uses la sección Meta Ads global para esto.
+                    </p>
+                    <div className="ajField">
+                      <label>Pixel ID</label>
+                      <input
+                        value={connForm.pixel_id}
+                        onChange={(e) => setConnForm({ ...connForm, pixel_id: e.target.value })}
+                        placeholder="ID del pixel"
+                      />
+                    </div>
+                    <div className="ajField">
+                      <label>
+                        CAPI Token
+                        {connForm.id && <span className="ajHint"> (vacío = conservar)</span>}
+                      </label>
+                      <input
+                        type="password"
+                        value={connForm.capi_token}
+                        onChange={(e) => setConnForm({ ...connForm, capi_token: e.target.value })}
+                        placeholder={tokenConfiguredPlaceholder(
+                          connForm.capi_token_masked || connForm.capiTokenMasked
+                        )}
+                        autoComplete="off"
+                      />
+                    </div>
+                    {connForm.id ? (
+                      <button
+                        type="button"
+                        className="ajBtn ghost waModalTestBtn"
+                        disabled={saving}
+                        onClick={() => probarMetaEvento({ conexion_whatsapp_id: connForm.id })}
+                      >
+                        Enviar evento de prueba de esta línea
+                      </button>
+                    ) : null}
+                  </section>
                 </div>
                 <div className="waModalFoot">
                   <button type="submit" className="ajBtn primary" disabled={saving}>
                     Guardar
                   </button>
-                  {connForm.id && (
-                    <button
-                      type="button"
-                      className="ajBtn ghost"
-                      disabled={saving}
-                      onClick={() =>
-                        probarMetaEvento({ conexion_whatsapp_id: connForm.id })
-                      }
-                    >
-                      Enviar evento de prueba
-                    </button>
-                  )}
                   <button type="button" className="ajBtn ghost" onClick={() => setConnForm(null)}>
                     Cancelar
                   </button>
@@ -521,62 +556,55 @@ export default function Ajustes() {
     }
 
     if (seccion === "meta") {
+      const ads = metaAdsStatus?.ads || {};
+      const adsConectado = Boolean(ads.conectado);
+      const insightsOk = adsConectado && Boolean(ads.ultimo_sync);
+      const cuentaDetail = adsConectado
+        ? ads.ad_account_id_masked
+          ? `Cuenta ${ads.ad_account_id_masked}`
+          : "Cuenta publicitaria configurada"
+        : "Conecta Ad Account y token en Métricas";
+      const insightsDetail = insightsOk
+        ? "Insights sincronizados"
+        : adsConectado
+          ? "Conectado — sincroniza en Métricas"
+          : "Requiere cuenta publicitaria conectada";
+
       return (
-        <form className="ajCard" onSubmit={handleSaveMeta}>
-          <h2>Meta Ads / Tracking</h2>
-          <p className="ajHint">Pixel y CAPI se guardan en conexiones_whatsapp (misma tabla que Conexiones).</p>
-          <div className="ajField">
-            <label>Nombre del pixel</label>
-            <input value={meta.pixelNombre || ""} onChange={(e) => setMeta({ ...meta, pixelNombre: e.target.value })} />
-          </div>
-          <div className="ajRow2">
-            <div className="ajField">
-              <label>Pixel ID</label>
-              <input value={meta.pixelId || ""} onChange={(e) => setMeta({ ...meta, pixelId: e.target.value })} />
-            </div>
-            <div className="ajField">
-              <label>Estado</label>
-              <select value={meta.activo ? "1" : "0"} onChange={(e) => setMeta({ ...meta, activo: e.target.value === "1" })}>
-                <option value="1">Activo</option>
-                <option value="0">Inactivo</option>
-              </select>
-            </div>
-          </div>
-          <div className="ajField">
-            <label>
-              CAPI Token{" "}
-              {data?.meta?.tieneCapiToken && (
-                <span className="ajHint">
-                  (guardado: {data.meta.capi_token_masked || data.meta.capiTokenMasked})
-                </span>
-              )}
-            </label>
-            <div style={{ display: "flex", gap: 8 }}>
-              <input
-                type={showCapi ? "text" : "password"}
-                value={meta.capiToken}
-                onChange={(e) => setMeta({ ...meta, capiToken: e.target.value })}
-                placeholder={tokenConfiguredPlaceholder(
-                  data?.meta?.capi_token_masked ||
-                    data?.meta?.capiTokenMasked ||
-                    conexionActiva?.capi_token_masked ||
-                    conexionActiva?.capiTokenMasked
-                )}
-                autoComplete="off"
-                style={{ flex: 1 }}
+        <div className="ajCard">
+          <h2>Meta Ads</h2>
+          <p className="metaAjustesIntro">
+            <strong>Pixel y CAPI se configuran dentro de cada línea WhatsApp.</strong> Esta sección es solo
+            para métricas publicitarias y Ads Insights.
+          </p>
+          <p className="metaAjustesNote">
+            Ve a <strong>WhatsApp API</strong> en el menú lateral para Pixel ID, CAPI Token y eventos de prueba
+            por línea.
+          </p>
+
+          {metaAdsStatusLoading ? (
+            <p className="metaAjustesLoading">Cargando estado de integración…</p>
+          ) : (
+            <div className="metaAjustesStatusList">
+              <MetaAjustesStatusRow
+                label="Cuenta publicitaria"
+                ok={adsConectado}
+                detail={cuentaDetail}
               />
-              <button type="button" className="ajBtn ghost" onClick={() => setShowCapi((v) => !v)}>
-                {showCapi ? "Ocultar" : "Mostrar"}
-              </button>
+              <MetaAjustesStatusRow
+                label="Ads Insights"
+                ok={insightsOk}
+                detail={insightsDetail}
+              />
             </div>
-          </div>
+          )}
+
           <div className="ajBtnRow">
-            <button type="submit" className="ajBtn primary" disabled={saving}>Guardar Meta</button>
-            <button type="button" className="ajBtn ghost" disabled={saving} onClick={() => probarMetaEvento()}>
-              Enviar evento de prueba
+            <button type="button" className="ajBtn primary" onClick={irAMetricasMetaAds}>
+              {adsConectado ? "Ir a Métricas Meta Ads" : "Configurar Ads en Métricas"}
             </button>
           </div>
-        </form>
+        </div>
       );
     }
 

@@ -337,6 +337,102 @@ export const ajustesStyles = `
   text-transform: uppercase;
   letter-spacing: .06em;
 }
+.waModalGroup {
+  margin-bottom: 4px;
+}
+.waModalGroup + .waModalGroup {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(148,163,184,.1);
+}
+.waModalGroupTitle {
+  margin: 0 0 12px;
+  font-size: 12px;
+  font-weight: 800;
+  color: #cbd5e1;
+  letter-spacing: .02em;
+}
+.waModalGroupHint {
+  margin: -6px 0 12px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: #64748b;
+}
+.waModalTestBtn {
+  margin-top: 4px;
+  width: 100%;
+}
+
+.metaAjustesIntro {
+  margin: 0 0 16px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #94a3b8;
+}
+.metaAjustesIntro strong { color: #e2e8f0; font-weight: 700; }
+.metaAjustesStatusList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.metaAjustesStatusRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255,255,255,.03);
+  border: 1px solid rgba(148,163,184,.12);
+}
+.metaAjustesStatusRow.ok {
+  border-color: rgba(34,197,94,.22);
+  background: rgba(34,197,94,.06);
+}
+.metaAjustesStatusRow.pending { border-color: rgba(148,163,184,.12); }
+.metaAjustesStatusDot {
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 900;
+  background: rgba(148,163,184,.15);
+  color: #94a3b8;
+}
+.metaAjustesStatusRow.ok .metaAjustesStatusDot {
+  background: rgba(34,197,94,.25);
+  color: #4ade80;
+}
+.metaAjustesStatusText strong {
+  display: block;
+  font-size: 12px;
+  color: #e2e8f0;
+}
+.metaAjustesStatusText small {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  color: #64748b;
+}
+.metaAjustesLoading {
+  font-size: 12px;
+  color: #64748b;
+  margin-bottom: 12px;
+}
+.metaAjustesNote {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #94a3b8;
+  background: rgba(6,182,212,.08);
+  border: 1px solid rgba(6,182,212,.18);
+}
 
 @media (max-width: 640px) {
   .waConnRow {
