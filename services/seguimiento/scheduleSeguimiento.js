@@ -1,6 +1,9 @@
 const crypto = require("crypto");
 const { parseSeguimientoFromHtml } = require("./parseSeguimientoNode");
-const { insertarProgramados } = require("./seguimientoRepository");
+const {
+  insertarProgramados,
+  obtenerCampanaActivaProgramacion,
+} = require("./seguimientoRepository");
 const { ESTADOS_SEGUIMIENTO } = require("./constants");
 const { nowUtc, toTimestamptzUtc } = require("./timestamps");
 
@@ -36,6 +39,31 @@ async function programarSeguimientoNodo({
   if (!config.pasos.length) {
     console.log("[SEGUIMIENTO] Sin pasos válidos para programar | nodo:", nodoId);
     return { campanaId: null, programados: 0 };
+  }
+
+  const campanaActiva = await obtenerCampanaActivaProgramacion({
+    numero,
+    usuarioId,
+    conexionWhatsappId: conexionId,
+    flujoId,
+    nodoId,
+  });
+
+  if (campanaActiva?.campana_id) {
+    console.log("[SEGUIMIENTO_DEDUP_PROGRAMACION] campaña activa existente", {
+      campana_id: campanaActiva.campana_id,
+      estado: campanaActiva.estado,
+      usuario_id: usuarioId,
+      cliente_numero: numero,
+      conexion_whatsapp_id: conexionId,
+      flujo_id: flujoId ?? null,
+      nodo_id: nodoId,
+    });
+    return {
+      campanaId: campanaActiva.campana_id,
+      programados: 0,
+      omitido: true,
+    };
   }
 
   const campanaId = crypto.randomUUID();

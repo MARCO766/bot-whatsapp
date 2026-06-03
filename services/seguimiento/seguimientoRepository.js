@@ -534,6 +534,52 @@ async function listarPorNodo(flujoId, nodoId, usuarioId, limite = 30) {
   return response.data || [];
 }
 
+/** Campaña activa (pendiente/procesando) para la misma clave de programación. */
+async function obtenerCampanaActivaProgramacion({
+  numero,
+  usuarioId,
+  conexionWhatsappId,
+  flujoId,
+  nodoId,
+}) {
+  const conexion = normalizarConexionId(conexionWhatsappId);
+  if (!numero || !usuarioId || !conexion || !nodoId) {
+    return null;
+  }
+
+  const estadosActivos = [
+    ESTADOS_SEGUIMIENTO.PENDIENTE,
+    ESTADOS_SEGUIMIENTO.PROCESANDO,
+  ].join(",");
+
+  const url =
+    `${SUPABASE_URL}/rest/v1/seguimientos_programados?` +
+    `${filtrosClaveLead(numero, usuarioId, conexion)}` +
+    `&${filtroEqCampo("flujo_id", flujoId)}` +
+    `&nodo_id=eq.${encodeURIComponent(nodoId)}` +
+    `&estado=in.(${estadosActivos})` +
+    `&select=campana_id,estado,conexion_whatsapp_id` +
+    `&order=creado_en.desc&limit=1`;
+
+  try {
+    const response = await axios.get(url, { headers: headers() });
+    const row = (response.data || [])[0] || null;
+    if (!row || !seguimientoMismaConexion(row, conexion)) {
+      return null;
+    }
+    return {
+      campana_id: row.campana_id,
+      estado: row.estado,
+    };
+  } catch (error) {
+    console.log(
+      "[SEGUIMIENTO_DEDUP_PROGRAMACION] error consultando campaña activa:",
+      error.response?.data || error.message
+    );
+    return null;
+  }
+}
+
 module.exports = {
   normalizarConexionId,
   seguimientoMismaConexion,
@@ -554,4 +600,5 @@ module.exports = {
   listarPendientesRespondibles,
   listarPorCliente,
   listarPorNodo,
+  obtenerCampanaActivaProgramacion,
 };
