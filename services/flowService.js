@@ -34,6 +34,10 @@ const {
   continuarMiniFlujoRmTrasPagoValido,
 } = require("./remarketing24h/rmMiniFlowRuntime");
 const { esTipoIA, resolverTipoRaw } = require("./seguimiento/detectarTipoNodo");
+const {
+  esNodoSeguimiento,
+  parseSeguimientoFromHtml,
+} = require("./seguimiento/parseSeguimientoNode");
 const { obtenerConfigRemarketingGlobal } = require("./remarketing24h/parseRemarketingGlobalNode");
 const {
   iniciarRemarketing24h,
@@ -266,7 +270,123 @@ function opcionesEnvioFlujo(usuarioId, conexionWhatsappId) {
   return op;
 }
 
-async function ejecutarBloqueContenido(numero, bloque, usuarioId, conexionWhatsappId = null) {
+const REGEX_ACCION_LEGACY_HTML =
+  /<p[^>]*>\s*(texto|tiempo|imagen|audio|video|doc):\s*([\s\S]*?)<\/p>/gi;
+
+function normalizarTextoReservaSeguimiento(texto) {
+  return String(texto || "").trim().toLowerCase();
+}
+
+function logSeguimientoBloqueadoFlowService(payload) {
+  console.log("[SEGUIMIENTO_BLOQUEADO_FLOWSERVICE]", payload);
+}
+
+function extraerAccionesLegacyHtml(html) {
+  const acciones = [];
+  if (!html) return acciones;
+
+  const regex = new RegExp(REGEX_ACCION_LEGACY_HTML.source, REGEX_ACCION_LEGACY_HTML.flags);
+  let match;
+
+  while ((match = regex.exec(html)) !== null) {
+    const tipoAccion = match[1].trim().toLowerCase();
+    const valorAccion = match[2]
+      .replace(/&amp;/g, "&")
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/<[^>]*>/g, "")
+      .trim();
+
+    acciones.push({ tipo: tipoAccion, valor: valorAccion });
+  }
+
+  return acciones;
+}
+
+function extraerTextosPasosSeguimiento(nodo) {
+  const config = parseSeguimientoFromHtml(nodo?.html || "");
+  const textos = [];
+
+  for (const paso of config.pasos || []) {
+    const msg = paso.mensaje || {};
+    const t = String(msg.texto || "").trim();
+    if (t) textos.push(t);
+    const cap = String(msg.caption || "").trim();
+    if (cap) textos.push(cap);
+    const url = String(msg.url || "").trim();
+    if (url) textos.push(url);
+  }
+
+  return textos;
+}
+
+function construirTextosReservadosSeguimientoFlujo(nodos) {
+  const set = new Set();
+
+  for (const nodo of nodos || []) {
+    if (!esNodoSeguimiento(nodo)) continue;
+
+    for (const t of extraerTextosPasosSeguimiento(nodo)) {
+      const norm = normalizarTextoReservaSeguimiento(t);
+      if (norm) set.add(norm);
+    }
+
+    for (const acc of extraerAccionesLegacyHtml(nodo.html || "")) {
+      if (acc.tipo === "texto" && acc.valor) {
+        const norm = normalizarTextoReservaSeguimiento(acc.valor);
+        if (norm) set.add(norm);
+      }
+    }
+  }
+
+  return set;
+}
+
+function esTextoReservadoSeguimiento(texto, textosReservados) {
+  const norm = normalizarTextoReservaSeguimiento(texto);
+  if (!norm || !textosReservados?.size) return false;
+  return textosReservados.has(norm);
+}
+
+function auditarLegacySeguimientoEnNodo(nodo, nodoId, clienteNumero) {
+  const legacyAcciones = extraerAccionesLegacyHtml(nodo?.html || "");
+  const textosPasos = extraerTextosPasosSeguimiento(nodo);
+
+  if (legacyAcciones.length) {
+    logSeguimientoBloqueadoFlowService({
+      motivo: "html_legacy_detectado_en_nodo_seguimiento",
+      nodoId,
+      cliente_numero: clienteNumero,
+      acciones_legacy: legacyAcciones.length,
+      pasos_programados: textosPasos.length,
+      tipos_legacy: legacyAcciones.map((a) => a.tipo),
+    });
+
+    for (const acc of legacyAcciones) {
+      if (acc.tipo !== "texto" || !acc.valor) continue;
+      logSeguimientoBloqueadoFlowService({
+        motivo: "texto_legacy_no_enviado_por_flowservice",
+        nodoId,
+        cliente_numero: clienteNumero,
+        texto: acc.valor,
+        coincide_con_paso:
+          textosPasos.some(
+            (t) => normalizarTextoReservaSeguimiento(t) === normalizarTextoReservaSeguimiento(acc.valor)
+          ) || false,
+      });
+    }
+  }
+
+  return { legacyAcciones, textosPasos };
+}
+
+async function ejecutarBloqueContenido(
+  numero,
+  bloque,
+  usuarioId,
+  conexionWhatsappId = null,
+  opts = {}
+) {
   const opEnvio = opcionesEnvioFlujo(usuarioId, conexionWhatsappId);
   const tipo = tipoBloqueContenido(bloque);
   console.log("🧩 EJECUTANDO BLOQUE:", tipo, bloque);
@@ -280,6 +400,15 @@ async function ejecutarBloqueContenido(numero, bloque, usuarioId, conexionWhatsa
     const mensaje = valorTextoBloque(bloque);
     if (!mensaje) {
       console.log("⚠️ TEXTO VACÍO, SE OMITE");
+      return null;
+    }
+    if (esTextoReservadoSeguimiento(mensaje, opts.textosReservadosSeguimiento)) {
+      logSeguimientoBloqueadoFlowService({
+        motivo: "texto_paso_seguimiento_en_ejecutarBloqueContenido",
+        nodoId: opts.nodoId || null,
+        cliente_numero: numero,
+        texto: mensaje,
+      });
       return null;
     }
     await enviarTextoWhatsApp(numero, mensaje, opEnvio);
@@ -348,7 +477,13 @@ async function ejecutarBloqueContenido(numero, bloque, usuarioId, conexionWhatsa
   console.log("⚠️ TIPO DE BLOQUE NO RECONOCIDO:", tipo);
 }
 
-async function ejecutarContenidoNodo(numero, nodo, usuarioId, conexionWhatsappId = null) {
+async function ejecutarContenidoNodo(
+  numero,
+  nodo,
+  usuarioId,
+  conexionWhatsappId = null,
+  opts = {}
+) {
   console.log("📦 EJECUTANDO NODO CONTENIDO");
   console.log("📦 DATA NODO:", nodo?.data);
   console.log("🧩 JSON REAL BLOQUES:", extraerJsonVariantesDesdeNodo(nodo) || "(vacío)");
@@ -371,7 +506,10 @@ async function ejecutarContenidoNodo(numero, nodo, usuarioId, conexionWhatsappId
     let ultimoTextoBot = "";
     for (const bloque of bloques) {
       console.log("📦 BLOQUE ACTUAL:", bloque);
-      const enviado = await ejecutarBloqueContenido(numero, bloque, usuarioId, conexionWhatsappId);
+      const enviado = await ejecutarBloqueContenido(numero, bloque, usuarioId, conexionWhatsappId, {
+        textosReservadosSeguimiento: opts.textosReservadosSeguimiento,
+        nodoId: nodo?.id || null,
+      });
       if (enviado && typeof enviado === "string") ultimoTextoBot = enviado;
     }
 
@@ -393,6 +531,11 @@ async function ejecutarFlujo(
 
   const nodos = flujoData.nodos;
   const conexiones = normalizarConexionesFlujo(flujoData.conexiones);
+  const textosReservadosSeguimiento = construirTextosReservadosSeguimientoFlujo(nodos);
+
+  if (textosReservadosSeguimiento.size) {
+    console.log("[FLUJO] Textos reservados seguimiento CRM:", textosReservadosSeguimiento.size);
+  }
 
   let flowContext = opts.flowContextResume || {
     numero,
@@ -544,6 +687,13 @@ async function ejecutarFlujo(
       console.log("➡️ SIGUIENTE NODO IA:", ids.join(", "));
     }
 
+    if (etiqueta === "seguimiento") {
+      console.log(
+        "[FLUJO] Seguimiento CRM — continuando solo por conexiones salientes:",
+        ids.join(", ")
+      );
+    }
+
     console.log(
       "[FLUJO] Siguiente nodo:",
       ids.join(", "),
@@ -616,8 +766,19 @@ async function ejecutarFlujo(
     const html = nodo.html || "";
     const tipoNodo = detectarTipoNodo(nodo);
     const tipoRaw = resolverTipoRaw(nodo);
+    const esSeguimientoCRM = esNodoSeguimiento(nodo);
+    const tipoEjecucion = esSeguimientoCRM ? "seguimiento" : tipoNodo;
 
-    console.log("🧩 Tipo nodo detectado:", tipoNodo);
+    if (esSeguimientoCRM && tipoNodo !== "seguimiento") {
+      logSeguimientoBloqueadoFlowService({
+        motivo: "reclasificado_a_seguimiento_crm",
+        nodoId,
+        tipoDetectado: tipoNodo,
+        cliente_numero: numero,
+      });
+    }
+
+    console.log("🧩 Tipo nodo detectado:", tipoEjecucion, tipoNodo !== tipoEjecucion ? `(raw: ${tipoNodo})` : "");
 
     console.log("➡️ NODO ACTUAL:", {
       id: nodo.id,
@@ -630,14 +791,14 @@ async function ejecutarFlujo(
       tipoRaw: resolverTipoRaw(nodo),
       esIA: esTipoIA(nodo),
     });
-    console.log("[FLUJO] Nodo actual:", nodoId, "| tipo:", tipoNodo);
+    console.log("[FLUJO] Nodo actual:", nodoId, "| tipo:", tipoEjecucion);
 
-    if (tipoNodo === "inicio") {
+    if (tipoEjecucion === "inicio") {
       await continuarASiguientes(nodoId, visitados, "inicio");
       return;
     }
 
-    if (tipoNodo === "lector_pago" || tipoRaw === "lector_pago") {
+    if (tipoEjecucion === "lector_pago" || tipoRaw === "lector_pago") {
       console.log("[LECTOR_PAGO_V1] entrando nodo (flowService)", {
         nodoId,
         numero,
@@ -671,13 +832,13 @@ async function ejecutarFlujo(
       return;
     }
 
-    if (tipoNodo === "remarketing_global") {
+    if (tipoEjecucion === "remarketing_global") {
       console.log("[RM24H] nodo cerebro omitido en ejecución (no avanza lead):", nodoId);
       await continuarASiguientes(nodoId, visitados, "remarketing_global");
       return;
     }
 
-    if (tipoNodo === "conversion") {
+    if (tipoEjecucion === "conversion") {
       await ejecutarNodoConversion(nodo, { visitados });
 
       if (flujoId && usuarioId) {
@@ -705,11 +866,16 @@ async function ejecutarFlujo(
       return;
     }
 
-    if (tipoNodo === "seguimiento") {
+    if (tipoEjecucion === "seguimiento") {
+      const auditLegacy = auditarLegacySeguimientoEnNodo(nodo, nodoId, numero);
+
       console.log("[SEGUIMIENTO_DEBUG] nodo detectado", {
         nodoId,
-        nodoTipo: tipoNodo,
+        nodoTipo: tipoEjecucion,
+        nodoTipoDetectado: tipoNodo,
         nodoNombre: nodo.data?.label || nodo.data?.nombre || nodo.dataset?.nombre || null,
+        legacy_en_html: auditLegacy.legacyAcciones.length,
+        pasos_programados: auditLegacy.textosPasos.length,
         data: nodo.data,
       });
       console.log("[SEGUIMIENTO] nodo detectado en flujo", {
@@ -749,12 +915,23 @@ async function ejecutarFlujo(
       return;
     }
 
-    if (tipoNodo === "contenido") {
+    if (tipoEjecucion === "contenido") {
+      if (esSeguimientoCRM) {
+        logSeguimientoBloqueadoFlowService({
+          motivo: "nodo_seguimiento_no_ejecuta_contenido_variantes",
+          nodoId,
+          cliente_numero: numero,
+        });
+        await continuarASiguientes(nodoId, visitados, "seguimiento");
+        return;
+      }
+
       const ejecutado = await ejecutarContenidoNodo(
         numero,
         nodo,
         usuarioId,
-        flowContext.conexionWhatsappId
+        flowContext.conexionWhatsappId,
+        { textosReservadosSeguimiento }
       );
       if (ejecutado?.ok || ejecutado === true) {
         const ultimoTexto =
@@ -773,7 +950,7 @@ async function ejecutarFlujo(
       }
     }
 
-    if (tipoNodo === "openai_agent") {
+    if (tipoEjecucion === "openai_agent") {
       const resumeIA = !!opts.iaResume;
       const mensajeLeadOpenAI = resumeIA
         ? opts.mensajeResume ||
@@ -856,7 +1033,7 @@ async function ejecutarFlujo(
       return;
     }
 
-    if (tipoNodo === "ia_pro") {
+    if (tipoEjecucion === "ia_pro") {
       const resumeIA = !!opts.iaResume;
 
       flowContext = await ejecutarNodoIAPro(
@@ -931,7 +1108,7 @@ async function ejecutarFlujo(
       return;
     }
 
-    if (tipoNodo === "ia" || esTipoIA(nodo)) {
+    if (tipoEjecucion === "ia" || esTipoIA(nodo)) {
       console.log("⚡ AGENTE RAPIDO intacto");
       const configIA = parseIAFromNodo(nodo);
       const esRouter = esConfigRouterLocal(configIA);
@@ -1027,107 +1204,113 @@ async function ejecutarFlujo(
       return;
     }
 
-const acciones = [];
+    if (esSeguimientoCRM) {
+      auditarLegacySeguimientoEnNodo(nodo, nodoId, numero);
+      logSeguimientoBloqueadoFlowService({
+        motivo: "parser_generico_omitido_en_nodo_seguimiento",
+        nodoId,
+        cliente_numero: numero,
+        tipoDetectado: tipoNodo,
+      });
+      await continuarASiguientes(nodoId, visitados, "seguimiento");
+      return;
+    }
 
-const regex = /<p[^>]*>\s*(texto|tiempo|imagen|audio|video|doc):\s*([\s\S]*?)<\/p>/gi;
-let match;
+    const acciones = extraerAccionesLegacyHtml(html);
 
-while ((match = regex.exec(html)) !== null) {
-  const tipoAccion = match[1].trim().toLowerCase();
+    for (const accion of acciones) {
+      console.log("✅ ACCION DETECTADA:", accion.tipo, accion.valor);
+    }
 
-  let valorAccion = match[2]
-    .replace(/&amp;/g, "&")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/<[^>]*>/g, "")
-    .trim();
-
-  console.log("✅ ACCION DETECTADA:", tipoAccion, valorAccion);
-
-  acciones.push({
-    tipo: tipoAccion,
-    valor: valorAccion
-  });
-}
-
-console.log("📦 TODAS LAS ACCIONES DEL NODO:", acciones);
+    console.log("📦 TODAS LAS ACCIONES DEL NODO:", acciones);
 
     for (const accion of acciones) {
       if (accion.tipo === "texto") {
+        if (esTextoReservadoSeguimiento(accion.valor, textosReservadosSeguimiento)) {
+          logSeguimientoBloqueadoFlowService({
+            motivo: "texto_reservado_seguimiento_en_parser_generico",
+            nodoId,
+            cliente_numero: numero,
+            texto: accion.valor,
+            tipoDetectado: tipoNodo,
+          });
+          continue;
+        }
         console.log("📤 MENSAJE ENVIADO (nodo):", accion.valor);
         await enviarTextoWhatsApp(numero, accion.valor, opEnvioNodo());
       }
 
       if (accion.tipo === "tiempo") {
-        const segundos = parseInt(accion.valor);
+        const segundos = parseInt(accion.valor, 10);
 
         if (!isNaN(segundos) && segundos > 0) {
           await esperarSegundos(segundos);
         }
       }
 
-if (accion.tipo === "imagen") {
-  const partes = accion.valor.split("||");
-  const urlImagen = partes[0].trim();
-  const captionImagen = partes[1] ? partes[1].trim() : "";
+      if (accion.tipo === "imagen") {
+        const partes = accion.valor.split("||");
+        const urlImagen = partes[0].trim();
+        const captionImagen = partes[1] ? partes[1].trim() : "";
 
-  await enviarMediaWhatsApp(numero, "image", urlImagen, captionImagen, opEnvioNodo());
-}
+        await enviarMediaWhatsApp(numero, "image", urlImagen, captionImagen, opEnvioNodo());
+      }
 
-if (accion.tipo === "audio") {
-  console.log("🎧 Nodo audio detectado:", accion.valor);
+      if (accion.tipo === "audio") {
+        console.log("🎧 Nodo audio detectado:", accion.valor);
 
-  await enviarMediaWhatsApp(numero, "audio", accion.valor, "", opEnvioNodo());
-}
+        await enviarMediaWhatsApp(numero, "audio", accion.valor, "", opEnvioNodo());
+      }
 
-if (accion.tipo === "video") {
-  const partes = accion.valor.split("||");
-  const urlVideo = partes[0].trim();
-  const captionVideo = partes[1] ? partes[1].trim() : "";
+      if (accion.tipo === "video") {
+        const partes = accion.valor.split("||");
+        const urlVideo = partes[0].trim();
+        const captionVideo = partes[1] ? partes[1].trim() : "";
 
-  await enviarMediaWhatsApp(numero, "video", urlVideo, captionVideo, opEnvioNodo());
-}
+        await enviarMediaWhatsApp(numero, "video", urlVideo, captionVideo, opEnvioNodo());
+      }
 
-if (accion.tipo === "doc") {
-  console.log("📄 Nodo documento detectado:", accion.valor);
+      if (accion.tipo === "doc") {
+        console.log("📄 Nodo documento detectado:", accion.valor);
 
-  await enviarMediaWhatsApp(numero, "document", accion.valor, "", opEnvioNodo());
-}
-
+        await enviarMediaWhatsApp(numero, "document", accion.valor, "", opEnvioNodo());
+      }
     }
 
     if (html.includes("⏳ Espera")) {
       const matchEspera = html.match(/<input[^>]*value="([^"]*)"/i);
-      const segundos = matchEspera ? parseInt(matchEspera[1]) : 0;
+      const segundos = matchEspera ? parseInt(matchEspera[1], 10) : 0;
 
       if (!isNaN(segundos) && segundos > 0) {
         await esperarSegundos(segundos);
       }
     }
-if (html.includes("🏷️ Etiqueta")) {
-  let etiqueta = "";
 
-  const matchSelect = html.match(/<option[^>]*value="([^"]*)"[^>]*selected/i);
-  const matchInput = html.match(/<input[^>]*value="([^"]*)"/i);
+    if (html.includes("🏷️ Etiqueta")) {
+      let etiqueta = "";
 
-  if (matchSelect) {
-    etiqueta = matchSelect[1].trim();
-  } else if (matchInput) {
-    etiqueta = matchInput[1].trim();
-  }
+      const matchSelect = html.match(/<option[^>]*value="([^"]*)"[^>]*selected/i);
+      const matchInput = html.match(/<input[^>]*value="([^"]*)"/i);
 
-  if (etiqueta) {
-    const conexionParaEtiqueta =
-      flowContext.conexionWhatsappId ?? conexionLineaEntrante ?? null;
-    await agregarEtiquetaCliente(
-      numero,
-      etiqueta,
-      usuarioId,
-      conexionParaEtiqueta
-    );
-  }
-}
-    await continuarASiguientes(nodoId, visitados, tipoNodo);
+      if (matchSelect) {
+        etiqueta = matchSelect[1].trim();
+      } else if (matchInput) {
+        etiqueta = matchInput[1].trim();
+      }
+
+      if (etiqueta) {
+        const conexionParaEtiqueta =
+          flowContext.conexionWhatsappId ?? conexionLineaEntrante ?? null;
+        await agregarEtiquetaCliente(
+          numero,
+          etiqueta,
+          usuarioId,
+          conexionParaEtiqueta
+        );
+      }
+    }
+
+    await continuarASiguientes(nodoId, visitados, tipoEjecucion);
   }
 
   if (opts.lectorContinuarDesdeNodoId) {
