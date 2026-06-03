@@ -12,6 +12,7 @@ const {
   refreshInsights,
 } = require("../services/metaAds/metaAdsInsightsService");
 const { getMetaAdsCampaigns } = require("../services/metaAds/metaAdsCampaignsService");
+const { runMetaAdsDebug } = require("../services/metaAds/metaAdsDebugService");
 
 function protegerApi(req, res, next) {
   if (req.session?.usuario?.id) return next();
@@ -97,6 +98,24 @@ router.post("/api/meta-ads/refresh", protegerApi, async (req, res) => {
     res.json(data);
   } catch (error) {
     handleError(res, error, "refresh");
+  }
+});
+
+router.get("/api/meta-ads/debug", protegerApi, async (req, res) => {
+  try {
+    const data = await runMetaAdsDebug({
+      usuarioId: uid(req),
+      conexionWhatsappId: req.query.conexion_whatsapp_id || null,
+    });
+    res.json(data);
+  } catch (error) {
+    const status = error.status || 500;
+    console.log(`[META_ADS_DEBUG] route_error (${status}):`, error.message);
+    res.status(status >= 400 && status < 600 ? status : 500).json({
+      ok: false,
+      debug: true,
+      error: error.message || "Error en diagnóstico Meta Ads",
+    });
   }
 });
 
