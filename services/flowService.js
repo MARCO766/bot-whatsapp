@@ -277,8 +277,36 @@ function normalizarTextoReservaSeguimiento(texto) {
   return String(texto || "").trim().toLowerCase();
 }
 
-function logSeguimientoBloqueadoFlowService(payload) {
-  console.log("[SEGUIMIENTO_BLOQUEADO_FLOWSERVICE]", payload);
+function logSeguimientoLegacyBloqueado(payload) {
+  console.log("[SEGUIMIENTO_LEGACY_BLOQUEADO]", payload);
+}
+
+function htmlTieneSeguimientoCRM(html) {
+  const h = String(html || "");
+  return (
+    h.includes("seguimiento-data") ||
+    h.includes("⏱️ Seguimiento") ||
+    h.includes("🔔 Seguimiento") ||
+    h.includes("Seguimiento CRM")
+  );
+}
+
+function nodoEsSeguimientoCRM(nodo) {
+  return esNodoSeguimiento(nodo) || htmlTieneSeguimientoCRM(nodo?.html || "");
+}
+
+function esValorLegacyReservadoSeguimiento(valor, textosReservados) {
+  const raw = String(valor || "").trim();
+  if (!raw || !textosReservados?.size) return false;
+
+  if (esTextoReservadoSeguimiento(raw, textosReservados)) return true;
+
+  const partes = raw.split("||");
+  for (const parte of partes) {
+    if (esTextoReservadoSeguimiento(parte, textosReservados)) return true;
+  }
+
+  return false;
 }
 
 function extraerAccionesLegacyHtml(html) {
@@ -324,7 +352,7 @@ function construirTextosReservadosSeguimientoFlujo(nodos) {
   const set = new Set();
 
   for (const nodo of nodos || []) {
-    if (!esNodoSeguimiento(nodo)) continue;
+    if (!nodoEsSeguimientoCRM(nodo)) continue;
 
     for (const t of extraerTextosPasosSeguimiento(nodo)) {
       const norm = normalizarTextoReservaSeguimiento(t);
@@ -332,9 +360,12 @@ function construirTextosReservadosSeguimientoFlujo(nodos) {
     }
 
     for (const acc of extraerAccionesLegacyHtml(nodo.html || "")) {
-      if (acc.tipo === "texto" && acc.valor) {
-        const norm = normalizarTextoReservaSeguimiento(acc.valor);
-        if (norm) set.add(norm);
+      if (!acc.valor) continue;
+      const norm = normalizarTextoReservaSeguimiento(acc.valor);
+      if (norm) set.add(norm);
+      for (const parte of String(acc.valor).split("||")) {
+        const pNorm = normalizarTextoReservaSeguimiento(parte);
+        if (pNorm) set.add(pNorm);
       }
     }
   }
@@ -353,7 +384,7 @@ function auditarLegacySeguimientoEnNodo(nodo, nodoId, clienteNumero) {
   const textosPasos = extraerTextosPasosSeguimiento(nodo);
 
   if (legacyAcciones.length) {
-    logSeguimientoBloqueadoFlowService({
+    logSeguimientoLegacyBloqueado({
       motivo: "html_legacy_detectado_en_nodo_seguimiento",
       nodoId,
       cliente_numero: clienteNumero,
@@ -363,12 +394,13 @@ function auditarLegacySeguimientoEnNodo(nodo, nodoId, clienteNumero) {
     });
 
     for (const acc of legacyAcciones) {
-      if (acc.tipo !== "texto" || !acc.valor) continue;
-      logSeguimientoBloqueadoFlowService({
-        motivo: "texto_legacy_no_enviado_por_flowservice",
+      if (!acc.valor) continue;
+      logSeguimientoLegacyBloqueado({
+        motivo: "accion_legacy_omitida_en_nodo_seguimiento_crm",
         nodoId,
         cliente_numero: clienteNumero,
-        texto: acc.valor,
+        tipo: acc.tipo,
+        valor: acc.valor,
         coincide_con_paso:
           textosPasos.some(
             (t) => normalizarTextoReservaSeguimiento(t) === normalizarTextoReservaSeguimiento(acc.valor)
@@ -403,7 +435,7 @@ async function ejecutarBloqueContenido(
       return null;
     }
     if (esTextoReservadoSeguimiento(mensaje, opts.textosReservadosSeguimiento)) {
-      logSeguimientoBloqueadoFlowService({
+      logSeguimientoLegacyBloqueado({
         motivo: "texto_paso_seguimiento_en_ejecutarBloqueContenido",
         nodoId: opts.nodoId || null,
         cliente_numero: numero,
@@ -438,8 +470,23 @@ async function ejecutarBloqueContenido(
     return;
   }
 
+  const caption = captionMediaBloque(bloque);
+  if (
+    esTextoReservadoSeguimiento(media, opts.textosReservadosSeguimiento) ||
+    esTextoReservadoSeguimiento(caption, opts.textosReservadosSeguimiento)
+  ) {
+    logSeguimientoLegacyBloqueado({
+      motivo: "media_paso_seguimiento_en_ejecutarBloqueContenido",
+      nodoId: opts.nodoId || null,
+      cliente_numero: numero,
+      tipo,
+      media,
+      caption: caption || null,
+    });
+    return null;
+  }
+
   if (tipo.includes("imagen") || tipo === "image") {
-    const caption = captionMediaBloque(bloque);
     console.log("🖼️ BLOQUE CONTENIDO IMAGEN:", { numero, mediaUrl: media, caption });
     const enviado = await enviarMediaWhatsApp(numero, "image", media, caption, opEnvio);
     if (enviado && enviado.whatsapp_message_id) {
@@ -451,7 +498,7 @@ async function ejecutarBloqueContenido(
   }
 
   if (tipo.includes("video")) {
-    const enviado = await enviarMediaWhatsApp(numero, "video", media, captionMediaBloque(bloque), opEnvio);
+    const enviado = await enviarMediaWhatsApp(numero, "video", media, caption, opEnvio);
     if (enviado) console.log("✅ VIDEO ENVIADO");
     else console.log("❌ VIDEO NO ENVIADO (Meta o URL inválida)");
     return;
@@ -465,7 +512,7 @@ async function ejecutarBloqueContenido(
   }
 
   if (tipo.includes("pdf") || tipo.includes("doc") || tipo === "document") {
-    const enviado = await enviarMediaWhatsApp(numero, "document", media, captionMediaBloque(bloque), {
+    const enviado = await enviarMediaWhatsApp(numero, "document", media, caption, {
       ...opEnvio,
       filename: bloque.nombre || bloque.filename || "archivo.pdf",
     });
@@ -484,6 +531,15 @@ async function ejecutarContenidoNodo(
   conexionWhatsappId = null,
   opts = {}
 ) {
+  if (nodoEsSeguimientoCRM(nodo)) {
+    logSeguimientoLegacyBloqueado({
+      motivo: "ejecutarContenidoNodo_omitido_en_nodo_seguimiento_crm",
+      nodoId: nodo?.id || null,
+      cliente_numero: numero,
+    });
+    return false;
+  }
+
   console.log("📦 EJECUTANDO NODO CONTENIDO");
   console.log("📦 DATA NODO:", nodo?.data);
   console.log("🧩 JSON REAL BLOQUES:", extraerJsonVariantesDesdeNodo(nodo) || "(vacío)");
@@ -766,11 +822,11 @@ async function ejecutarFlujo(
     const html = nodo.html || "";
     const tipoNodo = detectarTipoNodo(nodo);
     const tipoRaw = resolverTipoRaw(nodo);
-    const esSeguimientoCRM = esNodoSeguimiento(nodo);
+    const esSeguimientoCRM = nodoEsSeguimientoCRM(nodo);
     const tipoEjecucion = esSeguimientoCRM ? "seguimiento" : tipoNodo;
 
     if (esSeguimientoCRM && tipoNodo !== "seguimiento") {
-      logSeguimientoBloqueadoFlowService({
+      logSeguimientoLegacyBloqueado({
         motivo: "reclasificado_a_seguimiento_crm",
         nodoId,
         tipoDetectado: tipoNodo,
@@ -917,7 +973,7 @@ async function ejecutarFlujo(
 
     if (tipoEjecucion === "contenido") {
       if (esSeguimientoCRM) {
-        logSeguimientoBloqueadoFlowService({
+        logSeguimientoLegacyBloqueado({
           motivo: "nodo_seguimiento_no_ejecuta_contenido_variantes",
           nodoId,
           cliente_numero: numero,
@@ -931,7 +987,7 @@ async function ejecutarFlujo(
         nodo,
         usuarioId,
         flowContext.conexionWhatsappId,
-        { textosReservadosSeguimiento }
+        { textosReservadosSeguimiento, nodoId }
       );
       if (ejecutado?.ok || ejecutado === true) {
         const ultimoTexto =
@@ -945,9 +1001,9 @@ async function ejecutarFlujo(
           };
           flowContext.ultimoNodoContenido = nodoId;
         }
-        await continuarASiguientes(nodoId, visitados, "contenido");
-        return;
       }
+      await continuarASiguientes(nodoId, visitados, "contenido");
+      return;
     }
 
     if (tipoEjecucion === "openai_agent") {
@@ -1204,10 +1260,10 @@ async function ejecutarFlujo(
       return;
     }
 
-    if (esSeguimientoCRM) {
+    if (esSeguimientoCRM || htmlTieneSeguimientoCRM(html)) {
       auditarLegacySeguimientoEnNodo(nodo, nodoId, numero);
-      logSeguimientoBloqueadoFlowService({
-        motivo: "parser_generico_omitido_en_nodo_seguimiento",
+      logSeguimientoLegacyBloqueado({
+        motivo: "parser_generico_omitido_en_nodo_seguimiento_crm",
         nodoId,
         cliente_numero: numero,
         tipoDetectado: tipoNodo,
@@ -1225,17 +1281,19 @@ async function ejecutarFlujo(
     console.log("📦 TODAS LAS ACCIONES DEL NODO:", acciones);
 
     for (const accion of acciones) {
+      if (esValorLegacyReservadoSeguimiento(accion.valor, textosReservadosSeguimiento)) {
+        logSeguimientoLegacyBloqueado({
+          motivo: "texto_reservado_seguimiento_en_parser_generico",
+          nodoId,
+          cliente_numero: numero,
+          tipo: accion.tipo,
+          valor: accion.valor,
+          tipoDetectado: tipoNodo,
+        });
+        continue;
+      }
+
       if (accion.tipo === "texto") {
-        if (esTextoReservadoSeguimiento(accion.valor, textosReservadosSeguimiento)) {
-          logSeguimientoBloqueadoFlowService({
-            motivo: "texto_reservado_seguimiento_en_parser_generico",
-            nodoId,
-            cliente_numero: numero,
-            texto: accion.valor,
-            tipoDetectado: tipoNodo,
-          });
-          continue;
-        }
         console.log("📤 MENSAJE ENVIADO (nodo):", accion.valor);
         await enviarTextoWhatsApp(numero, accion.valor, opEnvioNodo());
       }
