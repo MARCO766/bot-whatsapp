@@ -77,6 +77,7 @@ router.get("/api/meta-ads/insights", protegerApi, async (req, res) => {
       usuarioId: uid(req),
       conexionWhatsappId: req.query.conexion_whatsapp_id || null,
       periodo: req.query.periodo || "7d",
+      campaignId: req.query.campaign_id ?? req.query.campaignId ?? null,
     });
     res.json(data);
   } catch (error) {
@@ -91,6 +92,7 @@ router.post("/api/meta-ads/refresh", protegerApi, async (req, res) => {
       usuarioId: uid(req),
       conexionWhatsappId: body.conexion_whatsapp_id ?? body.conexionWhatsappId ?? null,
       periodo: body.periodo || "7d",
+      campaignId: body.campaign_id ?? body.campaignId ?? null,
     });
     res.json(data);
   } catch (error) {

@@ -135,7 +135,13 @@ export default function Metricas() {
     error: metaAdsInsightsError,
     refresh: refreshMetaAdsInsights,
     reload: reloadMetaAdsInsights,
-  } = useMetaAdsInsights(periodo, conexionSeleccionadaId, adsConectado, conexionesLoading);
+  } = useMetaAdsInsights(
+    periodo,
+    conexionSeleccionadaId,
+    adsConectado,
+    conexionesLoading,
+    metaAdsCampaignId
+  );
   const {
     campaigns: metaAdsCampaigns,
     loading: metaAdsCampaignsLoading,

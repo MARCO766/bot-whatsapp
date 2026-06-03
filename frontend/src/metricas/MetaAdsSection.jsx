@@ -202,7 +202,7 @@ function MetaAdsCampaignSelect({ campaigns, value, onChange, disabled }) {
     <label className="metaAdsCampaignSelect">
       <span>Campaña Meta</span>
       <select value={value} onChange={(e) => onChange(e.target.value)} disabled={disabled}>
-        <option value={META_CAMPAIGN_TODAS}>Todas</option>
+        <option value={META_CAMPAIGN_TODAS}>Todas las campañas</option>
         {campaigns.map((c) => (
           <option key={c.id} value={c.id}>
             {c.name}
@@ -320,6 +320,13 @@ export function MetaAdsCompactCard({
   onRefresh,
 }) {
   const campaignList = campaigns || [];
+  const isCampaignScope = Boolean(selectedCampaignId);
+  const selectedCampaign = isCampaignScope
+    ? campaignList.find((c) => String(c.id) === String(selectedCampaignId))
+    : null;
+  const syncLabel = isCampaignScope ? "Sincronizar campaña" : "Sincronizar";
+  const syncLabelPending = isCampaignScope ? "Sincronizando campaña…" : "Sincronizando…";
+  const syncLabelInline = isCampaignScope ? "Sync campaña" : "Sincronizar";
 
   if (statusLoading) {
     return <div className="metaAdsCompact metaAdsCompact--loading">Cargando estado Meta Ads…</div>;
@@ -387,14 +394,24 @@ export function MetaAdsCompactCard({
           />
 
           {insightsLoading && !hasCache ? (
-            <p className="metaAdsSyncHint">Cargando insights desde caché…</p>
+            <p className="metaAdsSyncHint">
+              {isCampaignScope
+                ? "Cargando insights de campaña desde caché…"
+                : "Cargando insights desde caché…"}
+            </p>
           ) : null}
 
           {!hasCache && !insightsLoading ? (
             <>
               <p className="metaAdsSyncHint">
-                <strong>Conectado — pendiente de sincronización.</strong> CTR, CPC, CPM, Frecuencia y
-                ROAS requieren Ads API.
+                <strong>Conectado — pendiente de sincronización.</strong>
+                {isCampaignScope && selectedCampaign ? (
+                  <>
+                    {" "}
+                    Campaña: <strong>{selectedCampaign.name}</strong>.
+                  </>
+                ) : null}{" "}
+                CTR, CPC, CPM, Frecuencia y ROAS requieren Ads API.
               </p>
               <button
                 type="button"
@@ -402,13 +419,18 @@ export function MetaAdsCompactCard({
                 onClick={onRefresh}
                 disabled={refreshing}
               >
-                {refreshing ? "Sincronizando…" : "Sincronizar ahora"}
+                {refreshing ? syncLabelPending : isCampaignScope ? syncLabel : "Sincronizar ahora"}
               </button>
             </>
           ) : null}
 
           {showMetrics ? (
             <>
+              {isCampaignScope && selectedCampaign ? (
+                <p className="metaAdsSyncHint">
+                  Métricas de campaña: <strong>{selectedCampaign.name}</strong>
+                </p>
+              ) : null}
               <div className="metaAdsSyncMeta">
                 {syncedLabel ? (
                   <span className="metaAdsSyncTime">Última sincronización: {syncedLabel}</span>
@@ -420,7 +442,7 @@ export function MetaAdsCompactCard({
                   onClick={onRefresh}
                   disabled={refreshing}
                 >
-                  {refreshing ? "Sync…" : "Sincronizar"}
+                  {refreshing ? "Sync…" : syncLabelInline}
                 </button>
               </div>
               <MetaAdsMetricsGrid insights={insights} />
@@ -428,7 +450,11 @@ export function MetaAdsCompactCard({
             </>
           ) : null}
 
-          {refreshing ? <p className="metaAdsSyncHint">Consultando Meta Ads…</p> : null}
+          {refreshing ? (
+            <p className="metaAdsSyncHint">
+              {isCampaignScope ? "Consultando campaña en Meta Ads…" : "Consultando Meta Ads…"}
+            </p>
+          ) : null}
         </div>
       ) : (
         <p className="metaAdsCopy">

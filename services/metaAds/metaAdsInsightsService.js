@@ -54,6 +54,13 @@ function normalizePeriodo(periodo) {
   return "7d";
 }
 
+function normalizeCampaignId(raw) {
+  const v = String(raw ?? "").trim();
+  if (!v) return null;
+  if (!/^\d{5,30}$/.test(v)) return null;
+  return v;
+}
+
 function calcularDateRange(periodo) {
   const p = normalizePeriodo(periodo);
   const days = p === "90d" ? 90 : p === "30d" ? 30 : 7;
@@ -77,13 +84,15 @@ function mapMetaInsightsToCache(metaRow, ctx) {
   const impressions = toInt(metaRow?.impressions);
   const reach = toInt(metaRow?.reach);
   const clicks = toInt(metaRow?.clicks);
+  const campaignId = normalizeCampaignId(ctx.campaignId);
+  const level = campaignId ? "campaign" : "account";
 
   return {
     usuario_id: ctx.usuarioId,
     conexion_whatsapp_id: ctx.connId,
     ad_account_id: ctx.adAccountId,
-    level: "account",
-    campaign_id: null,
+    level,
+    campaign_id: campaignId,
     periodo: ctx.periodo,
     date_start: ctx.date_start,
     date_stop: ctx.date_stop,
@@ -162,16 +171,32 @@ async function sumIngresosCrm(usuarioId, desdeIso, hastaIso, conexionWhatsappId)
   }
 }
 
-async function fetchCacheRow(usuarioId, connId, adAccountId, periodo, date_start, date_stop) {
+async function fetchCacheRow(
+  usuarioId,
+  connId,
+  adAccountId,
+  periodo,
+  date_start,
+  date_stop,
+  campaignId = null
+) {
+  const normalizedCampaignId = normalizeCampaignId(campaignId);
+  const level = normalizedCampaignId ? "campaign" : "account";
+
   let url =
     `${SUPABASE_URL}/rest/v1/meta_ads_insights_cache?usuario_id=eq.${encodeURIComponent(usuarioId)}` +
     `&ad_account_id=eq.${encodeURIComponent(adAccountId)}` +
     `&periodo=eq.${encodeURIComponent(periodo)}` +
-    `&level=eq.account` +
-    `&campaign_id=is.null` +
+    `&level=eq.${encodeURIComponent(level)}` +
     `&date_start=eq.${date_start}` +
     `&date_stop=eq.${date_stop}` +
     `&select=*&limit=1`;
+
+  if (normalizedCampaignId) {
+    url += `&campaign_id=eq.${encodeURIComponent(normalizedCampaignId)}`;
+  } else {
+    url += "&campaign_id=is.null";
+  }
 
   if (connId) {
     url += `&conexion_whatsapp_id=eq.${encodeURIComponent(connId)}`;
@@ -198,7 +223,8 @@ async function upsertCacheRow(payload) {
     payload.ad_account_id,
     payload.periodo,
     payload.date_start,
-    payload.date_stop
+    payload.date_stop,
+    payload.campaign_id
   );
 
   try {
@@ -275,21 +301,7 @@ function parseMetaApiError(error) {
   return error.message || "Error al consultar Meta Ads";
 }
 
-async function fetchMetaInsightsFromGraph({ adAccountId, accessToken, date_start, date_stop }) {
-  const timeRange = JSON.stringify({ since: date_start, until: date_stop });
-  const url = `https://graph.facebook.com/${GRAPH_VERSION}/${encodeURIComponent(adAccountId)}/insights`;
-
-  const res = await axios.get(url, {
-    params: {
-      fields: "spend,impressions,reach,clicks,ctr,cpc,cpm,frequency,account_currency",
-      time_range: timeRange,
-      level: "account",
-      access_token: accessToken,
-    },
-    timeout: 30000,
-  });
-
-  const rows = Array.isArray(res.data?.data) ? res.data.data : [];
+function aggregateInsightsRows(rows) {
   if (!rows.length) {
     return { aggregated: null, account_currency: null };
   }
@@ -326,6 +338,35 @@ async function fetchMetaInsightsFromGraph({ adAccountId, accessToken, date_start
   return { aggregated, account_currency: aggregated.account_currency };
 }
 
+async function fetchMetaInsightsFromGraph({
+  adAccountId,
+  campaignId,
+  accessToken,
+  date_start,
+  date_stop,
+}) {
+  const timeRange = JSON.stringify({ since: date_start, until: date_stop });
+  const fields = "spend,impressions,reach,clicks,ctr,cpc,cpm,frequency,account_currency";
+  const normalizedCampaignId = normalizeCampaignId(campaignId);
+
+  const url = normalizedCampaignId
+    ? `https://graph.facebook.com/${GRAPH_VERSION}/${encodeURIComponent(normalizedCampaignId)}/insights`
+    : `https://graph.facebook.com/${GRAPH_VERSION}/${encodeURIComponent(adAccountId)}/insights`;
+
+  const params = {
+    fields,
+    time_range: timeRange,
+    access_token: accessToken,
+  };
+  if (!normalizedCampaignId) {
+    params.level = "account";
+  }
+
+  const res = await axios.get(url, { params, timeout: 30000 });
+  const rows = Array.isArray(res.data?.data) ? res.data.data : [];
+  return aggregateInsightsRows(rows);
+}
+
 function buildMetricsFromCache(cacheRow, ingresosCrm, accountCurrency) {
   const spend = round2(cacheRow?.spend);
   const roas = calcularRoasHibrido({ ingresosCrm, spend });
@@ -357,6 +398,7 @@ async function buildInsightsResponse({
   usuarioId,
   conexionWhatsappId,
   periodo,
+  campaignId,
   cacheRow,
   configRow,
   cached,
@@ -366,6 +408,8 @@ async function buildInsightsResponse({
   const range = calcularDateRange(periodo);
   const adAccountId = normalizeAdAccountId(configRow?.ad_account_id);
   const accountCurrency = configRow?.account_currency || null;
+  const normalizedCampaignId = normalizeCampaignId(campaignId);
+  const level = normalizedCampaignId ? "campaign" : "account";
 
   const ingresosCrm = await sumIngresosCrm(
     usuarioId,
@@ -404,6 +448,8 @@ async function buildInsightsResponse({
     periodo: range.periodo,
     date_start: range.date_start,
     date_stop: range.date_stop,
+    level,
+    campaign_id: normalizedCampaignId,
     cached: Boolean(cached && cacheRow),
     stale,
     synced_at,
@@ -411,6 +457,8 @@ async function buildInsightsResponse({
     meta: {
       ad_account_id_masked: maskAdAccount(adAccountId),
       account_currency: accountCurrency,
+      level,
+      campaign_id: normalizedCampaignId,
     },
     mensaje,
   };
@@ -429,23 +477,36 @@ async function resolveAdsConfig(usuarioId, conexionWhatsappId) {
   return { ok: true, configRow, connId, adAccountId, token };
 }
 
-async function getCachedInsights({ usuarioId, conexionWhatsappId = null, periodo = "7d" }) {
+async function getCachedInsights({
+  usuarioId,
+  conexionWhatsappId = null,
+  periodo = "7d",
+  campaignId = null,
+}) {
   if (!usuarioId) {
     const err = new Error("usuarioId requerido");
     err.status = 400;
     throw err;
   }
 
+  const normalizedCampaignId = normalizeCampaignId(campaignId);
   const ads = await resolveAdsConfig(usuarioId, conexionWhatsappId);
   if (!ads.ok) {
     return {
       ok: false,
       periodo: normalizePeriodo(periodo),
+      level: normalizedCampaignId ? "campaign" : "account",
+      campaign_id: normalizedCampaignId,
       cached: false,
       stale: true,
       synced_at: null,
       metrics: null,
-      meta: { ad_account_id_masked: null, account_currency: null },
+      meta: {
+        ad_account_id_masked: null,
+        account_currency: null,
+        level: normalizedCampaignId ? "campaign" : "account",
+        campaign_id: normalizedCampaignId,
+      },
       mensaje: "Ads no configurado",
     };
   }
@@ -457,13 +518,15 @@ async function getCachedInsights({ usuarioId, conexionWhatsappId = null, periodo
     ads.adAccountId,
     range.periodo,
     range.date_start,
-    range.date_stop
+    range.date_stop,
+    normalizedCampaignId
   );
 
   return buildInsightsResponse({
     usuarioId,
     conexionWhatsappId: ads.connId,
     periodo: range.periodo,
+    campaignId: normalizedCampaignId,
     cacheRow,
     configRow: ads.configRow,
     cached: Boolean(cacheRow),
@@ -471,13 +534,19 @@ async function getCachedInsights({ usuarioId, conexionWhatsappId = null, periodo
   });
 }
 
-async function refreshInsights({ usuarioId, conexionWhatsappId = null, periodo = "7d" }) {
+async function refreshInsights({
+  usuarioId,
+  conexionWhatsappId = null,
+  periodo = "7d",
+  campaignId = null,
+}) {
   if (!usuarioId) {
     const err = new Error("usuarioId requerido");
     err.status = 400;
     throw err;
   }
 
+  const normalizedCampaignId = normalizeCampaignId(campaignId);
   const ads = await resolveAdsConfig(usuarioId, conexionWhatsappId);
   if (!ads.ok) {
     const err = new Error("Ads no configurado");
@@ -493,15 +562,21 @@ async function refreshInsights({ usuarioId, conexionWhatsappId = null, periodo =
     ads.adAccountId,
     range.periodo,
     range.date_start,
-    range.date_stop
+    range.date_stop,
+    normalizedCampaignId
   );
 
   if (isRecentlySynced(existingCache?.synced_at)) {
-    logSafe("refresh_skipped_recent", { usuarioId, periodo: range.periodo });
+    logSafe("refresh_skipped_recent", {
+      usuarioId,
+      periodo: range.periodo,
+      campaign_id: normalizedCampaignId || "(account)",
+    });
     const response = await buildInsightsResponse({
       usuarioId,
       conexionWhatsappId: ads.connId,
       periodo: range.periodo,
+      campaignId: normalizedCampaignId,
       cacheRow: existingCache,
       configRow: ads.configRow,
       cached: true,
@@ -513,12 +588,14 @@ async function refreshInsights({ usuarioId, conexionWhatsappId = null, periodo =
   logSafe("refresh_start", {
     usuarioId,
     periodo: range.periodo,
+    campaign_id: normalizedCampaignId || "(account)",
     ad_account_id_masked: maskAdAccount(ads.adAccountId),
   });
 
   try {
     const { aggregated, account_currency } = await fetchMetaInsightsFromGraph({
       adAccountId: ads.adAccountId,
+      campaignId: normalizedCampaignId,
       accessToken: ads.token,
       date_start: range.date_start,
       date_stop: range.date_stop,
@@ -528,6 +605,7 @@ async function refreshInsights({ usuarioId, conexionWhatsappId = null, periodo =
       usuarioId,
       connId: ads.connId,
       adAccountId: ads.adAccountId,
+      campaignId: normalizedCampaignId,
       periodo: range.periodo,
       date_start: range.date_start,
       date_stop: range.date_stop,
@@ -543,6 +621,7 @@ async function refreshInsights({ usuarioId, conexionWhatsappId = null, periodo =
     logSafe("refresh_success", {
       usuarioId,
       periodo: range.periodo,
+      campaign_id: normalizedCampaignId || "(account)",
       spend: saved.spend,
     });
 
@@ -550,6 +629,7 @@ async function refreshInsights({ usuarioId, conexionWhatsappId = null, periodo =
       usuarioId,
       conexionWhatsappId: ads.connId,
       periodo: range.periodo,
+      campaignId: normalizedCampaignId,
       cacheRow: saved,
       configRow: {
         ...ads.configRow,
@@ -560,14 +640,21 @@ async function refreshInsights({ usuarioId, conexionWhatsappId = null, periodo =
     });
 
     if (round2(saved.spend) <= 0) {
-      response.mensaje = "No hay gasto publicitario en este periodo";
+      response.mensaje = normalizedCampaignId
+        ? "No hay gasto publicitario en esta campaña en el periodo"
+        : "No hay gasto publicitario en este periodo";
     }
 
     return response;
   } catch (error) {
     const msg = parseMetaApiError(error);
     await updateConfigSyncOk(ads.configRow.id, { ultimoError: msg });
-    logSafe("refresh_error", { usuarioId, periodo: range.periodo, error: msg });
+    logSafe("refresh_error", {
+      usuarioId,
+      periodo: range.periodo,
+      campaign_id: normalizedCampaignId || "(account)",
+      error: msg,
+    });
 
     const err = new Error(msg);
     err.status = error.response?.status === 401 || error.response?.status === 403 ? 403 : 502;
@@ -577,6 +664,7 @@ async function refreshInsights({ usuarioId, conexionWhatsappId = null, periodo =
 
 module.exports = {
   normalizePeriodo,
+  normalizeCampaignId,
   calcularDateRange,
   mapMetaInsightsToCache,
   calcularRoasHibrido,

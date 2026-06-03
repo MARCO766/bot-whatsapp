@@ -3,21 +3,35 @@ import { MetricasApiError, fetchMetaAdsInsights, refreshMetaAdsInsights } from "
 import { periodoToMetaAdsApi } from "./format";
 import { apiConexionWhatsappParam } from "../utils/conexionesInbox";
 
-export function useMetaAdsInsights(periodoLabel, conexionWhatsappId, adsConectado, conexionesLoading) {
+function normalizeCampaignParam(campaignId) {
+  const v = String(campaignId ?? "").trim();
+  if (!v) return null;
+  return v;
+}
+
+export function useMetaAdsInsights(
+  periodoLabel,
+  conexionWhatsappId,
+  adsConectado,
+  conexionesLoading,
+  campaignId
+) {
   const [insights, setInsights] = useState(null);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
 
   const periodoApi = periodoToMetaAdsApi(periodoLabel);
+  const campaignApi = normalizeCampaignParam(campaignId);
 
   const buildParams = useCallback(() => {
     const conn = apiConexionWhatsappParam(conexionWhatsappId);
     return {
       periodo: periodoApi,
       ...(conn ? { conexion_whatsapp_id: conn } : {}),
+      ...(campaignApi ? { campaign_id: campaignApi } : {}),
     };
-  }, [conexionWhatsappId, periodoApi]);
+  }, [campaignApi, conexionWhatsappId, periodoApi]);
 
   const load = useCallback(async () => {
     if (conexionesLoading || conexionWhatsappId == null || !adsConectado) {
@@ -55,6 +69,7 @@ export function useMetaAdsInsights(periodoLabel, conexionWhatsappId, adsConectad
       const data = await refreshMetaAdsInsights({
         periodo: periodoApi,
         ...(conn ? { conexion_whatsapp_id: conn } : {}),
+        ...(campaignApi ? { campaign_id: campaignApi } : {}),
       });
       setInsights(data);
       return data;
@@ -66,7 +81,7 @@ export function useMetaAdsInsights(periodoLabel, conexionWhatsappId, adsConectad
     } finally {
       setRefreshing(false);
     }
-  }, [adsConectado, conexionWhatsappId, periodoApi]);
+  }, [adsConectado, campaignApi, conexionWhatsappId, periodoApi]);
 
   return { insights, loading, refreshing, error, reload: load, refresh };
 }
