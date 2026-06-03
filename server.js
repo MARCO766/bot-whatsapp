@@ -74,7 +74,6 @@ app.use(session({
   },
 }));
 
-app.use(authRoutes);
 app.use(webhookRoutes);
 app.use(adminRoutes);
 app.use("/", inboxRoutes);
@@ -98,22 +97,32 @@ console.log("✅ API Clientes montada en /api/clientes");
 console.log("✅ API IA montada en POST /api/ai/run");
 console.log("✅ Cron interno montado en POST /api/internal/cron/rm24h (seguimientos HTTP deshabilitado)");
 
-// ─── CRM React (frontend/dist) — mismo origen que /api en producción ───
-const frontendDist = path.join(__dirname, "frontend", "dist");
-const frontendIndex = path.join(frontendDist, "index.html");
-const hasFrontendBuild = fs.existsSync(frontendIndex);
+/** Rutas de auth backend — deben ir antes del fallback React (Express, no SPA). */
+const AUTH_BACKEND_PATHS = new Set([
+  "/login",
+  "/logout",
+  "/forgot-password",
+  "/reset-password",
+]);
 
-if (hasFrontendBuild) {
-  console.log("✅ Sirviendo CRM React desde", frontendDist);
-  app.use(express.static(frontendDist, { index: false }));
+function normalizePathname(req) {
+  const raw = req.originalUrl || req.url || req.path || "/";
+  const pathname = String(raw).split("?")[0].split("#")[0];
+  const trimmed = pathname.replace(/\/+$/, "");
+  return trimmed || "/";
+}
+
+function isAuthBackendPath(req) {
+  return AUTH_BACKEND_PATHS.has(normalizePathname(req));
+}
+
+function isBackendOnlyPath(req) {
+  const pathname = normalizePathname(req);
+  if (isAuthBackendPath(req)) return true;
 
   const backendOnlyPrefixes = [
     "/api",
     "/admin",
-    "/login",
-    "/logout",
-    "/forgot-password",
-    "/reset-password",
     "/inbox",
     "/builder",
     "/webhook",
@@ -128,16 +137,40 @@ if (hasFrontendBuild) {
     "/desbloquear-",
     "/chat-",
     "/debug-",
+    "/reset-",
+    "/forgot-",
   ];
+
+  return backendOnlyPrefixes.some(
+    (prefix) => pathname === prefix || pathname.startsWith(prefix)
+  );
+}
+
+// ─── CRM React (frontend/dist) — mismo origen que /api en producción ───
+const frontendDist = path.join(__dirname, "frontend", "dist");
+const frontendIndex = path.join(frontendDist, "index.html");
+const hasFrontendBuild = fs.existsSync(frontendIndex);
+
+if (hasFrontendBuild) {
+  console.log("✅ Sirviendo CRM React desde", frontendDist);
+
+  // Login / reset password: Express backend (routes/auth.js), nunca index.html del SPA.
+  app.use(authRoutes);
+
+  app.use((req, res, next) => {
+    if (isBackendOnlyPath(req)) return next();
+    return express.static(frontendDist, { index: false })(req, res, next);
+  });
 
   app.get("/{*splat}", (req, res, next) => {
     if (req.method !== "GET") return next();
-    if (backendOnlyPrefixes.some((p) => req.path.startsWith(p))) return next();
+    if (isBackendOnlyPath(req)) return next();
     if (req.path.includes(".") && !req.path.endsWith(".html")) return next();
     return res.sendFile(frontendIndex);
   });
 } else {
   console.log("⚠️ frontend/dist no encontrado — ejecuta: npm run build:frontend");
+  app.use(authRoutes);
 }
 
 
