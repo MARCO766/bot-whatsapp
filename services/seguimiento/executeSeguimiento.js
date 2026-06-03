@@ -34,9 +34,8 @@ function textoContenidoSeguimiento(item) {
   return String(payload.caption || payload.url || payload.texto || "").trim();
 }
 
-function logWorkerItemFinal(item, origenLog = "pre_envio") {
+function logWorkerItemFinal(item) {
   console.log("[WORKER_ITEM_FINAL]", {
-    origen_log: origenLog,
     id: item?.id ?? null,
     cliente_numero: item?.cliente_numero ?? null,
     contenido: textoContenidoSeguimiento(item),
@@ -113,11 +112,11 @@ async function enviarMensajeSeguimiento(item) {
     if (botones.length) {
       const res = await enviarBotonesWhatsApp(item.cliente_numero, texto, botones, opciones);
       if (!res) throw new Error("No se pudo enviar botones de seguimiento");
-    } else {
-      const res = await enviarTextoWhatsApp(item.cliente_numero, texto, opciones);
-      if (!res) throw new Error("No se pudo enviar texto de seguimiento");
+      return res;
     }
-    return;
+    const res = await enviarTextoWhatsApp(item.cliente_numero, texto, opciones);
+    if (!res) throw new Error("No se pudo enviar texto de seguimiento");
+    return res;
   }
 
   if (tipo === "imagen") {
@@ -131,7 +130,7 @@ async function enviarMensajeSeguimiento(item) {
       opciones
     );
     if (!res) throw new Error("No se pudo enviar imagen de seguimiento");
-    return;
+    return res;
   }
 
   if (tipo === "audio") {
@@ -139,7 +138,7 @@ async function enviarMensajeSeguimiento(item) {
     if (!url) throw new Error("URL de audio vacía");
     const res = await enviarMediaWhatsApp(item.cliente_numero, "audio", url, "", opciones);
     if (!res) throw new Error("No se pudo enviar audio de seguimiento");
-    return;
+    return res;
   }
 
   if (tipo === "pdf") {
@@ -153,7 +152,7 @@ async function enviarMensajeSeguimiento(item) {
       opciones
     );
     if (!res) throw new Error("No se pudo enviar PDF de seguimiento");
-    return;
+    return res;
   }
 
   if (tipo === "video") {
@@ -167,7 +166,7 @@ async function enviarMensajeSeguimiento(item) {
       opciones
     );
     if (!res) throw new Error("No se pudo enviar video de seguimiento");
-    return;
+    return res;
   }
 
   throw new Error("Tipo de mensaje no soportado: " + tipo);
@@ -255,7 +254,7 @@ async function intentarReservarYEnviarPaso(item, io) {
   });
 
   const itemParaEnvio = itemDb || reservado;
-  logWorkerItemFinal(itemParaEnvio, "pre_envio");
+  logWorkerItemFinal(itemParaEnvio);
 
   try {
     console.log("[SEGUIMIENTO_MULTI] ejecutando seguimiento", {
@@ -266,7 +265,10 @@ async function intentarReservarYEnviarPaso(item, io) {
       conexion_whatsapp_id: obtenerConexionSeguimiento(itemParaEnvio),
       paso_index: reservado.paso_index,
     });
-    await enviarMensajeSeguimiento(itemParaEnvio);
+    const enviado = await enviarMensajeSeguimiento(itemParaEnvio);
+    if (!enviado) {
+      throw new Error("Seguimiento: envío/inbox sin confirmar — no marcar enviado");
+    }
     await actualizarEstado(reservado.id, ESTADOS_SEGUIMIENTO.ENVIADO);
     emitirEstadoSeguimiento(io, reservado, ESTADOS_SEGUIMIENTO.ENVIADO);
     console.log("[SEGUIMIENTO_WORKER] enviado ok", {
@@ -383,7 +385,7 @@ async function procesarSeguimientosVencidos(io) {
   let enviados = 0;
 
   for (const item of pendientes) {
-    logWorkerItemFinal(item, "pendiente_vencido");
+    logWorkerItemFinal(item);
     console.log("[SEGUIMIENTO_WORKER_DEBUG] enviando", item);
     console.log("[SEGUIMIENTO_WORKER] enviando", {
       id: item.id,

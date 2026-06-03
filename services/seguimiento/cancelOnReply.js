@@ -9,20 +9,39 @@ const {
 const { ESTADOS_SEGUIMIENTO } = require("./constants");
 const rt = require("../realtimeService");
 
+function logCancelOnReplyTrace(fields) {
+  console.log("[CANCEL_ON_REPLY_TRACE]", {
+    mensaje_entrante: fields.mensaje_entrante ?? null,
+    cliente_numero: fields.cliente_numero ?? null,
+    conexionWhatsappIdEntrante: fields.conexionWhatsappIdEntrante ?? null,
+    seguimiento_id: fields.seguimiento_id ?? null,
+    seguimiento_conexion_whatsapp_id: fields.seguimiento_conexion_whatsapp_id ?? null,
+    accion: fields.accion,
+    motivo: fields.motivo ?? null,
+  });
+}
+
 async function cancelarSeguimientosPorRespuesta(numero, usuarioId, io, opts = {}) {
   if (!numero || !usuarioId) return;
 
   const mensajeAt = opts.mensajeAt || new Date().toISOString();
+  const mensajeEntrante =
+    opts.mensajeEntrante != null ? String(opts.mensajeEntrante).trim() : null;
   const conexionWhatsappId = normalizarConexionId(opts.conexionWhatsappId);
-
-  console.log(
-    `[SEGUIMIENTO_MULTI] cancelar inicio cliente_numero=${numero} usuario_id=${usuarioId} conexion_whatsapp_id=${conexionWhatsappId ?? null} mensajeAt=${mensajeAt}`
-  );
+  const traceBase = {
+    mensaje_entrante: mensajeEntrante,
+    cliente_numero: numero,
+    conexionWhatsappIdEntrante: conexionWhatsappId,
+  };
 
   if (!conexionWhatsappId) {
-    console.log(
-      `[SEGUIMIENTO_MULTI] cancelar omitido — mensaje sin conexion_whatsapp_id (multi-número requiere línea)`
-    );
+    logCancelOnReplyTrace({
+      ...traceBase,
+      seguimiento_id: null,
+      seguimiento_conexion_whatsapp_id: null,
+      accion: "omitido",
+      motivo: "mensaje_entrante_sin_conexion_whatsapp_id",
+    });
     return;
   }
 
@@ -38,9 +57,13 @@ async function cancelarSeguimientosPorRespuesta(numero, usuarioId, io, opts = {}
   );
 
   if (!pendientesFiltrados.length) {
-    console.log(
-      `[SEGUIMIENTO_MULTI] cancelar sin pendientes cliente_numero=${numero} conexion_whatsapp_id=${conexionWhatsappId} listados=${pendientes.length}`
-    );
+    logCancelOnReplyTrace({
+      ...traceBase,
+      seguimiento_id: null,
+      seguimiento_conexion_whatsapp_id: null,
+      accion: "omitido",
+      motivo: "sin_pendientes_misma_linea",
+    });
     return;
   }
 
@@ -48,34 +71,46 @@ async function cancelarSeguimientosPorRespuesta(numero, usuarioId, io, opts = {}
 
   for (const seg of pendientesFiltrados) {
     const conexionSeg = normalizarConexionId(seg.conexion_whatsapp_id);
+    const traceSeg = {
+      ...traceBase,
+      seguimiento_id: seg.id ?? null,
+      seguimiento_conexion_whatsapp_id: conexionSeg,
+    };
 
     if (!conexionSeg || conexionSeg !== conexionWhatsappId) {
-      console.log(
-        `[SEGUIMIENTO_MULTI] cancelar omitido seguimiento_id=${seg.id} seg_conexion=${seg.conexion_whatsapp_id ?? null} mensaje_conexion=${conexionWhatsappId}`
-      );
+      logCancelOnReplyTrace({
+        ...traceSeg,
+        accion: "omitido",
+        motivo: "cruzado_linea_AB",
+      });
       continue;
     }
 
-    if (!mensajeEsRespuestaValida(opts.mensajeAt, seg)) {
-      console.log(
-        `[SEGUIMIENTO_MULTI] cancelar omitido seguimiento_id=${seg.id} mensaje antes de checkpoint conexion=${conexionWhatsappId}`
-      );
+    if (!mensajeEsRespuestaValida(mensajeAt, seg)) {
+      logCancelOnReplyTrace({
+        ...traceSeg,
+        accion: "omitido",
+        motivo: "activador_antes_checkpoint",
+      });
       continue;
     }
 
     const respondio = await leadRespondioParaSeguimiento(seg, conexionWhatsappId);
 
-    console.log(
-      `[SEGUIMIENTO_MULTI] cancelar eval respondio=${respondio} seguimiento_id=${seg.id} conexion_whatsapp_id=${conexionSeg} checkpoint_at=${seg.checkpoint_at ?? null}`
-    );
-
     if (!respondio) {
+      logCancelOnReplyTrace({
+        ...traceSeg,
+        accion: "omitido",
+        motivo: "sin_respuesta_misma_linea_despues_checkpoint",
+      });
       continue;
     }
 
-    console.log(
-      `[SEGUIMIENTO_MULTI] cancelar aplicando seguimiento_id=${seg.id} conexion_whatsapp_id=${conexionSeg}`
-    );
+    logCancelOnReplyTrace({
+      ...traceSeg,
+      accion: "cancelado",
+      motivo: "lead_respondio_misma_linea",
+    });
 
     await actualizarEstado(seg.id, ESTADOS_SEGUIMIENTO.RESPONDIDO, {
       error_detalle: "Lead respondió",
@@ -114,4 +149,5 @@ function emitirCancelacion(io, seg, usuarioId) {
 module.exports = {
   cancelarSeguimientosPorRespuesta,
   mensajeEsRespuestaValida,
+  logCancelOnReplyTrace,
 };

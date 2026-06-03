@@ -70,6 +70,20 @@ async function programarSeguimientoNodo({
       row.conexion_whatsapp_id = conexionWhatsappId;
     }
     rows.push(row);
+
+    const mensaje =
+      paso.mensaje?.texto ||
+      paso.mensaje?.caption ||
+      paso.mensaje?.url ||
+      "";
+    console.log("[SCHEDULE_TRACE]", {
+      cliente_numero: numero,
+      flujo_id: flujoId ?? null,
+      nodo_id: nodoId,
+      paso_index: index,
+      mensaje: String(mensaje).trim(),
+      conexionWhatsappId: conexionWhatsappId || null,
+    });
   });
 
   const conexionInsertada =
