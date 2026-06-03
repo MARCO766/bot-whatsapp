@@ -112,6 +112,8 @@ if (hasFrontendBuild) {
     "/admin",
     "/login",
     "/logout",
+    "/forgot-password",
+    "/reset-password",
     "/inbox",
     "/builder",
     "/webhook",
