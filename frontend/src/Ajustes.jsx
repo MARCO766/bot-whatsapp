@@ -126,7 +126,7 @@ function DiagCheckRow({ checkKey, check }) {
   } else if (check.aviso) {
     cls = "warn";
     icon = "⚠";
-  } else if (critico || checkKey === "pixel") {
+  } else if (critico) {
     cls = "crit";
     icon = "✕";
   } else {

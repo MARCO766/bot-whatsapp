@@ -1,9 +1,9 @@
 /**
- * Diagnóstico de salud por línea WhatsApp — solo lectura, sin envíos ni CAPI real.
+ * Diagnóstico de salud por línea WhatsApp — solo lectura; prueba CAPI mínima solo en diagnóstico Pixel.
  */
 const axios = require("axios");
 const { getConexionPorId } = require("./conexionesWhatsappService");
-const { validarPixelMeta } = require("./metaAds/metaPixelService");
+const { validarPixelMeta, probarPixelCapi } = require("./metaAds/metaPixelService");
 const { fetchMetaAdsConfigRow } = require("./metaAds/metaAdsConfigService");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -155,54 +155,79 @@ async function resolvePixelAccessToken(usuarioId, conexionId, conexion) {
 
 async function buildPixelDiagnostico(usuarioId, conexionId, conexion) {
   const pixelIdRaw = conexion.pixel_id?.trim() || "";
+  const capiToken = conexion.capi_token?.trim() || "";
 
   if (!pixelIdRaw) {
     return {
-      check: {
+      pixel: {
         ok: false,
-        label: "Pixel",
+        label: "Pixel configurado",
         detalle: "No configurado",
         aviso: true,
       },
+      pixel_graph: null,
       pixel_meta: {
         existe: false,
         nombre: null,
         pixel_id: null,
+        capi_operativo: false,
+        graph_consultable: false,
       },
     };
   }
 
   const accessToken = await resolvePixelAccessToken(usuarioId, conexionId, conexion);
-  const result = await validarPixelMeta(pixelIdRaw, accessToken);
 
-  if (result.ok && result.existe) {
-    const nombre = result.nombre || pixelIdRaw;
-    return {
-      check: {
-        ok: true,
-        label: "Pixel",
-        detalle: `Pixel válido: ${nombre}`,
-      },
-      pixel_meta: {
-        existe: true,
-        nombre: result.nombre || null,
-        pixel_id: result.pixel_id || pixelIdRaw,
-      },
-    };
-  }
+  const [graphResult, capiResult] = await Promise.all([
+    validarPixelMeta(pixelIdRaw, accessToken),
+    capiToken
+      ? probarPixelCapi(pixelIdRaw, capiToken)
+      : Promise.resolve({ ok: false, events_received: 0 }),
+  ]);
+
+  const graphOk = Boolean(graphResult.ok && graphResult.consultable);
+  const capiOk = Boolean(capiResult.ok && capiResult.events_received > 0);
+  const pixelOperativo = graphOk || capiOk;
+
+  const pixel = {
+    ok: true,
+    label: "Pixel configurado",
+    detalle: "Configurado",
+  };
+
+  const pixel_graph = {
+    ok: graphOk,
+    label: "Pixel (Graph API)",
+    detalle: graphOk
+      ? graphResult.nombre
+        ? `Pixel válido: ${graphResult.nombre}`
+        : "Información consultada"
+      : "No se pudo consultar información del pixel",
+    aviso: !graphOk,
+    capi_operativo: capiOk,
+  };
 
   return {
-    check: {
-      ok: false,
-      label: "Pixel",
-      detalle: "Pixel inválido o sin permisos",
-    },
+    pixel,
+    pixel_graph,
     pixel_meta: {
-      existe: false,
-      nombre: null,
-      pixel_id: pixelIdRaw,
+      existe: pixelOperativo,
+      nombre: graphResult.nombre || null,
+      pixel_id: graphResult.pixel_id || pixelIdRaw,
+      capi_operativo: capiOk,
+      graph_consultable: graphOk,
+      events_received: capiResult.events_received ?? 0,
     },
   };
+}
+
+function pixelTieneProblema(checks) {
+  if (!checks.pixel?.ok) return true;
+  const graph = checks.pixel_graph;
+  if (!graph) return false;
+  if (graph.ok) return false;
+  if (graph.capi_operativo) return false;
+  return true;
 }
 
 function computeEstadoGeneral(checks) {
@@ -215,7 +240,7 @@ function computeEstadoGeneral(checks) {
   if (waFail) return "critico";
 
   const advertencia =
-    !checks.pixel.ok ||
+    pixelTieneProblema(checks) ||
     !checks.capi.ok ||
     !checks.mensajes.ok ||
     !checks.ventana24h.ok;
@@ -284,7 +309,8 @@ async function getDiagnosticoConexion(usuarioId, conexionId) {
       detalle: graphResult.detalle,
       status: graphResult.status,
     },
-    pixel: pixelDiag.check,
+    pixel: pixelDiag.pixel,
+    ...(pixelDiag.pixel_graph ? { pixel_graph: pixelDiag.pixel_graph } : {}),
     capi: {
       ok: capiOk,
       label: "CAPI",
