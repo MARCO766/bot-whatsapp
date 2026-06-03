@@ -13,18 +13,25 @@ document.addEventListener("DOMContentLoaded", () => {
     const texto = textarea.value.trim();
     const archivo = archivoInput?.files?.[0];
     const appCRM = document.querySelector(".whatsapp");
-    const numeroActual = appCRM?.dataset?.chat;
+    const chatActual = getChatAbiertoDesdeApp(appCRM);
 
     if (!texto && !archivo) return;
 
     const formData = new FormData(form);
 
     const mensajeTemporal = agregarMensajeSaliente(texto, archivo);
-    moverChatArriba(numeroActual);
-    actualizarUltimoMensajeLista(
-  numeroActual,
-  texto || (archivo ? archivo.name : "")
-);
+    if (chatActual.chatKey) {
+      moverChatArriba(
+        chatActual.chatKey,
+        chatActual.numero,
+        chatActual.conexionWhatsappId,
+        { contenido: texto || (archivo ? archivo.name : "") }
+      );
+      actualizarUltimoMensajeLista(
+        chatActual.chatKey,
+        texto || (archivo ? archivo.name : "")
+      );
+    }
 
     textarea.value = "";
 

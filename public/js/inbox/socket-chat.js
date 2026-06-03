@@ -5,8 +5,18 @@ function getAppCRM() {
 }
 
 function getChatActual() {
-  const appCRM = getAppCRM();
-  return appCRM?.dataset?.chat || "";
+  return getChatAbiertoDesdeApp(getAppCRM());
+}
+
+function mensajeCoincideChatAbierto(msg, chatActual) {
+  const numeroMsg = String(msg.cliente_numero || "").trim();
+  const connMsg = String(msg.conexion_whatsapp_id || "").trim();
+  if (!numeroMsg || !connMsg) return false;
+  if (!chatActual.numero || !chatActual.conexionWhatsappId) return false;
+  return (
+    numeroMsg === chatActual.numero &&
+    connMsg === chatActual.conexionWhatsappId
+  );
 }
 
 function getUsuarioId() {
@@ -20,24 +30,30 @@ if (USUARIO_ID) {
   socket.emit("join-user", USUARIO_ID);
 }
 
-socket.on("nuevo-mensaje", function(msg){
+socket.on("nuevo-mensaje", function (msg) {
+  const numero = String(msg.cliente_numero || "").trim();
+  const conexionWhatsappId = String(msg.conexion_whatsapp_id || "").trim();
+  const chatKey =
+    String(msg.chatKey || "").trim() ||
+    inboxChatKey(numero, conexionWhatsappId);
 
-  const numero = msg.cliente_numero;
+  if (!numero || !conexionWhatsappId || !chatKey) {
+    return;
+  }
 
-  moverChatArriba(numero, msg);
+  moverChatArriba(chatKey, numero, conexionWhatsappId, msg);
 
   actualizarUltimoMensajeLista(
-    numero,
+    chatKey,
     msg.contenido || msg.tipo || ""
   );
 
   const chatActual = getChatActual();
 
-  if (numero !== chatActual) {
-  incrementarBadgeNuevo(numero);
-}
-
-  if (numero !== chatActual) return;
+  if (!mensajeCoincideChatAbierto(msg, chatActual)) {
+    incrementarBadgeNuevo(chatKey);
+    return;
+  }
 
   const mensajes = document.getElementById("mensajes");
   if (!mensajes) return;
@@ -46,28 +62,26 @@ socket.on("nuevo-mensaje", function(msg){
 
   mensajes.appendChild(div);
   mensajes.scrollTop = mensajes.scrollHeight;
-
 });
 
-socket.on("mensaje-estado", function(data){
-
+socket.on("mensaje-estado", function (data) {
   const msg = document.querySelector(
     '[data-whatsapp-id="' + data.whatsapp_message_id + '"]'
   );
 
-  if(!msg) return;
+  if (!msg) return;
 
   const status = msg.querySelector(".msg-status");
 
-  if(!status) return;
+  if (!status) return;
 
-  if(data.estado_envio === "read"){
+  if (data.estado_envio === "read") {
     status.className = "msg-status read";
     status.innerText = "✓✓";
     return;
   }
 
-  if(data.estado_envio === "delivered"){
+  if (data.estado_envio === "delivered") {
     status.className = "msg-status delivered";
     status.innerText = "✓✓";
     return;
@@ -75,15 +89,21 @@ socket.on("mensaje-estado", function(data){
 
   status.className = "msg-status sent";
   status.innerText = "✓";
-
 });
 
 socket.on("seguimiento-estado", function (data) {
-  const numero = data.cliente_numero;
-  if (!numero) return;
-
   const chatActual = getChatActual();
-  if (numero !== chatActual) return;
+  const numero = String(data.cliente_numero || "").trim();
+  const conexionWhatsappId = String(data.conexion_whatsapp_id || "").trim();
+
+  if (
+    !numero ||
+    !conexionWhatsappId ||
+    numero !== chatActual.numero ||
+    conexionWhatsappId !== chatActual.conexionWhatsappId
+  ) {
+    return;
+  }
 
   const mensajes = document.getElementById("mensajes");
   if (!mensajes) return;
@@ -99,29 +119,27 @@ socket.on("seguimiento-estado", function (data) {
   mensajes.scrollTop = mensajes.scrollHeight;
 });
 
-function moverChatArriba(numero, msg = null) {
+function moverChatArriba(chatKey, numero, conexionWhatsappId, msg = null) {
   const chatList = document.querySelector(".chat-list");
-  if (!chatList || !numero) return;
+  const key = String(chatKey || "").trim();
+  if (!chatList || !key) return;
 
-  let item = document.querySelector(
-    '.chat-item[data-numero="' + numero + '"]'
-  );
+  let item = document.querySelector('.chat-item[data-chat-key="' + key + '"]');
 
   if (!item) {
-    item = crearChatItemRealtime(numero, msg);
+    item = crearChatItemRealtime(numero, conexionWhatsappId, msg);
   }
 
   chatList.prepend(item);
 }
 
-function actualizarUltimoMensajeLista(numero, texto) {
+function actualizarUltimoMensajeLista(chatKey, texto) {
+  const key = String(chatKey || "").trim();
   let preview = document.querySelector(
-    '.chat-last-message[data-numero="' + numero + '"]'
+    '.chat-last-message[data-chat-key="' + key + '"]'
   );
 
-  const item = document.querySelector(
-    '.chat-item[data-numero="' + numero + '"]'
-  );
+  const item = document.querySelector('.chat-item[data-chat-key="' + key + '"]');
 
   if (!preview && item) {
     const info = item.querySelector(".chat-info");
@@ -129,7 +147,7 @@ function actualizarUltimoMensajeLista(numero, texto) {
     if (info) {
       preview = document.createElement("p");
       preview.className = "chat-last-message";
-      preview.dataset.numero = numero;
+      preview.dataset.chatKey = key;
       info.appendChild(preview);
     }
   }
@@ -139,35 +157,41 @@ function actualizarUltimoMensajeLista(numero, texto) {
   preview.innerText = (texto || "").substring(0, 35);
 }
 
-function crearChatItemRealtime(numero, msg) {
+function crearChatItemRealtime(numero, conexionWhatsappId, msg) {
+  const num = String(numero || "").trim();
+  const conn = String(conexionWhatsappId || "").trim();
+  const key = inboxChatKey(num, conn);
+
   const item = document.createElement("div");
 
   item.className = "chat-item";
-  item.dataset.numero = numero;
+  item.dataset.numero = num;
+  item.dataset.conexionWhatsappId = conn;
+  item.dataset.chatKey = key;
 
   item.onclick = function () {
-    cargarChatSinRecargar(numero);
+    cargarChatSinRecargar(num, conn);
   };
 
   item.innerHTML = `
     <div class="avatar"></div>
 
     <div class="chat-info">
-      <h4>${msg?.nombre || numero}</h4>
-      <small style="color:#8f9ba8;">${numero}</small>
+      <h4>${msg?.nombre || num}</h4>
+      <small style="color:#8f9ba8;">${num}</small>
 
-      <p class="chat-last-message" data-numero="${numero}">
+      <p class="chat-last-message" data-chat-key="${key}">
         ${(msg?.contenido || msg?.tipo || "").substring(0, 35)}
       </p>
     </div>
 
     <div class="chat-actions" onclick="event.stopPropagation()">
-      <button class="chat-dots" onclick='toggleChatMenu("${numero}")'>⋮</button>
+      <button class="chat-dots" onclick='toggleChatMenu("${key}")'>⋮</button>
 
-      <div class="chat-menu" id="chat_menu_${numero}">
-        <a href="#" onclick='abrirMiniEtiqueta("${numero}"); return false;'>🏷️ Etiqueta</a>
-        <a href="/bloquear-chat?numero=${numero}" onclick="return confirm('¿Bloquear este chat?')">🚫 Bloquear</a>
-        <a class="danger" href="/eliminar-chat?numero=${numero}" onclick="return confirm('¿Eliminar este chat?')">🗑️ Eliminar</a>
+      <div class="chat-menu" id="chat_menu_${key.replace(/::/g, "__")}">
+        <a href="#" onclick='abrirMiniEtiqueta("${num}"); return false;'>🏷️ Etiqueta</a>
+        <a href="/bloquear-chat?numero=${num}" onclick="return confirm('¿Bloquear este chat?')">🚫 Bloquear</a>
+        <a class="danger" href="/eliminar-chat?numero=${num}" onclick="return confirm('¿Eliminar este chat?')">🗑️ Eliminar</a>
       </div>
     </div>
   `;
@@ -175,8 +199,9 @@ function crearChatItemRealtime(numero, msg) {
   return item;
 }
 
-function incrementarBadgeNuevo(numero) {
-  const item = document.querySelector('.chat-item[data-numero="' + numero + '"]');
+function incrementarBadgeNuevo(chatKey) {
+  const key = String(chatKey || "").trim();
+  const item = document.querySelector('.chat-item[data-chat-key="' + key + '"]');
   if (!item) return;
 
   let badge = item.querySelector(".unread-badge");
@@ -184,7 +209,7 @@ function incrementarBadgeNuevo(numero) {
   if (!badge) {
     badge = document.createElement("span");
     badge.className = "unread-badge";
-    badge.dataset.numero = numero;
+    badge.dataset.chatKey = key;
     badge.innerText = "1 nuevo";
 
     item.appendChild(badge);
@@ -192,9 +217,8 @@ function incrementarBadgeNuevo(numero) {
     return;
   }
 
-  const actual = parseInt(badge.innerText) || 0;
+  const actual = parseInt(badge.innerText, 10) || 0;
   const nuevo = actual + 1;
 
   badge.innerText = nuevo + " nuevo";
 }
-

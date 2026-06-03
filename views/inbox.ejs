@@ -3,7 +3,9 @@
 <div
   class="whatsapp"
   data-usuario="<%= usuarioId %>"
-  data-chat="<%= chatActual %>"
+  data-chat-numero="<%= chatActualNumero %>"
+  data-conexion-whatsapp-id="<%= chatActualConexion %>"
+  data-chat-key="<%= chatActualKey %>"
 >
 
   <!-- SIDEBAR -->
@@ -41,30 +43,35 @@
 
     <div class="chat-list">
 
-      <% numeros.forEach(numero => { %>
+      <% (chats || []).forEach(chat => { %>
+        <% const numero = chat.cliente_numero || chat.numero %>
+        <% const connId = chat.conexion_whatsapp_id || chat.conexionWhatsappId %>
+        <% const chatKey = chat.chatKey %>
 
         <div
           class="chat-item"
           data-numero="<%= numero %>"
-          onclick='cargarChatSinRecargar("<%= numero %>")'
+          data-conexion-whatsapp-id="<%= connId %>"
+          data-chat-key="<%= chatKey %>"
+          onclick='cargarChatSinRecargar("<%= numero %>", "<%= connId %>")'
         >
 
           <div class="avatar"></div>
 
           <div class="chat-info">
-            <h4><%= mapaClientes[numero]?.nombre || numero %></h4>
-            <small style="color:#8f9ba8;"><%= numero %></small>
+            <h4><%= chat.nombre || mapaClientes[numero]?.nombre || numero %></h4>
+            <small style="color:#8f9ba8;"><%= numero %><% if (chat.conexion_nombre) { %> · <%= chat.conexion_nombre %><% } %></small>
 
-            <% if (mapaUnread[numero] > 0) { %>
-  <span class="unread-badge" data-numero="<%= numero %>">
-    <%= mapaUnread[numero] %> nuevo
+            <% if ((mapaUnread[chatKey] || 0) > 0) { %>
+  <span class="unread-badge" data-chat-key="<%= chatKey %>">
+    <%= mapaUnread[chatKey] %> nuevo
   </span>
 <% } %>
 
             <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:6px;">
 
               <% etiquetasClientes
-                .filter(e => e.cliente_numero === numero)
+                .filter(e => e.cliente_numero === numero && String(e.conexion_whatsapp_id || '') === String(connId || ''))
                 .forEach(e => { %>
 
                   <span class="chat-label-manual" style="
@@ -85,7 +92,7 @@
 
 <%
 let previewTexto =
-  mapaConversaciones[numero]?.ultimo_mensaje ||
+  mapaConversaciones[chatKey]?.ultimo_mensaje ||
   "";
 
 if (previewTexto === "image" || previewTexto === "imagen") {
@@ -105,7 +112,7 @@ else if (previewTexto === "video") {
 }
 %>
 
-<p class="chat-last-message" data-numero="<%= numero %>">
+<p class="chat-last-message" data-chat-key="<%= chatKey %>">
   <%= previewTexto.substring(0,30) %>
 </p>
 
@@ -113,9 +120,9 @@ else if (previewTexto === "video") {
           </div>
 
           <div class="chat-actions" onclick="event.stopPropagation()">
-            <button class="chat-dots" onclick='toggleChatMenu("<%= numero %>")'>⋮</button>
+            <button class="chat-dots" onclick='toggleChatMenu("<%= chatKey %>")'>⋮</button>
 
-            <div class="chat-menu" id="chat_menu_<%= numero %>">
+            <div class="chat-menu" id="chat_menu_<%= chatKey.replace(/::/g, '__') %>">
 
   <a href="#" onclick='abrirMiniEtiqueta("<%= numero %>"); return false;'>
   🏷️ Etiqueta
@@ -164,17 +171,17 @@ else if (previewTexto === "video") {
     <div class="avatar"></div>
 
     <div>
-      <h3><%= mapaClientes[chatActual]?.nombre || chatActual || "Selecciona un chat" %></h3>
-<small style="color:#8f9ba8;"><%= chatActual %></small>
+      <h3><%= mapaClientes[chatActualNumero]?.nombre || chatActualNumero || "Selecciona un chat" %></h3>
+<small style="color:#8f9ba8;"><%= chatActualNumero %><% if (chatActualConexion) { %> · línea <%= chatActualConexion %><% } %></small>
       <small style="color:#25d366;">en línea</small>
     </div>
   </div>
 
   <div class="chat-messages" id="mensajes">
 
-    <% if (chatActual && conversaciones[chatActual]) { %>
+    <% if (chatActualKey && conversaciones[chatActualKey]) { %>
 
-      <% conversaciones[chatActual].forEach(msg => { %>
+      <% conversaciones[chatActualKey].forEach(msg => { %>
 
         <div
   class="message <%= msg.direccion === 'saliente' ? 'saliente' : 'entrante' %>"
@@ -238,13 +245,14 @@ else if (previewTexto === "video") {
   </div>
 
 
-<% if (chatActual || true) { %>
+<% if (chatActualNumero || true) { %>
 
   <div class="chat-bottom">
 
     <form action="/inbox/responder" method="POST" enctype="multipart/form-data">
 
-      <input type="hidden" name="numero" value="<%= chatActual %>" id="numeroResponder">
+      <input type="hidden" name="numero" value="<%= chatActualNumero %>" id="numeroResponder">
+      <input type="hidden" name="conexion_whatsapp_id" value="<%= chatActualConexion %>" id="conexionResponder">
 
       <input
         type="file"

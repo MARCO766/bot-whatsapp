@@ -1,13 +1,15 @@
-function toggleChatMenu(numero){
+function toggleChatMenu(chatKey){
   event.stopPropagation();
 
+  const safeId = String(chatKey || "").replace(/::/g, "__");
+
   document.querySelectorAll(".chat-menu").forEach(menu => {
-    if(menu.id !== "chat_menu_" + numero){
+    if(menu.id !== "chat_menu_" + safeId){
       menu.style.display = "none";
     }
   });
 
-  const menu = document.getElementById("chat_menu_" + numero);
+  const menu = document.getElementById("chat_menu_" + safeId);
 
   if(menu){
     menu.style.display =
