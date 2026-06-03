@@ -9,7 +9,10 @@ import {
 } from "react";
 import { io } from "socket.io-client";
 import { getApiBase, resolveApiUrl } from "../flujos/apiBase";
-import { ALL_SOCKET_EVENTS, normalizeEvent } from "../realtime/events";
+import { RT, normalizeEvent } from "../realtime/events";
+
+/** Solo canónicos: el backend también emite aliases legacy (p. ej. nuevo-mensaje). */
+const CANONICAL_SOCKET_EVENTS = Object.values(RT);
 
 const SocketContext = createContext(null);
 
@@ -78,12 +81,12 @@ export function SocketProvider({ children }) {
     socket.on("connect", onConnect);
     socket.on("disconnect", onDisconnect);
 
-    ALL_SOCKET_EVENTS.forEach((ev) => {
+    CANONICAL_SOCKET_EVENTS.forEach((ev) => {
       socket.on(ev, (payload) => dispatch(ev, payload));
     });
 
     return () => {
-      ALL_SOCKET_EVENTS.forEach((ev) => socket.off(ev));
+      CANONICAL_SOCKET_EVENTS.forEach((ev) => socket.off(ev));
       socket.off("connect", onConnect);
       socket.off("disconnect", onDisconnect);
       socket.disconnect();
