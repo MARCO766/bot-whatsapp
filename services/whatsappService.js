@@ -412,6 +412,25 @@ async function registrarMensajeSalienteEnInbox({
     insertPayload.conexion_whatsapp_id = conexionWhatsappId;
   }
 
+  console.log("[SEGUIMIENTO_INSERT_TRACE]", {
+    texto,
+    origen,
+    seguimientoId,
+    conexionWhatsappId,
+    insertPayloadConexion: insertPayload.conexion_whatsapp_id ?? null,
+  });
+
+  if (origen === "seguimiento" && !insertPayload.conexion_whatsapp_id) {
+    console.error("[SEGUIMIENTO_INSERT_TRACE] ABORT — conexion_whatsapp_id NULL en seguimiento", {
+      seguimiento_id: seguimientoId ?? null,
+      cliente_numero: numero,
+      usuario_id: usuarioId,
+    });
+    throw new Error(
+      "Seguimiento: insertPayload.conexion_whatsapp_id NULL — no se guarda en bandeja"
+    );
+  }
+
   let bodyJson = "";
   try {
     bodyJson = JSON.stringify(insertPayload);
@@ -521,6 +540,15 @@ async function enviarTextoWhatsApp(numero, texto, opciones = {}) {
     const wamid = meta?.messages?.[0]?.id || null;
     const usuarioId = opcionesEnvio.usuarioId ?? null;
 
+    console.log("[SEGUIMIENTO_INBOX_TRACE]", {
+      texto: textoEnvio,
+      origen: opcionesEnvio.origen ?? null,
+      seguimientoId: opcionesEnvio.seguimientoId ?? null,
+      opcionesConexion: opcionesEnvio.conexionWhatsappId ?? null,
+      resolvedConexionWhatsappId: resolvedConexionWhatsappId ?? null,
+      conexionParaInbox: conexionParaInbox ?? null,
+    });
+
     try {
       if (usuarioId) {
         return await registrarMensajeSalienteEnInbox({
@@ -548,7 +576,7 @@ async function enviarTextoWhatsApp(numero, texto, opciones = {}) {
     } catch (supabaseErr) {
       console.log("ERROR ENVIANDO WHATSAPP (SUPABASE mensajes):", {
         code: supabaseErr.response?.data?.code,
-        message: supabaseErr.response?.data?.message,
+        message: supabaseErr.response?.data?.message || supabaseErr.message,
         details: supabaseErr.response?.data,
         url: supabaseErr.config?.url,
         bodyEnviado: supabaseErr.config?.data,
@@ -569,6 +597,9 @@ async function enviarTextoWhatsApp(numero, texto, opciones = {}) {
         bodyEnviado: error.config?.data,
       }
     );
+    if (opcionesEnvio?.origen === "seguimiento") {
+      throw error;
+    }
     return null;
   }
 }
