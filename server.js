@@ -1,5 +1,13 @@
 console.log("🔥 SERVER NUEVO ACTIVO");
 require("dotenv").config();
+console.log("[ENV_CHECK]", {
+  APP_URL: Boolean(process.env.APP_URL),
+  SMTP_HOST: Boolean(process.env.SMTP_HOST),
+  SMTP_PORT: Boolean(process.env.SMTP_PORT),
+  SMTP_USER: Boolean(process.env.SMTP_USER),
+  SMTP_PASS: Boolean(process.env.SMTP_PASS),
+  SMTP_FROM: Boolean(process.env.SMTP_FROM),
+});
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
