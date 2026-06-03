@@ -244,6 +244,7 @@ export default function Ajustes({ cambiarVista }) {
       pixel_id: c?.pixel_id || c?.pixelId || "",
       capi_token: "",
       capi_token_masked: c?.capi_token_masked || c?.capiTokenMasked || null,
+      test_event_code: "",
     });
   }
 
@@ -255,6 +256,7 @@ export default function Ajustes({ cambiarVista }) {
       phone_id: "",
       pixel_id: "",
       capi_token: "",
+      test_event_code: "",
     });
   }
 
@@ -646,12 +648,32 @@ export default function Ajustes({ cambiarVista }) {
                         autoComplete="off"
                       />
                     </div>
+                    <div className="ajField">
+                      <label>Código de prueba Meta</label>
+                      <input
+                        value={connForm.test_event_code || ""}
+                        onChange={(e) =>
+                          setConnForm({ ...connForm, test_event_code: e.target.value })
+                        }
+                        placeholder="TEST12345"
+                        autoComplete="off"
+                      />
+                      <p className="ajHint">
+                        Opcional. Cópialo desde Events Manager → Probar eventos. No se guarda en la
+                        línea.
+                      </p>
+                    </div>
                     {connForm.id ? (
                       <button
                         type="button"
                         className="ajBtn ghost waModalTestBtn"
                         disabled={saving}
-                        onClick={() => probarMetaEvento({ conexion_whatsapp_id: connForm.id })}
+                        onClick={() =>
+                          probarMetaEvento({
+                            conexion_whatsapp_id: connForm.id,
+                            test_event_code: (connForm.test_event_code || "").trim() || undefined,
+                          })
+                        }
                       >
                         Enviar evento de prueba de esta línea
                       </button>

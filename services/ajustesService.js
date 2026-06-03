@@ -226,11 +226,20 @@ async function diagnosticoConexionAjustes(usuarioId, conexionId) {
 async function probarMetaEvento(usuarioId, opciones = {}) {
   const conexionWhatsappId =
     opciones.conexionWhatsappId ?? opciones.conexion_whatsapp_id ?? null;
+  const testEventCode =
+    opciones.testEventCode ?? opciones.test_event_code ?? null;
   await enviarEventoMeta(usuarioId, "Lead", "59170000000", {
     value: 0,
     conexionWhatsappId,
+    testEventCode,
+    esPrueba: true,
   });
-  return { ok: true, mensaje: "Evento enviado (revisa Events Manager en Meta)" };
+  return {
+    ok: true,
+    mensaje: testEventCode
+      ? "Evento de prueba enviado (revisa Probar eventos en Events Manager)"
+      : "Evento enviado (revisa Events Manager en Meta)",
+  };
 }
 
 async function cambiarPassword(usuarioId, actual, nueva) {

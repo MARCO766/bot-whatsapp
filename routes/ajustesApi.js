@@ -86,6 +86,7 @@ router.post("/api/ajustes/meta/probar", protegerApi, async (req, res) => {
       await probarMetaEvento(uid(req), {
         conexionWhatsappId:
           body.conexion_whatsapp_id ?? body.conexionWhatsappId ?? null,
+        testEventCode: body.test_event_code ?? body.testEventCode ?? null,
       })
     );
   } catch (error) {
