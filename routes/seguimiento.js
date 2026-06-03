@@ -10,11 +10,22 @@ const {
 router.get("/api/seguimientos/cliente", protegerPanel, async (req, res) => {
   try {
     const numero = req.query.numero;
+    const conexionWhatsappId = req.query.conexion_whatsapp_id || null;
     if (!numero) {
       return res.status(400).json({ error: "Falta numero" });
     }
+    if (!conexionWhatsappId) {
+      return res.status(400).json({
+        error: "Falta conexion_whatsapp_id (multi-número)",
+      });
+    }
 
-    const items = await listarPorCliente(numero, req.session.usuario.id);
+    const items = await listarPorCliente(
+      numero,
+      req.session.usuario.id,
+      50,
+      conexionWhatsappId
+    );
     res.json({ ok: true, items });
   } catch (error) {
     console.log("ERROR listar seguimientos cliente:", error.message);

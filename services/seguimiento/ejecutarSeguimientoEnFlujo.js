@@ -53,8 +53,19 @@ async function ejecutarSeguimientoEnFlujo({
     );
   });
 
+  const conexionId =
+    conexionWhatsappId != null && String(conexionWhatsappId).trim() !== ""
+      ? String(conexionWhatsappId).trim()
+      : null;
+
+  if (!conexionId) {
+    throw new Error(
+      "ejecutarSeguimientoEnFlujo: conexion_whatsapp_id obligatorio (línea entrante del webhook)"
+    );
+  }
+
   console.log(
-    `[EJECUTAR SEGUIMIENTO FLUJO] cliente_numero=${numero} flujo_id=${flujoId ?? null} nodo_id=${nodoId} conexionWhatsappId=${conexionWhatsappId ?? null}`
+    `[EJECUTAR SEGUIMIENTO FLUJO] cliente_numero=${numero} flujo_id=${flujoId ?? null} nodo_id=${nodoId} conexion_whatsapp_id=${conexionId}`
   );
 
   const result = await programarSeguimientoNodo({
@@ -63,7 +74,7 @@ async function ejecutarSeguimientoEnFlujo({
     flujoId,
     nodoId,
     html,
-    conexionWhatsappId,
+    conexionWhatsappId: conexionId,
   });
 
   console.log("[SEGUIMIENTO] insert seguimiento", {

@@ -525,6 +525,7 @@ if (message.type === "interactive" && message.interactive?.button_reply) {
     await registrarRespuestaBotonSeguimiento({
       clienteNumero: from,
       usuarioId: usuarioIdWebhook,
+      conexionWhatsappId,
       botonId: reply.id,
       botonTexto: reply.title || reply.id,
       whatsappMessageId: message.id,

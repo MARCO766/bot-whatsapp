@@ -31,8 +31,13 @@ function sanitizarContenidoMensajeSupabase(contenido) {
 }
 
 function filtroConexionConversacion(conexionWhatsappId) {
-  if (!conexionWhatsappId) return "";
-  return `&conexion_whatsapp_id=eq.${encodeURIComponent(conexionWhatsappId)}`;
+  const conexion = normalizarConexionWhatsappIdOpciones(conexionWhatsappId);
+  if (!conexion) {
+    throw new Error(
+      "filtroConexionConversacion requiere conexion_whatsapp_id (no actualizar conversación solo por cliente_numero)"
+    );
+  }
+  return `&conexion_whatsapp_id=eq.${encodeURIComponent(conexion)}`;
 }
 
 async function actualizarConversacionSaliente(
@@ -43,10 +48,19 @@ async function actualizarConversacionSaliente(
 ) {
   if (!usuarioId || !numero || !SUPABASE_URL || !SUPABASE_KEY) return;
 
+  const conexion = normalizarConexionWhatsappIdOpciones(conexionWhatsappId);
+  if (!conexion) {
+    console.warn(
+      "[WhatsApp] actualizarConversacionSaliente omitido — sin conexion_whatsapp_id",
+      { cliente_numero: numero, usuario_id: usuarioId }
+    );
+    return;
+  }
+
   const ultimoMensaje = sanitizarContenidoMensajeSupabase(texto);
   const headers = supabaseHeaders({ "Content-Type": "application/json" });
   const ahora = new Date().toISOString();
-  const filtroConexion = filtroConexionConversacion(conexionWhatsappId);
+  const filtroConexion = filtroConexionConversacion(conexion);
 
   try {
     const res = await axios.get(
@@ -75,10 +89,8 @@ async function actualizarConversacionSaliente(
       ultimo_mensaje_en: ahora,
       estado: "abierta",
       unread_count: 0,
+      conexion_whatsapp_id: conexion,
     };
-    if (conexionWhatsappId) {
-      nueva.conexion_whatsapp_id = conexionWhatsappId;
-    }
 
     await axios.post(
       `${SUPABASE_URL}/rest/v1/conversaciones`,
@@ -97,36 +109,56 @@ async function actualizarConversacionSaliente(
 }
 
 /**
- * Línea del chat (último mensaje o conversación con conexion_whatsapp_id).
- * Bandeja y webhook pueden pasar conexionWhatsappId explícito.
+ * Inferir línea solo si el lead tiene UNA conexión en historial.
+ * Con varias líneas (A+B) devuelve null — obliga conexion explícita (webhook/flujo).
  */
-async function obtenerConexionWhatsappIdDeChat(usuarioId, numero) {
+async function obtenerConexionWhatsappIdDeChat(usuarioId, numero, conexionPreferida = null) {
+  const preferida = normalizarConexionWhatsappIdOpciones(conexionPreferida);
+  if (preferida) return preferida;
+
   if (!usuarioId || !numero || !SUPABASE_URL || !SUPABASE_KEY) return null;
 
   const headers = supabaseHeaders();
   const uid = encodeURIComponent(String(usuarioId).trim());
   const num = encodeURIComponent(String(numero).trim());
 
+  const conexiones = new Set();
+
   try {
     const msgRes = await axios.get(
-      `${SUPABASE_URL}/rest/v1/mensajes?usuario_id=eq.${uid}&cliente_numero=eq.${num}&conexion_whatsapp_id=not.is.null&select=conexion_whatsapp_id&order=creado_en.desc&limit=1`,
+      `${SUPABASE_URL}/rest/v1/mensajes?usuario_id=eq.${uid}&cliente_numero=eq.${num}&conexion_whatsapp_id=not.is.null&select=conexion_whatsapp_id&order=creado_en.desc&limit=15`,
       { headers }
     );
-    const idMsg = msgRes.data?.[0]?.conexion_whatsapp_id;
-    if (idMsg) return String(idMsg).trim();
+    for (const row of msgRes.data || []) {
+      const id = normalizarConexionWhatsappIdOpciones(row?.conexion_whatsapp_id);
+      if (id) conexiones.add(id);
+    }
   } catch (err) {
     console.log("[WhatsApp] conexion desde mensajes:", err.response?.data?.message || err.message);
   }
 
   try {
     const convRes = await axios.get(
-      `${SUPABASE_URL}/rest/v1/conversaciones?usuario_id=eq.${uid}&cliente_numero=eq.${num}&conexion_whatsapp_id=not.is.null&select=conexion_whatsapp_id&order=ultimo_mensaje_en.desc&limit=1`,
+      `${SUPABASE_URL}/rest/v1/conversaciones?usuario_id=eq.${uid}&cliente_numero=eq.${num}&conexion_whatsapp_id=not.is.null&select=conexion_whatsapp_id&order=ultimo_mensaje_en.desc&limit=15`,
       { headers }
     );
-    const idConv = convRes.data?.[0]?.conexion_whatsapp_id;
-    if (idConv) return String(idConv).trim();
+    for (const row of convRes.data || []) {
+      const id = normalizarConexionWhatsappIdOpciones(row?.conexion_whatsapp_id);
+      if (id) conexiones.add(id);
+    }
   } catch (err) {
     console.log("[WhatsApp] conexion desde conversaciones:", err.response?.data?.message || err.message);
+  }
+
+  if (conexiones.size === 1) {
+    return [...conexiones][0];
+  }
+
+  if (conexiones.size > 1) {
+    console.warn(
+      "[WhatsApp] lead con varias líneas — no inferir conexion por último chat",
+      { cliente_numero: numero, usuario_id: usuarioId, lineas: [...conexiones] }
+    );
   }
 
   return null;
@@ -195,7 +227,10 @@ async function revisarIdempotenciaSeguimientoAntesEnvio(opcionesEnvio) {
   if (!esInboxSeguimiento(opcionesEnvio)) return null;
   assertOpcionesSeguimiento(opcionesEnvio);
 
-  const existente = await existeMensajePorSeguimientoId(opcionesEnvio.seguimientoId);
+  const existente = await existeMensajePorSeguimientoId(
+    opcionesEnvio.seguimientoId,
+    opcionesEnvio.conexionWhatsappId
+  );
   if (!existente) return null;
 
   console.log("[SEGUIMIENTO_IDEMPOTENTE] omitiendo Meta — mensaje ya existe", {
@@ -225,7 +260,8 @@ async function completarOpcionesEnvio(opciones = {}, numero) {
 
   const conexionWhatsappId = await obtenerConexionWhatsappIdDeChat(
     opciones.usuarioId,
-    numero
+    numero,
+    opciones.conexionWhatsappId
   );
   if (!conexionWhatsappId) return opciones;
 
@@ -456,9 +492,15 @@ async function registrarMensajeSalienteEnInbox({
   });
 
   if (origen === "seguimiento") {
-    insertPayload.conexion_whatsapp_id = conexionWhatsappId;
+    const connSeg = normalizarConexionWhatsappIdOpciones(conexionWhatsappId);
+    if (!connSeg) {
+      throw new Error(
+        "Seguimiento: conexion_whatsapp_id NULL — no insertar mensaje"
+      );
+    }
+    insertPayload.conexion_whatsapp_id = connSeg;
     if (!seguimientoId || String(seguimientoId).trim() === "") {
-      throw new Error("Seguimiento: seguimiento_id obligatorio para insertar mensaje");
+      throw new Error("Seguimiento: seguimiento_id NULL — no insertar mensaje");
     }
     insertPayload.seguimiento_id = String(seguimientoId).trim();
   }

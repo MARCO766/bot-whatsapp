@@ -255,7 +255,14 @@ function segundosPausaBloque(bloque) {
 
 function opcionesEnvioFlujo(usuarioId, conexionWhatsappId) {
   const op = { usuarioId };
-  if (conexionWhatsappId) op.conexionWhatsappId = conexionWhatsappId;
+  const conexion =
+    conexionWhatsappId != null && String(conexionWhatsappId).trim() !== ""
+      ? String(conexionWhatsappId).trim()
+      : null;
+  if (conexion) {
+    op.conexionWhatsappId = conexion;
+    op.strictConexionWhatsappId = true;
+  }
   return op;
 }
 
@@ -412,8 +419,11 @@ async function ejecutarFlujo(
       ? String(opts.conexionWhatsappId).trim()
       : null;
 
-  flowContext.conexionWhatsappId =
-    conexionLineaEntrante ?? flowContext.conexionWhatsappId ?? null;
+  if (conexionLineaEntrante) {
+    flowContext.conexionWhatsappId = conexionLineaEntrante;
+  } else if (!flowContext.conexionWhatsappId) {
+    flowContext.conexionWhatsappId = null;
+  }
 
   logFlowKey(usuarioId, flowContext.conexionWhatsappId, numero);
 
@@ -708,12 +718,17 @@ async function ejecutarFlujo(
         numero,
       });
       try {
-        const conexionParaSeguimiento =
-          conexionLineaEntrante ?? flowContext.conexionWhatsappId ?? null;
+        const conexionParaSeguimiento = conexionLineaEntrante;
 
         console.log(
-          `[FLUJO SEGUIMIENTO CONTEXT] cliente_numero=${numero} flowContext.conexionWhatsappId=${flowContext.conexionWhatsappId ?? null} conexionLineaEntrante=${conexionLineaEntrante ?? null} conexionWhatsappId_pasada_a_seguimiento=${conexionParaSeguimiento ?? null}`
+          `[FLUJO SEGUIMIENTO CONTEXT] cliente_numero=${numero} conexion_linea_entrante=${conexionLineaEntrante ?? null} (sin fallback flowContext)`
         );
+
+        if (!conexionParaSeguimiento) {
+          throw new Error(
+            "Seguimiento en flujo: falta conexion_whatsapp_id de la línea entrante (webhook)"
+          );
+        }
 
         await ejecutarSeguimientoEnFlujo({
           numero,

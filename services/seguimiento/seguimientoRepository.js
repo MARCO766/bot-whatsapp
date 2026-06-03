@@ -83,20 +83,22 @@ function normalizarConexionId(conexionWhatsappId) {
   return String(conexionWhatsappId).trim();
 }
 
-/** Multi-número: misma línea o legacy (ambos null). Nunca mezclar A con B. */
+/** Multi-número: siempre filtrar por línea explícita (nunca is.null ni mezclar A/B). */
 function filtroConexionWhatsapp(conexionWhatsappId) {
   const conexion = normalizarConexionId(conexionWhatsappId);
-  if (conexion) {
-    return `&conexion_whatsapp_id=eq.${encodeURIComponent(conexion)}`;
+  if (!conexion) {
+    throw new Error(
+      "filtroConexionWhatsapp requiere conexion_whatsapp_id (no consultar solo por cliente_numero)"
+    );
   }
-  return "&conexion_whatsapp_id=is.null";
+  return `&conexion_whatsapp_id=eq.${encodeURIComponent(conexion)}`;
 }
 
 function mensajeCoincideConexion(row, conexionWhatsappId) {
   const conexion = normalizarConexionId(conexionWhatsappId);
   const msgConn = normalizarConexionId(row?.conexion_whatsapp_id);
-  if (conexion) return msgConn === conexion;
-  return !msgConn;
+  if (!conexion || !msgConn) return false;
+  return msgConn === conexion;
 }
 
 /** Seguimiento y contexto deben compartir la misma conexion_whatsapp_id (sin mezclar líneas). */
@@ -108,13 +110,17 @@ function seguimientoMismaConexion(seguimiento, conexionContexto) {
 }
 
 function filtrosClaveLead(numero, usuarioId, conexionWhatsappId) {
-  let parte =
-    `cliente_numero=eq.${encodeURIComponent(numero)}` +
-    filtroConexionWhatsapp(conexionWhatsappId);
-  if (usuarioId) {
-    parte += `&usuario_id=eq.${encodeURIComponent(usuarioId)}`;
+  const conexion = normalizarConexionId(conexionWhatsappId);
+  if (!numero || !usuarioId || !conexion) {
+    throw new Error(
+      "filtrosClaveLead requiere cliente_numero, usuario_id y conexion_whatsapp_id"
+    );
   }
-  return parte;
+  return (
+    `cliente_numero=eq.${encodeURIComponent(numero)}` +
+    filtroConexionWhatsapp(conexion) +
+    `&usuario_id=eq.${encodeURIComponent(usuarioId)}`
+  );
 }
 
 function logPendienteSeguimiento(origen, row) {
@@ -501,13 +507,22 @@ async function listarPendientesRespondibles(
   return rows;
 }
 
-async function listarPorCliente(numero, usuarioId, limite = 50) {
+async function listarPorCliente(numero, usuarioId, limite = 50, conexionWhatsappId = null) {
+  const conexion = normalizarConexionId(conexionWhatsappId);
+  if (!conexion) {
+    console.warn(
+      "[SEGUIMIENTO_MULTI] listarPorCliente omitido — sin conexion_whatsapp_id",
+      { cliente_numero: numero, usuario_id: usuarioId }
+    );
+    return [];
+  }
+
   const response = await axios.get(
-    `${SUPABASE_URL}/rest/v1/seguimientos_programados?cliente_numero=eq.${numero}&usuario_id=eq.${usuarioId}&order=creado_en.desc&limit=${limite}&select=*`,
+    `${SUPABASE_URL}/rest/v1/seguimientos_programados?${filtrosClaveLead(numero, usuarioId, conexion)}&order=creado_en.desc&limit=${limite}&select=*`,
     { headers: headers() }
   );
 
-  return response.data || [];
+  return (response.data || []).filter((row) => seguimientoMismaConexion(row, conexion));
 }
 
 async function listarPorNodo(flujoId, nodoId, usuarioId, limite = 30) {

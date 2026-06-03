@@ -261,7 +261,10 @@ async function intentarReservarYEnviarPaso(item, io) {
   const itemParaEnvio = itemDb || reservado;
   logWorkerItemFinal(itemParaEnvio);
 
-  const mensajePrevio = await existeMensajePorSeguimientoId(reservado.id);
+  const mensajePrevio = await existeMensajePorSeguimientoId(
+    reservado.id,
+    obtenerConexionSeguimiento(itemParaEnvio)
+  );
   if (mensajePrevio) {
     console.log("[SEGUIMIENTO_IDEMPOTENTE] mensaje ya en bandeja, marcar enviado", {
       seguimiento_id: reservado.id,

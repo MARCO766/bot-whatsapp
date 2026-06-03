@@ -9,6 +9,13 @@ function checkpointAlProgramar() {
   return toTimestamptzUtc(Date.now() + 2000);
 }
 
+function normalizarConexionProgramar(conexionWhatsappId) {
+  if (conexionWhatsappId == null || String(conexionWhatsappId).trim() === "") {
+    return null;
+  }
+  return String(conexionWhatsappId).trim();
+}
+
 async function programarSeguimientoNodo({
   numero,
   usuarioId,
@@ -17,6 +24,13 @@ async function programarSeguimientoNodo({
   html,
   conexionWhatsappId = null,
 }) {
+  const conexionId = normalizarConexionProgramar(conexionWhatsappId);
+  if (!conexionId) {
+    throw new Error(
+      "programarSeguimientoNodo: conexion_whatsapp_id obligatorio (multi-número)"
+    );
+  }
+
   const config = parseSeguimientoFromHtml(html);
 
   if (!config.pasos.length) {
@@ -36,7 +50,7 @@ async function programarSeguimientoNodo({
     nodoId,
     usuario_id: usuarioId,
     cliente_numero: numero,
-    conexion_whatsapp_id: conexionWhatsappId || null,
+    conexion_whatsapp_id: conexionId,
     pasos: config.pasos.length,
     checkpoint_at: checkpointAt,
     lote_id: campanaId,
@@ -66,9 +80,7 @@ async function programarSeguimientoNodo({
       checkpoint_at: checkpointAt,
       estado: ESTADOS_SEGUIMIENTO.PENDIENTE,
     };
-    if (conexionWhatsappId) {
-      row.conexion_whatsapp_id = conexionWhatsappId;
-    }
+    row.conexion_whatsapp_id = conexionId;
     rows.push(row);
 
     const mensaje =
@@ -82,15 +94,12 @@ async function programarSeguimientoNodo({
       nodo_id: nodoId,
       paso_index: index,
       mensaje: String(mensaje).trim(),
-      conexionWhatsappId: conexionWhatsappId || null,
+      conexionWhatsappId: conexionId,
     });
   });
 
-  const conexionInsertada =
-    rows[0]?.conexion_whatsapp_id ?? conexionWhatsappId ?? null;
-
   console.log(
-    `[SCHEDULE SEGUIMIENTO] cliente_numero=${numero} flujo_id=${flujoId ?? null} nodo_id=${nodoId} conexionWhatsappId_recibida=${conexionWhatsappId ?? null} conexion_whatsapp_id_insertada=${conexionInsertada ?? null}`
+    `[SCHEDULE SEGUIMIENTO] cliente_numero=${numero} flujo_id=${flujoId ?? null} nodo_id=${nodoId} conexion_whatsapp_id=${conexionId}`
   );
 
   const insertados = await insertarProgramados(rows);
@@ -99,7 +108,7 @@ async function programarSeguimientoNodo({
     programados: insertados.length,
     usuario_id: usuarioId,
     cliente_numero: numero,
-    conexion_whatsapp_id: conexionWhatsappId || null,
+    conexion_whatsapp_id: conexionId,
     campana_id: campanaId,
   });
 
