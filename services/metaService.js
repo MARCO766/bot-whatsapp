@@ -17,6 +17,13 @@ function maskId(value) {
   return `${s.slice(0, 3)}***${s.slice(-3)}`;
 }
 
+function maskPixelId(value) {
+  if (!value || typeof value !== "string") return null;
+  const s = String(value).trim();
+  if (s.length <= 8) return "********";
+  return `${s.slice(0, 4)}${"*".repeat(8)}${s.slice(-4)}`;
+}
+
 function normalizeConexionWhatsappId(opciones = {}) {
   const raw =
     opciones.conexionWhatsappId ?? opciones.conexion_whatsapp_id ?? null;
@@ -108,6 +115,15 @@ async function enviarEventoMeta(usuarioId, nombreEvento, telefono, opciones = {}
 
     if (testEventCode) {
       payload.test_event_code = testEventCode;
+    }
+
+    if (esPrueba) {
+      console.log("[META TEST]", {
+        event_name: nombreEvento,
+        test_event_code: testEventCode,
+        pixel_id_masked: maskPixelId(conexion.pixel_id),
+        conexion_whatsapp_id: conexionIdLog,
+      });
     }
 
     const res = await axios.post(
