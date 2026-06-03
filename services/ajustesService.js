@@ -17,6 +17,7 @@ const {
   maskToken,
 } = require("./conexionesWhatsappService");
 const { enviarEventoMeta } = require("./metaService");
+const { getDiagnosticoConexion } = require("./conexionDiagnosticoService");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
@@ -218,6 +219,10 @@ async function hacerPrincipalAjustes(usuarioId, conexionId) {
   return { ok: true, conexionActiva: mapConexionApi(row) };
 }
 
+async function diagnosticoConexionAjustes(usuarioId, conexionId) {
+  return getDiagnosticoConexion(usuarioId, conexionId);
+}
+
 async function probarMetaEvento(usuarioId, opciones = {}) {
   const conexionWhatsappId =
     opciones.conexionWhatsappId ?? opciones.conexion_whatsapp_id ?? null;
@@ -271,5 +276,6 @@ module.exports = {
   probarConexionAjustesPorId,
   hacerPrincipalAjustes,
   probarMetaEvento,
+  diagnosticoConexionAjustes,
   cambiarPassword,
 };

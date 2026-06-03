@@ -15,6 +15,7 @@ const {
   probarConexionAjustesPorId,
   hacerPrincipalAjustes,
   probarMetaEvento,
+  diagnosticoConexionAjustes,
   cambiarPassword,
 } = require("../services/ajustesService");
 const rt = require("../services/realtimeService");
@@ -151,6 +152,14 @@ router.post("/api/ajustes/conexion/:id/probar", protegerApi, async (req, res) =>
     res.json(await probarConexionAjustesPorId(uid(req), req.params.id, numero));
   } catch (error) {
     handleError(res, error, "POST probar por id");
+  }
+});
+
+router.get("/api/ajustes/conexion/:id/diagnostico", protegerApi, async (req, res) => {
+  try {
+    res.json(await diagnosticoConexionAjustes(uid(req), req.params.id));
+  } catch (error) {
+    handleError(res, error, "GET diagnostico");
   }
 });
 

@@ -363,6 +363,131 @@ export const ajustesStyles = `
   width: 100%;
 }
 
+/* Panel diagnóstico por línea */
+.waDiagPanel {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(440px, calc(100vw - 32px));
+  max-height: min(85vh, 640px);
+  z-index: 520;
+  background: #0f172a;
+  border: 1px solid rgba(148,163,184,.18);
+  border-radius: 18px;
+  box-shadow: 0 24px 60px rgba(0,0,0,.45);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.waDiagHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 20px;
+  border-bottom: 1px solid rgba(148,163,184,.1);
+}
+.waDiagHead h2 { margin: 0; font-size: 16px; font-weight: 800; }
+.waDiagSub { margin: 4px 0 0; font-size: 12px; color: #94a3b8; font-weight: 600; }
+.waDiagBody {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px;
+}
+.waDiagFoot {
+  padding: 12px 20px;
+  border-top: 1px solid rgba(148,163,184,.1);
+  display: flex;
+  justify-content: flex-end;
+}
+.waDiagLoading, .waDiagError {
+  margin: 0;
+  font-size: 13px;
+  text-align: center;
+  padding: 24px 8px;
+}
+.waDiagLoading { color: #94a3b8; }
+.waDiagError { color: #fca5a5; }
+.waDiagEstado {
+  padding: 12px 14px;
+  border-radius: 12px;
+  margin-bottom: 14px;
+  border: 1px solid rgba(148,163,184,.15);
+  background: rgba(255,255,255,.03);
+}
+.waDiagEstadoLabel {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: #64748b;
+  margin-bottom: 4px;
+}
+.waDiagEstado strong { font-size: 15px; }
+.waDiagEstado--saludable {
+  border-color: rgba(34,197,94,.28);
+  background: rgba(34,197,94,.08);
+}
+.waDiagEstado--saludable strong { color: #4ade80; }
+.waDiagEstado--advertencia {
+  border-color: rgba(234,179,8,.28);
+  background: rgba(234,179,8,.08);
+}
+.waDiagEstado--advertencia strong { color: #facc15; }
+.waDiagEstado--critico {
+  border-color: rgba(239,68,68,.28);
+  background: rgba(239,68,68,.08);
+}
+.waDiagEstado--critico strong { color: #f87171; }
+.waDiagChecks { display: flex; flex-direction: column; gap: 8px; }
+.waDiagCheck {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(148,163,184,.12);
+  background: rgba(255,255,255,.02);
+}
+.waDiagCheckIcon {
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 900;
+}
+.waDiagCheck.ok .waDiagCheckIcon {
+  background: rgba(34,197,94,.22);
+  color: #4ade80;
+}
+.waDiagCheck.warn .waDiagCheckIcon {
+  background: rgba(234,179,8,.22);
+  color: #facc15;
+}
+.waDiagCheck.crit .waDiagCheckIcon {
+  background: rgba(239,68,68,.22);
+  color: #f87171;
+}
+.waDiagCheckText strong {
+  display: block;
+  font-size: 12px;
+  color: #e2e8f0;
+}
+.waDiagCheckText small {
+  display: block;
+  margin-top: 3px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: #64748b;
+  word-break: break-word;
+}
+
 .metaAjustesIntro {
   margin: 0 0 16px;
   font-size: 13px;

@@ -91,6 +91,10 @@ export function hacerPrincipalWhatsapp(id) {
   return request(`/api/ajustes/conexion/${id}/principal`, { method: "POST", body: "{}" });
 }
 
+export function fetchConexionDiagnostico(id) {
+  return request(`/api/ajustes/conexion/${id}/diagnostico`);
+}
+
 export function logout() {
   window.location.href = resolveApiUrl("/logout");
 }

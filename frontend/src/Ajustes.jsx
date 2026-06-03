@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useAjustes } from "./ajustes/useAjustes";
 import { ajustesStyles } from "./ajustes/styles";
-import { logout } from "./ajustes/api";
+import { logout, fetchConexionDiagnostico } from "./ajustes/api";
 import { fetchMetaAdsStatus } from "./metricas/metaAdsApi";
 
 const SECCIONES = [
@@ -107,6 +107,32 @@ function tituloModalConexion(form) {
   return `Configurar ${nombre}`;
 }
 
+const DIAG_CHECKS_CRITICOS = new Set(["whatsapp_config", "phone_id", "token", "graph_api"]);
+
+const ESTADO_GENERAL_LABEL = {
+  saludable: "Saludable",
+  advertencia: "Requiere atención",
+  critico: "Crítico",
+};
+
+function DiagCheckRow({ checkKey, check }) {
+  if (!check) return null;
+  const critico = DIAG_CHECKS_CRITICOS.has(checkKey);
+  const cls = check.ok ? "ok" : critico ? "crit" : "warn";
+  const icon = check.ok ? "✓" : critico ? "✕" : "!";
+  return (
+    <div className={`waDiagCheck ${cls}`}>
+      <span className="waDiagCheckIcon" aria-hidden="true">
+        {icon}
+      </span>
+      <div className="waDiagCheckText">
+        <strong>{check.label}</strong>
+        <small>{check.detalle}</small>
+      </div>
+    </div>
+  );
+}
+
 function copyText(text, showToast) {
   if (!text) return;
   navigator.clipboard?.writeText(text).then(() => showToast("Copiado al portapapeles"));
@@ -141,6 +167,7 @@ export default function Ajustes({ cambiarVista }) {
   const [testNumero, setTestNumero] = useState("");
   const [metaAdsStatus, setMetaAdsStatus] = useState(null);
   const [metaAdsStatusLoading, setMetaAdsStatusLoading] = useState(false);
+  const [diagPanel, setDiagPanel] = useState(null);
 
   useEffect(() => {
     if (!data) return;
@@ -264,6 +291,25 @@ export default function Ajustes({ cambiarVista }) {
 
   async function handleHacerPrincipal(id) {
     await hacerPrincipal(id);
+  }
+
+  async function handleDiagnosticar(c) {
+    setDiagPanel({
+      id: c.id,
+      nombre: c.nombre || "WhatsApp",
+      numero: c.numero || "",
+      loading: true,
+      data: null,
+      error: null,
+    });
+    try {
+      const data = await fetchConexionDiagnostico(c.id);
+      setDiagPanel((prev) => (prev ? { ...prev, loading: false, data } : null));
+    } catch (err) {
+      setDiagPanel((prev) =>
+        prev ? { ...prev, loading: false, error: err.message || "Error al diagnosticar" } : null
+      );
+    }
   }
 
   async function handlePassword(e) {
@@ -407,6 +453,14 @@ export default function Ajustes({ cambiarVista }) {
                       </div>
                     </div>
                     <div className="waConnRowActions">
+                      <button
+                        type="button"
+                        className="waActBtn waActBtnGhost"
+                        onClick={() => handleDiagnosticar(c)}
+                        disabled={saving || (diagPanel?.loading && String(diagPanel.id) === String(c.id))}
+                      >
+                        Diagnosticar
+                      </button>
                       <button type="button" className="waActBtn waActBtnPrimary" onClick={() => abrirConfigurar(c)}>
                         Configurar
                       </button>
@@ -442,6 +496,57 @@ export default function Ajustes({ cambiarVista }) {
               <input value={testNumero} onChange={(e) => setTestNumero(e.target.value)} placeholder="59170000000" />
             </div>
           </div>
+
+          {diagPanel && (
+            <>
+              <div className="waModalBackdrop" onClick={() => setDiagPanel(null)} aria-hidden />
+              <div className="waDiagPanel" role="dialog" aria-modal="true" aria-labelledby="waDiagTitle">
+                <div className="waDiagHead">
+                  <div>
+                    <h2 id="waDiagTitle">{diagPanel.nombre}</h2>
+                    <p className="waDiagSub">{diagPanel.numero || "Sin número"}</p>
+                  </div>
+                  <button
+                    type="button"
+                    className="waModalClose"
+                    onClick={() => setDiagPanel(null)}
+                    aria-label="Cerrar"
+                  >
+                    ×
+                  </button>
+                </div>
+                <div className="waDiagBody">
+                  {diagPanel.loading && (
+                    <p className="waDiagLoading">Analizando conexión…</p>
+                  )}
+                  {diagPanel.error && (
+                    <p className="waDiagError">{diagPanel.error}</p>
+                  )}
+                  {diagPanel.data && (
+                    <>
+                      <div className={`waDiagEstado waDiagEstado--${diagPanel.data.estado_general}`}>
+                        <span className="waDiagEstadoLabel">Estado general</span>
+                        <strong>
+                          {ESTADO_GENERAL_LABEL[diagPanel.data.estado_general] ||
+                            diagPanel.data.estado_general}
+                        </strong>
+                      </div>
+                      <div className="waDiagChecks">
+                        {Object.entries(diagPanel.data.checks || {}).map(([key, check]) => (
+                          <DiagCheckRow key={key} checkKey={key} check={check} />
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+                <div className="waDiagFoot">
+                  <button type="button" className="ajBtn ghost" onClick={() => setDiagPanel(null)}>
+                    Cerrar
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
 
           {connForm && (
             <>
