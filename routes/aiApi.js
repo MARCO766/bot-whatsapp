@@ -9,11 +9,7 @@ const {
   MODOS_FASE1,
   normalizarConfig,
 } = require("../services/aiService");
-
-function protegerApi(req, res, next) {
-  if (req.session?.usuario?.id) return next();
-  return res.status(401).json({ ok: false, error: "No autenticado" });
-}
+const { protegerApi } = require("../middlewares/auth");
 
 router.get("/api/ai/status", protegerApi, (req, res) => {
   res.json(getIAStatus());

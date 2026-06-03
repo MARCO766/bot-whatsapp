@@ -22,10 +22,7 @@ function log(msg, extra) {
   else console.log(`[flujosCarpetasApi] ${msg}`);
 }
 
-function protegerApi(req, res, next) {
-  if (req.session?.usuario) return next();
-  return res.status(401).json({ ok: false, error: "No autenticado" });
-}
+const { protegerApi } = require("../middlewares/auth");
 
 function supabaseHeaders(extra = {}) {
   return {

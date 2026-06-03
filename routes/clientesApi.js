@@ -28,11 +28,7 @@ const {
   normalizeNumero,
 } = require("../services/clientesService");
 const rt = require("../services/realtimeService");
-
-function protegerApi(req, res, next) {
-  if (req.session?.usuario?.id) return next();
-  return res.status(401).json({ ok: false, error: "No autenticado" });
-}
+const { protegerApi } = require("../middlewares/auth");
 
 function uid(req) {
   return req.session.usuario.id;

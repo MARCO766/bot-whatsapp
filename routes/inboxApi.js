@@ -22,11 +22,7 @@ const {
   pausarBotConversacion,
   reactivarBotConversacion,
 } = require("../services/conversaciones/botPauseService");
-
-function protegerApi(req, res, next) {
-  if (req.session?.usuario) return next();
-  return res.status(401).json({ ok: false, error: "No autenticado" });
-}
+const { protegerApi } = require("../middlewares/auth");
 
 function log(msg, extra) {
   if (extra !== undefined) console.log(`[inboxApi] ${msg}`, extra);

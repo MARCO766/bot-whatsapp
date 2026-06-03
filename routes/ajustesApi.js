@@ -19,15 +19,11 @@ const {
   cambiarPassword,
 } = require("../services/ajustesService");
 const rt = require("../services/realtimeService");
+const { protegerApi } = require("../middlewares/auth");
 
 function log(msg, extra) {
   if (extra !== undefined) console.log(`[ajustesApi] ${msg}`, extra);
   else console.log(`[ajustesApi] ${msg}`);
-}
-
-function protegerApi(req, res, next) {
-  if (req.session?.usuario?.id) return next();
-  return res.status(401).json({ ok: false, error: "No autenticado" });
 }
 
 function uid(req) {

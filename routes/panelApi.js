@@ -4,11 +4,7 @@
 const express = require("express");
 const router = express.Router();
 const { computePanelDashboard } = require("../services/panelService");
-
-function protegerApi(req, res, next) {
-  if (req.session?.usuario) return next();
-  return res.status(401).json({ ok: false, error: "No autenticado" });
-}
+const { protegerApi } = require("../middlewares/auth");
 
 // GET /api/panel/dashboard
 router.get("/api/panel/dashboard", protegerApi, async (req, res) => {

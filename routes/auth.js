@@ -3,19 +3,9 @@ const router = express.Router();
 
 const axios = require("axios");
 const bcrypt = require("bcryptjs");
-const session = require("express-session");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
-
-router.use(session({
-  secret: process.env.SESSION_SECRET || "macbot-secreto-cambiar",
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    maxAge: 1000 * 60 * 60 * 24 * 7
-  }
-}));
 
 router.get("/login", (req, res) => {
   if (req.session?.usuario) {

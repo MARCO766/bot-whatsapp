@@ -13,11 +13,7 @@ const {
 } = require("../services/metaAds/metaAdsInsightsService");
 const { getMetaAdsCampaigns } = require("../services/metaAds/metaAdsCampaignsService");
 const { runMetaAdsDebug } = require("../services/metaAds/metaAdsDebugService");
-
-function protegerApi(req, res, next) {
-  if (req.session?.usuario?.id) return next();
-  return res.status(401).json({ ok: false, error: "No autenticado" });
-}
+const { protegerApi } = require("../middlewares/auth");
 
 function uid(req) {
   return req.session.usuario.id;

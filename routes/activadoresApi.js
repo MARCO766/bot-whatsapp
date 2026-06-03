@@ -21,14 +21,11 @@ const SELECT_BASE =
   "id,usuario_id,nombre,flujo_id,conexion,conexion_whatsapp_id,frase,activo,repetible,creado_en";
 const SELECT_EXTENDED = `${SELECT_BASE},prioridad,coincidencia,veces_usado,ultima_ejecucion,tipo_activador,palabras_clave_array`;
 
+const { protegerApi } = require("../middlewares/auth");
+
 function log(msg, extra) {
   if (extra !== undefined) console.log(`[activadoresApi] ${msg}`, extra);
   else console.log(`[activadoresApi] ${msg}`);
-}
-
-function protegerApi(req, res, next) {
-  if (req.session?.usuario) return next();
-  return res.status(401).json({ ok: false, error: "No autenticado" });
 }
 
 function supabaseHeaders(extra = {}) {
