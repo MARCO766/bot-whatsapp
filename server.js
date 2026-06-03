@@ -15,6 +15,7 @@ const authRoutes = require("./routes/auth");
 const webhookRoutes = require("./routes/webhook");
 const adminRoutes = require("./routes/admin");
 const { warnIfMissingSessionSecret } = require("./middlewares/auth");
+const { warnIfMissingPasswordResetEnv } = require("./services/emailService");
 const inboxRoutes = require("./routes/inbox");
 const builderRoutes = require("./routes/builder");
 const flowsRoutes = require("./routes/flows");
@@ -46,6 +47,7 @@ app.use(bodyParser.json());
 app.use(express.urlencoded({ extended: true }));
 
 warnIfMissingSessionSecret();
+warnIfMissingPasswordResetEnv();
 
 if (process.env.CORS_ORIGIN) {
   const cors = require("cors");
