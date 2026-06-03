@@ -18,6 +18,11 @@ const {
 const { ESTADOS_SEGUIMIENTO } = require("./constants");
 const rt = require("../realtimeService");
 const { estaBotPausado } = require("../conversaciones/botPauseService");
+const {
+  adquirirLockWorkerSeguimiento,
+  liberarLockWorkerSeguimiento,
+} = require("./seguimientoWorkerLock");
+const { existeMensajePorSeguimientoId } = require("./mensajesSeguimientoIdempotencia");
 
 function obtenerConexionSeguimiento(item) {
   if (item?.conexion_whatsapp_id == null) return null;
@@ -256,6 +261,18 @@ async function intentarReservarYEnviarPaso(item, io) {
   const itemParaEnvio = itemDb || reservado;
   logWorkerItemFinal(itemParaEnvio);
 
+  const mensajePrevio = await existeMensajePorSeguimientoId(reservado.id);
+  if (mensajePrevio) {
+    console.log("[SEGUIMIENTO_IDEMPOTENTE] mensaje ya en bandeja, marcar enviado", {
+      seguimiento_id: reservado.id,
+      mensaje_id: mensajePrevio.id,
+      conexion_whatsapp_id: mensajePrevio.conexion_whatsapp_id ?? null,
+    });
+    await actualizarEstado(reservado.id, ESTADOS_SEGUIMIENTO.ENVIADO);
+    emitirEstadoSeguimiento(io, reservado, ESTADOS_SEGUIMIENTO.ENVIADO);
+    return { ok: true, motivo: "idempotente_mensaje_existente" };
+  }
+
   try {
     console.log("[SEGUIMIENTO_MULTI] ejecutando seguimiento", {
       id: reservado.id,
@@ -370,34 +387,32 @@ async function procesarSeguimientoItem(item, io) {
 }
 
 async function procesarSeguimientosVencidos(io) {
-  const pendientes = await obtenerPendientesVencidos(40);
-  console.log(
-    "[SEGUIMIENTO_WORKER_DEBUG] pendientes encontrados",
-    pendientes?.length,
-    pendientes
-  );
-
-  if (!pendientes.length) return { procesados: 0, enviados: 0 };
-
-  console.log("[SEGUIMIENTO_WORKER] pendientes encontrados:", pendientes.length);
-
-  let procesados = 0;
-  let enviados = 0;
-
-  for (const item of pendientes) {
-    logWorkerItemFinal(item);
-    console.log("[SEGUIMIENTO_WORKER_DEBUG] enviando", item);
-    console.log("[SEGUIMIENTO_WORKER] enviando", {
-      id: item.id,
-      cliente: item.cliente_numero,
-      run_at: item.run_at,
-    });
-    const res = await procesarSeguimientoItem(item, io);
-    procesados++;
-    if (res?.ok) enviados++;
+  const lock = await adquirirLockWorkerSeguimiento();
+  if (!lock.acquired) {
+    return { procesados: 0, enviados: 0, lock: "skipped" };
   }
 
-  return { procesados, enviados };
+  try {
+    const pendientes = await obtenerPendientesVencidos(40);
+
+    if (!pendientes.length) return { procesados: 0, enviados: 0, lock: "acquired" };
+
+    console.log("[SEGUIMIENTO_WORKER] pendientes:", pendientes.length);
+
+    let procesados = 0;
+    let enviados = 0;
+
+    for (const item of pendientes) {
+      logWorkerItemFinal(item);
+      const res = await procesarSeguimientoItem(item, io);
+      procesados++;
+      if (res?.ok) enviados++;
+    }
+
+    return { procesados, enviados, lock: "acquired" };
+  } finally {
+    await liberarLockWorkerSeguimiento(lock.workerId);
+  }
 }
 
 module.exports = {

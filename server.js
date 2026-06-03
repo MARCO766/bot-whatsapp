@@ -90,9 +90,11 @@ app.use(etiquetasApiRoutes);
 app.use("/api/clientes", clientesApiRouter);
 app.use(aiApiRoutes);
 app.use("/api/internal/cron", internalCronApi);
+const legacySeguimientoCronDisabled = require("./routes/legacySeguimientoCronDisabled");
+app.use(legacySeguimientoCronDisabled);
 console.log("✅ API Clientes montada en /api/clientes");
 console.log("✅ API IA montada en POST /api/ai/run");
-console.log("✅ Cron interno montado en POST /api/internal/cron/rm24h");
+console.log("✅ Cron interno montado en POST /api/internal/cron/rm24h (seguimientos HTTP deshabilitado)");
 
 // ─── CRM React (frontend/dist) — mismo origen que /api en producción ───
 const frontendDist = path.join(__dirname, "frontend", "dist");

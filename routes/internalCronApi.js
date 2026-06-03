@@ -33,6 +33,16 @@ function verificarCronSecret(req, res, next) {
   return next();
 }
 
+/** Seguimientos CRM: solo worker interno Node — no cron HTTP externo. */
+router.post("/seguimientos", verificarCronSecret, (req, res) => {
+  console.log("[CRON_SEGUIMIENTO_LEGACY] rechazado — usar jobs/seguimientoWorker.js");
+  return res.status(410).json({
+    ok: false,
+    error:
+      "Cron HTTP de seguimientos deshabilitado. El worker corre solo en el proceso Node (jobs/seguimientoWorker.js).",
+  });
+});
+
 router.post("/rm24h", verificarCronSecret, async (req, res) => {
   if (global.__rm24hCronRunning) {
     return res.status(409).json({
