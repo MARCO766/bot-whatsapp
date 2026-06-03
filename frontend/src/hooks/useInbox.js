@@ -322,9 +322,10 @@ export function useInbox({ onUnreadChange } = {}) {
     abrirChat(match);
   }, [loading, chats, abrirChat, conexionSeleccionadaId]);
 
-  const moverChatArriba = useCallback((chatKey, preview) => {
+  const moverChatArriba = useCallback((chatKey, preview, ultimoEn) => {
     const key = String(chatKey || "").trim();
     if (!key || !key.includes("::")) return;
+    const ts = ultimoEn || new Date().toISOString();
 
     setChats((prev) => {
       const idx = prev.findIndex((c) => c.chatKey === key);
@@ -347,7 +348,7 @@ export function useInbox({ onUnreadChange } = {}) {
             online: true,
             noLeidos: 0,
             ultimoMensaje: texto,
-            ultimoMensajeEn: new Date().toISOString(),
+            ultimoMensajeEn: ts,
             etiquetas: [],
           },
           ...prev,
@@ -358,7 +359,7 @@ export function useInbox({ onUnreadChange } = {}) {
       updated.unshift({
         ...item,
         ultimoMensaje: texto || item.ultimoMensaje,
-        ultimoMensajeEn: new Date().toISOString(),
+        ultimoMensajeEn: ts,
       });
       return updated;
     });
@@ -389,7 +390,7 @@ export function useInbox({ onUnreadChange } = {}) {
         return;
       }
 
-      moverChatArriba(key, msg.contenido || msg.tipo || "");
+      moverChatArriba(key, msg.contenido || msg.tipo || "", msg.creado_en);
 
       const sel = selectedChatRef.current;
       const selKey = resolveChatKey(sel);

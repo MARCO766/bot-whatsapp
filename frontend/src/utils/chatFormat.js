@@ -7,14 +7,48 @@ export function formatPreview(texto) {
   return String(texto).substring(0, 35);
 }
 
+const HORA_BO_OPTIONS = {
+  timeZone: "America/La_Paz",
+  hour: "2-digit",
+  minute: "2-digit",
+};
+
+/**
+ * Instante UTC desde Supabase/ISO. Sin offset explícito → UTC (evita usar TZ del navegador).
+ */
+function parseFechaUtc(fecha) {
+  if (fecha == null || fecha === "") return null;
+  if (fecha instanceof Date) {
+    return Number.isNaN(fecha.getTime()) ? null : fecha;
+  }
+  const s = String(fecha).trim();
+  if (!s) return null;
+
+  if (/^\d+$/.test(s)) {
+    const n = Number(s);
+    const d = new Date(n < 1e12 ? n * 1000 : n);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+
+  if (/[Zz]$|[+-]\d{2}:\d{2}$|[+-]\d{4}$/.test(s)) {
+    const d = new Date(s);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+
+  const m = s.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}(?::\d{2})?(?:\.\d+)?)/);
+  if (m) {
+    const d = new Date(`${m[1]}T${m[2]}Z`);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+
+  const d = new Date(s);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
 export function formatHora(fecha) {
-  if (!fecha) return "";
-  return new Date(fecha).toLocaleTimeString("es-BO", {
-    timeZone: "America/La_Paz",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: true,
-  });
+  const d = parseFechaUtc(fecha);
+  if (!d) return "";
+  return d.toLocaleTimeString("es-BO", HORA_BO_OPTIONS);
 }
 
 export function messageChecks(estadoEnvio) {

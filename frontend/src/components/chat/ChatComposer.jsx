@@ -71,7 +71,7 @@ export default function ChatComposer({
 
     onSent?.(tempMsg);
     const key = chatListKey(numero, conexionWhatsappId);
-    if (key) moverChatArriba?.(key, texto || file?.name || "");
+    if (key) moverChatArriba?.(key, texto || file?.name || "", tempMsg.creado_en);
 
     const formData = buildMessageFormData(numero, texto, file, conexionWhatsappId);
     setEnviando(true);
