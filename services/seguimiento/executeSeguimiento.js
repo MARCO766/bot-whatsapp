@@ -13,6 +13,7 @@ const {
   esUnicoProcesandoEnClave,
   cancelarPendientesDuplicadosClave,
   reservarPasoParaEnvio,
+  obtenerSeguimientoPorId,
 } = require("./seguimientoRepository");
 const { ESTADOS_SEGUIMIENTO } = require("./constants");
 const rt = require("../realtimeService");
@@ -22,6 +23,26 @@ function obtenerConexionSeguimiento(item) {
   if (item?.conexion_whatsapp_id == null) return null;
   const id = String(item.conexion_whatsapp_id).trim();
   return id || null;
+}
+
+function textoContenidoSeguimiento(item) {
+  const payload = item?.mensaje_payload || {};
+  const tipo = (item?.mensaje_tipo || payload.tipo || "texto").toLowerCase();
+  if (tipo === "texto") {
+    return String(payload.texto || "").trim();
+  }
+  return String(payload.caption || payload.url || payload.texto || "").trim();
+}
+
+function logWorkerItemFinal(item, origenLog = "pre_envio") {
+  console.log("[WORKER_ITEM_FINAL]", {
+    origen_log: origenLog,
+    id: item?.id ?? null,
+    cliente_numero: item?.cliente_numero ?? null,
+    contenido: textoContenidoSeguimiento(item),
+    conexion_whatsapp_id: item?.conexion_whatsapp_id ?? null,
+    estado: item?.estado ?? null,
+  });
 }
 
 async function cancelarSeguimientoSinConexion(item, io) {
@@ -192,6 +213,15 @@ async function intentarReservarYEnviarPaso(item, io) {
     return { ok: false, motivo: "no_reservado" };
   }
 
+  console.log("[WORKER_RESERVA_TRACE]", {
+    id: item.id,
+    conexion_antes_reserva: item.conexion_whatsapp_id ?? null,
+    conexion_despues_reserva: reservado.conexion_whatsapp_id ?? null,
+    estado_despues_reserva: reservado.estado ?? null,
+    perdida_en_reserva:
+      Boolean(item.conexion_whatsapp_id) && !reservado.conexion_whatsapp_id,
+  });
+
   console.log("[SEGUIMIENTO DEBUG] marcado procesando:", {
     id: reservado.id,
     clave,
@@ -213,16 +243,30 @@ async function intentarReservarYEnviarPaso(item, io) {
     return cancelarSeguimientoSinConexion(reservado, io);
   }
 
+  const itemDb = await obtenerSeguimientoPorId(reservado.id);
+  console.log("[WORKER_DB_REFETCH]", {
+    id: reservado.id,
+    conexion_en_memoria: reservado.conexion_whatsapp_id ?? null,
+    conexion_en_db: itemDb?.conexion_whatsapp_id ?? null,
+    estado_en_db: itemDb?.estado ?? null,
+    perdida_entre_memoria_y_db:
+      Boolean(reservado.conexion_whatsapp_id) && !itemDb?.conexion_whatsapp_id,
+    programada_sin_conexion_en_db: !itemDb?.conexion_whatsapp_id,
+  });
+
+  const itemParaEnvio = itemDb || reservado;
+  logWorkerItemFinal(itemParaEnvio, "pre_envio");
+
   try {
     console.log("[SEGUIMIENTO_MULTI] ejecutando seguimiento", {
       id: reservado.id,
       lote_id: reservado.campana_id,
       usuario_id: reservado.usuario_id,
       cliente_numero: reservado.cliente_numero,
-      conexion_whatsapp_id: obtenerConexionSeguimiento(reservado),
+      conexion_whatsapp_id: obtenerConexionSeguimiento(itemParaEnvio),
       paso_index: reservado.paso_index,
     });
-    await enviarMensajeSeguimiento(reservado);
+    await enviarMensajeSeguimiento(itemParaEnvio);
     await actualizarEstado(reservado.id, ESTADOS_SEGUIMIENTO.ENVIADO);
     emitirEstadoSeguimiento(io, reservado, ESTADOS_SEGUIMIENTO.ENVIADO);
     console.log("[SEGUIMIENTO_WORKER] enviado ok", {
@@ -338,6 +382,7 @@ async function procesarSeguimientosVencidos(io) {
   let enviados = 0;
 
   for (const item of pendientes) {
+    logWorkerItemFinal(item, "pendiente_vencido");
     console.log("[SEGUIMIENTO_WORKER_DEBUG] enviando", item);
     console.log("[SEGUIMIENTO_WORKER] enviando", {
       id: item.id,

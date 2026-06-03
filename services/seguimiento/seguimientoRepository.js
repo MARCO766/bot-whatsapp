@@ -203,7 +203,27 @@ async function reservarPasoParaEnvio(id) {
     { headers: headers({ Prefer: "return=representation" }) }
   );
 
-  return (response.data || [])[0] || null;
+  const row = (response.data || [])[0] || null;
+  if (row) {
+    console.log("[WORKER_RESERVA_TRACE]", {
+      id: row.id,
+      conexion_whatsapp_id_reservado: row.conexion_whatsapp_id ?? null,
+      estado_reservado: row.estado ?? null,
+      keys_en_respuesta: Object.keys(row),
+    });
+  }
+  return row;
+}
+
+const SELECT_SEGUIMIENTO_WORKER =
+  "id,cliente_numero,usuario_id,conexion_whatsapp_id,estado,run_at,creado_en,campana_id,paso_index,paso_id,mensaje_tipo,mensaje_payload,solo_si_no_respondio,detener_si_responde,checkpoint_at,flujo_id,nodo_id";
+
+async function obtenerSeguimientoPorId(id) {
+  const response = await axios.get(
+    `${SUPABASE_URL}/rest/v1/seguimientos_programados?id=eq.${encodeURIComponent(id)}&select=${SELECT_SEGUIMIENTO_WORKER}`,
+    { headers: headers() }
+  );
+  return response.data?.[0] || null;
 }
 
 async function obtenerPendientesVencidos(limite = 40) {
@@ -211,7 +231,7 @@ async function obtenerPendientesVencidos(limite = 40) {
   const ahoraEncoded = encodeTimestampFilter(ahora);
 
   const response = await axios.get(
-    `${SUPABASE_URL}/rest/v1/seguimientos_programados?estado=eq.${ESTADOS_SEGUIMIENTO.PENDIENTE}&run_at=lte.${ahoraEncoded}&order=run_at.asc&limit=${limite}&select=*`,
+    `${SUPABASE_URL}/rest/v1/seguimientos_programados?estado=eq.${ESTADOS_SEGUIMIENTO.PENDIENTE}&run_at=lte.${ahoraEncoded}&order=run_at.asc&limit=${limite}&select=${SELECT_SEGUIMIENTO_WORKER}`,
     { headers: headers() }
   );
 
@@ -466,6 +486,7 @@ module.exports = {
   esUnicoProcesandoEnClave,
   cancelarPendientesDuplicadosClave,
   reservarPasoParaEnvio,
+  obtenerSeguimientoPorId,
   obtenerPendientesVencidos,
   actualizarEstado,
   cancelarCampana,
