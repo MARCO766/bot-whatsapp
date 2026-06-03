@@ -54,7 +54,7 @@ function buildClaveDedupPaso(item) {
   return [
     item.usuario_id || "",
     item.cliente_numero || "",
-    item.conexion_whatsapp_id || "",
+    normalizarConexionId(item.conexion_whatsapp_id) || "",
     item.campana_id || "",
     String(item.paso_index ?? ""),
   ].join("|");
@@ -62,14 +62,11 @@ function buildClaveDedupPaso(item) {
 
 /** Worker: dedup/carrera solo dentro de la misma línea WhatsApp del lead. */
 function filtrosDedupWorker(item) {
-  const partes = [];
-  if (item.usuario_id && item.cliente_numero) {
-    partes.push(filtrosClaveLead(item.cliente_numero, item.usuario_id, item.conexion_whatsapp_id));
+  const conexion = normalizarConexionId(item.conexion_whatsapp_id);
+  if (!item.usuario_id || !item.cliente_numero || !conexion || !item.campana_id) {
+    return null;
   }
-  if (item.campana_id) {
-    partes.push(filtrosLotePaso(item));
-  }
-  return partes.join("&");
+  return `${filtrosClaveLead(item.cliente_numero, item.usuario_id, conexion)}&${filtrosLotePaso(item)}`;
 }
 
 function filtroEqCampo(campo, valor) {
@@ -133,9 +130,10 @@ function logPendienteSeguimiento(origen, row) {
   });
 }
 
-/** Deduplicación solo dentro del mismo lote (campana_id). */
+/** Deduplicación solo dentro del mismo lote (campana_id) y misma línea. */
 async function existePasoEnviadoOProcesando(item, excludeId = null) {
-  if (!item.campana_id) return null;
+  const filtros = filtrosDedupWorker(item);
+  if (!filtros) return null;
 
   const estados = [
     ESTADOS_SEGUIMIENTO.ENVIADO,
@@ -144,15 +142,19 @@ async function existePasoEnviadoOProcesando(item, excludeId = null) {
 
   let url =
     `${SUPABASE_URL}/rest/v1/seguimientos_programados?estado=in.(${estados})` +
-    `&${filtrosDedupWorker(item)}` +
-    "&select=id,estado&limit=1";
+    `&${filtros}` +
+    "&select=id,estado,conexion_whatsapp_id&limit=1";
 
   if (excludeId) {
     url += `&id=neq.${excludeId}`;
   }
 
   const response = await axios.get(url, { headers: headers() });
-  return (response.data || [])[0] || null;
+  const row = (response.data || [])[0] || null;
+  if (!row || !seguimientoMismaConexion(item, item.conexion_whatsapp_id)) {
+    return null;
+  }
+  return row;
 }
 
 function filtrosLotePaso(item) {
@@ -164,21 +166,26 @@ function filtrosLotePaso(item) {
 
 /** Tras reservar: solo una fila en "procesando" por lead+línea+lote+paso. */
 async function esUnicoProcesandoEnClave(item) {
-  if (!item.campana_id || !item.usuario_id || !item.cliente_numero) return true;
+  const filtros = filtrosDedupWorker(item);
+  if (!filtros) return true;
 
   const response = await axios.get(
-    `${SUPABASE_URL}/rest/v1/seguimientos_programados?estado=eq.${ESTADOS_SEGUIMIENTO.PROCESANDO}&${filtrosDedupWorker(item)}&select=id&order=id.asc&limit=1`,
+    `${SUPABASE_URL}/rest/v1/seguimientos_programados?estado=eq.${ESTADOS_SEGUIMIENTO.PROCESANDO}&${filtros}&select=id,conexion_whatsapp_id&order=id.asc&limit=1`,
     { headers: headers() }
   );
   const primero = (response.data || [])[0];
-  return primero?.id === item.id;
+  if (!primero || !seguimientoMismaConexion(item, item.conexion_whatsapp_id)) {
+    return true;
+  }
+  return primero.id === item.id;
 }
 
 async function cancelarPendientesDuplicadosClave(item, exceptId) {
-  if (!item.campana_id || !item.usuario_id || !item.cliente_numero) return;
+  const filtros = filtrosDedupWorker(item);
+  if (!filtros) return;
 
   const url =
-    `${SUPABASE_URL}/rest/v1/seguimientos_programados?estado=eq.${ESTADOS_SEGUIMIENTO.PENDIENTE}&${filtrosDedupWorker(item)}&id=neq.${exceptId}`;
+    `${SUPABASE_URL}/rest/v1/seguimientos_programados?estado=eq.${ESTADOS_SEGUIMIENTO.PENDIENTE}&${filtros}&id=neq.${exceptId}`;
 
   await axios.patch(
     url,
@@ -398,7 +405,10 @@ async function clienteRespondioDespues(
   fallbackAt = null,
   conexionWhatsappId = null
 ) {
-  const umbral = checkpointAt || fallbackAt;
+  const umbral =
+    checkpointAt != null && String(checkpointAt).trim() !== ""
+      ? checkpointAt
+      : fallbackAt;
   if (!umbral || !numero || !usuarioId) return false;
 
   const conexion = normalizarConexionId(conexionWhatsappId);
@@ -443,11 +453,12 @@ async function leadRespondioParaSeguimiento(seguimiento, conexionMensajeEntrante
   const conexionSeg = normalizarConexionId(seguimiento.conexion_whatsapp_id);
   if (!conexionSeg) return false;
 
+  const checkpoint = seguimiento.checkpoint_at;
   return clienteRespondioDespues(
     seguimiento.cliente_numero,
     seguimiento.usuario_id,
-    seguimiento.checkpoint_at,
-    seguimiento.creado_en,
+    checkpoint || null,
+    checkpoint ? null : seguimiento.creado_en,
     conexionSeg
   );
 }
