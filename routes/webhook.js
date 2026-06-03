@@ -597,6 +597,13 @@ if (!activadorEjecutado) {
   console.log("⚠️ ACTIVADOR — no se encontró coincidencia para:", textoParaActivador);
 }
 
+console.log("[WEBHOOK] cancelOnReply context", {
+  cliente_numero: from,
+  usuario_id: usuarioIdWebhook,
+  conexion_whatsapp_id: conexionWhatsappId || null,
+  mensajeAt: creadoEn,
+});
+
 try {
   await cancelarSeguimientosPorRespuesta(from, usuarioIdWebhook, req, {
     mensajeAt: creadoEn,

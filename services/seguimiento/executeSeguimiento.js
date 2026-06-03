@@ -7,13 +7,13 @@ const {
   obtenerPendientesVencidos,
   actualizarEstado,
   cancelarCampana,
-  clienteRespondioDespues,
   buildClaveDedupPaso,
   existePasoEnviadoOProcesando,
   esUnicoProcesandoEnClave,
   cancelarPendientesDuplicadosClave,
   reservarPasoParaEnvio,
   obtenerSeguimientoPorId,
+  leadRespondioParaSeguimiento,
 } = require("./seguimientoRepository");
 const { ESTADOS_SEGUIMIENTO } = require("./constants");
 const rt = require("../realtimeService");
@@ -325,41 +325,42 @@ async function procesarSeguimientoItem(item, io) {
   }
 
   if (item.solo_si_no_respondio) {
-    const conexionSeg =
-      item.conexion_whatsapp_id != null && String(item.conexion_whatsapp_id).trim() !== ""
-        ? String(item.conexion_whatsapp_id).trim()
-        : null;
-
-    const respondio = await clienteRespondioDespues(
-      item.cliente_numero,
-      item.usuario_id,
-      item.checkpoint_at,
-      item.creado_en,
-      conexionSeg
-    );
-
-    if (respondio) {
-      console.log("[SEGUIMIENTO_MULTI] seguimiento omitido — lead respondió en esta conexión", {
+    const conexionSeg = obtenerConexionSeguimiento(item);
+    if (!conexionSeg) {
+      console.warn("[SEGUIMIENTO_MULTI] solo_si_no_respondio omitido — sin conexion_whatsapp_id", {
         id: item.id,
-        usuario_id: item.usuario_id,
         cliente_numero: item.cliente_numero,
-        conexion_whatsapp_id: item.conexion_whatsapp_id || null,
       });
-      await actualizarEstado(item.id, ESTADOS_SEGUIMIENTO.RESPONDIDO, {
-        error_detalle: "Lead respondió antes del envío",
-      });
+    } else {
+      const respondio = await leadRespondioParaSeguimiento(item, conexionSeg);
 
-      if (item.detener_si_responde) {
-        await cancelarCampana(
-          item.campana_id,
-          ESTADOS_SEGUIMIENTO.RESPONDIDO,
-          "Lead respondió",
-          { conexionWhatsappId: item.conexion_whatsapp_id || null }
-        );
+      if (respondio) {
+        console.log("[SEGUIMIENTO_MULTI] seguimiento omitido — lead respondió en esta conexión", {
+          id: item.id,
+          usuario_id: item.usuario_id,
+          cliente_numero: item.cliente_numero,
+          conexion_whatsapp_id: conexionSeg,
+        });
+        await actualizarEstado(item.id, ESTADOS_SEGUIMIENTO.RESPONDIDO, {
+          error_detalle: "Lead respondió antes del envío",
+        });
+
+        if (item.detener_si_responde) {
+          await cancelarCampana(
+            item.campana_id,
+            ESTADOS_SEGUIMIENTO.RESPONDIDO,
+            "Lead respondió",
+            {
+              conexionWhatsappId: conexionSeg,
+              usuarioId: item.usuario_id,
+              clienteNumero: item.cliente_numero,
+            }
+          );
+        }
+
+        emitirEstadoSeguimiento(io, item, ESTADOS_SEGUIMIENTO.RESPONDIDO);
+        return { ok: false, motivo: "respondido" };
       }
-
-      emitirEstadoSeguimiento(io, item, ESTADOS_SEGUIMIENTO.RESPONDIDO);
-      return { ok: false, motivo: "respondido" };
     }
   }
 

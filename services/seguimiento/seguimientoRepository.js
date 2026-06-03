@@ -290,15 +290,26 @@ async function cancelarCampana(campanaId, estado, motivo, opts = {}) {
   const ahora = nowUtc();
   const campoFecha =
     estado === ESTADOS_SEGUIMIENTO.RESPONDIDO ? "respondido_en" : "cancelado_en";
+  const conexion = normalizarConexionId(opts.conexionWhatsappId);
+  const clienteNumero =
+    opts.clienteNumero != null ? String(opts.clienteNumero).trim() : "";
+  const usuarioId =
+    opts.usuarioId != null ? String(opts.usuarioId).trim() : "";
+
+  if (!conexion || !clienteNumero || !usuarioId) {
+    console.warn("[SEGUIMIENTO_MULTI] cancelarCampana omitido — requiere linea+cliente+usuario", {
+      campana_id: campanaId,
+      conexion_whatsapp_id: conexion ?? null,
+      cliente_numero: clienteNumero || null,
+      usuario_id: usuarioId || null,
+    });
+    return;
+  }
 
   let url =
-    `${SUPABASE_URL}/rest/v1/seguimientos_programados?campana_id=eq.${campanaId}&estado=in.(${ESTADOS_SEGUIMIENTO.PENDIENTE},${ESTADOS_SEGUIMIENTO.PROCESANDO})`;
-
-  if (opts.usuarioId && opts.clienteNumero) {
-    url += `&${filtrosClaveLead(opts.clienteNumero, opts.usuarioId, opts.conexionWhatsappId ?? null)}`;
-  } else {
-    url += filtroConexionWhatsapp(opts.conexionWhatsappId ?? null);
-  }
+    `${SUPABASE_URL}/rest/v1/seguimientos_programados?campana_id=eq.${campanaId}` +
+    `&estado=in.(${ESTADOS_SEGUIMIENTO.PENDIENTE},${ESTADOS_SEGUIMIENTO.PROCESANDO})` +
+    `&${filtrosClaveLead(clienteNumero, usuarioId, conexion)}`;
 
   await axios.patch(
     url,
@@ -319,12 +330,21 @@ async function cancelarPendientesCliente(
   motivo,
   opts = {}
 ) {
+  const conexion = normalizarConexionId(opts.conexionWhatsappId);
+  if (!conexion) {
+    console.warn(
+      "[SEGUIMIENTO_MULTI] cancelarPendientesCliente omitido — sin conexion_whatsapp_id",
+      { cliente_numero: numero, usuario_id: usuarioId }
+    );
+    return;
+  }
+
   const ahora = nowUtc();
   const campoFecha =
     estado === ESTADOS_SEGUIMIENTO.RESPONDIDO ? "respondido_en" : "cancelado_en";
 
   let url =
-    `${SUPABASE_URL}/rest/v1/seguimientos_programados?${filtrosClaveLead(numero, usuarioId, opts.conexionWhatsappId)}` +
+    `${SUPABASE_URL}/rest/v1/seguimientos_programados?${filtrosClaveLead(numero, usuarioId, conexion)}` +
     `&estado=in.(${ESTADOS_SEGUIMIENTO.PENDIENTE},${ESTADOS_SEGUIMIENTO.PROCESANDO})&detener_si_responde=eq.true`;
 
   if (opts.creadoAntesDe) {
@@ -396,8 +416,10 @@ async function clienteRespondioDespues(
     `&direccion=eq.entrante&creado_en=gt.${checkpointEncoded}&select=id,creado_en,conexion_whatsapp_id&order=creado_en.asc&limit=5`;
 
   const response = await axios.get(url, { headers: headers() });
-  const filas = response.data || [];
-  const mensaje = filas.find((row) => mensajeCoincideConexion(row, conexion)) || null;
+  const filas = (response.data || []).filter((row) =>
+    mensajeCoincideConexion(row, conexion)
+  );
+  const mensaje = filas[0] || null;
   const hay = Boolean(mensaje);
 
   console.log(
@@ -438,20 +460,29 @@ async function listarPendientesRespondibles(
 ) {
   if (!numero || !usuarioId) return [];
 
+  const conexion = normalizarConexionId(conexionWhatsappId);
+  if (!conexion) {
+    console.warn(
+      "[SEGUIMIENTO_MULTI] listarPendientesRespondibles omitido — sin conexion_whatsapp_id",
+      { cliente_numero: numero, usuario_id: usuarioId }
+    );
+    return [];
+  }
+
   let url =
-    `${SUPABASE_URL}/rest/v1/seguimientos_programados?${filtrosClaveLead(numero, usuarioId, conexionWhatsappId)}` +
+    `${SUPABASE_URL}/rest/v1/seguimientos_programados?${filtrosClaveLead(numero, usuarioId, conexion)}` +
     `&estado=in.(${ESTADOS_SEGUIMIENTO.PENDIENTE},${ESTADOS_SEGUIMIENTO.PROCESANDO})` +
     `&or=(solo_si_no_respondio.eq.true,detener_si_responde.eq.true)` +
     `&order=creado_en.asc&limit=${limite}&select=*`;
 
   const response = await axios.get(url, { headers: headers() });
   const rows = (response.data || []).filter((row) =>
-    seguimientoMismaConexion(row, conexionWhatsappId)
+    seguimientoMismaConexion(row, conexion)
   );
 
   if (rows.length) {
     console.log(
-      `[WORKER LISTAR PENDIENTES] respondibles total=${rows.length} cliente_numero=${numero} conexion_whatsapp_id=${normalizarConexionId(conexionWhatsappId) ?? null}`
+      `[WORKER LISTAR PENDIENTES] respondibles total=${rows.length} cliente_numero=${numero} conexion_whatsapp_id=${conexion}`
     );
     rows.forEach((row) => logPendienteSeguimiento("RESPONDIBLES", row));
   }

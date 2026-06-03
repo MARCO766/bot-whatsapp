@@ -56,6 +56,13 @@ async function cancelarSeguimientosPorRespuesta(numero, usuarioId, io, opts = {}
       continue;
     }
 
+    if (!mensajeEsRespuestaValida(opts.mensajeAt, seg)) {
+      console.log(
+        `[SEGUIMIENTO_MULTI] cancelar omitido seguimiento_id=${seg.id} mensaje antes de checkpoint conexion=${conexionWhatsappId}`
+      );
+      continue;
+    }
+
     const respondio = await leadRespondioParaSeguimiento(seg, conexionWhatsappId);
 
     console.log(
