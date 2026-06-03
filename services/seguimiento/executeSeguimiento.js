@@ -18,6 +18,27 @@ const { ESTADOS_SEGUIMIENTO } = require("./constants");
 const rt = require("../realtimeService");
 const { estaBotPausado } = require("../conversaciones/botPauseService");
 
+function obtenerConexionSeguimiento(item) {
+  if (item?.conexion_whatsapp_id == null) return null;
+  const id = String(item.conexion_whatsapp_id).trim();
+  return id || null;
+}
+
+async function cancelarSeguimientoSinConexion(item, io) {
+  const detalle =
+    "Seguimiento sin conexion_whatsapp_id — no se envía (multi-número)";
+  console.error("[SEGUIMIENTO_MULTI] cancelado sin línea WhatsApp", {
+    seguimiento_id: item.id,
+    cliente_numero: item.cliente_numero,
+    usuario_id: item.usuario_id || null,
+  });
+  await actualizarEstado(item.id, ESTADOS_SEGUIMIENTO.CANCELADO, {
+    error_detalle: detalle,
+  });
+  emitirEstadoSeguimiento(io, item, ESTADOS_SEGUIMIENTO.CANCELADO);
+  return { ok: false, motivo: "sin_conexion_whatsapp_id" };
+}
+
 function emitirEstadoSeguimiento(io, item, estado) {
   if (!item?.usuario_id) return;
 
@@ -34,23 +55,34 @@ function emitirEstadoSeguimiento(io, item, estado) {
   });
 }
 
-async function enviarMensajeSeguimiento(item) {
-  const payload = item.mensaje_payload || {};
-  const tipo = (item.mensaje_tipo || payload.tipo || "texto").toLowerCase();
-  const opciones = {
+function buildOpcionesEnvioSeguimiento(item) {
+  const conexionId = obtenerConexionSeguimiento(item);
+  if (!conexionId) {
+    throw new Error(
+      "Seguimiento sin conexion_whatsapp_id — no se envía (multi-número)"
+    );
+  }
+  return {
     usuarioId: item.usuario_id,
-    conexionWhatsappId: item.conexion_whatsapp_id || null,
-    strictConexionWhatsappId: !!item.conexion_whatsapp_id,
+    conexionWhatsappId: conexionId,
+    strictConexionWhatsappId: true,
     origen: "seguimiento",
     seguimientoId: item.id,
   };
+}
+
+async function enviarMensajeSeguimiento(item) {
+  const payload = item.mensaje_payload || {};
+  const tipo = (item.mensaje_tipo || payload.tipo || "texto").toLowerCase();
+  const opciones = buildOpcionesEnvioSeguimiento(item);
   const botones = Array.isArray(payload.botones) ? payload.botones : [];
 
   console.log("[SEGUIMIENTO_MULTI] enviando mensaje de seguimiento", {
     seguimiento_id: item.id,
     usuario_id: item.usuario_id,
     cliente_numero: item.cliente_numero,
-    conexion_whatsapp_id: item.conexion_whatsapp_id || null,
+    conexion_whatsapp_id: opciones.conexionWhatsappId,
+    strictConexionWhatsappId: opciones.strictConexionWhatsappId,
     paso_index: item.paso_index,
   });
 
@@ -177,13 +209,17 @@ async function intentarReservarYEnviarPaso(item, io) {
     return { ok: false, motivo: "carrera_procesando" };
   }
 
+  if (!obtenerConexionSeguimiento(reservado)) {
+    return cancelarSeguimientoSinConexion(reservado, io);
+  }
+
   try {
     console.log("[SEGUIMIENTO_MULTI] ejecutando seguimiento", {
       id: reservado.id,
       lote_id: reservado.campana_id,
       usuario_id: reservado.usuario_id,
       cliente_numero: reservado.cliente_numero,
-      conexion_whatsapp_id: reservado.conexion_whatsapp_id || null,
+      conexion_whatsapp_id: obtenerConexionSeguimiento(reservado),
       paso_index: reservado.paso_index,
     });
     await enviarMensajeSeguimiento(reservado);
@@ -219,6 +255,10 @@ async function procesarSeguimientoItem(item, io) {
     mensaje_tipo: item.mensaje_tipo || null,
     estado: item.estado || null,
   });
+
+  if (!obtenerConexionSeguimiento(item)) {
+    return cancelarSeguimientoSinConexion(item, io);
+  }
 
   if (
     item.conexion_whatsapp_id &&

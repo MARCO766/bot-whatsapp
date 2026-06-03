@@ -131,7 +131,47 @@ async function obtenerConexionWhatsappIdDeChat(usuarioId, numero) {
   return null;
 }
 
+function esOrigenSeguimiento(opciones) {
+  return opciones?.origen === "seguimiento";
+}
+
+function normalizarConexionWhatsappIdOpciones(conexionWhatsappId) {
+  if (conexionWhatsappId == null || String(conexionWhatsappId).trim() === "") {
+    return null;
+  }
+  return String(conexionWhatsappId).trim();
+}
+
+function assertOpcionesSeguimiento(opciones) {
+  if (!esOrigenSeguimiento(opciones)) return opciones;
+
+  const conexionId = normalizarConexionWhatsappIdOpciones(opciones.conexionWhatsappId);
+  if (!conexionId) {
+    throw new Error(
+      "Seguimiento requiere conexion_whatsapp_id (no se puede enviar ni guardar sin línea)"
+    );
+  }
+  if (!opciones.usuarioId) {
+    throw new Error("Seguimiento requiere usuario_id");
+  }
+
+  opciones.conexionWhatsappId = conexionId;
+  opciones.strictConexionWhatsappId = true;
+  return opciones;
+}
+
+function chatListKeySaliente(numero, conexionWhatsappId) {
+  const n = String(numero || "").trim();
+  const c = normalizarConexionWhatsappIdOpciones(conexionWhatsappId);
+  if (!n || !c) return null;
+  return `${n}::${c}`;
+}
+
 async function completarOpcionesEnvio(opciones = {}, numero) {
+  if (esOrigenSeguimiento(opciones)) {
+    return assertOpcionesSeguimiento(opciones);
+  }
+
   if (opciones.strictConexionWhatsappId) return opciones;
   if (opciones.conexionWhatsappId) return opciones;
   if (!opciones.usuarioId || !numero) return opciones;
@@ -181,6 +221,36 @@ function logMetaSendFinal(opcionesEnvio, numero, phoneIdEnviar) {
 }
 
 async function resolverCredencialesEnvio(opciones = {}) {
+  if (esOrigenSeguimiento(opciones)) {
+    assertOpcionesSeguimiento(opciones);
+
+    const conexion = await resolverConexionWhatsappPorId(
+      opciones.usuarioId,
+      opciones.conexionWhatsappId,
+      { soloSeguimientoStrict: true }
+    );
+
+    if (!conexion?.token || !conexion?.phone_id) {
+      throw new Error(
+        "Seguimiento: no se encontró la conexión WhatsApp (id + usuario, sin fallback activo)"
+      );
+    }
+
+    console.log("[STRICT CONEXION RESUELTA]", {
+      origen: "seguimiento",
+      conexion_whatsapp_id: conexion.id || opciones.conexionWhatsappId,
+      activo: conexion.activo,
+      phone_id: conexion.phone_id,
+    });
+
+    logResolverCredenciales(opciones, conexion, conexion.phone_id);
+
+    return {
+      tokenEnviar: conexion.token,
+      phoneIdEnviar: conexion.phone_id,
+    };
+  }
+
   let tokenEnviar = TOKEN;
   let phoneIdEnviar = PHONE_ID;
   let conexionUsada = null;
@@ -309,7 +379,24 @@ async function registrarMensajeSalienteEnInbox({
   wamid,
   tipo = "texto",
   conexionWhatsappId = null,
+  origen = null,
+  seguimientoId = null,
 }) {
+  if (origen === "seguimiento") {
+    const conn = normalizarConexionWhatsappIdOpciones(conexionWhatsappId);
+    if (!conn) {
+      console.error("[SEGUIMIENTO INBOX] FALTA conexion_whatsapp_id — no insertar", {
+        seguimiento_id: seguimientoId ?? null,
+        cliente_numero: numero,
+        usuario_id: usuarioId,
+      });
+      throw new Error(
+        "Seguimiento: conexion_whatsapp_id obligatorio para guardar en bandeja"
+      );
+    }
+    conexionWhatsappId = conn;
+  }
+
   const insertPayload = normalizarBodyMensajeSupabase({
     usuarioId,
     numero,
@@ -318,6 +405,12 @@ async function registrarMensajeSalienteEnInbox({
     tipo,
     conexionWhatsappId,
   });
+
+  if (origen === "seguimiento" && !insertPayload.conexion_whatsapp_id) {
+    throw new Error(
+      "Seguimiento: payload mensajes sin conexion_whatsapp_id"
+    );
+  }
 
   let bodyJson = "";
   try {
@@ -354,6 +447,7 @@ async function registrarMensajeSalienteEnInbox({
     conexionWhatsappId
   );
 
+  const conexionSocket = insertPayload.conexion_whatsapp_id || conexionWhatsappId || null;
   const payloadMensaje = {
     id: row?.id,
     cliente_numero: numero,
@@ -364,14 +458,15 @@ async function registrarMensajeSalienteEnInbox({
     imagen_url: insertPayload.imagen_url,
     whatsapp_message_id: wamid || null,
     estado_envio: "sent",
-    conexion_whatsapp_id: conexionWhatsappId || null,
+    conexion_whatsapp_id: conexionSocket,
+    chatKey: chatListKeySaliente(numero, conexionSocket),
     creado_en: row?.creado_en || new Date().toISOString(),
   };
 
   rt.nuevoMensaje(null, usuarioId, payloadMensaje);
   rt.conversacionActualizada(null, usuarioId, {
     cliente_numero: numero,
-    conexion_whatsapp_id: conexionWhatsappId || null,
+    conexion_whatsapp_id: conexionSocket,
     ultimo_mensaje: insertPayload.contenido,
     ultimo_mensaje_en: payloadMensaje.creado_en,
     direccion: "saliente",
@@ -427,6 +522,8 @@ async function enviarTextoWhatsApp(numero, texto, opciones = {}) {
           wamid,
           tipo: "texto",
           conexionWhatsappId: opcionesEnvio.conexionWhatsappId || null,
+          origen: opcionesEnvio.origen || null,
+          seguimientoId: opcionesEnvio.seguimientoId ?? null,
         });
       }
 
@@ -437,6 +534,8 @@ async function enviarTextoWhatsApp(numero, texto, opciones = {}) {
         wamid,
         tipo: "texto",
         conexionWhatsappId: opcionesEnvio.conexionWhatsappId || null,
+        origen: opcionesEnvio.origen || null,
+        seguimientoId: opcionesEnvio.seguimientoId ?? null,
       });
     } catch (supabaseErr) {
       console.log("ERROR ENVIANDO WHATSAPP (SUPABASE mensajes):", {
@@ -760,6 +859,18 @@ async function enviarMediaWhatsApp(numero, tipo, mediaUrl, caption = "", opcione
       conexionWhatsappId: opcionesEnvio.conexionWhatsappId || null,
     });
 
+    if (esOrigenSeguimiento(opcionesEnvio)) {
+      if (!insertPayload.conexion_whatsapp_id) {
+        console.error("[SEGUIMIENTO INBOX] media sin conexion_whatsapp_id", {
+          seguimiento_id: opcionesEnvio.seguimientoId ?? null,
+          cliente_numero: numeroDestino,
+        });
+        throw new Error(
+          "Seguimiento: conexion_whatsapp_id obligatorio para media en bandeja"
+        );
+      }
+    }
+
     const insertRes = await axios.post(
       `${SUPABASE_URL}/rest/v1/mensajes`,
       insertPayload,
@@ -782,6 +893,10 @@ async function enviarMediaWhatsApp(numero, tipo, mediaUrl, caption = "", opcione
         opcionesEnvio.conexionWhatsappId || null
       );
 
+      const conexionSocket =
+        insertPayload.conexion_whatsapp_id ||
+        opcionesEnvio.conexionWhatsappId ||
+        null;
       rt.nuevoMensaje(null, opcionesEnvio.usuarioId, {
         id: row.id,
         cliente_numero: numeroDestino,
@@ -792,7 +907,8 @@ async function enviarMediaWhatsApp(numero, tipo, mediaUrl, caption = "", opcione
         imagen_url: urlEnvio,
         whatsapp_message_id: whatsappMessageId,
         estado_envio: "sent",
-        conexion_whatsapp_id: opcionesEnvio.conexionWhatsappId || null,
+        conexion_whatsapp_id: conexionSocket,
+        chatKey: chatListKeySaliente(numeroDestino, conexionSocket),
         creado_en: row.creado_en || new Date().toISOString(),
       });
     }
@@ -868,6 +984,16 @@ async function enviarBotonesWhatsApp(numero, texto, botones, opciones = {}) {
       conexionWhatsappId: opcionesEnvio.conexionWhatsappId || null,
     });
 
+    if (esOrigenSeguimiento(opcionesEnvio) && !insertPayload.conexion_whatsapp_id) {
+      console.error("[SEGUIMIENTO INBOX] botones sin conexion_whatsapp_id", {
+        seguimiento_id: opcionesEnvio.seguimientoId ?? null,
+        cliente_numero: numero,
+      });
+      throw new Error(
+        "Seguimiento: conexion_whatsapp_id obligatorio para botones en bandeja"
+      );
+    }
+
     const insertRes = await axios.post(
       `${SUPABASE_URL}/rest/v1/mensajes`,
       insertPayload,
@@ -883,11 +1009,15 @@ async function enviarBotonesWhatsApp(numero, texto, botones, opciones = {}) {
 
     const row = insertRes.data?.[0];
     if (opcionesEnvio.usuarioId) {
+      const conexionConv =
+        insertPayload.conexion_whatsapp_id ||
+        opcionesEnvio.conexionWhatsappId ||
+        null;
       await actualizarConversacionSaliente(
         opcionesEnvio.usuarioId,
         numero,
         insertPayload.contenido,
-        opcionesEnvio.conexionWhatsappId || null
+        conexionConv
       );
 
       rt.nuevoMensaje(null, opcionesEnvio.usuarioId, {
@@ -899,7 +1029,8 @@ async function enviarBotonesWhatsApp(numero, texto, botones, opciones = {}) {
         contenido: insertPayload.contenido,
         whatsapp_message_id: whatsappMessageId,
         estado_envio: "sent",
-        conexion_whatsapp_id: opcionesEnvio.conexionWhatsappId || null,
+        conexion_whatsapp_id: conexionConv,
+        chatKey: chatListKeySaliente(numero, conexionConv),
         creado_en: row?.creado_en || new Date().toISOString(),
       });
     }
