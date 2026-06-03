@@ -1,5 +1,5 @@
 /**
- * API Meta Ads — estado, configuración e insights (cache + refresh manual).
+ * API Meta Ads — estado, configuración, campañas (lectura) e insights (cache + refresh manual).
  */
 const express = require("express");
 const router = express.Router();
@@ -11,6 +11,7 @@ const {
   getCachedInsights,
   refreshInsights,
 } = require("../services/metaAds/metaAdsInsightsService");
+const { getMetaAdsCampaigns } = require("../services/metaAds/metaAdsCampaignsService");
 
 function protegerApi(req, res, next) {
   if (req.session?.usuario?.id) return next();
@@ -55,6 +56,18 @@ router.post("/api/meta-ads/config", protegerApi, async (req, res) => {
     res.json(data);
   } catch (error) {
     handleError(res, error, "config");
+  }
+});
+
+router.get("/api/meta-ads/campaigns", protegerApi, async (req, res) => {
+  try {
+    const data = await getMetaAdsCampaigns({
+      usuarioId: uid(req),
+      conexionWhatsappId: req.query.conexion_whatsapp_id || null,
+    });
+    res.json(data);
+  } catch (error) {
+    handleError(res, error, "campaigns");
   }
 });
 

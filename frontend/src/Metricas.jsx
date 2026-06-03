@@ -1,11 +1,12 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useMetricas } from "./metricas/useMetricas";
 import { useMetaAdsStatus } from "./metricas/useMetaAdsStatus";
 import { useMetaAdsInsights } from "./metricas/useMetaAdsInsights";
 import { formatMoney, formatNum, formatPct, formatTendencia } from "./metricas/format";
 import FlujoCampanaSelect from "./metricas/FlujoCampanaSelect";
 import RevenuePremiumSection from "./metricas/revenue/RevenuePremiumSection";
-import MetaAdsConnectModal, { MetaAdsCompactCard } from "./metricas/MetaAdsSection";
+import MetaAdsConnectModal, { MetaAdsCompactCard, META_CAMPAIGN_TODAS } from "./metricas/MetaAdsSection";
+import { useMetaAdsCampaigns } from "./metricas/useMetaAdsCampaigns";
 import ConexionLineaTabs from "./components/conexion/ConexionLineaTabs";
 import { useMetricasConexion } from "./hooks/useMetricasConexion";
 import { CONEXION_TODAS } from "./utils/conexionesInbox";
@@ -111,6 +112,7 @@ export default function Metricas() {
   const [periodo, setPeriodo] = useState("7 días");
   const [flujoId, setFlujoId] = useState("");
   const [metaAdsModalOpen, setMetaAdsModalOpen] = useState(false);
+  const [metaAdsCampaignId, setMetaAdsCampaignId] = useState(META_CAMPAIGN_TODAS);
   const {
     conexionesInbox,
     conexionSeleccionadaId,
@@ -134,6 +136,17 @@ export default function Metricas() {
     refresh: refreshMetaAdsInsights,
     reload: reloadMetaAdsInsights,
   } = useMetaAdsInsights(periodo, conexionSeleccionadaId, adsConectado, conexionesLoading);
+  const {
+    campaigns: metaAdsCampaigns,
+    loading: metaAdsCampaignsLoading,
+    error: metaAdsCampaignsError,
+    mensaje: metaAdsCampaignsMensaje,
+    reload: reloadMetaAdsCampaigns,
+  } = useMetaAdsCampaigns(conexionSeleccionadaId, adsConectado, conexionesLoading);
+
+  useEffect(() => {
+    setMetaAdsCampaignId(META_CAMPAIGN_TODAS);
+  }, [conexionSeleccionadaId]);
 
   const kpis = resumen?.kpis || {};
   const salud = resumen?.salud || { score: 0, label: "Sin datos" };
@@ -510,6 +523,12 @@ export default function Metricas() {
                 insightsLoading={metaAdsInsightsLoading}
                 refreshing={metaAdsRefreshing}
                 insightsError={metaAdsInsightsError}
+                campaigns={metaAdsCampaigns}
+                campaignsLoading={metaAdsCampaignsLoading}
+                campaignsError={metaAdsCampaignsError}
+                campaignsMensaje={metaAdsCampaignsMensaje}
+                selectedCampaignId={metaAdsCampaignId}
+                onSelectCampaign={setMetaAdsCampaignId}
                 onConnect={() => setMetaAdsModalOpen(true)}
                 onRefresh={refreshMetaAdsInsights}
               />
@@ -607,6 +626,8 @@ export default function Metricas() {
         onSaved={() => {
           reloadMetaAds();
           reloadMetaAdsInsights();
+          reloadMetaAdsCampaigns();
+          setMetaAdsCampaignId(META_CAMPAIGN_TODAS);
         }}
       />
     </div>
@@ -749,6 +770,19 @@ const styles = `
 .metaAdsMetricMini strong { display: block; margin-top: 4px; font-size: 15px; line-height: 1.1; color: #f8fafc; }
 .metaAdsMetricMini small { display: block; margin-top: 3px; font-size: 9px; color: #94a3b8; }
 .metaAdsFootnote { margin: 0; font-size: 10px; color: #94a3b8; line-height: 1.35; }
+.metaAdsCampaignsBlock { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid rgba(148,163,184,.12); }
+.metaAdsCampaignSelect { display: flex; flex-direction: column; gap: 5px; }
+.metaAdsCampaignSelect span { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: #64748b; }
+.metaAdsCampaignSelect select { height: 32px; border-radius: 10px; border: 1px solid rgba(148,163,184,.2); background: rgba(15,23,42,.85); color: #f8fafc; padding: 0 10px; font-size: 12px; }
+.metaAdsCampaignsTableWrap { overflow-x: auto; border-radius: 12px; border: 1px solid rgba(148,163,184,.12); }
+.metaAdsCampaignsTable { width: 100%; border-collapse: collapse; font-size: 11px; }
+.metaAdsCampaignsTable th { text-align: left; padding: 8px 10px; color: #64748b; font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; background: rgba(255,255,255,.03); }
+.metaAdsCampaignsTable td { padding: 8px 10px; border-top: 1px solid rgba(148,163,184,.08); color: #cbd5e1; vertical-align: top; }
+.metaAdsCampaignName { color: #f1f5f9; font-weight: 700; max-width: 140px; word-break: break-word; }
+.metaAdsCampaignStatus { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 10px; font-weight: 800; background: rgba(148,163,184,.15); color: #94a3b8; }
+.metaAdsCampaignStatus--active { background: rgba(34,197,94,.15); color: #86efac; }
+.metaAdsCampaignStatus--paused { background: rgba(234,179,8,.12); color: #fde68a; }
+.metaAdsCampaignStatus--archived { background: rgba(100,116,139,.2); color: #cbd5e1; }
 .metaAdsCompact--syncing { opacity: .92; }
 .segStrip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .segStripItem { padding: 10px 8px; border-radius: 14px; text-align: center; background: rgba(255,255,255,.04); border: 1px solid rgba(148,163,184,.1); }

@@ -1,7 +1,52 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { saveMetaAdsConfig } from "./metaAdsApi";
 import { formatNum, formatPct } from "./format";
 import { apiConexionWhatsappParam } from "../utils/conexionesInbox";
+
+export const META_CAMPAIGN_TODAS = "";
+
+const META_CAMPAIGN_STATUS_LABELS = {
+  ACTIVE: "Activa",
+  PAUSED: "Pausada",
+  ARCHIVED: "Archivada",
+  DELETED: "Eliminada",
+  IN_PROCESS: "En proceso",
+  WITH_ISSUES: "Con incidencias",
+};
+
+const META_CAMPAIGN_OBJECTIVE_LABELS = {
+  OUTCOME_AWARENESS: "Conciencia",
+  OUTCOME_TRAFFIC: "Tráfico",
+  OUTCOME_ENGAGEMENT: "Interacción",
+  OUTCOME_LEADS: "Leads",
+  OUTCOME_SALES: "Ventas",
+  OUTCOME_APP_PROMOTION: "Promoción de app",
+  LINK_CLICKS: "Clics al enlace",
+  BRAND_AWARENESS: "Reconocimiento de marca",
+  REACH: "Alcance",
+  VIDEO_VIEWS: "Reproducciones de video",
+  LEAD_GENERATION: "Generación de leads",
+  MESSAGES: "Mensajes",
+  CONVERSIONS: "Conversiones",
+  CATALOG_SALES: "Ventas de catálogo",
+  STORE_VISITS: "Visitas a tienda",
+};
+
+export function formatMetaCampaignStatus(status) {
+  const key = String(status || "").trim().toUpperCase();
+  return META_CAMPAIGN_STATUS_LABELS[key] || key || "—";
+}
+
+export function formatMetaCampaignObjective(objective) {
+  const key = String(objective || "").trim().toUpperCase();
+  if (!key) return "—";
+  if (META_CAMPAIGN_OBJECTIVE_LABELS[key]) return META_CAMPAIGN_OBJECTIVE_LABELS[key];
+  return key
+    .toLowerCase()
+    .split("_")
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+}
 
 export default function MetaAdsConnectModal({ open, onClose, conexionWhatsappId, onSaved }) {
   const [adAccountId, setAdAccountId] = useState("");
@@ -152,6 +197,89 @@ function MetricMini({ label, value, hint }) {
   );
 }
 
+function MetaAdsCampaignSelect({ campaigns, value, onChange, disabled }) {
+  return (
+    <label className="metaAdsCampaignSelect">
+      <span>Campaña Meta</span>
+      <select value={value} onChange={(e) => onChange(e.target.value)} disabled={disabled}>
+        <option value={META_CAMPAIGN_TODAS}>Todas</option>
+        {campaigns.map((c) => (
+          <option key={c.id} value={c.id}>
+            {c.name}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function MetaAdsCampaignsTable({ rows }) {
+  if (!rows.length) {
+    return <p className="metaAdsSyncHint">No hay campañas para mostrar.</p>;
+  }
+
+  return (
+    <div className="metaAdsCampaignsTableWrap">
+      <table className="metaAdsCampaignsTable">
+        <thead>
+          <tr>
+            <th>Campaña</th>
+            <th>Estado</th>
+            <th>Objetivo</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((c) => (
+            <tr key={c.id}>
+              <td className="metaAdsCampaignName">{c.name}</td>
+              <td>
+                <span className={`metaAdsCampaignStatus metaAdsCampaignStatus--${String(c.status || "").toLowerCase()}`}>
+                  {formatMetaCampaignStatus(c.status)}
+                </span>
+              </td>
+              <td>{formatMetaCampaignObjective(c.objective)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function MetaAdsCampaignsBlock({
+  campaigns,
+  campaignsLoading,
+  campaignsError,
+  campaignsMensaje,
+  selectedCampaignId,
+  onSelectCampaign,
+}) {
+  const visibleRows = useMemo(() => {
+    if (!selectedCampaignId) return campaigns;
+    return campaigns.filter((c) => String(c.id) === String(selectedCampaignId));
+  }, [campaigns, selectedCampaignId]);
+
+  if (campaignsLoading) {
+    return <p className="metaAdsSyncHint">Cargando campañas desde Meta…</p>;
+  }
+
+  return (
+    <div className="metaAdsCampaignsBlock">
+      <MetaAdsCampaignSelect
+        campaigns={campaigns}
+        value={selectedCampaignId}
+        onChange={onSelectCampaign}
+        disabled={!campaigns.length}
+      />
+      {campaignsMensaje && !campaigns.length ? (
+        <p className="metaAdsSyncHint">{campaignsMensaje}</p>
+      ) : null}
+      <MetaAdsCampaignsTable rows={visibleRows} />
+      {campaignsError ? <p className="metaAdsModalError">{campaignsError}</p> : null}
+    </div>
+  );
+}
+
 function MetaAdsMetricsGrid({ insights }) {
   const m = insights?.metrics || {};
   const currency = insights?.meta?.account_currency;
@@ -182,9 +310,17 @@ export function MetaAdsCompactCard({
   insightsLoading,
   refreshing,
   insightsError,
+  campaigns,
+  campaignsLoading,
+  campaignsError,
+  campaignsMensaje,
+  selectedCampaignId,
+  onSelectCampaign,
   onConnect,
   onRefresh,
 }) {
+  const campaignList = campaigns || [];
+
   if (statusLoading) {
     return <div className="metaAdsCompact metaAdsCompact--loading">Cargando estado Meta Ads…</div>;
   }
@@ -241,6 +377,15 @@ export function MetaAdsCompactCard({
 
       {adsConectado ? (
         <div className="metaAdsInsightsBlock">
+          <MetaAdsCampaignsBlock
+            campaigns={campaignList}
+            campaignsLoading={campaignsLoading}
+            campaignsError={campaignsError}
+            campaignsMensaje={campaignsMensaje}
+            selectedCampaignId={selectedCampaignId}
+            onSelectCampaign={onSelectCampaign}
+          />
+
           {insightsLoading && !hasCache ? (
             <p className="metaAdsSyncHint">Cargando insights desde caché…</p>
           ) : null}
