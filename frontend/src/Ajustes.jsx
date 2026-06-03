@@ -118,8 +118,21 @@ const ESTADO_GENERAL_LABEL = {
 function DiagCheckRow({ checkKey, check }) {
   if (!check) return null;
   const critico = DIAG_CHECKS_CRITICOS.has(checkKey);
-  const cls = check.ok ? "ok" : critico ? "crit" : "warn";
-  const icon = check.ok ? "✓" : critico ? "✕" : "!";
+  let cls;
+  let icon;
+  if (check.ok) {
+    cls = "ok";
+    icon = "✓";
+  } else if (check.aviso) {
+    cls = "warn";
+    icon = "⚠";
+  } else if (critico || checkKey === "pixel") {
+    cls = "crit";
+    icon = "✕";
+  } else {
+    cls = "warn";
+    icon = "!";
+  }
   return (
     <div className={`waDiagCheck ${cls}`}>
       <span className="waDiagCheckIcon" aria-hidden="true">

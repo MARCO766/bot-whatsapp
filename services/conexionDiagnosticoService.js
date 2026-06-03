@@ -3,6 +3,8 @@
  */
 const axios = require("axios");
 const { getConexionPorId } = require("./conexionesWhatsappService");
+const { validarPixelMeta } = require("./metaAds/metaPixelService");
+const { fetchMetaAdsConfigRow } = require("./metaAds/metaAdsConfigService");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
@@ -144,6 +146,65 @@ function buildVentana24hCheck(ultimoEntrante) {
   };
 }
 
+async function resolvePixelAccessToken(usuarioId, conexionId, conexion) {
+  const capi = conexion.capi_token?.trim();
+  if (capi) return capi;
+  const configRow = await fetchMetaAdsConfigRow(usuarioId, conexionId);
+  return configRow?.ads_access_token?.trim() || "";
+}
+
+async function buildPixelDiagnostico(usuarioId, conexionId, conexion) {
+  const pixelIdRaw = conexion.pixel_id?.trim() || "";
+
+  if (!pixelIdRaw) {
+    return {
+      check: {
+        ok: false,
+        label: "Pixel",
+        detalle: "No configurado",
+        aviso: true,
+      },
+      pixel_meta: {
+        existe: false,
+        nombre: null,
+        pixel_id: null,
+      },
+    };
+  }
+
+  const accessToken = await resolvePixelAccessToken(usuarioId, conexionId, conexion);
+  const result = await validarPixelMeta(pixelIdRaw, accessToken);
+
+  if (result.ok && result.existe) {
+    const nombre = result.nombre || pixelIdRaw;
+    return {
+      check: {
+        ok: true,
+        label: "Pixel",
+        detalle: `Pixel válido: ${nombre}`,
+      },
+      pixel_meta: {
+        existe: true,
+        nombre: result.nombre || null,
+        pixel_id: result.pixel_id || pixelIdRaw,
+      },
+    };
+  }
+
+  return {
+    check: {
+      ok: false,
+      label: "Pixel",
+      detalle: "Pixel inválido o sin permisos",
+    },
+    pixel_meta: {
+      existe: false,
+      nombre: null,
+      pixel_id: pixelIdRaw,
+    },
+  };
+}
+
 function computeEstadoGeneral(checks) {
   const waFail =
     !checks.whatsapp_config.ok ||
@@ -182,12 +243,11 @@ async function getDiagnosticoConexion(usuarioId, conexionId) {
 
   const tokenOk = Boolean(conexion.token?.trim());
   const phoneOk = Boolean(conexion.phone_id?.trim());
-  const pixelOk = Boolean(conexion.pixel_id?.trim());
   const capiOk = Boolean(conexion.capi_token?.trim());
 
   const whatsappConfigOk = tokenOk && phoneOk;
 
-  const [graphResult, ultimoEntrante, ultimoSaliente] = await Promise.all([
+  const [graphResult, ultimoEntrante, ultimoSaliente, pixelDiag] = await Promise.all([
     whatsappConfigOk
       ? probarGraphApi(conexion.phone_id.trim(), conexion.token.trim())
       : Promise.resolve({
@@ -197,6 +257,7 @@ async function getDiagnosticoConexion(usuarioId, conexionId) {
         }),
     fetchUltimoMensaje(usuarioId, conexionId, "entrante"),
     fetchUltimoMensaje(usuarioId, conexionId, "saliente"),
+    buildPixelDiagnostico(usuarioId, conexionId, conexion),
   ]);
 
   const checks = {
@@ -223,11 +284,7 @@ async function getDiagnosticoConexion(usuarioId, conexionId) {
       detalle: graphResult.detalle,
       status: graphResult.status,
     },
-    pixel: {
-      ok: pixelOk,
-      label: "Pixel",
-      detalle: pixelOk ? "Configurado" : "Pendiente",
-    },
+    pixel: pixelDiag.check,
     capi: {
       ok: capiOk,
       label: "CAPI",
@@ -252,6 +309,7 @@ async function getDiagnosticoConexion(usuarioId, conexionId) {
     numero: conexion.numero || "",
     estado_general,
     checks,
+    pixel_meta: pixelDiag.pixel_meta,
   };
 }
 
