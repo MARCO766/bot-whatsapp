@@ -11,6 +11,7 @@ import Ajustes from "./Ajustes";
 import Metricas from "./Metricas";
 import Activadores from "./Activadores";
 import Etiquetas from "./Etiquetas";
+import { fetchInbox } from "./services/chatService";
 
 export default function App() {
   const [vista, setVista] = useState(() => localStorage.getItem("macbot_vista") || "panel");
@@ -26,6 +27,26 @@ export default function App() {
   useEffect(() => {
     vistaRef.current = vista;
   }, [vista]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await fetchInbox();
+        if (cancelled) return;
+        const total =
+          typeof data.totalNoLeidos === "number"
+            ? data.totalNoLeidos
+            : (data.chats || []).reduce((s, c) => s + (c.noLeidos || 0), 0);
+        setInboxUnread(total);
+      } catch {
+        /* sin sesión o error de red: badge sigue en null */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const pushActivity = useCallback((text, dot = "cyan") => {
     setActivities((prev) => [
