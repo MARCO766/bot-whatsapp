@@ -179,6 +179,11 @@ async function actualizarPlanUsuario(id, body) {
     return { ok: false, status: 400, error: "id de usuario inválido" };
   }
 
+  const anterior = await fetchUsuarioPorId(usuarioId);
+  if (!anterior) {
+    return { ok: false, status: 404, error: "Usuario no encontrado" };
+  }
+
   const limites = LIMITES_POR_PLAN[plan];
   const payload = {
     plan,
@@ -232,7 +237,7 @@ async function actualizarPlanUsuario(id, body) {
       max_flujos: usuario.max_flujos,
     });
 
-    return { ok: true, usuario };
+    return { ok: true, usuario, anterior };
   } catch (error) {
     console.log("[ADMIN_PLAN_UPDATE] error", {
       message: error.response?.data?.message || error.response?.data?.hint || error.message,
@@ -253,6 +258,11 @@ async function actualizarEstadoUsuario(id, activo) {
     return { ok: false, status: 400, error: "id de usuario inválido" };
   }
 
+  const anterior = await fetchUsuarioPorId(usuarioId);
+  if (!anterior) {
+    return { ok: false, status: 404, error: "Usuario no encontrado" };
+  }
+
   const patchRes = await axios.patch(
     `${SUPABASE_URL}/rest/v1/crm_usuarios?${idFilter}`,
     { activo },
@@ -269,7 +279,8 @@ async function actualizarEstadoUsuario(id, activo) {
     return { ok: false, status: 404, error: "Usuario no encontrado" };
   }
 
-  return { ok: true, usuario: mapUsuarioRow(rows[0]) };
+  const usuario = mapUsuarioRow(rows[0]);
+  return { ok: true, usuario, anterior };
 }
 
 module.exports = {

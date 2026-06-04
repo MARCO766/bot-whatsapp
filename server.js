@@ -88,7 +88,7 @@ app.use(session({
 app.use(webhookRoutes);
 app.use(adminRoutes);
 app.use(adminUsuariosApiRoutes);
-console.log("✅ Panel admin usuarios: GET /admin (ADMIN_EMAILS) + GET /api/admin/usuarios (resumen + usuarios)");
+console.log("✅ Panel admin: GET /admin + /api/admin/usuarios + /api/admin/logs (ADMIN_EMAILS)");
 app.use("/", inboxRoutes);
 app.use("/", builderRoutes);
 app.use(flowsRoutes);

@@ -123,6 +123,32 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
 .mb-admin__empty{padding:32px;text-align:center;color:#64748b}
 .mb-admin__logout{color:#94a3b8;font-size:.8rem;text-decoration:none}
 .mb-admin__logout:hover{color:#39ff14}
+.mb-admin__logs{
+  margin-top:32px;padding:20px;border-radius:16px;
+  background:rgba(15,23,42,.45);backdrop-filter:blur(14px);
+  border:1px solid rgba(148,163,184,.12);
+  box-shadow:0 8px 32px rgba(0,0,0,.22);
+}
+.mb-admin__logs-title{margin:0 0 14px;font-size:1rem;font-weight:600;color:#f1f5f9}
+.mb-admin__logs-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.mb-admin__log-item{
+  display:flex;flex-wrap:wrap;align-items:flex-start;gap:8px 12px;
+  padding:10px 12px;border-radius:10px;
+  background:rgba(30,41,59,.4);border:1px solid rgba(51,65,85,.35);
+  font-size:.8125rem;
+}
+.mb-admin__log-fecha{font-family:"JetBrains Mono",monospace;font-size:.72rem;color:#64748b;min-width:120px}
+.mb-admin__log-resumen{flex:1;min-width:200px;color:#e2e8f0;line-height:1.45}
+.mb-admin__log-meta{font-size:.72rem;color:#94a3b8}
+.mb-admin__log-badge{
+  display:inline-block;padding:2px 8px;border-radius:999px;
+  font-size:.65rem;font-weight:600;text-transform:uppercase;letter-spacing:.04em;
+}
+.mb-admin__log-badge--cambio_plan{background:rgba(167,139,250,.2);color:#c4b5fd}
+.mb-admin__log-badge--cambio_estado_plan{background:rgba(34,211,238,.15);color:#67e8f9}
+.mb-admin__log-badge--activar_usuario{background:rgba(57,255,20,.15);color:#86efac}
+.mb-admin__log-badge--suspender_usuario{background:rgba(239,68,68,.2);color:#fca5a5}
+.mb-admin__logs-empty,.mb-admin__logs-loading{color:#64748b;font-size:.875rem;padding:12px 0}
 </style>
 </head>
 <body class="mb-admin">
@@ -192,6 +218,13 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
     </table>
     <div class="mb-admin__empty" id="empty" hidden>Sin resultados</div>
   </div>
+
+  <section class="mb-admin__logs" id="logsSection" aria-label="Historial reciente">
+    <h2 class="mb-admin__logs-title">Historial reciente</h2>
+    <div class="mb-admin__logs-loading" id="logsLoading">Cargando historial…</div>
+    <ul class="mb-admin__logs-list" id="logsList" hidden></ul>
+    <div class="mb-admin__logs-empty" id="logsEmpty" hidden>Sin acciones registradas aún.</div>
+  </section>
 </div>
 <div class="mb-admin__toast" id="toast" role="status"></div>
 <script>
@@ -208,6 +241,11 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
   const $search = document.getElementById("search");
   const $filterPlan = document.getElementById("filterPlan");
   const $toast = document.getElementById("toast");
+  const $logsLoading = document.getElementById("logsLoading");
+  const $logsList = document.getElementById("logsList");
+  const $logsEmpty = document.getElementById("logsEmpty");
+
+  const PLAN_LABELS = { free: "Free", starter: "Starter", pro: "Pro", agency: "Agency" };
 
   function toast(msg, isErr){
     $toast.textContent = msg;
@@ -232,6 +270,91 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
 
   function planBadge(plan){
     return '<span class="mb-plan mb-plan--' + plan + '">' + plan + '</span>';
+  }
+
+  function adminDisplayName(email){
+    if (!email) return "Admin";
+    const local = String(email).split("@")[0];
+    return local.charAt(0).toUpperCase() + local.slice(1);
+  }
+
+  function planLabel(p){
+    return PLAN_LABELS[p] || (p ? String(p) : "—");
+  }
+
+  function accionLabel(accion){
+    const labels = {
+      cambio_plan: "Cambio plan",
+      cambio_estado_plan: "Estado plan",
+      activar_usuario: "Activación",
+      suspender_usuario: "Suspensión"
+    };
+    return labels[accion] || accion;
+  }
+
+  function formatLogResumen(log){
+    const admin = adminDisplayName(log.admin_email);
+    const target = log.usuario_afectado_email || "usuario";
+    const d = log.detalle || {};
+    switch (log.accion) {
+      case "cambio_plan":
+        return admin + " cambió " + target + " de " + planLabel(d.plan_anterior) + " a " + planLabel(d.plan_nuevo) + ".";
+      case "cambio_estado_plan":
+        return admin + " cambió el estado de plan de " + target + " de " + (d.estado_plan_anterior || "—") + " a " + (d.estado_plan_nuevo || "—") + ".";
+      case "activar_usuario":
+        return admin + " activó la cuenta de " + target + ".";
+      case "suspender_usuario":
+        return admin + " suspendió la cuenta de " + target + ".";
+      default:
+        return admin + " realizó " + (log.accion || "acción") + " sobre " + target + ".";
+    }
+  }
+
+  function formatLogFecha(iso){
+    if (!iso) return "—";
+    try {
+      const d = new Date(iso);
+      return d.toLocaleString("es", {
+        day: "2-digit", month: "short", year: "numeric",
+        hour: "2-digit", minute: "2-digit"
+      });
+    } catch { return "—"; }
+  }
+
+  function renderLogs(logs){
+    $logsLoading.hidden = true;
+    if (!logs || logs.length === 0) {
+      $logsList.hidden = true;
+      $logsEmpty.hidden = false;
+      return;
+    }
+    $logsEmpty.hidden = true;
+    $logsList.hidden = false;
+    $logsList.innerHTML = logs.map(function(log){
+      const badgeCls = "mb-admin__log-badge mb-admin__log-badge--" + (log.accion || "").replace(/[^a-z_]/g, "");
+      return '<li class="mb-admin__log-item">' +
+        '<span class="mb-admin__log-fecha">' + escapeHtml(formatLogFecha(log.creado_en)) + '</span>' +
+        '<span class="' + badgeCls + '">' + escapeHtml(accionLabel(log.accion)) + '</span>' +
+        '<span class="mb-admin__log-resumen">' + escapeHtml(formatLogResumen(log)) + '</span>' +
+        '<span class="mb-admin__log-meta">' + escapeHtml(log.admin_email || "") + '</span>' +
+      '</li>';
+    }).join("");
+  }
+
+  async function reloadLogs(){
+    try {
+      $logsLoading.hidden = false;
+      $logsLoading.textContent = "Cargando historial…";
+      $logsList.hidden = true;
+      $logsEmpty.hidden = true;
+      const res = await fetch("/api/admin/logs?limit=50", { credentials: "same-origin" });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || "Error " + res.status);
+      renderLogs(data.logs || []);
+    } catch (e) {
+      $logsLoading.textContent = "No se pudo cargar el historial.";
+      console.error(e);
+    }
   }
 
   function fmtNum(n){
@@ -353,6 +476,7 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
     usuarios = data.usuarios || [];
     updateResumenCards(data.resumen);
     applyFilters();
+    await reloadLogs();
   }
 
   function bindRowActions(){
