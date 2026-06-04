@@ -64,6 +64,11 @@ function getTransporter() {
     throw err;
   }
 
+  console.log("[SMTP_SECURE_ENV]", {
+    SMTP_SECURE_RAW: process.env.SMTP_SECURE ? "SET" : "EMPTY",
+    SMTP_SECURE_NORMALIZED: String(process.env.SMTP_SECURE || "").trim().toLowerCase(),
+    port,
+  });
   const secure = getSmtpSecure(port);
   console.log("[SMTP_SECURE_RESOLVED]", { port, secure });
 
@@ -95,6 +100,11 @@ async function sendEmail({ to, subject, text, html }) {
   const port = Number(process.env.SMTP_PORT || 587);
   const user = String(process.env.SMTP_USER || "").trim();
   const pass = String(process.env.SMTP_PASS || "").trim();
+  console.log("[SMTP_SECURE_ENV]", {
+    SMTP_SECURE_RAW: process.env.SMTP_SECURE ? "SET" : "EMPTY",
+    SMTP_SECURE_NORMALIZED: String(process.env.SMTP_SECURE || "").trim().toLowerCase(),
+    port,
+  });
   const secure = getSmtpSecure(port);
   console.log("[SMTP_SECURE_RESOLVED]", { port, secure });
 
