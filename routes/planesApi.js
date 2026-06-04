@@ -6,6 +6,7 @@ const router = express.Router();
 const { protegerApi } = require("../middlewares/auth");
 const {
   obtenerPlanUsuario,
+  obtenerUsoUsuario,
   buildMiPlanResponse,
 } = require("../services/planesService");
 
@@ -18,8 +19,11 @@ function log(msg, extra) {
 router.get("/api/planes/mi-plan", protegerApi, async (req, res) => {
   try {
     const usuarioId = req.session.usuario.id;
-    const planData = await obtenerPlanUsuario(usuarioId);
-    res.status(200).json(buildMiPlanResponse(planData));
+    const [planData, uso] = await Promise.all([
+      obtenerPlanUsuario(usuarioId),
+      obtenerUsoUsuario(usuarioId),
+    ]);
+    res.status(200).json(buildMiPlanResponse(planData, uso));
   } catch (error) {
     log("GET /api/planes/mi-plan:", error.message);
     res.status(500).json({

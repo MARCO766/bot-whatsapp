@@ -139,6 +139,36 @@ async function fetchPlanRow(usuarioId) {
   return res.data?.[0] || null;
 }
 
+async function supabaseCountPorUsuario(table, usuarioId) {
+  if (!usuarioId || !SUPABASE_URL || !SUPABASE_KEY) return 0;
+  const filter = `usuario_id=eq.${encodeURIComponent(usuarioId)}`;
+  const url = `${SUPABASE_URL}/rest/v1/${table}?select=id&${filter}`;
+  try {
+    const res = await axios.get(url, {
+      headers: headers({ Prefer: "count=exact", Range: "0-0" }),
+    });
+    const range = res.headers["content-range"] || res.headers["Content-Range"] || "";
+    const part = String(range).split("/")[1];
+    const n = parseInt(part, 10);
+    return Number.isFinite(n) ? n : 0;
+  } catch (error) {
+    log(`supabaseCountPorUsuario ${table}:`, error.response?.data || error.message);
+    return 0;
+  }
+}
+
+/**
+ * Uso real de recursos del usuario (conteos en Supabase).
+ */
+async function obtenerUsoUsuario(usuarioId) {
+  const [whatsapp_usados, contactos_usados, flujos_usados] = await Promise.all([
+    supabaseCountPorUsuario("conexiones_whatsapp", usuarioId),
+    supabaseCountPorUsuario("clientes", usuarioId),
+    supabaseCountPorUsuario("flujos_builder", usuarioId),
+  ]);
+  return { whatsapp_usados, contactos_usados, flujos_usados };
+}
+
 /**
  * Datos de plan del usuario (normalizados).
  */
@@ -170,8 +200,9 @@ async function obtenerLimitesUsuario(usuarioId) {
 /**
  * Respuesta API GET /api/planes/mi-plan
  */
-function buildMiPlanResponse(planData) {
+function buildMiPlanResponse(planData, uso = null) {
   const u = normalizarPlanUsuario(planData);
+  const usoNorm = uso && typeof uso === "object" ? uso : {};
   return {
     ok: true,
     plan: {
@@ -182,6 +213,11 @@ function buildMiPlanResponse(planData) {
         whatsapp: u.max_whatsapp,
         contactos: u.max_contactos,
         flujos: u.max_flujos,
+      },
+      uso: {
+        whatsapp_usados: toInt(usoNorm.whatsapp_usados, 0),
+        contactos_usados: toInt(usoNorm.contactos_usados, 0),
+        flujos_usados: toInt(usoNorm.flujos_usados, 0),
       },
     },
   };
@@ -201,5 +237,6 @@ module.exports = {
   esPlanActivo,
   obtenerPlanUsuario,
   obtenerLimitesUsuario,
+  obtenerUsoUsuario,
   buildMiPlanResponse,
 };

@@ -11,16 +11,20 @@ export const miPlanStyles = `
   border-radius: 28px;
   padding: 26px 28px;
   margin-bottom: 18px;
-  border: 1px solid rgba(148, 163, 184, .18);
+  border: 1px solid rgba(148, 163, 184, .2);
   background:
-    radial-gradient(circle at 88% 12%, rgba(34, 211, 238, .24), transparent 36%),
-    radial-gradient(circle at 8% 88%, rgba(139, 92, 246, .18), transparent 38%),
-    linear-gradient(135deg, rgba(15, 23, 42, .94), rgba(8, 14, 32, .9));
+    radial-gradient(circle at 88% 12%, rgba(34, 211, 238, .22), transparent 36%),
+    radial-gradient(circle at 8% 88%, rgba(139, 92, 246, .16), transparent 38%),
+    linear-gradient(135deg, rgba(15, 23, 42, .88), rgba(8, 14, 32, .82));
+  backdrop-filter: blur(14px);
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 20px;
   flex-wrap: wrap;
+  box-shadow:
+    0 0 0 1px rgba(34, 211, 238, .06) inset,
+    0 20px 50px rgba(0, 0, 0, .28);
 }
 
 .miPlanHeroGlow {
@@ -32,8 +36,12 @@ export const miPlanStyles = `
   border-radius: 50%;
   background: conic-gradient(from 210deg, #22c55e, #06b6d4, #8b5cf6, #f59e0b, #22c55e);
   filter: blur(48px);
-  opacity: .14;
+  opacity: .16;
   pointer-events: none;
+  animation: miPlanGlowSpin 12s linear infinite;
+}
+@keyframes miPlanGlowSpin {
+  to { transform: rotate(360deg); }
 }
 
 .miPlanHeroText { position: relative; z-index: 1; }
@@ -52,12 +60,21 @@ export const miPlanStyles = `
   line-height: 1.1;
 }
 .miPlanHero p {
-  margin: 0;
+  margin: 0 0 12px;
   color: #94a3b8;
   font-size: 14px;
-  max-width: 480px;
+  max-width: 520px;
   line-height: 1.5;
 }
+.miPlanHeroMeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+  color: #94a3b8;
+}
+.miPlanHeroVence { font-size: 12px; color: #64748b; }
 
 .miPlanHeroActions {
   position: relative;
@@ -65,43 +82,43 @@ export const miPlanStyles = `
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 10px;
+  gap: 12px;
 }
 
 .miPlanBadge {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 14px;
+  padding: 10px 16px;
   border-radius: 999px;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 900;
-  letter-spacing: .4px;
+  letter-spacing: .5px;
   text-transform: uppercase;
   border: 1px solid transparent;
 }
 .miPlanBadge--free {
   color: #e2e8f0;
-  background: rgba(148, 163, 184, .14);
-  border-color: rgba(148, 163, 184, .28);
+  background: rgba(148, 163, 184, .16);
+  border-color: rgba(148, 163, 184, .32);
 }
 .miPlanBadge--starter {
   color: #a5f3fc;
-  background: rgba(6, 182, 212, .16);
-  border-color: rgba(34, 211, 238, .35);
-  box-shadow: 0 0 24px rgba(6, 182, 212, .12);
+  background: rgba(6, 182, 212, .18);
+  border-color: rgba(34, 211, 238, .4);
+  box-shadow: 0 0 28px rgba(6, 182, 212, .14);
 }
 .miPlanBadge--pro {
-  color: #ddd6fe;
-  background: rgba(139, 92, 246, .2);
-  border-color: rgba(167, 139, 250, .4);
-  box-shadow: 0 0 28px rgba(139, 92, 246, .15);
+  color: #bbf7d0;
+  background: rgba(34, 197, 94, .18);
+  border-color: rgba(74, 222, 128, .4);
+  box-shadow: 0 0 28px rgba(34, 197, 94, .16);
 }
 .miPlanBadge--agency {
-  color: #fde68a;
-  background: linear-gradient(135deg, rgba(245, 158, 11, .22), rgba(234, 88, 12, .14));
-  border-color: rgba(251, 191, 36, .45);
-  box-shadow: 0 0 28px rgba(245, 158, 11, .14);
+  color: #ddd6fe;
+  background: rgba(139, 92, 246, .22);
+  border-color: rgba(167, 139, 250, .45);
+  box-shadow: 0 0 32px rgba(139, 92, 246, .18);
 }
 
 .miPlanEstadoBadge {
@@ -117,42 +134,91 @@ export const miPlanStyles = `
 .miPlanEstadoBadge--vencido { color: #fdba74; background: rgba(249, 115, 22, .14); border: 1px solid rgba(251, 146, 60, .3); }
 .miPlanEstadoBadge--suspendido { color: #fca5a5; background: rgba(239, 68, 68, .14); border: 1px solid rgba(248, 113, 113, .3); }
 
-.miPlanGrid {
+.miPlanAlert {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+  padding: 14px 18px;
+  border-radius: 18px;
+  backdrop-filter: blur(10px);
+}
+.miPlanAlert p {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+.miPlanAlert--warn {
+  background: rgba(234, 179, 8, .1);
+  border: 1px solid rgba(250, 204, 21, .28);
+  color: #fde68a;
+}
+.miPlanAlert--limit {
+  background: rgba(239, 68, 68, .1);
+  border: 1px solid rgba(248, 113, 113, .28);
+  color: #fecaca;
+}
+
+.miPlanQuickGrid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 14px;
   margin-bottom: 18px;
 }
 
-.miPlanStatCard {
+.miPlanQuickCard {
+  position: relative;
   border-radius: 20px;
-  padding: 18px 16px;
-  border: 1px solid rgba(148, 163, 184, .14);
-  background: rgba(15, 23, 42, .72);
+  padding: 20px 16px;
+  text-align: center;
+  border: 1px solid rgba(148, 163, 184, .16);
+  background: rgba(15, 23, 42, .55);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, .2);
+  transition: transform .2s ease, box-shadow .2s ease;
 }
-.miPlanStatCard strong {
+.miPlanQuickCard:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 40px rgba(6, 182, 212, .12);
+}
+.miPlanQuickIcon {
   display: block;
-  font-size: 22px;
-  margin: 6px 0 4px;
-  letter-spacing: -.3px;
+  font-size: 26px;
+  margin-bottom: 6px;
 }
-.miPlanStatCard span.label {
+.miPlanQuickCard strong {
+  display: block;
+  font-size: 28px;
+  margin: 4px 0 6px;
+  letter-spacing: -.4px;
+  background: linear-gradient(135deg, #f8fafc, #67e8f9);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.miPlanQuickCard span.label {
   color: #64748b;
-  font-size: 12px;
-  font-weight: 700;
+  font-size: 11px;
+  font-weight: 800;
   text-transform: uppercase;
   letter-spacing: .6px;
 }
-.miPlanStatCard span.hint {
-  color: #94a3b8;
-  font-size: 12px;
+
+.miPlanGlass {
+  backdrop-filter: blur(14px);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, .04) inset,
+    0 16px 48px rgba(0, 0, 0, .22);
 }
 
 .miPlanLimitsCard {
   border-radius: 24px;
   padding: 22px 20px;
-  border: 1px solid rgba(148, 163, 184, .14);
-  background: rgba(15, 23, 42, .68);
+  border: 1px solid rgba(148, 163, 184, .16);
+  background: rgba(15, 23, 42, .58);
   margin-bottom: 16px;
 }
 .miPlanLimitsCard h3 {
@@ -160,25 +226,40 @@ export const miPlanStyles = `
   font-size: 18px;
 }
 .miPlanLimitsCard > p {
-  margin: 0 0 18px;
+  margin: 0 0 20px;
   color: #64748b;
   font-size: 13px;
 }
 
-.miPlanLimitRow + .miPlanLimitRow { margin-top: 16px; }
+.miPlanUsageRow + .miPlanUsageRow { margin-top: 18px; }
 .miPlanLimitHead {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
   gap: 10px;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
-.miPlanLimitHead strong { font-size: 14px; }
-.miPlanLimitHead span {
+.miPlanLimitHead strong { font-size: 15px; }
+.miPlanUsageText {
+  margin: 0 0 8px;
+  font-size: 13px;
   color: #94a3b8;
-  font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
 }
+.miPlanUnlimited {
+  color: #c4b5fd;
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: .3px;
+}
+.miPlanPct {
+  font-size: 13px;
+  font-weight: 900;
+}
+.miPlanPct--ok { color: #4ade80; }
+.miPlanPct--warn { color: #facc15; }
+.miPlanPct--danger { color: #f87171; }
+
 .miPlanBarTrack {
   height: 10px;
   border-radius: 999px;
@@ -189,18 +270,52 @@ export const miPlanStyles = `
 .miPlanBarFill {
   height: 100%;
   border-radius: 999px;
-  background: linear-gradient(90deg, #06b6d4, #22c55e);
-  transition: width .4s ease;
+  transition: width .65s cubic-bezier(.22, 1, .36, 1);
   min-width: 2px;
 }
-.miPlanBarFill--placeholder {
-  width: 0% !important;
-  min-width: 0;
+.miPlanBarFill--ok {
+  background: linear-gradient(90deg, #06b6d4, #22c55e);
+  box-shadow: 0 0 12px rgba(34, 197, 94, .35);
 }
-.miPlanBarCap {
-  margin-top: 6px;
-  font-size: 11px;
-  color: #64748b;
+.miPlanBarFill--warn {
+  background: linear-gradient(90deg, #eab308, #f59e0b);
+  box-shadow: 0 0 12px rgba(234, 179, 8, .35);
+}
+.miPlanBarFill--danger {
+  background: linear-gradient(90deg, #f97316, #ef4444);
+  box-shadow: 0 0 12px rgba(239, 68, 68, .35);
+}
+
+.miPlanBenefitsCard {
+  border-radius: 24px;
+  padding: 22px 20px;
+  border: 1px solid rgba(148, 163, 184, .14);
+  background: rgba(15, 23, 42, .52);
+  margin-bottom: 16px;
+}
+.miPlanBenefitsCard h3 {
+  margin: 0 0 14px;
+  font-size: 17px;
+}
+.miPlanBenefitsList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px 16px;
+}
+.miPlanBenefitsList li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: #cbd5e1;
+  font-weight: 600;
+}
+.miPlanCheck {
+  color: #4ade80;
+  font-weight: 900;
 }
 
 .miPlanUpgradeBtn {
@@ -216,6 +331,12 @@ export const miPlanStyles = `
   box-shadow: 0 10px 32px rgba(6, 182, 212, .25);
   transition: transform .15s ease, box-shadow .15s ease;
 }
+.miPlanUpgradeBtn--sm {
+  height: 38px;
+  padding: 0 16px;
+  font-size: 13px;
+  flex-shrink: 0;
+}
 .miPlanUpgradeBtn:hover {
   transform: translateY(-1px);
   box-shadow: 0 14px 36px rgba(6, 182, 212, .32);
@@ -230,7 +351,8 @@ export const miPlanStyles = `
 }
 
 @media (max-width: 900px) {
-  .miPlanGrid { grid-template-columns: 1fr; }
+  .miPlanQuickGrid { grid-template-columns: 1fr; }
+  .miPlanBenefitsList { grid-template-columns: 1fr; }
   .miPlanHero { flex-direction: column; }
   .miPlanHeroActions { align-items: flex-start; }
 }
