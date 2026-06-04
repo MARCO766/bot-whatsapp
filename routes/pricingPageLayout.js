@@ -34,10 +34,23 @@ const PRICING_EXTRA_STYLES = `
   transform:translateY(-2px);
 }
 .mb-pricing__card--popular{
-  border-color:rgba(167,139,250,.55);
-  box-shadow:0 0 64px rgba(167,139,250,.22),0 0 36px rgba(57,255,20,.1);
-  transform:scale(1.02);
+  border-color:rgba(74,222,128,.55);
+  box-shadow:
+    0 0 88px rgba(34,197,94,.28),
+    0 0 48px rgba(167,139,250,.2),
+    0 0 24px rgba(57,255,20,.15),
+    inset 0 0 0 1px rgba(57,255,20,.12);
+  transform:scale(1.03);
 }
+.mb-pricing__tagline{
+  margin:0 0 14px;font-size:.8125rem;color:#64748b;line-height:1.45;font-style:italic;
+}
+.mb-pricing__limits{
+  margin:0 0 12px;padding:10px 12px;border-radius:10px;
+  background:rgba(6,10,16,.35);border:1px solid rgba(255,255,255,.06);
+  font-size:.8125rem;color:#94a3b8;line-height:1.5;
+}
+.mb-pricing__limits strong{color:#e2e8f0;font-weight:600;display:block;margin-bottom:4px;font-size:.75rem;text-transform:uppercase;letter-spacing:.05em}
 @media(max-width:768px){.mb-pricing__card--popular{transform:none}}
 .mb-pricing__badge{
   position:absolute;top:-11px;left:50%;transform:translateX(-50%);
@@ -143,15 +156,10 @@ const PRICING_PLANS = [
     name: "Free",
     price: "Gratis",
     priceSub: "",
+    tagline: "Ideal para probar MacBot.",
+    limits: ["1 WhatsApp", "100 contactos", "1 flujo"],
     popular: false,
-    features: [
-      "1 número WhatsApp",
-      "1 flujo",
-      "100 contactos",
-      "Bandeja CRM",
-      "Agente IA",
-      "Seguimiento básico",
-    ],
+    features: ["Agente Rápido", "CRM básico", "Bandeja WhatsApp"],
     cta: "Crear cuenta gratis",
     href: "/register",
     soon: false,
@@ -159,16 +167,19 @@ const PRICING_PLANS = [
   {
     id: "starter",
     name: "Starter",
-    price: "$9",
+    price: "$18",
     priceSub: "/mes",
+    tagline: "Ideal para emprendedores, afiliados e infoproductores.",
+    limits: ["1 WhatsApp", "1.000 contactos", "10 flujos"],
     popular: false,
     features: [
-      "2 números WhatsApp",
-      "10 flujos",
-      "2.000 contactos",
-      "IA conversacional",
+      "Agente Rápido",
+      "IA Python básica",
+      "Seguimientos CRM",
       "Remarketing 24h",
       "Lector de pagos",
+      "Conversiones",
+      "Etiquetas",
       "Métricas básicas",
     ],
     cta: "Próximamente",
@@ -177,17 +188,28 @@ const PRICING_PLANS = [
   {
     id: "pro",
     name: "Pro",
-    price: "$29",
+    price: "$35",
     priceSub: "/mes",
+    tagline: "Ideal para negocios que ya venden y quieren escalar.",
+    limits: ["1 WhatsApp", "2.000 contactos", "20 flujos"],
     popular: true,
     features: [
-      "5 números WhatsApp",
-      "20 flujos",
-      "10.000 contactos",
+      "Todo Starter",
       "IA avanzada",
-      "Flujos visuales completos",
-      "Remarketing avanzado",
-      "Conversiones y métricas",
+      "Agente IA Pro",
+      "OpenAI Node",
+      "Métricas avanzadas",
+      "Dashboard de ventas",
+      "Embudos de conversión",
+      "Estadísticas de remarketing",
+      "Versionado de flujos",
+      "Carpetas de flujos",
+      "Exportar / Importar flujos",
+      "Mini embudos RM24H",
+      "OCR avanzado lector de pagos",
+      "Historial de conversiones",
+      "Prioridad en procesamiento",
+      "Acceso anticipado a nuevas funciones",
       "Soporte prioritario",
     ],
     cta: "Próximamente",
@@ -198,14 +220,21 @@ const PRICING_PLANS = [
     name: "Agency",
     price: "Contactar ventas",
     priceSub: "",
+    tagline: "Para agencias y empresas.",
+    limits: [
+      "WhatsApps personalizados",
+      "Contactos personalizados",
+      "Flujos personalizados",
+    ],
     popular: false,
     features: [
-      "WhatsApp ilimitado",
-      "Flujos ilimitados",
-      "Contactos ilimitados",
-      "Multi-campañas",
-      "Uso para agencias",
-      "Soporte avanzado",
+      "Todo Pro",
+      "Multi cuenta futura",
+      "Marca blanca futura",
+      "Implementación personalizada",
+      "Soporte VIP",
+      "Asesoría directa",
+      "Funciones empresariales futuras",
     ],
     cta: "Contactar ventas",
     href: "mailto:ventas@macbot.app?subject=Plan%20Agency%20MacBot",
@@ -215,16 +244,19 @@ const PRICING_PLANS = [
 ];
 
 const COMPARE_ROWS = [
-  { label: "Números WhatsApp", free: "1", starter: "2", pro: "5", agency: "Ilimitado" },
-  { label: "Contactos", free: "100", starter: "2.000", pro: "10.000", agency: "Ilimitado" },
-  { label: "Flujos", free: "1", starter: "10", pro: "20", agency: "Ilimitado" },
-  { label: "Bandeja CRM", free: "yes", starter: "yes", pro: "yes", agency: "yes" },
-  { label: "IA", free: "Agente IA", starter: "Conversacional", pro: "Avanzada", agency: "Avanzada" },
-  { label: "Remarketing", free: "no", starter: "24h", pro: "Avanzado", agency: "Avanzado" },
-  { label: "Seguimientos", free: "Básico", starter: "yes", pro: "yes", agency: "yes" },
-  { label: "Lector de pagos", free: "no", starter: "yes", pro: "yes", agency: "yes" },
-  { label: "Métricas", free: "no", starter: "Básicas", pro: "Conversiones", agency: "yes" },
-  { label: "Soporte", free: "no", starter: "no", pro: "Prioritario", agency: "Avanzado" },
+  { label: "Precio", free: "Gratis", starter: "$18/mes", pro: "$35/mes", agency: "Contactar ventas" },
+  { label: "WhatsApp", free: "1", starter: "1", pro: "1", agency: "Personalizado" },
+  { label: "Contactos", free: "100", starter: "1.000", pro: "2.000", agency: "Personalizado" },
+  { label: "Flujos", free: "1", starter: "10", pro: "20", agency: "Personalizado" },
+  { label: "Agente Rápido", free: "yes", starter: "yes", pro: "yes", agency: "yes" },
+  { label: "CRM / Bandeja", free: "Básico", starter: "yes", pro: "yes", agency: "yes" },
+  { label: "IA Python básica", free: "no", starter: "yes", pro: "yes", agency: "yes" },
+  { label: "Remarketing 24h", free: "no", starter: "yes", pro: "yes", agency: "yes" },
+  { label: "Lector de pagos", free: "no", starter: "yes", pro: "OCR avanzado", agency: "yes" },
+  { label: "Conversiones", free: "no", starter: "yes", pro: "Historial", agency: "yes" },
+  { label: "Métricas", free: "no", starter: "Básicas", pro: "Avanzadas", agency: "yes" },
+  { label: "Versionado flujos", free: "no", starter: "no", pro: "yes", agency: "yes" },
+  { label: "Soporte", free: "—", starter: "—", pro: "Prioritario", agency: "VIP" },
 ];
 
 function renderPricingNavbar() {
@@ -281,6 +313,12 @@ function renderPlanCards() {
     const priceSub = plan.priceSub
       ? `<small>${escapeHtml(plan.priceSub)}</small>`
       : "";
+    const tagline = plan.tagline
+      ? `<p class="mb-pricing__tagline">${escapeHtml(plan.tagline)}</p>`
+      : "";
+    const limits = plan.limits?.length
+      ? `<div class="mb-pricing__limits"><strong>Límites</strong>${plan.limits.map((l) => escapeHtml(l)).join(" · ")}</div>`
+      : "";
     const list = plan.features
       .map((f) => `<li>${escapeHtml(f)}</li>`)
       .join("");
@@ -296,6 +334,8 @@ function renderPlanCards() {
       ${badge}
       <h3 class="mb-pricing__name">${escapeHtml(plan.name)}</h3>
       <p class="mb-pricing__price">${escapeHtml(plan.price)}${priceSub}</p>
+      ${tagline}
+      ${limits}
       <ul class="mb-pricing__list">${list}</ul>
       ${btn}
     </article>`;

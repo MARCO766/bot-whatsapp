@@ -60,11 +60,18 @@ export const miPlanStyles = `
   line-height: 1.1;
 }
 .miPlanHero p {
-  margin: 0 0 12px;
-  color: #94a3b8;
-  font-size: 14px;
+  margin: 0 0 8px;
+  color: #e2e8f0;
+  font-size: 15px;
   max-width: 520px;
   line-height: 1.5;
+  font-weight: 600;
+}
+.miPlanHeroSub {
+  color: #94a3b8 !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  margin-bottom: 12px !important;
 }
 .miPlanHeroMeta {
   display: flex;

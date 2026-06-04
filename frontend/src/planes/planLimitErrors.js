@@ -1,3 +1,8 @@
+import {
+  getUpgradeRecommendation,
+  shouldShowPlanUpgrade,
+} from "./planCatalog";
+
 const PLAN_LIMIT_CODES = new Set([
   "PLAN_LIMIT_WHATSAPP",
   "PLAN_LIMIT_FLUJOS",
@@ -50,9 +55,13 @@ export function isPlanLimitError(error) {
   return Boolean(extractPlanLimitPayload(error));
 }
 
-export function buildPlanLimitMessage(error) {
+export function buildPlanLimitMessage(error, planNombre = null) {
   const payload = extractPlanLimitPayload(error);
   if (!payload) return null;
+
+  const planKey = (planNombre || payload.plan || "free").toLowerCase();
+  const recommendation =
+    getUpgradeRecommendation(planKey) || "Tu plan Agency incluye capacidad personalizada.";
 
   return {
     title: "Has alcanzado el límite de tu plan",
@@ -62,7 +71,9 @@ export function buildPlanLimitMessage(error) {
     usados: payload.usados,
     limiteLabel: formatPlanLimitValue(payload.limite),
     usadosLabel: formatPlanLimitValue(payload.usados),
-    recommendation: "Actualiza tu plan para seguir creciendo con MacBot.",
+    recommendation,
+    showUpgrade: shouldShowPlanUpgrade(planKey),
+    planKey,
     rawError: payload.error,
   };
 }

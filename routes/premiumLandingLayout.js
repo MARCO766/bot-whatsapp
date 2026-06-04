@@ -459,8 +459,11 @@ body.mb-premium{
 }
 .mb-premium__plan--popular{
   position:relative;
-  border-color:rgba(167,139,250,.5);
-  box-shadow:0 0 56px rgba(167,139,250,.18),0 0 32px rgba(57,255,20,.12),inset 0 0 0 1px rgba(57,255,20,.08);
+  border-color:rgba(74,222,128,.5);
+  box-shadow:
+    0 0 72px rgba(34,197,94,.22),
+    0 0 40px rgba(167,139,250,.16),
+    inset 0 0 0 1px rgba(57,255,20,.1);
   transform:scale(1.02);
   z-index:1;
 }
@@ -883,9 +886,9 @@ const PLANS = [
   {
     id: "free",
     popular: false,
-    price: "",
-    items: ["1 número WhatsApp", "1 flujo", "100 contactos"],
-    tag: "Ideal para probar",
+    price: "Gratis",
+    items: ["1 WhatsApp · 100 contactos · 1 flujo", "Agente Rápido", "CRM básico", "Bandeja WhatsApp"],
+    tag: "Ideal para probar MacBot.",
     cta: "Empezar gratis",
     href: "/register",
     soon: false,
@@ -894,9 +897,13 @@ const PLANS = [
   {
     id: "starter",
     popular: false,
-    price: "$9/mes",
-    items: ["2 números WhatsApp", "10 flujos", "2.000 contactos"],
-    tag: "Ideal para emprendedores",
+    price: "$18/mes",
+    items: [
+      "1 WhatsApp · 1.000 contactos · 10 flujos",
+      "Remarketing 24h · Lector de pagos",
+      "Seguimientos CRM · Conversiones",
+    ],
+    tag: "Ideal para emprendedores, afiliados e infoproductores.",
     cta: "Próximamente",
     soon: true,
     contact: false,
@@ -904,9 +911,14 @@ const PLANS = [
   {
     id: "pro",
     popular: true,
-    price: "$29/mes",
-    items: ["5 números WhatsApp", "20 flujos", "10.000 contactos", "IA avanzada", "Soporte prioritario"],
-    tag: "Ideal para negocios en crecimiento",
+    price: "$35/mes",
+    items: [
+      "1 WhatsApp · 2.000 contactos · 20 flujos",
+      "Todo Starter + IA avanzada",
+      "Dashboard ventas · Versionado flujos",
+      "Soporte prioritario",
+    ],
+    tag: "Ideal para negocios que ya venden y quieren escalar.",
     cta: "Próximamente",
     soon: true,
     contact: false,
@@ -915,8 +927,12 @@ const PLANS = [
     id: "agency",
     popular: false,
     price: "Contactar ventas",
-    items: ["WhatsApp ilimitado", "Flujos ilimitados", "Contactos ilimitados", "Multi-campañas"],
-    tag: "Ideal para agencias",
+    items: [
+      "Límites personalizados",
+      "Todo Pro + implementación a medida",
+      "Soporte VIP y asesoría directa",
+    ],
+    tag: "Para agencias y empresas.",
     cta: "Contactar ventas",
     href: "mailto:ventas@macbot.app?subject=Plan%20Agency%20MacBot",
     soon: false,

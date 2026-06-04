@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useMiPlan } from "./useMiPlan";
 import { miPlanStyles } from "./styles";
 import { goToPricing } from "./goToPricing";
+import { getPlanBenefits, PLAN_TAGLINES } from "./planCatalog";
 
 const PLAN_LABELS = {
   free: "Free",
@@ -16,15 +17,6 @@ const ESTADO_LABELS = {
   vencido: "Vencido",
   suspendido: "Suspendido",
 };
-
-const BENEFICIOS = [
-  "IA",
-  "CRM",
-  "Flujos",
-  "Seguimientos",
-  "Remarketing",
-  "Bandeja WhatsApp",
-];
 
 function formatFecha(iso) {
   if (!iso) return "Sin fecha de vencimiento";
@@ -194,6 +186,8 @@ export default function MiPlanSection() {
   const pctMax = maxUsoPorcentaje(uso, limites);
   const cercaLimite = pctMax >= 80 && pctMax < 100;
   const enLimite = pctMax >= 100;
+  const beneficios = getPlanBenefits(nombre);
+  const tagline = PLAN_TAGLINES[nombre] || PLAN_TAGLINES.free;
 
   return (
     <div className="miPlanWrap">
@@ -204,9 +198,9 @@ export default function MiPlanSection() {
         <div className="miPlanHeroText">
           <p className="miPlanEyebrow">Suscripción MacBot</p>
           <h2>Plan actual</h2>
-          <p>
-            Uso real de WhatsApp, contactos y flujos. Los porcentajes se actualizan con tus datos en
-            la plataforma.
+          <p>{tagline}</p>
+          <p className="miPlanHeroSub">
+            Uso real de WhatsApp, contactos y flujos según tu plan {PLAN_LABELS[nombre] || nombre}.
           </p>
           <div className="miPlanHeroMeta">
             <span>
@@ -289,7 +283,7 @@ export default function MiPlanSection() {
       <div className="miPlanBenefitsCard miPlanGlass">
         <h3>Tu plan incluye</h3>
         <ul className="miPlanBenefitsList">
-          {BENEFICIOS.map((b) => (
+          {beneficios.map((b) => (
             <li key={b}>
               <span className="miPlanCheck">✓</span> {b}
             </li>

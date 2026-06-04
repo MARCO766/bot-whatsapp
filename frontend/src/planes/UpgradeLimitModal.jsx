@@ -1,6 +1,11 @@
 import React, { useEffect } from "react";
 import { upgradeLimitModalStyles } from "./styles";
 import { useMiPlan } from "./useMiPlan";
+import {
+  getUpgradeAction,
+  getUpgradeRecommendation,
+  shouldShowPlanUpgrade,
+} from "./planCatalog";
 
 const PLAN_LABELS = {
   free: "Free",
@@ -23,9 +28,17 @@ export default function UpgradeLimitModal({ data, onClose, onUpgrade }) {
 
   if (!data) return null;
 
-  const planNombre = plan?.nombre ? PLAN_LABELS[plan.nombre] || plan.nombre : "—";
+  const planKey = (plan?.nombre || data.planKey || "free").toLowerCase();
+  const planNombre = PLAN_LABELS[planKey] || planKey;
+  const recommendation = getUpgradeRecommendation(planKey) || data.recommendation;
+  const showUpgrade = shouldShowPlanUpgrade(planKey);
+  const action = getUpgradeAction(planKey);
 
   function handleUpgrade() {
+    if (action.type === "contact" && action.href) {
+      window.location.href = action.href;
+      return;
+    }
     onUpgrade?.();
   }
 
@@ -64,15 +77,17 @@ export default function UpgradeLimitModal({ data, onClose, onUpgrade }) {
           </div>
         </div>
 
-        <p className="upgradeLimitReco">{data.recommendation}</p>
+        {recommendation && <p className="upgradeLimitReco">{recommendation}</p>}
 
         <div className="upgradeLimitActions">
           <button type="button" className="upgradeLimitBtnGhost" onClick={onClose}>
             Cerrar
           </button>
-          <button type="button" className="upgradeLimitBtnPrimary" onClick={handleUpgrade}>
-            Mejorar plan
-          </button>
+          {showUpgrade && action.type !== "none" && (
+            <button type="button" className="upgradeLimitBtnPrimary" onClick={handleUpgrade}>
+              {action.label}
+            </button>
+          )}
         </div>
       </div>
     </>
