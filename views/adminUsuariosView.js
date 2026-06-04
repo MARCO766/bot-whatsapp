@@ -35,13 +35,36 @@ body.mb-admin{
   background:rgba(57,255,20,.12);border:1px solid rgba(57,255,20,.35);
   color:#39ff14;font-size:.75rem;font-weight:600;
 }
-.mb-admin__stats{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:20px}
-.mb-admin__stat{
-  flex:1;min-width:100px;padding:12px 16px;border-radius:12px;
-  background:rgba(15,23,42,.7);border:1px solid rgba(51,65,85,.6);
+.mb-admin__section-title{margin:0 0 12px;font-size:.8rem;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:#64748b}
+.mb-admin__cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:12px;margin-bottom:18px}
+.mb-admin__card{
+  padding:14px 16px;border-radius:16px;
+  background:rgba(15,23,42,.5);
+  backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+  border:1px solid rgba(148,163,184,.12);
+  box-shadow:0 8px 32px rgba(0,0,0,.28),inset 0 1px 0 rgba(255,255,255,.04);
+  transition:border-color .2s,transform .2s;
 }
-.mb-admin__stat-label{font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;color:#64748b}
-.mb-admin__stat-value{font-size:1.25rem;font-weight:700;margin-top:4px}
+.mb-admin__card:hover{border-color:rgba(57,255,20,.25);transform:translateY(-1px)}
+.mb-admin__card-icon{font-size:1.1rem;margin-bottom:6px;line-height:1}
+.mb-admin__card-label{font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;color:#94a3b8;font-weight:500}
+.mb-admin__card-value{font-size:1.45rem;font-weight:700;margin-top:6px;letter-spacing:-.02em}
+.mb-admin__card--activos .mb-admin__card-value{color:#4ade80}
+.mb-admin__card--suspendidos .mb-admin__card-value{color:#f87171}
+.mb-admin__card--free{border-color:rgba(100,116,139,.25)}
+.mb-admin__card--free .mb-admin__card-value{color:#cbd5e1}
+.mb-admin__card--starter{border-color:rgba(34,211,238,.2)}
+.mb-admin__card--starter .mb-admin__card-value{color:#22d3ee}
+.mb-admin__card--pro{border-color:rgba(167,139,250,.25)}
+.mb-admin__card--pro .mb-admin__card-value{color:#a78bfa}
+.mb-admin__card--agency{border-color:rgba(57,255,20,.22)}
+.mb-admin__card--agency .mb-admin__card-value{color:#39ff14}
+.mb-admin__card--wa .mb-admin__card-value{color:#38bdf8}
+.mb-admin__card--ct .mb-admin__card-value{color:#fbbf24}
+.mb-admin__card--fl .mb-admin__card-value{color:#a78bfa}
+.mb-admin__card--conv .mb-admin__card-value{color:#34d399}
+.mb-admin__dashboard{margin-bottom:28px}
+.mb-admin__table-section-title{margin:0 0 14px;font-size:1rem;font-weight:600;color:#f1f5f9}
 .mb-admin__toolbar{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:16px;align-items:center}
 .mb-admin__search{
   flex:1;min-width:200px;padding:10px 14px;border-radius:10px;
@@ -116,14 +139,27 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
     </div>
   </header>
 
-  <div class="mb-admin__stats" id="stats">
-    <div class="mb-admin__stat"><div class="mb-admin__stat-label">Total</div><div class="mb-admin__stat-value" data-stat="total">—</div></div>
-    <div class="mb-admin__stat"><div class="mb-admin__stat-label">Free</div><div class="mb-admin__stat-value" data-stat="free">—</div></div>
-    <div class="mb-admin__stat"><div class="mb-admin__stat-label">Starter</div><div class="mb-admin__stat-value" data-stat="starter">—</div></div>
-    <div class="mb-admin__stat"><div class="mb-admin__stat-label">Pro</div><div class="mb-admin__stat-value" data-stat="pro">—</div></div>
-    <div class="mb-admin__stat"><div class="mb-admin__stat-label">Agency</div><div class="mb-admin__stat-value" data-stat="agency">—</div></div>
-  </div>
+  <section class="mb-admin__dashboard" id="dashboard" aria-label="Métricas SaaS">
+    <h2 class="mb-admin__section-title">Resumen de cuentas</h2>
+    <div class="mb-admin__cards">
+      <div class="mb-admin__card"><div class="mb-admin__card-icon">👥</div><div class="mb-admin__card-label">Usuarios totales</div><div class="mb-admin__card-value" data-metric="usuarios_total">—</div></div>
+      <div class="mb-admin__card mb-admin__card--activos"><div class="mb-admin__card-icon">🟢</div><div class="mb-admin__card-label">Activos</div><div class="mb-admin__card-value" data-metric="usuarios_activos">—</div></div>
+      <div class="mb-admin__card mb-admin__card--suspendidos"><div class="mb-admin__card-icon">🔴</div><div class="mb-admin__card-label">Suspendidos</div><div class="mb-admin__card-value" data-metric="usuarios_suspendidos">—</div></div>
+      <div class="mb-admin__card mb-admin__card--free"><div class="mb-admin__card-icon">🆓</div><div class="mb-admin__card-label">Free</div><div class="mb-admin__card-value" data-metric="plan_free">—</div></div>
+      <div class="mb-admin__card mb-admin__card--starter"><div class="mb-admin__card-icon">🚀</div><div class="mb-admin__card-label">Starter</div><div class="mb-admin__card-value" data-metric="plan_starter">—</div></div>
+      <div class="mb-admin__card mb-admin__card--pro"><div class="mb-admin__card-icon">⭐</div><div class="mb-admin__card-label">Pro</div><div class="mb-admin__card-value" data-metric="plan_pro">—</div></div>
+      <div class="mb-admin__card mb-admin__card--agency"><div class="mb-admin__card-icon">🏢</div><div class="mb-admin__card-label">Agency</div><div class="mb-admin__card-value" data-metric="plan_agency">—</div></div>
+    </div>
+    <h2 class="mb-admin__section-title">Uso de la plataforma</h2>
+    <div class="mb-admin__cards">
+      <div class="mb-admin__card mb-admin__card--wa"><div class="mb-admin__card-icon">📱</div><div class="mb-admin__card-label">WhatsApps conectados</div><div class="mb-admin__card-value" data-metric="whatsapp_conectados">—</div></div>
+      <div class="mb-admin__card mb-admin__card--ct"><div class="mb-admin__card-icon">👤</div><div class="mb-admin__card-label">Contactos totales</div><div class="mb-admin__card-value" data-metric="contactos_totales">—</div></div>
+      <div class="mb-admin__card mb-admin__card--fl"><div class="mb-admin__card-icon">🔄</div><div class="mb-admin__card-label">Flujos totales</div><div class="mb-admin__card-value" data-metric="flujos_totales">—</div></div>
+      <div class="mb-admin__card mb-admin__card--conv"><div class="mb-admin__card-icon">💰</div><div class="mb-admin__card-label">Conversiones registradas</div><div class="mb-admin__card-value" data-metric="conversiones_totales">—</div></div>
+    </div>
+  </section>
 
+  <h2 class="mb-admin__table-section-title">Usuarios</h2>
   <div class="mb-admin__toolbar">
     <input type="search" class="mb-admin__search" id="search" placeholder="Buscar por email…" autocomplete="off">
     <select class="mb-admin__filter" id="filterPlan">
@@ -198,12 +234,30 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
     return '<span class="mb-plan mb-plan--' + plan + '">' + plan + '</span>';
   }
 
-  function updateStats(list){
-    const counts = { total: list.length, free:0, starter:0, pro:0, agency:0 };
-    list.forEach(u => { if (counts[u.plan] !== undefined) counts[u.plan]++; });
-    document.querySelectorAll("[data-stat]").forEach(el => {
-      const k = el.getAttribute("data-stat");
-      el.textContent = counts[k] !== undefined ? counts[k] : "—";
+  function fmtNum(n){
+    const x = Number(n);
+    if (!Number.isFinite(x)) return "—";
+    return x.toLocaleString("es");
+  }
+
+  function updateResumenCards(resumen){
+    if (!resumen) return;
+    const map = {
+      usuarios_total: resumen.usuarios_total,
+      usuarios_activos: resumen.usuarios_activos,
+      usuarios_suspendidos: resumen.usuarios_suspendidos,
+      plan_free: resumen.planes?.free,
+      plan_starter: resumen.planes?.starter,
+      plan_pro: resumen.planes?.pro,
+      plan_agency: resumen.planes?.agency,
+      whatsapp_conectados: resumen.uso?.whatsapp_conectados,
+      contactos_totales: resumen.uso?.contactos_totales,
+      flujos_totales: resumen.uso?.flujos_totales,
+      conversiones_totales: resumen.uso?.conversiones_totales,
+    };
+    document.querySelectorAll("[data-metric]").forEach(function(el){
+      const key = el.getAttribute("data-metric");
+      el.textContent = fmtNum(map[key]);
     });
   }
 
@@ -215,7 +269,6 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
       if (q && !(u.email || "").toLowerCase().includes(q)) return false;
       return true;
     });
-    updateStats(usuarios);
     renderRows();
   }
 
@@ -298,6 +351,7 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
       throw new Error(data.error || "Error " + res.status);
     }
     usuarios = data.usuarios || [];
+    updateResumenCards(data.resumen);
     applyFilters();
   }
 

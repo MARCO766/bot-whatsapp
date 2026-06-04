@@ -2,18 +2,29 @@ const express = require("express");
 const router = express.Router();
 const { protegerAdmin } = require("../middlewares/adminAuth");
 const {
-  listarUsuarios,
+  obtenerDashboardAdmin,
+  obtenerResumenAdmin,
   actualizarPlanUsuario,
   actualizarEstadoUsuario,
 } = require("../services/adminUsuariosService");
 
 router.get("/api/admin/usuarios", protegerAdmin, async (req, res) => {
   try {
-    const usuarios = await listarUsuarios();
-    res.json({ ok: true, usuarios });
+    const { resumen, usuarios } = await obtenerDashboardAdmin();
+    res.json({ ok: true, resumen, usuarios });
   } catch (error) {
     console.log("[adminUsuariosApi] GET usuarios:", error.response?.data || error.message);
     res.status(500).json({ ok: false, error: "No se pudo cargar usuarios" });
+  }
+});
+
+router.get("/api/admin/resumen", protegerAdmin, async (req, res) => {
+  try {
+    const resumen = await obtenerResumenAdmin();
+    res.json({ ok: true, resumen });
+  } catch (error) {
+    console.log("[adminUsuariosApi] GET resumen:", error.response?.data || error.message);
+    res.status(500).json({ ok: false, error: "No se pudo cargar el resumen" });
   }
 });
 

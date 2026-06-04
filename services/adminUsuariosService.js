@@ -7,6 +7,7 @@ const {
   ESTADOS_VALIDOS,
   normalizarPlanUsuario,
 } = require("./planesService");
+const { isSchemaMissingError, logSchemaFallback } = require("./supabaseSafe");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
@@ -64,12 +65,79 @@ function filtroIdEq(id) {
   return `id=eq.${encodeURIComponent(uid)}`;
 }
 
+async function supabaseCount(table, filterQuery = "") {
+  const suffix = filterQuery ? `&${filterQuery}` : "";
+  const url = `${SUPABASE_URL}/rest/v1/${table}?select=id${suffix}`;
+  try {
+    const res = await axios.get(url, {
+      headers: headers({ Prefer: "count=exact", Range: "0-0" }),
+    });
+    const range = res.headers["content-range"] || res.headers["Content-Range"] || "";
+    const part = String(range).split("/")[1];
+    const n = parseInt(part, 10);
+    return Number.isFinite(n) ? n : 0;
+  } catch (error) {
+    if (table === "crm_conversiones" && isSchemaMissingError(error)) {
+      logSchemaFallback(table, error);
+      return 0;
+    }
+    console.log(`[adminUsuarios] count ${table}:`, error.response?.data || error.message);
+    throw error;
+  }
+}
+
+async function obtenerResumenAdmin() {
+  const [
+    usuarios_total,
+    usuarios_activos,
+    usuarios_suspendidos,
+    free,
+    starter,
+    pro,
+    agency,
+    whatsapp_conectados,
+    contactos_totales,
+    flujos_totales,
+    conversiones_totales,
+  ] = await Promise.all([
+    supabaseCount("crm_usuarios"),
+    supabaseCount("crm_usuarios", "activo=eq.true"),
+    supabaseCount("crm_usuarios", "or=(activo.eq.false,estado_plan.eq.suspendido)"),
+    supabaseCount("crm_usuarios", "plan=eq.free"),
+    supabaseCount("crm_usuarios", "plan=eq.starter"),
+    supabaseCount("crm_usuarios", "plan=eq.pro"),
+    supabaseCount("crm_usuarios", "plan=eq.agency"),
+    supabaseCount("conexiones_whatsapp"),
+    supabaseCount("clientes"),
+    supabaseCount("flujos_builder"),
+    supabaseCount("crm_conversiones"),
+  ]);
+
+  return {
+    usuarios_total,
+    usuarios_activos,
+    usuarios_suspendidos,
+    planes: { free, starter, pro, agency },
+    uso: {
+      whatsapp_conectados,
+      contactos_totales,
+      flujos_totales,
+      conversiones_totales,
+    },
+  };
+}
+
 async function listarUsuarios() {
   const res = await axios.get(
     `${SUPABASE_URL}/rest/v1/crm_usuarios?select=${SELECT_USUARIO_ADMIN}&order=email.asc`,
     { headers: headers() }
   );
   return (res.data || []).map(mapUsuarioRow);
+}
+
+async function obtenerDashboardAdmin() {
+  const [resumen, usuarios] = await Promise.all([obtenerResumenAdmin(), listarUsuarios()]);
+  return { resumen, usuarios };
 }
 
 async function fetchUsuarioPorId(id) {
@@ -206,6 +274,8 @@ async function actualizarEstadoUsuario(id, activo) {
 
 module.exports = {
   LIMITES_POR_PLAN,
+  obtenerResumenAdmin,
+  obtenerDashboardAdmin,
   listarUsuarios,
   actualizarPlanUsuario,
   actualizarEstadoUsuario,
