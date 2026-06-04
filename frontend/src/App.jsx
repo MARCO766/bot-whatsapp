@@ -118,10 +118,14 @@ export default function App() {
 },
     { id: "campañas", nombre: "Campañas", icono: "📣", badge: null, color: "orange" },
     { id: "clientes", nombre: "Clientes", icono: "👥", badge: null, color: "pink" },
+    { id: "mi-plan", nombre: "Mi Plan", icono: "💎", badge: null, color: "cyan" },
     { id: "ajustes", nombre: "Ajustes", icono: "⚙️", badge: null, color: "blue" },
   ];
 
-  const vistaActual = useMemo(() => menu.find((m) => m.id === vista), [vista, connected, inboxUnread]);
+  const vistaActual = useMemo(() => {
+    const id = vista === "mi-plan" ? "mi-plan" : vista;
+    return menu.find((m) => m.id === id);
+  }, [vista, connected, inboxUnread, menu]);
 
   function renderVista() {
     if (vista === "panel") return <Panel cambiarVista={setVista} />;
@@ -133,7 +137,8 @@ export default function App() {
     if (vista === "metricas") return <Metricas />;
     if (vista === "campañas") return <Campañas />;
     if (vista === "clientes") return <Clientes cambiarVista={setVista} />;
-    if (vista === "ajustes") return <Ajustes cambiarVista={setVista} />;
+    if (vista === "ajustes" || vista === "mi-plan")
+      return <Ajustes cambiarVista={setVista} seccionInicial={vista === "mi-plan" ? "plan" : undefined} />;
     return <Panel cambiarVista={setVista} />;
   }
 

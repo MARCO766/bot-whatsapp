@@ -3,8 +3,10 @@ import { useAjustes } from "./ajustes/useAjustes";
 import { ajustesStyles } from "./ajustes/styles";
 import { logout, fetchConexionDiagnostico } from "./ajustes/api";
 import { fetchMetaAdsStatus } from "./metricas/metaAdsApi";
+import MiPlanSection from "./planes/MiPlanSection";
 
 const SECCIONES = [
+  { id: "plan", label: "Mi Plan", icon: "💎" },
   { id: "perfil", label: "Perfil", icon: "👤" },
   { id: "whatsapp", label: "WhatsApp API", icon: "💬" },
   { id: "meta", label: "Meta Ads", icon: "📊" },
@@ -151,7 +153,23 @@ function copyText(text, showToast) {
   navigator.clipboard?.writeText(text).then(() => showToast("Copiado al portapapeles"));
 }
 
-export default function Ajustes({ cambiarVista }) {
+function resolveSeccionInicial(seccionInicial) {
+  if (seccionInicial && SECCIONES.some((s) => s.id === seccionInicial)) {
+    return seccionInicial;
+  }
+  try {
+    const stored = localStorage.getItem("macbot_ajustes_seccion");
+    if (stored && SECCIONES.some((s) => s.id === stored)) {
+      localStorage.removeItem("macbot_ajustes_seccion");
+      return stored;
+    }
+  } catch {
+    /* ignore */
+  }
+  return "perfil";
+}
+
+export default function Ajustes({ cambiarVista, seccionInicial }) {
   const {
     data,
     loading,
@@ -168,7 +186,7 @@ export default function Ajustes({ cambiarVista }) {
     probarMetaEvento,
   } = useAjustes();
 
-  const [seccion, setSeccion] = useState("perfil");
+  const [seccion, setSeccion] = useState(() => resolveSeccionInicial(seccionInicial));
 
   const [perfil, setPerfil] = useState({});
   const [auto, setAuto] = useState({});
@@ -356,6 +374,10 @@ export default function Ajustes({ cambiarVista }) {
           <p className="ajHint">Inicia sesión en <a href="/login" style={{ color: "#86efac" }}>/login</a> y vuelve aquí.</p>
         </div>
       );
+    }
+
+    if (seccion === "plan") {
+      return <MiPlanSection showToast={showToast} />;
     }
 
     if (seccion === "perfil") {
