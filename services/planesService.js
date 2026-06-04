@@ -39,6 +39,19 @@ function toInt(value, fallback) {
   return Number.isFinite(n) && n >= 0 ? Math.floor(n) : fallback;
 }
 
+/** null o -1 = sin tope de conexiones WhatsApp */
+function normalizarMaxWhatsapp(value) {
+  if (value === null || value === undefined) return null;
+  const n = Number(value);
+  if (n === -1) return -1;
+  if (Number.isFinite(n) && n >= 0) return Math.floor(n);
+  return DEFAULTS_PLAN.max_whatsapp;
+}
+
+function esWhatsappIlimitado(maxWhatsapp) {
+  return maxWhatsapp === null || maxWhatsapp === -1;
+}
+
 /**
  * Asegura valores válidos y defaults si faltan columnas o datos legacy.
  */
@@ -64,7 +77,7 @@ function normalizarPlanUsuario(usuario) {
     plan,
     estado_plan,
     fecha_vencimiento,
-    max_whatsapp: toInt(usuario.max_whatsapp, DEFAULTS_PLAN.max_whatsapp),
+    max_whatsapp: normalizarMaxWhatsapp(usuario.max_whatsapp),
     max_contactos: toInt(usuario.max_contactos, DEFAULTS_PLAN.max_contactos),
     max_flujos: toInt(usuario.max_flujos, DEFAULTS_PLAN.max_flujos),
     created_plan_at: usuario.created_plan_at ?? null,
@@ -153,6 +166,8 @@ module.exports = {
   ESTADOS_VALIDOS,
   DEFAULTS_PLAN,
   normalizarPlanUsuario,
+  normalizarMaxWhatsapp,
+  esWhatsappIlimitado,
   esPlanActivo,
   obtenerPlanUsuario,
   obtenerLimitesUsuario,

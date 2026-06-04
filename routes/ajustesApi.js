@@ -20,6 +20,7 @@ const {
 } = require("../services/ajustesService");
 const rt = require("../services/realtimeService");
 const { protegerApi } = require("../middlewares/auth");
+const { verificarLimiteNuevaConexionWhatsapp } = require("../middlewares/planLimits");
 
 function log(msg, extra) {
   if (extra !== undefined) console.log(`[ajustesApi] ${msg}`, extra);
@@ -91,7 +92,11 @@ router.post("/api/ajustes/meta/probar", protegerApi, async (req, res) => {
 });
 
 /** Misma lógica que POST /guardar-conexion */
-router.post("/api/ajustes/conexion/guardar", protegerApi, async (req, res) => {
+router.post(
+  "/api/ajustes/conexion/guardar",
+  protegerApi,
+  verificarLimiteNuevaConexionWhatsapp,
+  async (req, res) => {
   try {
     const result = await guardarConexionAjustes(uid(req), req.body);
     rt.conexionActualizada(req, uid(req), { accion: "guardada", conexion: result });
@@ -99,10 +104,15 @@ router.post("/api/ajustes/conexion/guardar", protegerApi, async (req, res) => {
   } catch (error) {
     handleError(res, error, "POST conexion guardar");
   }
-});
+}
+);
 
 /** Alias para el frontend */
-router.post("/api/conexiones/whatsapp", protegerApi, async (req, res) => {
+router.post(
+  "/api/conexiones/whatsapp",
+  protegerApi,
+  verificarLimiteNuevaConexionWhatsapp,
+  async (req, res) => {
   try {
     const result = await guardarConexionAjustes(uid(req), req.body);
     rt.conexionActualizada(req, uid(req), { accion: "guardada", conexion: result });
@@ -110,7 +120,8 @@ router.post("/api/conexiones/whatsapp", protegerApi, async (req, res) => {
   } catch (error) {
     handleError(res, error, "POST conexiones/whatsapp");
   }
-});
+}
+);
 
 /** Misma lógica que POST /desconectar-whatsapp */
 router.post("/api/ajustes/conexion/desconectar", protegerApi, async (req, res) => {
