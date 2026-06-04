@@ -131,7 +131,7 @@ export default function App() {
     if (vista === "panel") return <Panel cambiarVista={setVista} />;
     if (vista === "inbox")
       return <Bandeja onUnreadChange={setInboxUnread} />;
-    if (vista === "flujos") return <Flujos />;
+    if (vista === "flujos") return <Flujos cambiarVista={setVista} />;
     if (vista === "activadores") return <Activadores />;
     if (vista === "etiquetas") return <Etiquetas />;
     if (vista === "metricas") return <Metricas />;

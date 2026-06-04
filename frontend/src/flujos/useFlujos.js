@@ -25,6 +25,7 @@ import {
   normalizeConexionesInbox,
   sameConexionId,
 } from "../utils/conexionesInbox";
+import { usePlanLimitModal } from "../planes/usePlanLimitModal";
 
 import {
   countByEstado,
@@ -79,6 +80,17 @@ export function useFlujos() {
     setToast({ message, type });
     setTimeout(() => setToast(null), 2800);
   }, []);
+
+  const { limitModal, tryHandlePlanLimitError, closeLimitModal } = usePlanLimitModal();
+
+  const handleWriteError = useCallback(
+    (err, fallbackMsg) => {
+      if (tryHandlePlanLimitError(err)) return true;
+      showToast(err instanceof ApiError ? err.message : fallbackMsg, "error");
+      return false;
+    },
+    [showToast, tryHandlePlanLimitError]
+  );
 
   const requireLineaParaEscribir = useCallback(() => {
     if (puedeEscribir) return true;
@@ -436,12 +448,11 @@ export function useFlujos() {
         await load();
         return res.flow;
       } catch (err) {
-        const msg = err instanceof ApiError ? err.message : "No se pudo crear el flujo";
-        showToast(msg, "error");
+        handleWriteError(err, "No se pudo crear el flujo");
         return null;
       }
     },
-    [apiOnline, conexionSeleccionadaId, load, requireLineaParaEscribir, showToast]
+    [apiOnline, conexionSeleccionadaId, handleWriteError, load, requireLineaParaEscribir, showToast]
   );
 
   const importar = useCallback(
@@ -456,11 +467,10 @@ export function useFlujos() {
         showToast("Plantilla importada");
         await load();
       } catch (err) {
-        const msg = err instanceof ApiError ? err.message : "Error al importar";
-        showToast(msg, "error");
+        handleWriteError(err, "Error al importar");
       }
     },
-    [apiOnline, conexionSeleccionadaId, load, requireLineaParaEscribir, showToast]
+    [apiOnline, conexionSeleccionadaId, handleWriteError, load, requireLineaParaEscribir, showToast]
   );
 
   const duplicar = useCallback(
@@ -526,12 +536,11 @@ export function useFlujos() {
         await load();
         return true;
       } catch (err) {
-        const msg = err instanceof ApiError ? err.message : "Error al importar JSON";
-        showToast(msg, "error");
+        handleWriteError(err, "Error al importar JSON");
         return false;
       }
     },
-    [apiOnline, conexionSeleccionadaId, load, requireLineaParaEscribir, showToast]
+    [apiOnline, conexionSeleccionadaId, handleWriteError, load, requireLineaParaEscribir, showToast]
   );
 
   const cargarVersiones = useCallback(
@@ -634,6 +643,8 @@ export function useFlujos() {
     eliminarCarpetaFlujo,
     load,
     showToast,
+    limitModal,
+    closeLimitModal,
     updateMeta,
     toggleEstado,
     moveToFolder,

@@ -12,6 +12,7 @@ import { flujosStyles } from "./flujos/styles";
 import { SORT_OPTIONS } from "./flujos/constants";
 import { useFlujos } from "./flujos/useFlujos";
 import { loginUrl } from "./flujos/api";
+import UpgradeLimitModal from "./planes/UpgradeLimitModal";
 import { CONEXION_TODAS, sameConexionId } from "./utils/conexionesInbox";
 import { FLOW_DRAG_MIME, flowMatchesFolder } from "./flujos/utils";
 
@@ -31,7 +32,7 @@ function readCollapseSections() {
   }
 }
 
-export default function Flujos() {
+export default function Flujos({ cambiarVista }) {
   const {
     flows,
     filtered,
@@ -63,6 +64,8 @@ export default function Flujos() {
     editarCarpetaFlujo,
     eliminarCarpetaFlujo,
     showToast,
+    limitModal,
+    closeLimitModal,
     toggleEstado,
     moveToFolder,
     crearFlujo,
@@ -210,7 +213,8 @@ export default function Flujos() {
 
   async function handleCreate() {
     if (!newFlowName.trim()) return;
-    await crearFlujo(newFlowName.trim());
+    const flow = await crearFlujo(newFlowName.trim());
+    if (!flow) return;
     setNewFlowName("");
     setNewFlowOpen(false);
   }
@@ -588,6 +592,16 @@ export default function Flujos() {
           </div>
         </div>
       )}
+
+      <UpgradeLimitModal
+        data={limitModal}
+        onClose={closeLimitModal}
+        onUpgrade={() => {
+          closeLimitModal();
+          if (cambiarVista) cambiarVista("mi-plan");
+          else showToast("Próximamente pagos", "ok");
+        }}
+      />
     </div>
   );
 }

@@ -57,7 +57,7 @@ async function request(path, options = {}) {
   if (!res.ok) {
     throw new ApiError(
       data.error || `Error del servidor (${res.status})`,
-      "SERVER",
+      data.code || "SERVER",
       res.status,
       { url, data }
     );

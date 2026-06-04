@@ -3,11 +3,12 @@ import { resolveApiUrl } from "../flujos/apiBase";
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
 export class ApiError extends Error {
-  constructor(message, code, status = 0) {
+  constructor(message, code, status = 0, payload = null) {
     super(message);
     this.name = "ApiError";
     this.code = code;
     this.status = status;
+    this.payload = payload;
   }
 }
 
@@ -34,7 +35,12 @@ async function request(path, options = {}) {
 
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new ApiError(data.error || `Error (${res.status})`, "SERVER", res.status);
+    throw new ApiError(
+      data.error || `Error (${res.status})`,
+      data.code || "SERVER",
+      res.status,
+      data
+    );
   }
   return data;
 }

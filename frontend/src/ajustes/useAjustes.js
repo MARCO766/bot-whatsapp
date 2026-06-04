@@ -16,12 +16,15 @@ import { useSocketEvent } from "../hooks/useSocketEvent";
 import { useDebouncedCallback } from "../hooks/useDebouncedCallback";
 import { RT } from "../realtime/events";
 
+import { usePlanLimitModal } from "../planes/usePlanLimitModal";
+
 export function useAjustes() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const [toast, setToast] = useState(null);
+  const { limitModal, tryHandlePlanLimitError, closeLimitModal } = usePlanLimitModal();
 
   const showToast = useCallback((message, type = "success") => {
     setToast({ message, type });
@@ -59,13 +62,14 @@ export function useAjustes() {
         if (okMsg) showToast(okMsg);
         return true;
       } catch (err) {
+        if (tryHandlePlanLimitError(err)) return false;
         showToast(err instanceof ApiError ? err.message : "Error al guardar", "error");
         return false;
       } finally {
         setSaving(false);
       }
     },
-    [load, showToast]
+    [load, showToast, tryHandlePlanLimitError]
   );
 
   return {
@@ -76,6 +80,8 @@ export function useAjustes() {
     toast,
     showToast,
     reload: load,
+    limitModal,
+    closeLimitModal,
     savePerfil: (body) => run(() => patchPerfil(body), "Perfil guardado"),
     saveConexion: (body) => run(() => guardarConexion(body), "Conexión guardada"),
     desconectar: () => run(() => desconectarWhatsapp(), "WhatsApp desconectado"),

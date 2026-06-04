@@ -4,6 +4,7 @@ import { ajustesStyles } from "./ajustes/styles";
 import { logout, fetchConexionDiagnostico } from "./ajustes/api";
 import { fetchMetaAdsStatus } from "./metricas/metaAdsApi";
 import MiPlanSection from "./planes/MiPlanSection";
+import UpgradeLimitModal from "./planes/UpgradeLimitModal";
 
 const SECCIONES = [
   { id: "plan", label: "Mi Plan", icon: "💎" },
@@ -184,6 +185,8 @@ export default function Ajustes({ cambiarVista, seccionInicial }) {
     probarWhatsappPorId,
     savePassword,
     probarMetaEvento,
+    limitModal,
+    closeLimitModal,
   } = useAjustes();
 
   const [seccion, setSeccion] = useState(() => resolveSeccionInicial(seccionInicial));
@@ -894,6 +897,15 @@ export default function Ajustes({ cambiarVista, seccionInicial }) {
         </nav>
         <main className="ajustesMain">{renderContent()}</main>
       </div>
+
+      <UpgradeLimitModal
+        data={limitModal}
+        onClose={closeLimitModal}
+        onUpgrade={() => {
+          closeLimitModal();
+          setSeccion("plan");
+        }}
+      />
     </div>
   );
 }
