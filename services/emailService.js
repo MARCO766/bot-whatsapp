@@ -111,13 +111,29 @@ async function sendEmail({ to, subject, text, html }) {
 
   const mailer = getTransporter();
 
-  return mailer.sendMail({
-    from,
-    to,
-    subject,
-    text,
-    html: html || text,
-  });
+  try {
+    console.log("[SMTP_STEP] verify_start");
+    await mailer.verify();
+    console.log("[SMTP_STEP] verify_ok");
+
+    console.log("[SMTP_STEP] send_start");
+    const result = await mailer.sendMail({
+      from,
+      to,
+      subject,
+      text,
+      html: html || text,
+    });
+    console.log("[SMTP_STEP] send_ok");
+    return result;
+  } catch (error) {
+    console.log("[SMTP_STEP] error", {
+      message: error.message,
+      code: error.code,
+      response: error.response,
+    });
+    throw error;
+  }
 }
 
 module.exports = {
