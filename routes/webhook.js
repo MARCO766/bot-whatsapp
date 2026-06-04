@@ -19,6 +19,7 @@ const {
   registrarRespuestaBotonSeguimiento,
 } = require("../services/seguimiento/registrarRespuestaBoton");
 const rt = require("../services/realtimeService");
+const { evaluarLimiteContactoEntrante } = require("../middlewares/planLimits");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
@@ -179,6 +180,17 @@ const clienteBloqueado = responseClienteBloqueado.data?.[0];
 if (clienteBloqueado?.estado === "bloqueado") {
   console.log("🚫 Mensaje ignorado de contacto bloqueado:", from);
   return res.sendStatus(200);
+}
+
+if (usuarioIdWebhook) {
+  const limiteContacto = await evaluarLimiteContactoEntrante(
+    usuarioIdWebhook,
+    from,
+    { clienteRow: clienteBloqueado }
+  );
+  if (!limiteContacto.permitir) {
+    return res.sendStatus(200);
+  }
 }
 
 
