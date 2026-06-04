@@ -18,6 +18,7 @@ const upload = multer({
 });
 
 const { protegerPanel } = require("../middlewares/auth");
+const { verificarLimiteNuevoFlujo } = require("../middlewares/planLimits");
 const {
   enviarTextoWhatsApp,
   enviarMediaWhatsApp,
@@ -582,7 +583,7 @@ else if (mime.startsWith("audio/")) {
 
 router.post("/inbox/responder", protegerPanel, upload.single("archivo"), handleInboxResponder);
 
-router.post("/guardar-flujo-builder", protegerPanel, async (req, res) => {
+router.post("/guardar-flujo-builder", protegerPanel, verificarLimiteNuevoFlujo, async (req, res) => {
   try {
     const { id, nombre, data } = req.body;
     const usuarioId = req.session.usuario.id;

@@ -15,7 +15,7 @@ const DEFAULTS_PLAN = {
   fecha_vencimiento: null,
   max_whatsapp: 1,
   max_contactos: 100,
-  max_flujos: 3,
+  max_flujos: 1,
 };
 
 const SELECT_PLAN =
@@ -65,6 +65,19 @@ function esContactosIlimitado(maxContactos) {
   return maxContactos === null || maxContactos === -1;
 }
 
+/** null o -1 = sin tope de flujos (agency) */
+function normalizarMaxFlujos(value) {
+  if (value === null || value === undefined) return null;
+  const n = Number(value);
+  if (n === -1) return -1;
+  if (Number.isFinite(n) && n >= 0) return Math.floor(n);
+  return DEFAULTS_PLAN.max_flujos;
+}
+
+function esFlujosIlimitado(maxFlujos) {
+  return maxFlujos === null || maxFlujos === -1;
+}
+
 /**
  * Asegura valores válidos y defaults si faltan columnas o datos legacy.
  */
@@ -92,7 +105,7 @@ function normalizarPlanUsuario(usuario) {
     fecha_vencimiento,
     max_whatsapp: normalizarMaxWhatsapp(usuario.max_whatsapp),
     max_contactos: normalizarMaxContactos(usuario.max_contactos),
-    max_flujos: toInt(usuario.max_flujos, DEFAULTS_PLAN.max_flujos),
+    max_flujos: normalizarMaxFlujos(usuario.max_flujos),
     created_plan_at: usuario.created_plan_at ?? null,
     updated_plan_at: usuario.updated_plan_at ?? null,
   };
@@ -183,6 +196,8 @@ module.exports = {
   esWhatsappIlimitado,
   normalizarMaxContactos,
   esContactosIlimitado,
+  normalizarMaxFlujos,
+  esFlujosIlimitado,
   esPlanActivo,
   obtenerPlanUsuario,
   obtenerLimitesUsuario,

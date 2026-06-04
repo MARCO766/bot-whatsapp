@@ -1,6 +1,7 @@
 /**
  * Límites de plan — Fase 3A: conexiones WhatsApp.
  * Fase 3C: contactos nuevos vía webhook.
+ * Fase 3B: creación de flujos nuevos.
  */
 const axios = require("axios");
 const { getConexionesUsuario } = require("../services/conexionesWhatsappService");
@@ -10,6 +11,7 @@ const {
   esPlanActivo,
   esWhatsappIlimitado,
   esContactosIlimitado,
+  esFlujosIlimitado,
 } = require("../services/planesService");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -178,6 +180,114 @@ async function evaluarLimiteContactoEntrante(usuarioId, clienteNumero, opts = {}
   return { permitir: true, existente: false };
 }
 
+/** Flujos en flujos_builder por usuario_id */
+async function contarFlujosUsuario(usuarioId) {
+  if (!usuarioId || !SUPABASE_URL || !SUPABASE_KEY) return 0;
+
+  try {
+    const res = await axios.get(
+      `${SUPABASE_URL}/rest/v1/flujos_builder?usuario_id=eq.${encodeURIComponent(usuarioId)}&select=id`,
+      {
+        headers: supabaseHeaders({
+          Prefer: "count=exact",
+          Range: "0-0",
+        }),
+      }
+    );
+    const range = res.headers["content-range"] || res.headers["Content-Range"] || "";
+    const total = parseInt(String(range).split("/")[1], 10);
+    return Number.isFinite(total) ? total : (Array.isArray(res.data) ? res.data.length : 0);
+  } catch (error) {
+    console.log("[planLimits] contarFlujosUsuario:", error.response?.data || error.message);
+    return 0;
+  }
+}
+
+/**
+ * @returns {Promise<{
+ *   ok: boolean,
+ *   error?: string,
+ *   code?: string,
+ *   limite?: number|null,
+ *   usados?: number
+ * }>}
+ */
+async function puedeCrearFlujo(usuarioId) {
+  const [plan, limites, usados] = await Promise.all([
+    obtenerPlanUsuario(usuarioId),
+    obtenerLimitesUsuario(usuarioId),
+    contarFlujosUsuario(usuarioId),
+  ]);
+
+  if (!esPlanActivo(plan)) {
+    return {
+      ok: false,
+      error: "Tu plan no está activo. No puedes crear nuevos flujos.",
+      code: "PLAN_INACTIVE",
+      limite: limites.flujos,
+      usados,
+    };
+  }
+
+  const limite = limites.flujos;
+
+  if (esFlujosIlimitado(limite)) {
+    return { ok: true, limite, usados };
+  }
+
+  if (usados >= limite) {
+    return {
+      ok: false,
+      error: "Límite de flujos alcanzado",
+      code: "PLAN_LIMIT_FLUJOS",
+      limite,
+      usados,
+    };
+  }
+
+  return { ok: true, limite, usados };
+}
+
+function esCreacionNuevoFlujo(req) {
+  const id = req.body?.id ?? req.body?.flujoId ?? req.body?.flujo_id;
+  return !id;
+}
+
+/**
+ * Solo bloquea INSERT (sin id en body). Guardar/editar flujo existente no se toca.
+ */
+async function verificarLimiteNuevoFlujo(req, res, next) {
+  if (!esCreacionNuevoFlujo(req)) {
+    return next();
+  }
+
+  const usuarioId = req.session?.usuario?.id;
+  if (!usuarioId) {
+    return res.status(401).json({ ok: false, error: "No autenticado" });
+  }
+
+  try {
+    const check = await puedeCrearFlujo(usuarioId);
+    if (!check.ok) {
+      const body = {
+        ok: false,
+        error: check.error,
+        code: check.code,
+      };
+      if (check.limite !== undefined) body.limite = check.limite;
+      if (check.usados !== undefined) body.usados = check.usados;
+      return res.status(403).json(body);
+    }
+    return next();
+  } catch (error) {
+    console.log("[planLimits] verificarLimiteNuevoFlujo:", error.message);
+    return res.status(500).json({
+      ok: false,
+      error: "No se pudo validar el límite del plan",
+    });
+  }
+}
+
 /**
  * @returns {Promise<{
  *   ok: boolean,
@@ -266,9 +376,12 @@ async function verificarLimiteNuevaConexionWhatsapp(req, res, next) {
 module.exports = {
   contarConexionesWhatsappUsuario,
   contarContactosUsuario,
+  contarFlujosUsuario,
   existeContactoUsuario,
   puedeCrearContacto,
   evaluarLimiteContactoEntrante,
+  puedeCrearFlujo,
+  verificarLimiteNuevoFlujo,
   puedeCrearConexionWhatsapp,
   verificarLimiteNuevaConexionWhatsapp,
 };

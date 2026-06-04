@@ -45,6 +45,7 @@ function log(msg, extra) {
 }
 
 const { protegerApi } = require("../middlewares/auth");
+const { verificarLimiteNuevoFlujo } = require("../middlewares/planLimits");
 
 function supabaseHeaders(extra = {}) {
   return {
@@ -615,8 +616,8 @@ router.patch("/api/flujos/:id/nombre", protegerApi, async (req, res) => {
   }
 });
 
-// POST /api/flujos
-router.post("/api/flujos", protegerApi, async (req, res) => {
+// POST /api/flujos — crear flujo nuevo (INSERT en flujos_builder)
+router.post("/api/flujos", protegerApi, verificarLimiteNuevoFlujo, async (req, res) => {
   try {
     const nombre = (req.body?.nombre || "").trim() || "Nuevo flujo";
     const meta = req.body?.meta || {};
@@ -755,8 +756,8 @@ router.get("/api/flujos/:id/export", protegerApi, async (req, res) => {
   }
 });
 
-// POST /api/flujos/import-json — importar archivo JSON exportado
-router.post("/api/flujos/import-json", protegerApi, async (req, res) => {
+// POST /api/flujos/import-json — importar archivo JSON exportado (nuevo flujo)
+router.post("/api/flujos/import-json", protegerApi, verificarLimiteNuevoFlujo, async (req, res) => {
   try {
     const usuarioId = req.session.usuario.id;
     const scope = leerConexionScope(req);
@@ -802,8 +803,8 @@ router.post("/api/flujos/import-json", protegerApi, async (req, res) => {
   }
 });
 
-// POST /api/flujos/import
-router.post("/api/flujos/import", protegerApi, async (req, res) => {
+// POST /api/flujos/import — plantilla predefinida (nuevo flujo)
+router.post("/api/flujos/import", protegerApi, verificarLimiteNuevoFlujo, async (req, res) => {
   try {
     const templateId = req.body?.templateId;
     const templates = {
