@@ -45,8 +45,8 @@ function getSmtpSecure(port) {
   const explicit = String(process.env.SMTP_SECURE || "").trim().toLowerCase();
   if (explicit === "true") return true;
   if (explicit === "false") return false;
-  if (port === 465) return true;
-  if (port === 587) return false;
+  const numericPort = Number(port);
+  if (numericPort === 465) return true;
   return false;
 }
 
@@ -54,9 +54,7 @@ function getTransporter() {
   if (transporter) return transporter;
 
   const host = String(process.env.SMTP_HOST || "").trim();
-  const port = Number.isFinite(Number(process.env.SMTP_PORT))
-    ? Number(process.env.SMTP_PORT)
-    : 587;
+  const port = Number(process.env.SMTP_PORT || 587);
   const user = String(process.env.SMTP_USER || "").trim();
   const pass = String(process.env.SMTP_PASS || "").trim();
 
@@ -67,6 +65,7 @@ function getTransporter() {
   }
 
   const secure = getSmtpSecure(port);
+  console.log("[SMTP_SECURE_RESOLVED]", { port, secure });
 
   transporter = nodemailer.createTransport({
     host,
@@ -93,12 +92,11 @@ async function sendEmail({ to, subject, text, html }) {
 
   const from = String(process.env.SMTP_FROM || "").trim();
   const host = String(process.env.SMTP_HOST || "").trim();
-  const port = Number.isFinite(Number(process.env.SMTP_PORT))
-    ? Number(process.env.SMTP_PORT)
-    : 587;
+  const port = Number(process.env.SMTP_PORT || 587);
   const user = String(process.env.SMTP_USER || "").trim();
   const pass = String(process.env.SMTP_PASS || "").trim();
   const secure = getSmtpSecure(port);
+  console.log("[SMTP_SECURE_RESOLVED]", { port, secure });
 
   console.log("[SMTP_CONFIG_CHECK]", {
     host,
