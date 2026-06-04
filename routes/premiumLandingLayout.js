@@ -339,7 +339,7 @@ function renderNavbar({ active = "landing" } = {}) {
   </button>
   <nav class="mb-premium__nav-links">
     <a href="/login#producto" class="mb-premium__nav-link">Producto</a>
-    <a href="/login#planes" class="mb-premium__nav-link">Planes</a>
+    <a href="/pricing" class="mb-premium__nav-link">Planes</a>
     <a href="/login#login" class="mb-premium__nav-link">Iniciar sesión</a>
   </nav>
   <div class="mb-premium__nav-actions">
@@ -408,6 +408,7 @@ function renderHeroSection() {
     </p>
     <div class="mb-premium__hero-cta">
       <a href="/register" class="mb-premium__btn-lg mb-premium__btn-lg--neon">Crear cuenta gratis</a>
+      <a href="/pricing" class="mb-premium__btn-lg mb-premium__btn-lg--outline">Ver planes</a>
       <a href="#login" class="mb-premium__btn-lg mb-premium__btn-lg--outline">Iniciar sesión</a>
     </div>
   </div>
@@ -471,7 +472,7 @@ function renderPlansSection() {
   return `
 <section class="mb-premium__section" id="planes">
   <h2 class="mb-premium__section-title">Planes MacBot</h2>
-  <p class="mb-premium__section-sub">Empieza gratis y escala cuando tu operación lo necesite.</p>
+  <p class="mb-premium__section-sub">Empieza gratis y escala cuando tu operación lo necesite. <a href="/pricing" style="color:#22d3ee;text-decoration:none">Ver comparativa completa →</a></p>
   <div class="mb-premium__plans">${plans}</div>
 </section>`;
 }
@@ -514,6 +515,7 @@ function renderLoginForm({ resetBanner = "", errorMsg = "" } = {}) {
   </form>
   <p class="mb-premium__footer-links">
     ¿No tienes cuenta? <a href="/register">Crear cuenta gratis</a>
+    · <a href="/pricing">Ver planes</a>
   </p>
 </div>`;
 }
@@ -611,7 +613,14 @@ const PREMIUM_PASSWORD_TOGGLE = `
 })();
 </script>`;
 
-function renderPremiumLandingPage({ documentTitle, mainContent, scripts = "" }) {
+function renderPremiumLandingPage({
+  documentTitle,
+  mainContent,
+  scripts = "",
+  extraStyles = "",
+  skipNavbar = false,
+} = {}) {
+  const nav = skipNavbar ? "" : renderNavbar();
   return `<!DOCTYPE html>
 <html lang="es">
 <head>
@@ -621,7 +630,7 @@ function renderPremiumLandingPage({ documentTitle, mainContent, scripts = "" }) 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
-<style>${PREMIUM_STYLES}</style>
+<style>${PREMIUM_STYLES}${extraStyles}</style>
 </head>
 <body class="mb-premium">
 <div class="mb-premium__bg" aria-hidden="true">
@@ -632,7 +641,7 @@ function renderPremiumLandingPage({ documentTitle, mainContent, scripts = "" }) 
   <span class="mb-premium__code mb-premium__code--4">rm24h.schedule()</span>
 </div>
 <div class="mb-premium__wrap">
-  ${renderNavbar()}
+  ${nav}
   ${mainContent}
   <footer class="mb-premium__page-footer">© MacBot CRM · WhatsApp automatizado con IA</footer>
 </div>
@@ -683,4 +692,5 @@ module.exports = {
   renderLoginLandingPage,
   renderRegisterPage,
   renderLoginForm,
+  renderPremiumLandingPage,
 };

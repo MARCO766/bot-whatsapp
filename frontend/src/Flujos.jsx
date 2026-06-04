@@ -598,8 +598,7 @@ export default function Flujos({ cambiarVista }) {
         onClose={closeLimitModal}
         onUpgrade={() => {
           closeLimitModal();
-          if (cambiarVista) cambiarVista("mi-plan");
-          else showToast("Próximamente pagos", "ok");
+          window.location.href = "/pricing";
         }}
       />
     </div>

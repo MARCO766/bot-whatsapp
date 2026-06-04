@@ -903,7 +903,7 @@ export default function Ajustes({ cambiarVista, seccionInicial }) {
         onClose={closeLimitModal}
         onUpgrade={() => {
           closeLimitModal();
-          setSeccion("plan");
+          window.location.href = "/pricing";
         }}
       />
     </div>

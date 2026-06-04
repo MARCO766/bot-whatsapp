@@ -1,6 +1,7 @@
 import React from "react";
 import { useMiPlan } from "./useMiPlan";
 import { miPlanStyles } from "./styles";
+import { goToPricing } from "./goToPricing";
 
 const PLAN_LABELS = {
   free: "Free",
@@ -64,13 +65,11 @@ function LimitRow({ label, icon, max, hint }) {
   );
 }
 
-export default function MiPlanSection({ showToast }) {
+export default function MiPlanSection() {
   const { plan, loading, error, reload } = useMiPlan(true);
 
   function handleUpgrade() {
-    if (showToast) {
-      showToast("Mejorar plan — disponible próximamente", "ok");
-    }
+    goToPricing();
   }
 
   if (loading) {

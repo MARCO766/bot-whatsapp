@@ -12,6 +12,7 @@ const {
   renderLoginLandingPage,
   renderRegisterPage,
 } = require("./premiumLandingLayout");
+const { renderPricingPage } = require("./pricingPageLayout");
 const { DEFAULTS_PLAN } = require("../services/planesService");
 const {
   generarTokenReset,
@@ -193,6 +194,10 @@ function renderResetFormPage({ token, errorMsg = "" }) {
 </script>`,
   });
 }
+
+router.get("/pricing", (req, res) => {
+  res.send(renderPricingPage());
+});
 
 router.get("/login", (req, res) => {
   if (req.session?.usuario) {
