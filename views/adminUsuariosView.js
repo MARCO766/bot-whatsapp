@@ -227,7 +227,7 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
     const activoTxt = u.activo ? "Sí" : "No";
     const toggleLabel = u.activo ? "Suspender" : "Activar";
     const toggleCls = u.activo ? "" : " is-active";
-    return '<tr data-id="'+u.id+'">' +
+    return '<tr data-id="'+escapeHtml(String(u.id))+'">' +
       '<td class="mb-admin__email">'+escapeHtml(u.email)+'</td>' +
       '<td>'+escapeHtml(u.nombre)+'</td>' +
       '<td>'+planBadge(u.plan)+' <select class="mb-admin__select" data-field="plan">'+planOpts+'</select></td>' +
@@ -255,13 +255,25 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
     bindRowActions();
   }
 
+  function sameId(a, b){
+    return String(a ?? "").trim() === String(b ?? "").trim();
+  }
+
   function patchUsuario(id, data){
-    return fetch("/api/admin/usuarios/" + encodeURIComponent(id) + "/plan", {
+    const uid = String(id ?? "").trim();
+    return fetch("/api/admin/usuarios/" + encodeURIComponent(uid) + "/plan", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       credentials: "same-origin",
-      body: JSON.stringify(data)
-    }).then(r => r.json().then(j => ({ status: r.status, body: j })));
+      body: JSON.stringify({
+        plan: data.plan,
+        estado_plan: data.estado_plan,
+        fecha_vencimiento: data.fecha_vencimiento
+      })
+    }).then(async function(r){
+      const body = await r.json();
+      return { status: r.status, body };
+    });
   }
 
   function patchEstado(id, activo){
@@ -274,14 +286,24 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
   }
 
   function mergeUsuario(updated){
-    const i = usuarios.findIndex(u => u.id === updated.id);
+    const i = usuarios.findIndex(u => sameId(u.id, updated.id));
     if (i >= 0) usuarios[i] = updated;
+    applyFilters();
+  }
+
+  async function reloadUsuarios(){
+    const res = await fetch("/api/admin/usuarios", { credentials: "same-origin" });
+    const data = await res.json();
+    if (!res.ok || !data.ok) {
+      throw new Error(data.error || "Error " + res.status);
+    }
+    usuarios = data.usuarios || [];
     applyFilters();
   }
 
   function bindRowActions(){
     $tbody.querySelectorAll("tr").forEach(tr => {
-      const id = tr.getAttribute("data-id");
+      const id = String(tr.getAttribute("data-id") || "").trim();
       tr.querySelector('[data-action="save"]').addEventListener("click", async function(){
         const btn = this;
         btn.disabled = true;
@@ -289,11 +311,16 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
         const estado_plan = tr.querySelector('[data-field="estado_plan"]').value;
         const rawDate = tr.querySelector('[data-field="fecha_vencimiento"]').value;
         const fecha_vencimiento = rawDate ? new Date(rawDate).toISOString() : null;
+        if (!id) {
+          toast("ID de usuario inválido", true);
+          btn.disabled = false;
+          return;
+        }
         try {
           const { status, body } = await patchUsuario(id, { plan, estado_plan, fecha_vencimiento });
           if (!body.ok) throw new Error(body.error || "Error " + status);
-          mergeUsuario(body.usuario);
-          toast("Plan actualizado: " + body.usuario.email);
+          await reloadUsuarios();
+          toast("Plan actualizado");
         } catch (e) {
           toast(e.message || "Error al guardar", true);
         } finally {
@@ -302,7 +329,7 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
       });
       tr.querySelector('[data-action="toggle"]').addEventListener("click", async function(){
         const btn = this;
-        const u = usuarios.find(x => x.id === id);
+        const u = usuarios.find(x => sameId(x.id, id));
         if (!u) return;
         const nuevo = !u.activo;
         if (!nuevo && !confirm("¿Suspender cuenta de " + u.email + "?")) return;
@@ -310,7 +337,7 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
         try {
           const { status, body } = await patchEstado(id, nuevo);
           if (!body.ok) throw new Error(body.error || "Error " + status);
-          mergeUsuario(body.usuario);
+          await reloadUsuarios();
           toast(nuevo ? "Cuenta activada" : "Cuenta suspendida");
         } catch (e) {
           toast(e.message || "Error", true);
@@ -323,11 +350,10 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
 
   async function load(){
     try {
-      const res = await fetch("/api/admin/usuarios", { credentials: "same-origin" });
-      const data = await res.json();
-      if (!data.ok) throw new Error(data.error || "Error " + res.status);
-      usuarios = data.usuarios || [];
-      applyFilters();
+      $loading.hidden = false;
+      $loading.textContent = "Cargando usuarios…";
+      await reloadUsuarios();
+      $loading.hidden = true;
     } catch (e) {
       $loading.textContent = "Error: " + (e.message || "no se pudo cargar");
       toast(e.message, true);

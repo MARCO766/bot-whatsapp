@@ -32,7 +32,7 @@ function headers(extra = {}) {
 function mapUsuarioRow(row) {
   const plan = normalizarPlanUsuario(row);
   return {
-    id: row.id,
+    id: row.id != null ? String(row.id) : "",
     nombre: row.nombre ?? "",
     email: row.email ?? "",
     plan: plan.plan,
@@ -46,10 +46,22 @@ function mapUsuarioRow(row) {
 }
 
 function parseFechaVencimiento(value) {
-  if (value === null || value === undefined || value === "") return null;
+  if (value === null || value === undefined || value === "") {
+    return { value: null };
+  }
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return { error: "fecha_vencimiento inválida" };
   return { value: d.toISOString() };
+}
+
+function normalizarUsuarioId(id) {
+  return String(id ?? "").trim();
+}
+
+function filtroIdEq(id) {
+  const uid = normalizarUsuarioId(id);
+  if (!uid) return null;
+  return `id=eq.${encodeURIComponent(uid)}`;
 }
 
 async function listarUsuarios() {
@@ -61,8 +73,11 @@ async function listarUsuarios() {
 }
 
 async function fetchUsuarioPorId(id) {
+  const idFilter = filtroIdEq(id);
+  if (!idFilter) return null;
+
   const res = await axios.get(
-    `${SUPABASE_URL}/rest/v1/crm_usuarios?id=eq.${encodeURIComponent(id)}&select=${SELECT_USUARIO_ADMIN}`,
+    `${SUPABASE_URL}/rest/v1/crm_usuarios?${idFilter}&select=${SELECT_USUARIO_ADMIN}`,
     { headers: headers() }
   );
   const row = res.data?.[0];
@@ -70,9 +85,15 @@ async function fetchUsuarioPorId(id) {
 }
 
 async function actualizarPlanUsuario(id, body) {
+  const usuarioId = normalizarUsuarioId(id);
   const plan = String(body?.plan || "").trim().toLowerCase();
   const estado_plan = String(body?.estado_plan || "").trim().toLowerCase();
 
+  console.log("[ADMIN_PLAN_UPDATE] start", { id: usuarioId, plan, estado_plan });
+
+  if (!usuarioId) {
+    return { ok: false, status: 400, error: "id de usuario inválido" };
+  }
   if (!PLANES_VALIDOS.has(plan)) {
     return { ok: false, status: 400, error: "plan inválido" };
   }
@@ -83,6 +104,11 @@ async function actualizarPlanUsuario(id, body) {
   const fechaParsed = parseFechaVencimiento(body?.fecha_vencimiento);
   if (fechaParsed?.error) {
     return { ok: false, status: 400, error: fechaParsed.error };
+  }
+
+  const idFilter = filtroIdEq(usuarioId);
+  if (!idFilter) {
+    return { ok: false, status: 400, error: "id de usuario inválido" };
   }
 
   const limites = LIMITES_POR_PLAN[plan];
@@ -96,17 +122,56 @@ async function actualizarPlanUsuario(id, body) {
     updated_plan_at: new Date().toISOString(),
   };
 
-  await axios.patch(
-    `${SUPABASE_URL}/rest/v1/crm_usuarios?id=eq.${encodeURIComponent(id)}`,
-    payload,
-    { headers: headers({ "Content-Type": "application/json", Prefer: "return=minimal" }) }
-  );
+  try {
+    const patchRes = await axios.patch(
+      `${SUPABASE_URL}/rest/v1/crm_usuarios?${idFilter}`,
+      payload,
+      {
+        headers: headers({
+          "Content-Type": "application/json",
+          Prefer: "return=representation",
+        }),
+      }
+    );
 
-  const usuario = await fetchUsuarioPorId(id);
-  if (!usuario) {
-    return { ok: false, status: 404, error: "Usuario no encontrado" };
+    const rows = Array.isArray(patchRes.data) ? patchRes.data : patchRes.data ? [patchRes.data] : [];
+    if (rows.length === 0) {
+      console.log("[ADMIN_PLAN_UPDATE] error", {
+        message: "PATCH no actualizó ninguna fila en crm_usuarios",
+        id: usuarioId,
+      });
+      return { ok: false, status: 404, error: "Usuario no encontrado o sin cambios en base de datos" };
+    }
+
+    const row = rows[0];
+    const usuario = mapUsuarioRow(row);
+
+    if (usuario.plan !== plan) {
+      console.log("[ADMIN_PLAN_UPDATE] error", {
+        message: "plan en respuesta no coincide con el solicitado",
+        id: usuarioId,
+        esperado: plan,
+        recibido: usuario.plan,
+      });
+      return { ok: false, status: 500, error: "El plan no se guardó correctamente en Supabase" };
+    }
+
+    console.log("[ADMIN_PLAN_UPDATE] updated", {
+      id: usuario.id,
+      plan: usuario.plan,
+      max_whatsapp: usuario.max_whatsapp,
+      max_contactos: usuario.max_contactos,
+      max_flujos: usuario.max_flujos,
+    });
+
+    return { ok: true, usuario };
+  } catch (error) {
+    console.log("[ADMIN_PLAN_UPDATE] error", {
+      message: error.response?.data?.message || error.response?.data?.hint || error.message,
+      id: usuarioId,
+    });
+    throw error;
   }
-  return { ok: true, usuario };
 }
 
 async function actualizarEstadoUsuario(id, activo) {
@@ -114,17 +179,29 @@ async function actualizarEstadoUsuario(id, activo) {
     return { ok: false, status: 400, error: "activo debe ser true o false" };
   }
 
-  await axios.patch(
-    `${SUPABASE_URL}/rest/v1/crm_usuarios?id=eq.${encodeURIComponent(id)}`,
+  const usuarioId = normalizarUsuarioId(id);
+  const idFilter = filtroIdEq(usuarioId);
+  if (!idFilter) {
+    return { ok: false, status: 400, error: "id de usuario inválido" };
+  }
+
+  const patchRes = await axios.patch(
+    `${SUPABASE_URL}/rest/v1/crm_usuarios?${idFilter}`,
     { activo },
-    { headers: headers({ "Content-Type": "application/json", Prefer: "return=minimal" }) }
+    {
+      headers: headers({
+        "Content-Type": "application/json",
+        Prefer: "return=representation",
+      }),
+    }
   );
 
-  const usuario = await fetchUsuarioPorId(id);
-  if (!usuario) {
+  const rows = Array.isArray(patchRes.data) ? patchRes.data : patchRes.data ? [patchRes.data] : [];
+  if (rows.length === 0) {
     return { ok: false, status: 404, error: "Usuario no encontrado" };
   }
-  return { ok: true, usuario };
+
+  return { ok: true, usuario: mapUsuarioRow(rows[0]) };
 }
 
 module.exports = {

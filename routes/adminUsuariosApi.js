@@ -25,7 +25,8 @@ router.patch("/api/admin/usuarios/:id/plan", protegerAdmin, async (req, res) => 
     }
     res.json({ ok: true, usuario: result.usuario });
   } catch (error) {
-    console.log("[adminUsuariosApi] PATCH plan:", error.response?.data || error.message);
+    const msg = error.response?.data?.message || error.message;
+    console.log("[ADMIN_PLAN_UPDATE] error", { message: msg });
     res.status(500).json({ ok: false, error: "No se pudo actualizar el plan" });
   }
 });
