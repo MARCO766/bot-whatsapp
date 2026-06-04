@@ -77,9 +77,9 @@ function getTransporter() {
     port,
     secure,
     auth: { user, pass },
-    connectionTimeout: 10000,
-    greetingTimeout: 10000,
-    socketTimeout: 15000,
+    connectionTimeout: 5000,
+    greetingTimeout: 5000,
+    socketTimeout: 5000,
   });
 
   return transporter;
@@ -120,6 +120,11 @@ async function sendEmail({ to, subject, text, html }) {
   const mailer = getTransporter();
 
   try {
+    console.log("[SMTP_NETWORK]", {
+      host,
+      port,
+      secure,
+    });
     console.log("[SMTP_STEP] verify_start");
     await mailer.verify();
     console.log("[SMTP_STEP] verify_ok");
@@ -138,7 +143,10 @@ async function sendEmail({ to, subject, text, html }) {
     console.log("[SMTP_STEP] error", {
       message: error.message,
       code: error.code,
-      response: error.response,
+      errno: error.errno,
+      syscall: error.syscall,
+      address: error.address,
+      port: error.port,
     });
     throw error;
   }
