@@ -34,15 +34,25 @@ const PRICING_EXTRA_STYLES = `
   transform:translateY(-2px);
 }
 .mb-pricing__card--popular{
-  border-color:rgba(167,139,250,.45);
-  box-shadow:0 0 48px rgba(167,139,250,.12),0 0 24px rgba(57,255,20,.06);
+  border-color:rgba(167,139,250,.55);
+  box-shadow:0 0 64px rgba(167,139,250,.22),0 0 36px rgba(57,255,20,.1);
+  transform:scale(1.02);
 }
+@media(max-width:768px){.mb-pricing__card--popular{transform:none}}
 .mb-pricing__badge{
   position:absolute;top:-11px;left:50%;transform:translateX(-50%);
   padding:5px 14px;border-radius:999px;
-  background:linear-gradient(135deg,#a78bfa,#22d3ee);
-  color:#060a10;font-size:.7rem;font-weight:700;letter-spacing:.04em;
-  white-space:nowrap;
+  background:linear-gradient(135deg,#a78bfa,#39ff14);
+  color:#060a10;font-size:.65rem;font-weight:800;letter-spacing:.08em;
+  white-space:nowrap;box-shadow:0 0 20px rgba(167,139,250,.4);
+}
+.mb-pricing__btn--contact{
+  background:rgba(34,211,238,.1);color:#67e8f9;
+  border:1px solid rgba(34,211,238,.35);
+}
+.mb-pricing__btn--contact:hover{
+  background:rgba(34,211,238,.18);box-shadow:0 0 24px rgba(34,211,238,.15);
+  transform:translateY(-1px);
 }
 .mb-pricing__name{
   margin:0 0 6px;font-size:1.35rem;font-weight:700;text-transform:uppercase;
@@ -186,7 +196,7 @@ const PRICING_PLANS = [
   {
     id: "agency",
     name: "Agency",
-    price: "Personalizado",
+    price: "Contactar ventas",
     priceSub: "",
     popular: false,
     features: [
@@ -197,8 +207,10 @@ const PRICING_PLANS = [
       "Uso para agencias",
       "Soporte avanzado",
     ],
-    cta: "Contactar · Próximamente",
-    soon: true,
+    cta: "Contactar ventas",
+    href: "mailto:ventas@macbot.app?subject=Plan%20Agency%20MacBot",
+    soon: false,
+    contact: true,
   },
 ];
 
@@ -264,7 +276,7 @@ function renderPlanCards() {
   return PRICING_PLANS.map((plan) => {
     const popularClass = plan.popular ? " mb-pricing__card--popular" : "";
     const badge = plan.popular
-      ? '<span class="mb-pricing__badge">Más popular</span>'
+      ? '<span class="mb-pricing__badge">MÁS POPULAR</span>'
       : "";
     const priceSub = plan.priceSub
       ? `<small>${escapeHtml(plan.priceSub)}</small>`
@@ -272,7 +284,9 @@ function renderPlanCards() {
     const list = plan.features
       .map((f) => `<li>${escapeHtml(f)}</li>`)
       .join("");
-    const btnClass = plan.soon ? "mb-pricing__btn--soon" : "mb-pricing__btn--primary";
+    let btnClass = "mb-pricing__btn--primary";
+    if (plan.soon) btnClass = "mb-pricing__btn--soon";
+    else if (plan.contact) btnClass = "mb-pricing__btn--contact";
     const btn = plan.soon
       ? `<span class="mb-pricing__btn ${btnClass}">${escapeHtml(plan.cta)}</span>`
       : `<a href="${escapeHtml(plan.href)}" class="mb-pricing__btn ${btnClass}">${escapeHtml(plan.cta)}</a>`;

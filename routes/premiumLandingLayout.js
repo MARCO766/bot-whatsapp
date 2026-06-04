@@ -38,7 +38,41 @@ body.mb-premium{
 .mb-premium__code--2{top:28%;right:6%;animation-delay:-3s;color:rgba(34,211,238,.15)}
 .mb-premium__code--3{bottom:35%;left:8%;animation-delay:-6s}
 .mb-premium__code--4{bottom:18%;right:10%;animation-delay:-9s;color:rgba(167,139,250,.14)}
+.mb-premium__particles{
+  position:absolute;inset:0;overflow:hidden;pointer-events:none;
+}
+.mb-premium__particle{
+  position:absolute;width:3px;height:3px;border-radius:50%;
+  background:rgba(57,255,20,.35);
+  box-shadow:0 0 8px rgba(57,255,20,.4);
+  animation:mb-prem-particle 14s ease-in-out infinite;
+  animation-delay:calc(var(--d,0) * -.9s);
+  opacity:.5;
+}
+.mb-premium__particle:nth-child(1){left:8%;top:18%}
+.mb-premium__particle:nth-child(2){left:22%;top:62%;background:rgba(34,211,238,.4)}
+.mb-premium__particle:nth-child(3){left:45%;top:12%;width:2px;height:2px}
+.mb-premium__particle:nth-child(4){left:68%;top:44%}
+.mb-premium__particle:nth-child(5){left:82%;top:22%;background:rgba(167,139,250,.45)}
+.mb-premium__particle:nth-child(6){left:15%;top:78%}
+.mb-premium__particle:nth-child(7){left:55%;top:72%;background:rgba(34,211,238,.35)}
+.mb-premium__particle:nth-child(8){left:90%;top:58%}
+.mb-premium__particle:nth-child(9){left:35%;top:38%;opacity:.35}
+.mb-premium__particle:nth-child(10){left:72%;top:82%}
+.mb-premium__particle:nth-child(11){left:5%;top:48%}
+.mb-premium__particle:nth-child(12){left:58%;top:28%}
+.mb-premium__particle:nth-child(13){left:38%;top:88%;background:rgba(57,255,20,.25)}
+.mb-premium__particle:nth-child(14){left:92%;top:35%}
 .mb-premium__wrap{position:relative;z-index:1}
+.mb-premium__reveal{
+  opacity:0;transform:translateY(28px);
+  transition:opacity .65s cubic-bezier(.22,1,.36,1),transform .65s cubic-bezier(.22,1,.36,1);
+}
+.mb-premium__reveal.is-visible{opacity:1;transform:none}
+@media(prefers-reduced-motion:reduce){
+  .mb-premium__reveal{opacity:1;transform:none;transition:none}
+  .mb-premium__particle,.mb-premium__flow-spark,.mb-premium__metric-value{animation:none!important}
+}
 
 /* Navbar */
 .mb-premium__nav{
@@ -101,11 +135,8 @@ body.mb-premium{
 
 /* Hero */
 .mb-premium__hero{
-  display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:center;
-  max-width:1200px;margin:0 auto;padding:64px 24px 80px;
-}
-@media(max-width:960px){
-  .mb-premium__hero{grid-template-columns:1fr;padding:48px 20px 56px}
+  display:flex;flex-direction:column;align-items:center;text-align:center;
+  max-width:920px;margin:0 auto;padding:72px 24px 40px;
 }
 .mb-premium__hero-badge{
   display:inline-flex;align-items:center;gap:8px;
@@ -116,18 +147,37 @@ body.mb-premium{
   margin-bottom:20px;
 }
 .mb-premium__hero-title{
-  margin:0 0 18px;font-size:clamp(1.75rem,4vw,2.65rem);
-  font-weight:700;letter-spacing:-.03em;line-height:1.15;color:#f8fafc;
+  margin:0 0 18px;font-size:clamp(1.85rem,4.5vw,2.85rem);
+  font-weight:700;letter-spacing:-.03em;line-height:1.12;color:#f8fafc;
 }
 .mb-premium__hero-title span{
+  display:block;margin-top:.15em;
   background:linear-gradient(135deg,#39ff14 0%,#22d3ee 50%,#a78bfa 100%);
   -webkit-background-clip:text;-webkit-text-fill-color:transparent;
   background-clip:text;
 }
 .mb-premium__hero-sub{
-  margin:0 0 28px;font-size:1.05rem;line-height:1.65;color:#94a3b8;max-width:520px;
+  margin:0 auto 24px;font-size:1.0625rem;line-height:1.7;color:#94a3b8;max-width:640px;
 }
-.mb-premium__hero-cta{display:flex;flex-wrap:wrap;gap:12px}
+.mb-premium__hero-chips{
+  display:flex;flex-wrap:wrap;gap:10px;justify-content:center;
+  margin:0 auto 32px;max-width:720px;
+}
+.mb-premium__chip{
+  padding:8px 14px;border-radius:999px;
+  border:1px solid rgba(255,255,255,.08);
+  background:rgba(15,23,42,.55);
+  font-size:.78rem;font-weight:500;color:#cbd5e1;
+  backdrop-filter:blur(8px);
+  transition:border-color .2s,box-shadow .2s,transform .2s;
+}
+.mb-premium__chip:hover{
+  border-color:rgba(57,255,20,.28);
+  box-shadow:0 0 16px rgba(57,255,20,.08);
+  transform:translateY(-1px);
+}
+.mb-premium__chip strong{color:#86efac;font-weight:600;margin-right:4px}
+.mb-premium__hero-cta{display:flex;flex-wrap:wrap;gap:12px;justify-content:center}
 .mb-premium__btn-lg{
   padding:14px 24px;border-radius:12px;font-size:1rem;font-weight:600;
   font-family:inherit;text-decoration:none;cursor:pointer;
@@ -146,16 +196,127 @@ body.mb-premium{
 }
 .mb-premium__btn-lg--outline:hover{background:rgba(34,211,238,.12)}
 
-/* Flow mockup */
-.mb-premium__mockup{
-  position:relative;padding:24px;border-radius:20px;
+/* Flow pipeline */
+.mb-premium__flow-section{padding-top:24px;padding-bottom:72px}
+.mb-premium__flow-grid{
+  display:grid;grid-template-columns:1fr minmax(220px,280px);gap:40px;align-items:center;
+  max-width:1100px;margin:0 auto;
+}
+@media(max-width:900px){
+  .mb-premium__flow-grid{grid-template-columns:1fr;gap:32px}
+}
+.mb-premium__pipeline{
+  position:relative;padding:32px 28px;border-radius:24px;
+  border:1px solid rgba(57,255,20,.15);
+  background:rgba(15,23,42,.55);
+  backdrop-filter:blur(16px);
+  box-shadow:0 24px 64px rgba(0,0,0,.4),0 0 60px rgba(57,255,20,.06);
+}
+.mb-premium__pipeline::before{
+  content:"";position:absolute;inset:-1px;border-radius:24px;
+  background:linear-gradient(160deg,rgba(57,255,20,.2),transparent 40%,rgba(34,211,238,.15));
+  pointer-events:none;opacity:.6;z-index:0;
+}
+.mb-premium__pipeline-inner{position:relative;z-index:1;display:flex;flex-direction:column;align-items:stretch}
+.mb-premium__flow-node{
+  display:flex;align-items:center;gap:14px;padding:16px 18px;border-radius:14px;
+  border:1px solid rgba(255,255,255,.1);
+  background:rgba(6,10,16,.65);
+  box-shadow:0 4px 20px rgba(0,0,0,.25);
+  transition:border-color .25s,box-shadow .25s,transform .25s;
+}
+.mb-premium__flow-node:hover{
+  border-color:rgba(57,255,20,.35);
+  box-shadow:0 0 28px rgba(57,255,20,.12);
+  transform:translateX(4px);
+}
+.mb-premium__flow-node-icon{
+  width:42px;height:42px;border-radius:11px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;font-size:1.1rem;
+  border:1px solid rgba(255,255,255,.1);
+}
+.mb-premium__flow-node--wa .mb-premium__flow-node-icon{background:rgba(57,255,20,.12);border-color:rgba(57,255,20,.3)}
+.mb-premium__flow-node--ia .mb-premium__flow-node-icon{background:rgba(34,211,238,.1);border-color:rgba(34,211,238,.3)}
+.mb-premium__flow-node--crm .mb-premium__flow-node-icon{background:rgba(167,139,250,.1);border-color:rgba(167,139,250,.3)}
+.mb-premium__flow-node--pay .mb-premium__flow-node-icon{background:rgba(251,191,36,.08);border-color:rgba(251,191,36,.35)}
+.mb-premium__flow-node--sale .mb-premium__flow-node-icon{background:rgba(57,255,20,.18);border-color:rgba(57,255,20,.5);box-shadow:0 0 20px rgba(57,255,20,.15)}
+.mb-premium__flow-node-label{font-size:1rem;font-weight:600;color:#f1f5f9}
+.mb-premium__flow-node-sub{font-size:.7rem;color:#64748b;margin-top:2px}
+.mb-premium__flow-wire{
+  position:relative;height:40px;margin:0 auto;width:4px;
+  background:linear-gradient(180deg,rgba(57,255,20,.15),rgba(34,211,238,.25),rgba(57,255,20,.15));
+  border-radius:4px;overflow:hidden;
+}
+.mb-premium__flow-spark{
+  position:absolute;left:0;right:0;top:-20%;height:40%;
+  background:linear-gradient(180deg,transparent,#39ff14,#22d3ee,transparent);
+  filter:blur(2px);
+  animation:mb-prem-spark 2s ease-in-out infinite;
+}
+.mb-premium__flow-arrow{
+  text-align:center;color:rgba(57,255,20,.5);font-size:1.25rem;line-height:1;
+  margin:-4px 0;text-shadow:0 0 12px rgba(57,255,20,.4);
+}
+.mb-premium__flow-aside{display:flex;flex-direction:column;gap:14px}
+.mb-premium__flow-pill{
+  padding:18px 20px;border-radius:14px;
+  border:1px solid rgba(255,255,255,.08);
+  background:rgba(15,23,42,.5);
+  font-size:1.05rem;font-weight:600;color:#e2e8f0;
+  backdrop-filter:blur(10px);
+  transition:border-color .2s,transform .2s,box-shadow .2s;
+}
+.mb-premium__flow-pill:hover{
+  border-color:rgba(34,211,238,.3);
+  transform:translateX(6px);
+  box-shadow:0 8px 24px rgba(34,211,238,.08);
+}
+.mb-premium__flow-pill span{
+  display:inline-block;margin-right:8px;
+  background:linear-gradient(135deg,#39ff14,#22d3ee);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  background-clip:text;
+}
+/* Metrics */
+.mb-premium__metrics-grid{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:16px;
+}
+.mb-premium__metric{
+  padding:24px 18px;border-radius:16px;text-align:center;
   border:1px solid rgba(255,255,255,.08);
   background:rgba(15,23,42,.5);
   backdrop-filter:blur(12px);
-  box-shadow:0 24px 60px rgba(0,0,0,.45),0 0 0 1px rgba(57,255,20,.04) inset;
-  min-height:280px;
+  transition:border-color .25s,transform .25s,box-shadow .25s;
 }
-.mb-premium__mockup svg{width:100%;height:auto;display:block}
+.mb-premium__metric:hover{
+  border-color:rgba(57,255,20,.22);
+  transform:translateY(-4px);
+  box-shadow:0 12px 32px rgba(0,0,0,.28),0 0 24px rgba(57,255,20,.06);
+}
+.mb-premium__metric-icon{font-size:1.75rem;margin-bottom:10px;display:block}
+.mb-premium__metric-label{
+  font-size:.75rem;color:#64748b;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;
+}
+.mb-premium__metric-value{
+  font-size:1.35rem;font-weight:700;color:#f8fafc;line-height:1.2;
+}
+.mb-premium__metric-value--gradient{
+  background:linear-gradient(135deg,#39ff14,#22d3ee);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  background-clip:text;
+}
+/* Final CTA */
+.mb-premium__final-cta{
+  max-width:800px;margin:0 auto 56px;padding:48px 32px;text-align:center;
+  border-radius:24px;
+  border:1px solid rgba(57,255,20,.2);
+  background:linear-gradient(145deg,rgba(57,255,20,.08),rgba(15,23,42,.8) 45%,rgba(34,211,238,.06));
+  box-shadow:0 24px 60px rgba(0,0,0,.35),0 0 48px rgba(57,255,20,.08);
+  backdrop-filter:blur(16px);
+}
+.mb-premium__final-cta h2{margin:0 0 12px;font-size:clamp(1.5rem,3vw,2rem);font-weight:700}
+.mb-premium__final-cta p{margin:0 auto 28px;max-width:480px;color:#94a3b8;line-height:1.6}
+.mb-premium__final-cta-actions{display:flex;flex-wrap:wrap;gap:12px;justify-content:center}
 .mb-premium__node-pulse{animation:mb-prem-pulse 2.5s ease-in-out infinite}
 .mb-premium__line-glow{stroke-dasharray:8 6;animation:mb-prem-dash 1.2s linear infinite}
 
@@ -210,6 +371,24 @@ body.mb-premium{
   border-color:rgba(57,255,20,.35);
   box-shadow:0 0 40px rgba(57,255,20,.08);
 }
+.mb-premium__plan--popular{
+  position:relative;
+  border-color:rgba(167,139,250,.5);
+  box-shadow:0 0 56px rgba(167,139,250,.18),0 0 32px rgba(57,255,20,.12),inset 0 0 0 1px rgba(57,255,20,.08);
+  transform:scale(1.02);
+  z-index:1;
+}
+@media(max-width:768px){.mb-premium__plan--popular{transform:none}}
+.mb-premium__plan-badge{
+  position:absolute;top:-12px;left:50%;transform:translateX(-50%);
+  padding:5px 14px;border-radius:999px;
+  background:linear-gradient(135deg,#a78bfa,#39ff14);
+  color:#060a10;font-size:.65rem;font-weight:800;letter-spacing:.08em;
+  white-space:nowrap;box-shadow:0 0 20px rgba(167,139,250,.4);
+}
+.mb-premium__plan-price{
+  margin:0 0 12px;font-size:1.125rem;font-weight:600;color:#22d3ee;
+}
 .mb-premium__plan-name{font-size:1.25rem;font-weight:700;margin:0 0 4px;text-transform:capitalize}
 .mb-premium__plan-tag{font-size:.75rem;color:#64748b;margin:0 0 18px}
 .mb-premium__plan-list{
@@ -236,6 +415,14 @@ body.mb-premium{
 .mb-premium__plan-btn--soon{
   background:rgba(255,255,255,.06);color:#64748b;border:1px solid rgba(255,255,255,.1);
   cursor:not-allowed;opacity:.85;
+}
+.mb-premium__plan-btn--contact{
+  background:rgba(34,211,238,.1);color:#67e8f9;
+  border:1px solid rgba(34,211,238,.35);
+}
+.mb-premium__plan-btn--contact:hover{
+  background:rgba(34,211,238,.18);box-shadow:0 0 24px rgba(34,211,238,.15);
+  transform:translateY(-1px);
 }
 
 /* Auth panel (login / register) */
@@ -303,6 +490,16 @@ body.mb-premium{
 @keyframes mb-prem-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
 @keyframes mb-prem-pulse{0%,100%{opacity:1}50%{opacity:.75}}
 @keyframes mb-prem-dash{to{stroke-dashoffset:-28}}
+@keyframes mb-prem-particle{
+  0%,100%{transform:translate(0,0) scale(1);opacity:.35}
+  50%{transform:translate(8px,-14px) scale(1.2);opacity:.7}
+}
+@keyframes mb-prem-spark{
+  0%{top:-30%;opacity:0}
+  15%{opacity:1}
+  85%{opacity:1}
+  100%{top:110%;opacity:0}
+}
 `;
 
 function renderMacBotLogo() {
@@ -349,82 +546,111 @@ function renderNavbar({ active = "landing" } = {}) {
 </header>`;
 }
 
-function renderHeroFlowMockup() {
-  return `
-<div class="mb-premium__mockup" aria-hidden="true">
-  <svg viewBox="0 0 420 260" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <defs>
-      <linearGradient id="lineG" x1="0%" y1="0%" x2="100%" y2="0%">
-        <stop offset="0%" stop-color="#39ff14"/><stop offset="50%" stop-color="#22d3ee"/><stop offset="100%" stop-color="#a78bfa"/>
-      </linearGradient>
-      <filter id="glow"><feGaussianBlur stdDeviation="2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-    </defs>
-    <path class="mb-premium__line-glow" d="M95 80 H155" stroke="url(#lineG)" stroke-width="2" filter="url(#glow)"/>
-    <path class="mb-premium__line-glow" d="M195 80 H255" stroke="url(#lineG)" stroke-width="2" filter="url(#glow)" style="animation-delay:.2s"/>
-    <path class="mb-premium__line-glow" d="M295 80 H355" stroke="url(#lineG)" stroke-width="2" filter="url(#glow)" style="animation-delay:.4s"/>
-    <path class="mb-premium__line-glow" d="M70 130 V175 H95" stroke="url(#lineG)" stroke-width="2" opacity=".7"/>
-    <path class="mb-premium__line-glow" d="M350 130 V200 H325" stroke="url(#lineG)" stroke-width="2" opacity=".7"/>
-    <g class="mb-premium__node-pulse" transform="translate(40,52)">
-      <rect width="90" height="56" rx="12" fill="rgba(57,255,20,.12)" stroke="#39ff14" stroke-width="1.2"/>
-      <text x="45" y="24" text-anchor="middle" fill="#86efac" font-size="10" font-family="Inter,sans-serif">WhatsApp</text>
-      <text x="45" y="40" text-anchor="middle" fill="#94a3b8" font-size="8" font-family="Inter,sans-serif">Entrada</text>
-    </g>
-    <g class="mb-premium__node-pulse" transform="translate(140,52)" style="animation-delay:.3s">
-      <rect width="90" height="56" rx="12" fill="rgba(34,211,238,.1)" stroke="#22d3ee" stroke-width="1.2"/>
-      <text x="45" y="24" text-anchor="middle" fill="#67e8f9" font-size="10" font-family="Inter,sans-serif">IA</text>
-      <text x="45" y="40" text-anchor="middle" fill="#94a3b8" font-size="8" font-family="Inter,sans-serif">Agente</text>
-    </g>
-    <g class="mb-premium__node-pulse" transform="translate(240,52)" style="animation-delay:.6s">
-      <rect width="90" height="56" rx="12" fill="rgba(167,139,250,.1)" stroke="#a78bfa" stroke-width="1.2"/>
-      <text x="45" y="24" text-anchor="middle" fill="#c4b5fd" font-size="10" font-family="Inter,sans-serif">Seguimiento</text>
-      <text x="45" y="40" text-anchor="middle" fill="#94a3b8" font-size="8" font-family="Inter,sans-serif">CRM</text>
-    </g>
-    <g transform="translate(40,168)">
-      <rect width="90" height="56" rx="12" fill="rgba(251,191,36,.08)" stroke="#fbbf24" stroke-width="1.2"/>
-      <text x="45" y="24" text-anchor="middle" fill="#fde68a" font-size="10" font-family="Inter,sans-serif">Pago</text>
-      <text x="45" y="40" text-anchor="middle" fill="#94a3b8" font-size="8" font-family="Inter,sans-serif">Lector</text>
-    </g>
-    <g class="mb-premium__node-pulse" transform="translate(290,168)" style="animation-delay:.9s">
-      <rect width="90" height="56" rx="12" fill="rgba(57,255,20,.15)" stroke="#39ff14" stroke-width="1.5"/>
-      <text x="45" y="24" text-anchor="middle" fill="#39ff14" font-size="10" font-weight="600" font-family="Inter,sans-serif">Venta</text>
-      <text x="45" y="40" text-anchor="middle" fill="#94a3b8" font-size="8" font-family="Inter,sans-serif">Conversión</text>
-    </g>
-  </svg>
-</div>`;
+const HERO_CHIPS = [
+  "IA integrada",
+  "CRM WhatsApp",
+  "Remarketing 24h",
+  "Seguimientos automáticos",
+  "Lector de pagos",
+  "Multi WhatsApp",
+];
+
+const FLOW_STEPS = [
+  { mod: "wa", icon: "📱", label: "WhatsApp", sub: "Entrada de conversaciones" },
+  { mod: "ia", icon: "🤖", label: "Agente IA", sub: "Respuesta inteligente" },
+  { mod: "crm", icon: "🔄", label: "Seguimiento CRM", sub: "Recordatorios y cierres" },
+  { mod: "pay", icon: "💰", label: "Lector de pagos", sub: "Validación automática" },
+  { mod: "sale", icon: "📈", label: "Conversión", sub: "Venta cerrada" },
+];
+
+const FLOW_PILLS = ["Automatización", "IA", "CRM", "Ventas"];
+
+function renderParticles() {
+  const dots = Array.from({ length: 14 }, (_, i) => `<span class="mb-premium__particle" style="--d:${i}"></span>`).join("");
+  return `<div class="mb-premium__particles" aria-hidden="true">${dots}</div>`;
 }
 
 function renderHeroSection() {
+  const chips = HERO_CHIPS.map(
+    (c) => `<span class="mb-premium__chip"><strong>✓</strong>${escapeHtml(c)}</span>`
+  ).join("");
+
   return `
-<section class="mb-premium__hero">
-  <div>
-    <div class="mb-premium__hero-badge">
-      <span>●</span> WhatsApp CRM + IA + Flujos visuales
-    </div>
-    <h1 class="mb-premium__hero-title">
-      Automatiza tus ventas por WhatsApp con <span>IA y flujos visuales</span>
-    </h1>
-    <p class="mb-premium__hero-sub">
-      MacBot combina CRM, WhatsApp API, inteligencia artificial, remarketing, lector de pagos y embudos visuales para vender automáticamente.
-    </p>
-    <div class="mb-premium__hero-cta">
-      <a href="/register" class="mb-premium__btn-lg mb-premium__btn-lg--neon">Crear cuenta gratis</a>
-      <a href="/pricing" class="mb-premium__btn-lg mb-premium__btn-lg--outline">Ver planes</a>
-      <a href="#login" class="mb-premium__btn-lg mb-premium__btn-lg--outline">Iniciar sesión</a>
-    </div>
+<section class="mb-premium__hero mb-premium__reveal is-visible">
+  <div class="mb-premium__hero-badge">
+    <span>●</span> Plataforma SaaS para ventas por WhatsApp
   </div>
-  ${renderHeroFlowMockup()}
+  <h1 class="mb-premium__hero-title">
+    Automatiza ventas por WhatsApp con IA,
+    <span>CRM y Flujos Visuales</span>
+  </h1>
+  <p class="mb-premium__hero-sub">
+    MacBot convierte conversaciones en ventas usando inteligencia artificial, seguimiento automático, remarketing, lector de pagos y automatizaciones visuales.
+  </p>
+  <div class="mb-premium__hero-chips">${chips}</div>
+  <div class="mb-premium__hero-cta">
+    <a href="/register" class="mb-premium__btn-lg mb-premium__btn-lg--neon">Crear cuenta gratis</a>
+    <a href="/pricing" class="mb-premium__btn-lg mb-premium__btn-lg--outline">Ver planes</a>
+  </div>
+</section>`;
+}
+
+function renderFlowWire() {
+  return `
+<div class="mb-premium__flow-wire" aria-hidden="true">
+  <span class="mb-premium__flow-spark"></span>
+</div>`;
+}
+
+function renderFlowSection() {
+  const nodes = FLOW_STEPS.map((step, i) => {
+    const wire = i < FLOW_STEPS.length - 1 ? `${renderFlowWire()}<div class="mb-premium__flow-arrow" aria-hidden="true">↓</div>` : "";
+    return `
+    <div class="mb-premium__flow-node mb-premium__flow-node--${step.mod}">
+      <div class="mb-premium__flow-node-icon">${step.icon}</div>
+      <div>
+        <div class="mb-premium__flow-node-label">${escapeHtml(step.label)}</div>
+        <div class="mb-premium__flow-node-sub">${escapeHtml(step.sub)}</div>
+      </div>
+    </div>
+    ${wire}`;
+  }).join("");
+
+  const pills = FLOW_PILLS.map(
+    (p) => `<div class="mb-premium__flow-pill"><span>+</span>${escapeHtml(p)}</div>`
+  ).join("");
+
+  return `
+<section class="mb-premium__section mb-premium__flow-section mb-premium__reveal" id="como-funciona">
+  <h2 class="mb-premium__section-title">Así funciona MacBot</h2>
+  <p class="mb-premium__section-sub">Del primer mensaje al cierre de venta: un embudo visual con IA, CRM y pagos en un solo flujo.</p>
+  <div class="mb-premium__flow-grid">
+    <div class="mb-premium__pipeline">
+      <div class="mb-premium__pipeline-inner">${nodes}</div>
+    </div>
+    <aside class="mb-premium__flow-aside">${pills}</aside>
+  </div>
 </section>`;
 }
 
 const PRODUCT_CARDS = [
-  { icon: "g", emoji: "📱", title: "Bandeja multi-número", desc: "Gestiona varias líneas WhatsApp desde un solo panel." },
-  { icon: "c", emoji: "🔀", title: "Flujos visuales", desc: "Diseña embudos con nodos, condiciones y automatizaciones." },
-  { icon: "p", emoji: "🤖", title: "Agente IA", desc: "Responde, califica leads y deriva conversaciones con IA." },
-  { icon: "g", emoji: "🔁", title: "Remarketing automático", desc: "Reactiva contactos con campañas programadas 24h." },
-  { icon: "c", emoji: "💳", title: "Lector de pagos", desc: "Detecta comprobantes y acelera el cierre de ventas." },
-  { icon: "p", emoji: "📊", title: "Conversión y métricas", desc: "Mide ingresos, embudo y rendimiento por flujo." },
-  { icon: "g", emoji: "📋", title: "Planes con límites", desc: "Escala desde free hasta agency según tu operación." },
-  { icon: "c", emoji: "🔐", title: "Recuperación de contraseña segura", desc: "Restablece acceso sin exponer si el correo existe." },
+  { icon: "g", emoji: "📥", title: "Bandeja WhatsApp", desc: "Gestiona todas tus conversaciones." },
+  { icon: "c", emoji: "🤖", title: "IA Conversacional", desc: "Responde automáticamente a clientes." },
+  { icon: "p", emoji: "🔄", title: "Seguimientos CRM", desc: "Automatiza recordatorios y cierres." },
+  { icon: "g", emoji: "🎯", title: "Remarketing 24h", desc: "Recupera clientes que no compraron." },
+  { icon: "c", emoji: "💰", title: "Lector de pagos", desc: "Valida comprobantes automáticamente." },
+  { icon: "p", emoji: "📈", title: "Conversiones", desc: "Mide ventas y resultados." },
+  { icon: "g", emoji: "🏷", title: "Etiquetas", desc: "Segmenta contactos fácilmente." },
+  { icon: "c", emoji: "🌐", title: "Multi WhatsApp", desc: "Administra varias líneas." },
+];
+
+const METRICS = [
+  { icon: "⚡", label: "Automatizaciones visuales", count: 10, suffix: "+ nodos", text: null },
+  { icon: "🤖", label: "Inteligencia artificial", count: null, suffix: null, text: "Integrada" },
+  { icon: "📱", label: "WhatsApp", count: null, suffix: null, text: "Multi número" },
+  { icon: "📈", label: "Seguimientos", count: null, suffix: null, text: "Automáticos" },
+  { icon: "🎯", label: "Remarketing", count: 24, suffix: " horas", text: null },
+  { icon: "💰", label: "Ventas", count: null, suffix: null, text: "Conversión automática" },
 ];
 
 function renderProductSection() {
@@ -438,31 +664,98 @@ function renderProductSection() {
   ).join("");
 
   return `
-<section class="mb-premium__section" id="producto">
-  <h2 class="mb-premium__section-title">Todo lo que necesitas para vender en WhatsApp</h2>
-  <p class="mb-premium__section-sub">MacBot une conversación, automatización y datos en una plataforma pensada para equipos de ventas.</p>
+<section class="mb-premium__section mb-premium__reveal" id="producto">
+  <h2 class="mb-premium__section-title">Todo lo que incluye MacBot</h2>
+  <p class="mb-premium__section-sub">Herramientas premium para equipos que venden y escalan por WhatsApp.</p>
   <div class="mb-premium__cards">${cards}</div>
 </section>`;
 }
 
+function renderMetricsSection() {
+  const cards = METRICS.map((m) => {
+    const valueHtml = m.count != null
+      ? `<div class="mb-premium__metric-value mb-premium__metric-value--gradient" data-count="${m.count}" data-suffix="${escapeHtml(m.suffix || "")}">0${escapeHtml(m.suffix || "")}</div>`
+      : `<div class="mb-premium__metric-value">${escapeHtml(m.text)}</div>`;
+    return `
+    <article class="mb-premium__metric">
+      <span class="mb-premium__metric-icon">${m.icon}</span>
+      <div class="mb-premium__metric-label">${escapeHtml(m.label)}</div>
+      ${valueHtml}
+    </article>`;
+  }).join("");
+
+  return `
+<section class="mb-premium__section mb-premium__reveal" id="metricas">
+  <h2 class="mb-premium__section-title">MacBot en números</h2>
+  <p class="mb-premium__section-sub">Capacidades clave de la plataforma para automatizar tu operación comercial.</p>
+  <div class="mb-premium__metrics-grid">${cards}</div>
+</section>`;
+}
+
 const PLANS = [
-  { id: "free", featured: true, items: ["1 número WhatsApp", "1 flujo", "100 contactos"], tag: "Ideal para probar", cta: "Empezar gratis", href: "/register", soon: false },
-  { id: "starter", items: ["2 números WhatsApp", "10 flujos", "2.000 contactos"], tag: "Ideal para emprendedores", cta: "Próximamente", soon: true },
-  { id: "pro", items: ["5 números WhatsApp", "20 flujos", "10.000 contactos"], tag: "Ideal para negocios en crecimiento", cta: "Próximamente", soon: true },
-  { id: "agency", items: ["WhatsApp ilimitado", "Flujos ilimitados", "Contactos ilimitados"], tag: "Ideal para agencias", cta: "Próximamente", soon: true },
+  {
+    id: "free",
+    popular: false,
+    price: "",
+    items: ["1 número WhatsApp", "1 flujo", "100 contactos"],
+    tag: "Ideal para probar",
+    cta: "Empezar gratis",
+    href: "/register",
+    soon: false,
+    contact: false,
+  },
+  {
+    id: "starter",
+    popular: false,
+    price: "$9/mes",
+    items: ["2 números WhatsApp", "10 flujos", "2.000 contactos"],
+    tag: "Ideal para emprendedores",
+    cta: "Próximamente",
+    soon: true,
+    contact: false,
+  },
+  {
+    id: "pro",
+    popular: true,
+    price: "$29/mes",
+    items: ["5 números WhatsApp", "20 flujos", "10.000 contactos", "IA avanzada", "Soporte prioritario"],
+    tag: "Ideal para negocios en crecimiento",
+    cta: "Próximamente",
+    soon: true,
+    contact: false,
+  },
+  {
+    id: "agency",
+    popular: false,
+    price: "Contactar ventas",
+    items: ["WhatsApp ilimitado", "Flujos ilimitados", "Contactos ilimitados", "Multi-campañas"],
+    tag: "Ideal para agencias",
+    cta: "Contactar ventas",
+    href: "mailto:ventas@macbot.app?subject=Plan%20Agency%20MacBot",
+    soon: false,
+    contact: true,
+  },
 ];
 
 function renderPlansSection() {
   const plans = PLANS.map((p) => {
-    const btnClass = p.soon ? "mb-premium__plan-btn--soon" : "mb-premium__plan-btn--active";
+    let btnClass = "mb-premium__plan-btn--active";
+    if (p.soon) btnClass = "mb-premium__plan-btn--soon";
+    else if (p.contact) btnClass = "mb-premium__plan-btn--contact";
+
     const btn = p.soon
       ? `<span class="mb-premium__plan-btn ${btnClass}">${escapeHtml(p.cta)}</span>`
       : `<a href="${escapeHtml(p.href)}" class="mb-premium__plan-btn ${btnClass}">${escapeHtml(p.cta)}</a>`;
-    const feat = p.featured ? " mb-premium__plan--featured" : "";
+
+    const feat = p.popular ? " mb-premium__plan--popular" : "";
+    const badge = p.popular ? '<span class="mb-premium__plan-badge">MÁS POPULAR</span>' : "";
+    const priceHtml = p.price ? `<p class="mb-premium__plan-price">${escapeHtml(p.price)}</p>` : "";
     const list = p.items.map((i) => `<li>${escapeHtml(i)}</li>`).join("");
     return `
     <article class="mb-premium__plan${feat}">
+      ${badge}
       <h3 class="mb-premium__plan-name">${escapeHtml(p.id.charAt(0).toUpperCase() + p.id.slice(1))}</h3>
+      ${priceHtml}
       <p class="mb-premium__plan-tag">${escapeHtml(p.tag)}</p>
       <ul class="mb-premium__plan-list">${list}</ul>
       ${btn}
@@ -470,10 +763,24 @@ function renderPlansSection() {
   }).join("");
 
   return `
-<section class="mb-premium__section" id="planes">
+<section class="mb-premium__section mb-premium__reveal" id="planes">
   <h2 class="mb-premium__section-title">Planes MacBot</h2>
   <p class="mb-premium__section-sub">Empieza gratis y escala cuando tu operación lo necesite. <a href="/pricing" style="color:#22d3ee;text-decoration:none">Ver comparativa completa →</a></p>
   <div class="mb-premium__plans">${plans}</div>
+</section>`;
+}
+
+function renderFinalCtaSection() {
+  return `
+<section class="mb-premium__section mb-premium__reveal" style="padding-top:0;padding-bottom:32px">
+  <div class="mb-premium__final-cta">
+    <h2>Empieza gratis hoy</h2>
+    <p>Crea tu cuenta en menos de 1 minuto y conecta tu primer WhatsApp.</p>
+    <div class="mb-premium__final-cta-actions">
+      <a href="/register" class="mb-premium__btn-lg mb-premium__btn-lg--neon">Crear cuenta gratis</a>
+      <a href="/pricing" class="mb-premium__btn-lg mb-premium__btn-lg--outline">Ver planes</a>
+    </div>
+  </div>
 </section>`;
 }
 
@@ -598,6 +905,49 @@ const FORM_SUBMIT_SCRIPT = `
 })();
 </script>`;
 
+const LANDING_EFFECTS_SCRIPT = `
+<script>
+(function(){
+  if(window.matchMedia("(prefers-reduced-motion: reduce)").matches)return;
+  var reveals=document.querySelectorAll(".mb-premium__reveal");
+  if(reveals.length&&"IntersectionObserver"in window){
+    var io=new IntersectionObserver(function(entries){
+      entries.forEach(function(e){
+        if(e.isIntersecting){e.target.classList.add("is-visible");io.unobserve(e.target);}
+      });
+    },{threshold:.12,rootMargin:"0px 0px -40px 0px"});
+    reveals.forEach(function(el){io.observe(el);});
+  }else{reveals.forEach(function(el){el.classList.add("is-visible");});}
+  function animateCount(el){
+    var target=parseInt(el.getAttribute("data-count"),10);
+    var suffix=el.getAttribute("data-suffix")||"";
+    if(isNaN(target))return;
+    var start=performance.now(),dur=1200;
+    function tick(now){
+      var p=Math.min(1,(now-start)/dur);
+      var eased=1-Math.pow(1-p,3);
+      el.textContent=Math.round(target*eased)+suffix;
+      if(p<1)requestAnimationFrame(tick);
+      else el.textContent=target+suffix;
+    }
+    requestAnimationFrame(tick);
+  }
+  var counters=document.querySelectorAll("[data-count]");
+  if(counters.length&&"IntersectionObserver"in window){
+    var cio=new IntersectionObserver(function(entries){
+      entries.forEach(function(e){
+        if(e.isIntersecting&&!e.target.dataset.done){
+          e.target.dataset.done="1";
+          animateCount(e.target);
+          cio.unobserve(e.target);
+        }
+      });
+    },{threshold:.5});
+    counters.forEach(function(el){cio.observe(el);});
+  }
+})();
+</script>`;
+
 const PREMIUM_PASSWORD_TOGGLE = `
 <script>
 (function(){
@@ -635,6 +985,7 @@ function renderPremiumLandingPage({
 <body class="mb-premium">
 <div class="mb-premium__bg" aria-hidden="true">
   <div class="mb-premium__grid"></div>
+  ${renderParticles()}
   <span class="mb-premium__code mb-premium__code--1">flow.trigger("whatsapp")</span>
   <span class="mb-premium__code mb-premium__code--2">ai.reply(context)</span>
   <span class="mb-premium__code mb-premium__code--3">crm.track(conversion)</span>
@@ -645,7 +996,7 @@ function renderPremiumLandingPage({
   ${mainContent}
   <footer class="mb-premium__page-footer">© MacBot CRM · WhatsApp automatizado con IA</footer>
 </div>
-${NAV_SCRIPT}${FORM_SUBMIT_SCRIPT}${PREMIUM_PASSWORD_TOGGLE}${scripts}
+${NAV_SCRIPT}${FORM_SUBMIT_SCRIPT}${PREMIUM_PASSWORD_TOGGLE}${LANDING_EFFECTS_SCRIPT}${scripts}
 </body>
 </html>`;
 }
@@ -658,9 +1009,12 @@ function renderLoginLandingPage(opts = {}) {
 
   const main = `
   ${renderHeroSection()}
+  ${renderFlowSection()}
   ${renderProductSection()}
+  ${renderMetricsSection()}
   ${renderPlansSection()}
-  <section class="mb-premium__section">
+  ${renderFinalCtaSection()}
+  <section class="mb-premium__section mb-premium__reveal">
     ${renderLoginForm({ resetBanner, errorMsg: opts.errorMsg })}
   </section>`;
 
