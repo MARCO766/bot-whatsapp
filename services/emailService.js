@@ -66,11 +66,16 @@ function getTransporter() {
     throw err;
   }
 
+  const secure = getSmtpSecure(port);
+
   transporter = nodemailer.createTransport({
     host,
     port,
-    secure: getSmtpSecure(port),
+    secure,
     auth: { user, pass },
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 15000,
   });
 
   return transporter;
@@ -87,6 +92,23 @@ async function sendEmail({ to, subject, text, html }) {
   }
 
   const from = String(process.env.SMTP_FROM || "").trim();
+  const host = String(process.env.SMTP_HOST || "").trim();
+  const port = Number.isFinite(Number(process.env.SMTP_PORT))
+    ? Number(process.env.SMTP_PORT)
+    : 587;
+  const user = String(process.env.SMTP_USER || "").trim();
+  const pass = String(process.env.SMTP_PASS || "").trim();
+  const secure = getSmtpSecure(port);
+
+  console.log("[SMTP_CONFIG_CHECK]", {
+    host,
+    port,
+    secure,
+    user: Boolean(user),
+    pass: Boolean(pass),
+    from: Boolean(process.env.SMTP_FROM),
+  });
+
   const mailer = getTransporter();
 
   return mailer.sendMail({
