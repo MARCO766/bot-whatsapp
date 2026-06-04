@@ -118,6 +118,9 @@ console.log("✅ Cron interno montado en POST /api/internal/cron/rm24h (seguimie
 const AUTH_BACKEND_PATHS = new Set([
   "/login",
   "/register",
+  "/register/start",
+  "/register/verify",
+  "/register/resend",
   "/pricing",
   "/logout",
   "/forgot-password",

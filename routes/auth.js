@@ -14,13 +14,17 @@ const {
 } = require("./premiumLandingLayout");
 const { renderPricingPage } = require("./pricingPageLayout");
 const { renderLogoutPage } = require("./logoutPageLayout");
-const { DEFAULTS_PLAN } = require("../services/planesService");
 const {
   generarTokenReset,
   validarTokenReset,
   limpiarTokenReset,
 } = require("../services/passwordResetService");
 const { getAppUrl, sendEmail, isPasswordResetEmailConfigured } = require("../services/emailService");
+const {
+  startRegistration,
+  verifyRegistration,
+  resendPin,
+} = require("../services/registerVerificationService");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
@@ -220,96 +224,61 @@ router.get("/register", (req, res) => {
   res.send(renderRegisterPage());
 });
 
-router.post("/register", async (req, res) => {
+router.post("/register/start", async (req, res) => {
+  if (req.session?.usuario) {
+    return res.status(400).json({ ok: false, message: "Ya tienes sesión activa." });
+  }
+
+  const result = await startRegistration(req.body);
+  if (!result.ok) {
+    return res.status(result.status).json({
+      ok: false,
+      errors: result.errors,
+      message: result.errors?._global,
+    });
+  }
+
+  return res.json(result);
+});
+
+router.post("/register/verify", async (req, res) => {
   if (req.session?.usuario) {
     return res.redirect("/");
   }
 
-  const nombre = String(req.body?.nombre || "").trim();
-  const email = normalizeEmail(req.body?.email);
-  const password = String(req.body?.password || "");
-  const passwordConfirm = String(req.body?.password_confirm || "");
-
-  const values = { nombre, email };
-  const errors = {};
-
-  if (!nombre || nombre.length < 2) {
-    errors.nombre = "Ingresa tu nombre (mínimo 2 caracteres).";
-  }
-  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    errors.email = "Correo electrónico no válido.";
-  }
-  if (password.length < 6) {
-    errors.password = "La contraseña debe tener al menos 6 caracteres.";
-  }
-  if (password !== passwordConfirm) {
-    errors.password_confirm = "Las contraseñas no coinciden.";
+  const result = await verifyRegistration(req.body);
+  if (!result.ok) {
+    return res.status(result.status).json({
+      ok: false,
+      message: result.message,
+    });
   }
 
-  if (Object.keys(errors).length > 0) {
-    return res.status(400).send(renderRegisterPage({ errors, values }));
+  const usuario = result.usuario;
+  req.session.usuario = {
+    id: usuario.id,
+    nombre: usuario.nombre,
+    email: usuario.email,
+  };
+
+  return res.json({ ok: true, redirect: "/" });
+});
+
+router.post("/register/resend", async (req, res) => {
+  if (req.session?.usuario) {
+    return res.status(400).json({ ok: false, message: "Ya tienes sesión activa." });
   }
 
-  try {
-    const existente = await axios.get(
-      `${SUPABASE_URL}/rest/v1/crm_usuarios?email=eq.${encodeURIComponent(email)}&select=id`,
-      { headers: supabaseHeaders() }
-    );
-
-    if (existente.data?.length > 0) {
-      errors._global = "Este correo ya está registrado.";
-      return res.status(400).send(renderRegisterPage({ errors, values }));
-    }
-
-    const password_hash = await bcrypt.hash(password, 10);
-
-    const payload = {
-      nombre,
-      email,
-      password_hash,
-      activo: true,
-      plan: DEFAULTS_PLAN.plan,
-      estado_plan: DEFAULTS_PLAN.estado_plan,
-      max_whatsapp: DEFAULTS_PLAN.max_whatsapp,
-      max_contactos: DEFAULTS_PLAN.max_contactos,
-      max_flujos: DEFAULTS_PLAN.max_flujos,
-    };
-
-    const insertRes = await axios.post(
-      `${SUPABASE_URL}/rest/v1/crm_usuarios`,
-      payload,
-      {
-        headers: supabaseHeaders({
-          "Content-Type": "application/json",
-          Prefer: "return=representation",
-        }),
-      }
-    );
-
-    const usuario = insertRes.data?.[0];
-    if (!usuario?.id) {
-      errors._global = "No se pudo crear la cuenta. Intenta de nuevo.";
-      return res.status(500).send(renderRegisterPage({ errors, values }));
-    }
-
-    req.session.usuario = {
-      id: usuario.id,
-      nombre: usuario.nombre,
-      email: usuario.email,
-    };
-
-    console.log(`[register] cuenta creada usuarioId=${usuario.id} plan=free`);
-    return res.redirect("/");
-  } catch (error) {
-    const pgCode = error.response?.data?.code;
-    if (pgCode === "23505" || error.response?.status === 409) {
-      errors._global = "Este correo ya está registrado.";
-      return res.status(400).send(renderRegisterPage({ errors, values }));
-    }
-    console.log("[register] error:", error.response?.data || error.message);
-    errors._global = "No se pudo crear la cuenta. Intenta de nuevo.";
-    return res.status(500).send(renderRegisterPage({ errors, values }));
+  const result = await resendPin(req.body);
+  if (!result.ok) {
+    return res.status(result.status).json({
+      ok: false,
+      message: result.message,
+      cooldownSeconds: result.cooldownSeconds,
+    });
   }
+
+  return res.json({ ok: true, email: result.email });
 });
 
 router.post("/login", async (req, res) => {

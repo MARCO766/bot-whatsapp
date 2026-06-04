@@ -1030,12 +1030,173 @@ function renderLoginForm({ resetBanner = "", errorMsg = "" } = {}) {
 </div>`;
 }
 
+const REGISTER_EXTRA_STYLES = `
+.mb-register__steps{display:flex;gap:8px;justify-content:center;margin:0 0 20px}
+.mb-register__step{flex:1;max-width:140px;text-align:center;font-size:.7rem;color:#64748b;padding:8px 4px;border-radius:8px;border:1px solid rgba(255,255,255,.08)}
+.mb-register__step.is-active{color:#39ff14;border-color:rgba(57,255,20,.35);background:rgba(57,255,20,.06)}
+.mb-register__step.is-done{color:#94a3b8}
+.mb-register__panel[hidden]{display:none!important}
+.mb-register__email-hint{margin:0 0 16px;color:#94a3b8;font-size:.9rem;text-align:center}
+.mb-register__email-hint strong{color:#e2e8f0}
+.mb-register__actions{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-top:12px}
+.mb-register__link-btn{background:none;border:none;color:#39ff14;font-size:.85rem;cursor:pointer;padding:4px 8px;text-decoration:underline}
+.mb-register__link-btn:disabled{opacity:.5;cursor:not-allowed}
+.mb-register__pin-input{letter-spacing:.35em;text-align:center;font-size:1.25rem;font-variant-numeric:tabular-nums}
+`;
+
+const REGISTER_FLOW_SCRIPT = `
+<script>
+(function(){
+  var PASSWORD_REGEX=/^(?=.*[A-Za-z])(?=.*\\d).{8,}$/;
+  var PASSWORD_MSG="La contraseña debe tener mínimo 8 caracteres, una letra y un número.";
+  var step1=document.getElementById("registerStep1");
+  var step2=document.getElementById("registerStep2");
+  var stepInd1=document.getElementById("registerStepInd1");
+  var stepInd2=document.getElementById("registerStepInd2");
+  var form1=document.getElementById("registerForm1");
+  var form2=document.getElementById("registerForm2");
+  var globalErr=document.getElementById("registerGlobalErr");
+  var verifyErr=document.getElementById("registerVerifyErr");
+  var verifyEmailEl=document.getElementById("registerVerifyEmail");
+  var pendingEmail="";
+  var resendBtn=document.getElementById("registerResendBtn");
+  var changeEmailBtn=document.getElementById("registerChangeEmailBtn");
+
+  function showErr(el,msg){
+    if(!el)return;
+    if(msg){el.textContent=msg;el.style.display="block";}
+    else{el.textContent="";el.style.display="none";}
+  }
+  function fieldErr(name,msg){
+    var el=document.getElementById("err-"+name);
+    if(el){el.textContent=msg||"";el.style.display=msg?"block":"none";}
+  }
+  function clearFieldErrs(){
+    ["nombre","email","password","password_confirm"].forEach(function(n){fieldErr(n,"");});
+    showErr(globalErr,"");
+    showErr(verifyErr,"");
+  }
+  function goStep(n,email){
+    if(n===2){
+      step1&&step1.setAttribute("hidden","");
+      step2&&step2.removeAttribute("hidden");
+      stepInd1&&stepInd1.classList.add("is-done");
+      stepInd2&&stepInd2.classList.add("is-active");
+      pendingEmail=email||pendingEmail;
+      if(verifyEmailEl)verifyEmailEl.textContent=pendingEmail;
+    }else{
+      step2&&step2.setAttribute("hidden","");
+      step1&&step1.removeAttribute("hidden");
+      stepInd2&&stepInd2.classList.remove("is-active");
+      stepInd1&&stepInd1.classList.add("is-active");
+      stepInd1&&stepInd1.classList.remove("is-done");
+      showErr(verifyErr,"");
+    }
+  }
+  function validateStep1(){
+    clearFieldErrs();
+    var ok=true;
+    var nombre=(document.getElementById("nombre")||{}).value||"";
+    var email=(document.getElementById("email")||{}).value||"";
+    var password=(document.getElementById("password")||{}).value||"";
+    var confirm=(document.getElementById("password_confirm")||{}).value||"";
+    if(nombre.trim().length<2){fieldErr("nombre","Ingresa tu nombre (mínimo 2 caracteres).");ok=false;}
+    if(!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email.trim())){fieldErr("email","Correo electrónico no válido.");ok=false;}
+    if(!PASSWORD_REGEX.test(password)){fieldErr("password",PASSWORD_MSG);ok=false;}
+    if(password!==confirm){fieldErr("password_confirm","Las contraseñas no coinciden.");ok=false;}
+    return ok?{nombre:nombre.trim(),email:email.trim().toLowerCase(),password:password,confirmPassword:confirm}:null;
+  }
+  async function postJson(url,body){
+    var res=await fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},credentials:"same-origin",body:JSON.stringify(body)});
+    var data={};
+    try{data=await res.json();}catch(e){}
+    return {res:res,data:data};
+  }
+  if(form1){
+    form1.addEventListener("submit",async function(ev){
+      ev.preventDefault();
+      var payload=validateStep1();
+      if(!payload)return;
+      var sub=form1.querySelector(".mb-premium__submit");
+      if(sub){sub.disabled=true;sub.textContent="Enviando código...";}
+      showErr(globalErr,"");
+      try{
+        var out=await postJson("/register/start",payload);
+        if(!out.res.ok){
+          var errs=out.data.errors||{};
+          Object.keys(errs).forEach(function(k){
+            if(k==="_global")showErr(globalErr,errs[k]);
+            else fieldErr(k,errs[k]);
+          });
+          if(!errs._global&&out.data.message)showErr(globalErr,out.data.message);
+          return;
+        }
+        goStep(2,out.data.email);
+      }catch(e){
+        showErr(globalErr,"No se pudo conectar. Intenta de nuevo.");
+      }finally{
+        if(sub){sub.disabled=false;sub.textContent="Crear cuenta gratis";}
+      }
+    });
+  }
+  if(form2){
+    form2.addEventListener("submit",async function(ev){
+      ev.preventDefault();
+      var pin=String((document.getElementById("registerPin")||{}).value||"").replace(/\\D/g,"");
+      if(pin.length!==6){showErr(verifyErr,"Ingresa el código de 6 dígitos.");return;}
+      var sub=form2.querySelector(".mb-premium__submit");
+      if(sub){sub.disabled=true;sub.textContent="Verificando...";}
+      showErr(verifyErr,"");
+      try{
+        var out=await postJson("/register/verify",{email:pendingEmail,pin:pin});
+        if(!out.res.ok){
+          showErr(verifyErr,out.data.message||"No se pudo verificar el código.");
+          return;
+        }
+        window.location.href=out.data.redirect||"/";
+      }catch(e){
+        showErr(verifyErr,"No se pudo conectar. Intenta de nuevo.");
+      }finally{
+        if(sub){sub.disabled=false;sub.textContent="Verificar cuenta";}
+      }
+    });
+  }
+  if(resendBtn){
+    resendBtn.addEventListener("click",async function(){
+      if(!pendingEmail)return;
+      resendBtn.disabled=true;
+      showErr(verifyErr,"");
+      try{
+        var out=await postJson("/register/resend",{email:pendingEmail});
+        if(!out.res.ok){
+          showErr(verifyErr,out.data.message||"No se pudo reenviar.");
+          return;
+        }
+        showErr(verifyErr,"");
+        resendBtn.textContent="Código reenviado";
+        setTimeout(function(){resendBtn.textContent="Reenviar código";},3000);
+      }catch(e){
+        showErr(verifyErr,"No se pudo conectar.");
+      }finally{
+        resendBtn.disabled=false;
+      }
+    });
+  }
+  if(changeEmailBtn){
+    changeEmailBtn.addEventListener("click",function(){goStep(1);});
+  }
+})();
+</script>`;
+
 function renderRegisterForm({ errors = {}, values = {} } = {}) {
   const globalErr = errors._global
-    ? `<p class="mb-premium__msg mb-premium__msg--err">${escapeHtml(errors._global)}</p>`
-    : "";
-  const field = (name, label, type, placeholder, autocomplete) => {
-    const err = errors[name] ? `<span style="color:#fca5a5;font-size:.75rem">${escapeHtml(errors[name])}</span>` : "";
+    ? `<p id="registerGlobalErr" class="mb-premium__msg mb-premium__msg--err" style="display:block">${escapeHtml(errors._global)}</p>`
+    : `<p id="registerGlobalErr" class="mb-premium__msg mb-premium__msg--err" style="display:none"></p>`;
+
+  const field = (name, label, type, placeholder, autocomplete, extraAttrs = "") => {
+    const err = errors[name]
+      ? `<span id="err-${name}" style="display:block;color:#fca5a5;font-size:.75rem">${escapeHtml(errors[name])}</span>`
+      : `<span id="err-${name}" style="display:none;color:#fca5a5;font-size:.75rem"></span>`;
     const val = escapeHtml(values[name] || "");
     const pwdClass = type === "password" ? " mb-premium__input--pwd" : "";
     const toggle =
@@ -1056,7 +1217,7 @@ function renderRegisterForm({ errors = {}, values = {} } = {}) {
       <label class="mb-premium__label" for="${name}">${escapeHtml(label)}</label>
       <div class="mb-premium__input-wrap">
         ${icon}
-        <input class="mb-premium__input${pwdClass}" id="${name}" name="${name}" type="${type}" placeholder="${escapeHtml(placeholder)}" required ${autocomplete ? `autocomplete="${autocomplete}"` : ""} value="${val}">
+        <input class="mb-premium__input${pwdClass}" id="${name}" name="${name}" type="${type}" placeholder="${escapeHtml(placeholder)}" required ${autocomplete ? `autocomplete="${autocomplete}"` : ""} value="${val}" ${extraAttrs}>
         ${toggle}
       </div>
       ${err}
@@ -1065,16 +1226,48 @@ function renderRegisterForm({ errors = {}, values = {} } = {}) {
 
   return `
 <div class="mb-premium__auth">
-  <h2 class="mb-premium__auth-title">Crear cuenta</h2>
-  <p class="mb-premium__auth-sub">Plan Free incluido · Empieza en minutos</p>
-  ${globalErr}
-  <form class="mb-premium__form" method="POST" action="/register">
-    ${field("nombre", "Nombre", "text", "Tu nombre", "name")}
-    ${field("email", "Correo electrónico", "email", "tu@empresa.com", "email")}
-    ${field("password", "Contraseña", "password", "Mínimo 6 caracteres", "new-password")}
-    ${field("password_confirm", "Confirmar contraseña", "password", "Repite tu contraseña", "new-password")}
-    <button type="submit" class="mb-premium__submit">Crear cuenta gratis</button>
-  </form>
+  <div class="mb-register__steps" aria-hidden="true">
+    <div class="mb-register__step is-active" id="registerStepInd1">1 · Crear cuenta</div>
+    <div class="mb-register__step" id="registerStepInd2">2 · Verificar correo</div>
+  </div>
+  <div id="registerStep1" class="mb-register__panel">
+    <h2 class="mb-premium__auth-title">Crear cuenta</h2>
+    <p class="mb-premium__auth-sub">Plan Free incluido · Empieza en minutos</p>
+    ${globalErr}
+    <form id="registerForm1" class="mb-premium__form" novalidate>
+      ${field("nombre", "Nombre", "text", "Tu nombre", "name")}
+      ${field("email", "Correo electrónico", "email", "tu@empresa.com", "email")}
+      ${field(
+        "password",
+        "Contraseña",
+        "password",
+        "Mínimo 8 caracteres, letras y números",
+        "new-password",
+        'minlength="8" pattern="(?=.*[A-Za-z])(?=.*\\d).{8,}"'
+      )}
+      ${field("password_confirm", "Confirmar contraseña", "password", "Repite tu contraseña", "new-password")}
+      <button type="submit" class="mb-premium__submit">Crear cuenta gratis</button>
+    </form>
+  </div>
+  <div id="registerStep2" class="mb-register__panel" hidden>
+    <h2 class="mb-premium__auth-title">Verifica tu correo</h2>
+    <p class="mb-premium__auth-sub">Paso 2 de 2</p>
+    <p class="mb-register__email-hint">Enviamos un código de 6 dígitos a <strong id="registerVerifyEmail"></strong>. Escríbelo para activar tu cuenta.</p>
+    <p id="registerVerifyErr" class="mb-premium__msg mb-premium__msg--err" style="display:none"></p>
+    <form id="registerForm2" class="mb-premium__form" novalidate>
+      <div class="mb-premium__field">
+        <label class="mb-premium__label" for="registerPin">Código de verificación</label>
+        <div class="mb-premium__input-wrap">
+          <input class="mb-premium__input mb-register__pin-input" id="registerPin" name="pin" type="text" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" placeholder="000000" required autocomplete="one-time-code">
+        </div>
+      </div>
+      <button type="submit" class="mb-premium__submit">Verificar cuenta</button>
+      <div class="mb-register__actions">
+        <button type="button" class="mb-register__link-btn" id="registerResendBtn">Reenviar código</button>
+        <button type="button" class="mb-register__link-btn" id="registerChangeEmailBtn">Cambiar correo</button>
+      </div>
+    </form>
+  </div>
   <p class="mb-premium__footer-links">
     ¿Ya tienes cuenta? <a href="/login#login">Iniciar sesión</a>
   </p>
@@ -1242,6 +1435,8 @@ function renderRegisterPage(opts = {}) {
   return renderPremiumLandingPage({
     documentTitle: "Crear cuenta · MacBot CRM",
     mainContent: main,
+    extraStyles: REGISTER_EXTRA_STYLES,
+    scripts: REGISTER_FLOW_SCRIPT,
   });
 }
 
