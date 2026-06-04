@@ -12,6 +12,11 @@ import Metricas from "./Metricas";
 import Activadores from "./Activadores";
 import Etiquetas from "./Etiquetas";
 import { fetchInbox } from "./services/chatService";
+import { useOnboardingEstado } from "./onboarding/useOnboardingEstado";
+import OnboardingWelcome from "./onboarding/OnboardingWelcome";
+
+const NAV_BLOCKED_SIN_WHATSAPP = new Set(["inbox", "flujos", "clientes"]);
+const VISTAS_SIN_ONBOARDING = new Set(["ajustes", "mi-plan"]);
 
 export default function App() {
   const [vista, setVista] = useState(() => localStorage.getItem("macbot_vista") || "panel");
@@ -23,6 +28,7 @@ export default function App() {
   const [activities, setActivities] = useState([]);
   const vistaRef = useRef(vista);
   const { connected } = useSocket() || {};
+  const { needsOnboarding, loading: onboardingLoading } = useOnboardingEstado();
 
   useEffect(() => {
     vistaRef.current = vista;
@@ -127,7 +133,44 @@ export default function App() {
     return menu.find((m) => m.id === id);
   }, [vista, connected, inboxUnread, menu]);
 
+  function openWhatsAppAjustes() {
+    try {
+      localStorage.setItem("macbot_ajustes_seccion", "whatsapp");
+    } catch {
+      /* ignore */
+    }
+    setVista("ajustes");
+  }
+
+  function openMiPlan() {
+    setVista("mi-plan");
+  }
+
+  function handleNavClick(itemId) {
+    if (needsOnboarding && NAV_BLOCKED_SIN_WHATSAPP.has(itemId)) {
+      return;
+    }
+    setVista(itemId);
+  }
+
+  function isNavBlocked(itemId) {
+    return needsOnboarding && NAV_BLOCKED_SIN_WHATSAPP.has(itemId);
+  }
+
+  function showOnboardingScreen() {
+    return needsOnboarding && !VISTAS_SIN_ONBOARDING.has(vista);
+  }
+
   function renderVista() {
+    if (showOnboardingScreen()) {
+      return (
+        <OnboardingWelcome
+          onConnectWhatsApp={openWhatsAppAjustes}
+          onViewPlans={openMiPlan}
+        />
+      );
+    }
+
     if (vista === "panel") return <Panel cambiarVista={setVista} />;
     if (vista === "inbox")
       return <Bandeja onUnreadChange={setInboxUnread} />;
@@ -171,12 +214,19 @@ export default function App() {
         </button>
 
         <nav>
-          {menu.map((item) => (
+          {menu.map((item) => {
+            const blocked = isNavBlocked(item.id);
+            const navTitle = blocked
+              ? "Conecta WhatsApp primero"
+              : item.nombre;
+            return (
             <button
               key={item.id}
-              className={`navBtn ${vista === item.id ? "active" : ""} ${item.color}`}
-              onClick={() => setVista(item.id)}
-              title={item.nombre}
+              type="button"
+              className={`navBtn ${vista === item.id ? "active" : ""} ${item.color} ${blocked ? "navBtn--blocked" : ""}`}
+              onClick={() => handleNavClick(item.id)}
+              title={navTitle}
+              aria-disabled={blocked || undefined}
             >
               <span className="navAura" />
               <span className="navIcon">{item.icono}</span>
@@ -188,7 +238,8 @@ export default function App() {
                 </>
               )}
             </button>
-          ))}
+          );
+          })}
         </nav>
 
         {sidebarOpen && (
@@ -287,8 +338,12 @@ export default function App() {
         )}
 
         <section className="page">
-          <div className="pageAnimation" key={vista}>
-            {renderVista()}
+          <div className="pageAnimation" key={showOnboardingScreen() ? "onboarding" : vista}>
+            {onboardingLoading && !VISTAS_SIN_ONBOARDING.has(vista) ? (
+              <div className="onboardingLoader">Cargando MacBot…</div>
+            ) : (
+              renderVista()
+            )}
           </div>
         </section>
       </main>
@@ -525,6 +580,32 @@ nav {
   color: white;
   transform: translateX(4px);
   box-shadow: 0 18px 38px rgba(0,0,0,.18);
+}
+
+.navBtn--blocked {
+  opacity: .42;
+  cursor: not-allowed;
+}
+
+.navBtn--blocked:hover,
+.navBtn--blocked.active {
+  transform: none;
+  box-shadow: none;
+  color: #94a3b8;
+}
+
+.navBtn--blocked .navAura {
+  opacity: 0 !important;
+}
+
+.onboardingLoader {
+  min-height: 320px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #94a3b8;
+  font-weight: 700;
+  font-size: 14px;
 }
 
 .navIcon {
