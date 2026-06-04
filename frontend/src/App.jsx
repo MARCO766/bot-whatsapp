@@ -267,6 +267,23 @@ export default function App() {
             </div>
           </div>
         )}
+
+        <button
+          type="button"
+          className="logoutBtn"
+          onClick={() => { window.location.href = "/logout"; }}
+          title="Cerrar sesión"
+          aria-label="Cerrar sesión"
+        >
+          <span className="logoutIcon" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <polyline points="16 17 21 12 16 7" />
+              <line x1="21" y1="12" x2="9" y2="12" />
+            </svg>
+          </span>
+          {sidebarOpen && <span className="logoutText">🚪 Cerrar sesión</span>}
+        </button>
       </aside>
 
       <main className="main">
@@ -712,6 +729,75 @@ nav {
   color: #e5e7eb;
 }
 
+.logoutBtn {
+  margin-top: 12px;
+  width: 100%;
+  min-height: 52px;
+  border-radius: 18px;
+  border: 1px solid rgba(239, 68, 68, .28);
+  background:
+    linear-gradient(135deg, rgba(239, 68, 68, .08), rgba(6, 182, 212, .06)),
+    rgba(255, 255, 255, .03);
+  color: #fca5a5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 0 14px;
+  cursor: pointer;
+  font-weight: 800;
+  font-size: 13px;
+  letter-spacing: .02em;
+  transition: .22s ease;
+  box-shadow: inset 0 0 0 1px rgba(34, 211, 238, .08);
+  flex-shrink: 0;
+}
+
+.sidebar.closed .logoutBtn {
+  min-height: 48px;
+  padding: 0;
+}
+
+.logoutBtn:hover {
+  color: #fff;
+  border-color: rgba(239, 68, 68, .55);
+  background:
+    linear-gradient(135deg, rgba(239, 68, 68, .22), rgba(239, 68, 68, .10)),
+    rgba(255, 255, 255, .04);
+  box-shadow:
+    0 0 28px rgba(239, 68, 68, .25),
+    inset 0 0 0 1px rgba(34, 211, 238, .12);
+  transform: translateY(-1px);
+}
+
+.logoutBtn:active {
+  transform: translateY(0);
+}
+
+.logoutIcon {
+  width: 34px;
+  height: 34px;
+  min-width: 34px;
+  border-radius: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(239, 68, 68, .14);
+  color: #f87171;
+  transition: .22s ease;
+}
+
+.logoutBtn:hover .logoutIcon {
+  background: rgba(239, 68, 68, .28);
+  color: #fff;
+  box-shadow: 0 0 16px rgba(239, 68, 68, .35);
+}
+
+.logoutText {
+  flex: 1;
+  text-align: left;
+}
+
 .main {
   position: relative;
   z-index: 2;
@@ -1130,6 +1216,10 @@ nav {
   nav {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
+  }
+
+  .logoutBtn {
+    margin-top: 10px;
   }
 
   .quickStats {

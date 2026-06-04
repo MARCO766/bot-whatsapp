@@ -13,6 +13,7 @@ const {
   renderRegisterPage,
 } = require("./premiumLandingLayout");
 const { renderPricingPage } = require("./pricingPageLayout");
+const { renderLogoutPage } = require("./logoutPageLayout");
 const { DEFAULTS_PLAN } = require("../services/planesService");
 const {
   generarTokenReset,
@@ -352,8 +353,20 @@ router.post("/login", async (req, res) => {
 });
 
 router.get("/logout", (req, res) => {
-  req.session.destroy(() => {
-    res.redirect("/login");
+  const finishLogout = () => {
+    res.clearCookie("connect.sid");
+    res.send(renderLogoutPage());
+  };
+
+  if (!req.session) {
+    return finishLogout();
+  }
+
+  req.session.destroy((err) => {
+    if (err) {
+      console.error("ERROR LOGOUT:", err.message);
+    }
+    finishLogout();
   });
 });
 
