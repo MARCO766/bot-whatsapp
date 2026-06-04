@@ -1049,6 +1049,8 @@ const REGISTER_FLOW_SCRIPT = `
 (function(){
   var PASSWORD_REGEX=/^(?=.*[A-Za-z])(?=.*\\d).{8,}$/;
   var PASSWORD_MSG="La contraseña debe tener mínimo 8 caracteres, una letra y un número.";
+  var BTN_STEP1="Crear cuenta gratis";
+  var BTN_STEP2="Verificar cuenta";
   var step1=document.getElementById("registerStep1");
   var step2=document.getElementById("registerStep2");
   var stepInd1=document.getElementById("registerStepInd1");
@@ -1061,7 +1063,19 @@ const REGISTER_FLOW_SCRIPT = `
   var pendingEmail="";
   var resendBtn=document.getElementById("registerResendBtn");
   var changeEmailBtn=document.getElementById("registerChangeEmailBtn");
+  var alreadySubmittingStep1=false;
+  var alreadySubmittingStep2=false;
 
+  function resetBtn(btn,label){
+    if(!btn)return;
+    btn.disabled=false;
+    btn.textContent=label;
+  }
+  function setLoading(btn,label){
+    if(!btn)return;
+    btn.disabled=true;
+    btn.textContent=label;
+  }
   function showErr(el,msg){
     if(!el)return;
     if(msg){el.textContent=msg;el.style.display="block";}
@@ -1091,6 +1105,9 @@ const REGISTER_FLOW_SCRIPT = `
       stepInd1&&stepInd1.classList.add("is-active");
       stepInd1&&stepInd1.classList.remove("is-done");
       showErr(verifyErr,"");
+      alreadySubmittingStep1=false;
+      var sub1=form1&&form1.querySelector(".mb-premium__submit");
+      resetBtn(sub1,BTN_STEP1);
     }
   }
   function validateStep1(){
@@ -1115,11 +1132,18 @@ const REGISTER_FLOW_SCRIPT = `
   if(form1){
     form1.addEventListener("submit",async function(ev){
       ev.preventDefault();
-      var payload=validateStep1();
-      if(!payload)return;
+      ev.stopPropagation();
+      if(alreadySubmittingStep1)return;
       var sub=form1.querySelector(".mb-premium__submit");
-      if(sub){sub.disabled=true;sub.textContent="Enviando código...";}
+      var payload=validateStep1();
+      if(!payload){
+        resetBtn(sub,BTN_STEP1);
+        return;
+      }
+      alreadySubmittingStep1=true;
+      var advanced=false;
       showErr(globalErr,"");
+      setLoading(sub,"Enviando código...");
       try{
         var out=await postJson("/register/start",payload);
         if(!out.res.ok){
@@ -1131,35 +1155,47 @@ const REGISTER_FLOW_SCRIPT = `
           if(!errs._global&&out.data.message)showErr(globalErr,out.data.message);
           return;
         }
+        advanced=true;
         goStep(2,out.data.email);
       }catch(e){
         showErr(globalErr,"No se pudo conectar. Intenta de nuevo.");
       }finally{
-        if(sub){sub.disabled=false;sub.textContent="Crear cuenta gratis";}
+        alreadySubmittingStep1=false;
+        if(!advanced)resetBtn(sub,BTN_STEP1);
       }
-    });
+    },true);
   }
   if(form2){
     form2.addEventListener("submit",async function(ev){
       ev.preventDefault();
+      ev.stopPropagation();
+      if(alreadySubmittingStep2)return;
       var pin=String((document.getElementById("registerPin")||{}).value||"").replace(/\\D/g,"");
-      if(pin.length!==6){showErr(verifyErr,"Ingresa el código de 6 dígitos.");return;}
       var sub=form2.querySelector(".mb-premium__submit");
-      if(sub){sub.disabled=true;sub.textContent="Verificando...";}
+      if(pin.length!==6){
+        showErr(verifyErr,"Ingresa el código de 6 dígitos.");
+        resetBtn(sub,BTN_STEP2);
+        return;
+      }
+      alreadySubmittingStep2=true;
+      var redirecting=false;
       showErr(verifyErr,"");
+      setLoading(sub,"Verificando...");
       try{
         var out=await postJson("/register/verify",{email:pendingEmail,pin:pin});
         if(!out.res.ok){
           showErr(verifyErr,out.data.message||"No se pudo verificar el código.");
           return;
         }
+        redirecting=true;
         window.location.href=out.data.redirect||"/";
       }catch(e){
         showErr(verifyErr,"No se pudo conectar. Intenta de nuevo.");
       }finally{
-        if(sub){sub.disabled=false;sub.textContent="Verificar cuenta";}
+        alreadySubmittingStep2=false;
+        if(!redirecting)resetBtn(sub,BTN_STEP2);
       }
-    });
+    },true);
   }
   if(resendBtn){
     resendBtn.addEventListener("click",async function(){
@@ -1291,13 +1327,13 @@ const NAV_SCRIPT = `
 const FORM_SUBMIT_SCRIPT = `
 <script>
 (function(){
-  var form=document.querySelector(".mb-premium__form");
-  if(form){
+  document.querySelectorAll(".mb-premium__form").forEach(function(form){
+    if(form.id==="registerForm1"||form.id==="registerForm2")return;
     form.addEventListener("submit",function(){
       var sub=form.querySelector(".mb-premium__submit");
       if(sub&&!sub.disabled){sub.disabled=true;sub.textContent="Procesando...";}
     });
-  }
+  });
 })();
 </script>`;
 
