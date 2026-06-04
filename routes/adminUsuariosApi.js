@@ -63,7 +63,17 @@ router.patch("/api/admin/usuarios/:id/estado", protegerAdmin, async (req, res) =
   try {
     const result = await actualizarEstadoUsuario(req.params.id, req.body?.activo);
     if (!result.ok) {
-      return res.status(result.status).json({ ok: false, error: result.error });
+      if (result.code === "ADMIN_PROTECTED") {
+        console.log("[ADMIN_PROTECTED_BLOCK]", {
+          admin: req.session.usuario?.email || null,
+          target: result.targetEmail || null,
+        });
+      }
+      return res.status(result.status).json({
+        ok: false,
+        code: result.code,
+        error: result.error,
+      });
     }
     await registrarLogEstadoUsuario(req.session.usuario, result.anterior, result.usuario);
     res.json({ ok: true, usuario: result.usuario });

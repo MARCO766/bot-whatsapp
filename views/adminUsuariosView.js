@@ -110,6 +110,17 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
 .mb-admin__btn--save:disabled{opacity:.5;cursor:not-allowed}
 .mb-admin__btn--toggle{background:rgba(239,68,68,.2);color:#fca5a5;border:1px solid rgba(239,68,68,.4)}
 .mb-admin__btn--toggle.is-active{background:rgba(57,255,20,.15);color:#86efac;border-color:rgba(57,255,20,.35)}
+.mb-admin__btn--toggle:disabled{opacity:.35;cursor:not-allowed}
+.mb-admin__btn-wrap{display:inline-block;vertical-align:middle}
+.mb-admin__btn-wrap[title]{cursor:not-allowed}
+.mb-admin__badge-principal{
+  display:inline-block;margin-left:8px;padding:3px 10px;border-radius:999px;
+  font-size:.65rem;font-weight:700;letter-spacing:.03em;
+  background:rgba(57,255,20,.22);color:#39ff14;
+  border:1px solid rgba(57,255,20,.55);
+  box-shadow:0 0 14px rgba(57,255,20,.28);
+  white-space:nowrap;
+}
 .mb-admin__activo{font-size:.75rem}
 .mb-admin__activo--si{color:#4ade80}
 .mb-admin__activo--no{color:#f87171}
@@ -403,8 +414,19 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
     const activoTxt = u.activo ? "Sí" : "No";
     const toggleLabel = u.activo ? "Suspender" : "Activar";
     const toggleCls = u.activo ? "" : " is-active";
-    return '<tr data-id="'+escapeHtml(String(u.id))+'">' +
-      '<td class="mb-admin__email">'+escapeHtml(u.email)+'</td>' +
+    const protegido = Boolean(u.admin_protegido);
+    const suspendBloqueado = protegido && u.activo;
+    const toggleDisabled = suspendBloqueado ? " disabled" : "";
+    const toggleBtn =
+      '<button type="button" class="mb-admin__btn mb-admin__btn--toggle'+toggleCls+'" data-action="toggle"'+toggleDisabled+'>'+toggleLabel+'</button>';
+    const toggleHtml = suspendBloqueado
+      ? '<span class="mb-admin__btn-wrap" title="Cuenta administradora protegida">'+toggleBtn+'</span>'
+      : toggleBtn;
+    const badgePrincipal = protegido
+      ? ' <span class="mb-admin__badge-principal">🛡️ ADMIN PRINCIPAL</span>'
+      : "";
+    return '<tr data-id="'+escapeHtml(String(u.id))+'"'+(protegido?' data-protegido="1"':'')+'>' +
+      '<td class="mb-admin__email">'+escapeHtml(u.email)+badgePrincipal+'</td>' +
       '<td>'+escapeHtml(u.nombre)+'</td>' +
       '<td>'+planBadge(u.plan)+' <select class="mb-admin__select" data-field="plan">'+planOpts+'</select></td>' +
       '<td><select class="mb-admin__select" data-field="estado_plan">'+estOpts+'</select></td>' +
@@ -415,7 +437,7 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
       '<td><input type="datetime-local" class="mb-admin__date" data-field="fecha_vencimiento" value="'+venceVal+'"></td>' +
       '<td style="white-space:nowrap">' +
         '<button type="button" class="mb-admin__btn mb-admin__btn--save" data-action="save">Guardar</button> ' +
-        '<button type="button" class="mb-admin__btn mb-admin__btn--toggle'+toggleCls+'" data-action="toggle">'+toggleLabel+'</button>' +
+        toggleHtml +
       '</td></tr>';
   }
 
@@ -507,14 +529,24 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
       });
       tr.querySelector('[data-action="toggle"]').addEventListener("click", async function(){
         const btn = this;
+        if (btn.disabled) return;
         const u = usuarios.find(x => sameId(x.id, id));
         if (!u) return;
+        if (u.admin_protegido && u.activo) {
+          toast("Cuenta administradora protegida", true);
+          return;
+        }
         const nuevo = !u.activo;
         if (!nuevo && !confirm("¿Suspender cuenta de " + u.email + "?")) return;
         btn.disabled = true;
         try {
           const { status, body } = await patchEstado(id, nuevo);
-          if (!body.ok) throw new Error(body.error || "Error " + status);
+          if (!body.ok) {
+            if (body.code === "ADMIN_PROTECTED") {
+              throw new Error(body.error || "Cuenta administradora protegida");
+            }
+            throw new Error(body.error || "Error " + status);
+          }
           await reloadUsuarios();
           toast(nuevo ? "Cuenta activada" : "Cuenta suspendida");
         } catch (e) {

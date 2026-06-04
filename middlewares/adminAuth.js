@@ -15,6 +15,11 @@ function esAdminEmail(email) {
   return parseAdminEmails().includes(normalized);
 }
 
+/** Cuenta en ADMIN_EMAILS — no se puede suspender ni desactivar desde el panel. */
+function esAdminProtegido(email) {
+  return esAdminEmail(email);
+}
+
 function protegerAdmin(req, res, next) {
   if (!req.session?.usuario) {
     const acceptsJson =
@@ -36,5 +41,6 @@ function protegerAdmin(req, res, next) {
 module.exports = {
   parseAdminEmails,
   esAdminEmail,
+  esAdminProtegido,
   protegerAdmin,
 };

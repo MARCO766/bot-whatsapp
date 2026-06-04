@@ -8,6 +8,10 @@ const {
   normalizarPlanUsuario,
 } = require("./planesService");
 const { isSchemaMissingError, logSchemaFallback } = require("./supabaseSafe");
+const { esAdminProtegido } = require("../middlewares/adminAuth");
+
+const ADMIN_PROTECTED_ERROR =
+  "La cuenta administradora principal está protegida.";
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
@@ -43,6 +47,7 @@ function mapUsuarioRow(row) {
     max_contactos: plan.max_contactos,
     max_flujos: plan.max_flujos,
     activo: Boolean(row.activo),
+    admin_protegido: esAdminProtegido(row.email),
   };
 }
 
@@ -261,6 +266,16 @@ async function actualizarEstadoUsuario(id, activo) {
   const anterior = await fetchUsuarioPorId(usuarioId);
   if (!anterior) {
     return { ok: false, status: 404, error: "Usuario no encontrado" };
+  }
+
+  if (activo === false && esAdminProtegido(anterior.email)) {
+    return {
+      ok: false,
+      status: 403,
+      code: "ADMIN_PROTECTED",
+      error: ADMIN_PROTECTED_ERROR,
+      targetEmail: anterior.email,
+    };
   }
 
   const patchRes = await axios.patch(
