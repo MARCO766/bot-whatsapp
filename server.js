@@ -22,6 +22,7 @@ const { buscarYEjecutarActivador } = require("./services/flowService");
 const authRoutes = require("./routes/auth");
 const webhookRoutes = require("./routes/webhook");
 const adminRoutes = require("./routes/admin");
+const adminUsuariosApiRoutes = require("./routes/adminUsuariosApi");
 const { warnIfMissingSessionSecret } = require("./middlewares/auth");
 const { warnIfMissingPasswordResetEnv } = require("./services/emailService");
 const inboxRoutes = require("./routes/inbox");
@@ -86,6 +87,8 @@ app.use(session({
 
 app.use(webhookRoutes);
 app.use(adminRoutes);
+app.use(adminUsuariosApiRoutes);
+console.log("✅ Panel admin usuarios: GET /admin (ADMIN_EMAILS) + /api/admin/usuarios");
 app.use("/", inboxRoutes);
 app.use("/", builderRoutes);
 app.use(flowsRoutes);

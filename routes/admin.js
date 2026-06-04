@@ -1,12 +1,22 @@
 const { protegerPanel } = require("../middlewares/auth");
+const { esAdminEmail } = require("../middlewares/adminAuth");
 const express = require("express");
 const router = express.Router();
 const { renderAdminPage } = require("../views/adminView");
+const { renderAdminUsuariosPage } = require("../views/adminUsuariosView");
 const axios = require("axios");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
+
 router.get("/admin", protegerPanel, async (req, res) => {
+  if (esAdminEmail(req.session.usuario.email)) {
+    return res.send(
+      renderAdminUsuariosPage({
+        adminEmail: req.session.usuario.email,
+      })
+    );
+  }
 
 const tab = req.query.tab || "inicio";
 const builder = req.query.builder;
