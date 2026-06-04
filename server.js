@@ -111,6 +111,7 @@ console.log("✅ Cron interno montado en POST /api/internal/cron/rm24h (seguimie
 /** Rutas de auth backend — deben ir antes del fallback React (Express, no SPA). */
 const AUTH_BACKEND_PATHS = new Set([
   "/login",
+  "/register",
   "/logout",
   "/forgot-password",
   "/reset-password",

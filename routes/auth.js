@@ -9,6 +9,11 @@ const {
   PASSWORD_TOGGLE_SCRIPT,
 } = require("./authPageLayout");
 const {
+  renderLoginLandingPage,
+  renderRegisterPage,
+} = require("./premiumLandingLayout");
+const { DEFAULTS_PLAN } = require("../services/planesService");
+const {
   generarTokenReset,
   validarTokenReset,
   limpiarTokenReset,
@@ -194,97 +199,111 @@ router.get("/login", (req, res) => {
     return res.redirect("/");
   }
 
-  const resetOk = req.query.reset === "ok";
-  const resetBanner = resetOk
-    ? `<p class="mb-login__message mb-login__message--success">Tu contraseña fue actualizada. Ya puedes iniciar sesión.</p>`
-    : "";
-
-  const cardBody = `
-      ${resetBanner}
-      <button type="button" class="mb-login__google" aria-label="Continuar con Google (próximamente)">
-        <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
-          <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-          <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-          <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-          <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-        </svg>
-        Continuar con Google
-      </button>
-
-      <div class="mb-login__divider" role="separator">o</div>
-
-      <form class="mb-login__form" method="POST" action="/login">
-        <div class="mb-login__field">
-          <label class="mb-login__label" for="email">Correo electrónico</label>
-          <div class="mb-login__input-wrap">
-            <svg class="mb-login__input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-              <path d="M4 6h16v12H4z"/><path d="m4 7 8 6 8-6"/>
-            </svg>
-            <input class="mb-login__input" id="email" name="email" type="email" placeholder="tu@empresa.com" required autocomplete="email">
-          </div>
-        </div>
-
-        <div class="mb-login__field">
-          <label class="mb-login__label" for="password">Contraseña</label>
-          <div class="mb-login__input-wrap">
-            <svg class="mb-login__input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-              <rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 1 1 8 0v3"/>
-            </svg>
-            <input class="mb-login__input mb-login__input--password" id="password" name="password" type="password" placeholder="••••••••••" required autocomplete="current-password">
-            <button type="button" class="mb-login__toggle-pwd" aria-label="Mostrar contraseña" data-toggle-password>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="mb-login__eye-open" aria-hidden="true">
-                <path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/>
-              </svg>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="mb-login__eye-closed" style="display:none" aria-hidden="true">
-                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-10-8-10-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 10 8 10 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/>
-              </svg>
-            </button>
-          </div>
-        </div>
-
-        <div class="mb-login__row">
-          <label class="mb-login__remember">
-            <input type="checkbox" tabindex="-1">
-            Recordarme en este dispositivo
-          </label>
-          <a href="/forgot-password" class="mb-login__forgot">¿Olvidaste tu contraseña?</a>
-        </div>
-
-        <button type="submit" class="mb-login__submit">Entrar a MacBot</button>
-      </form>
-
-      <p class="mb-login__secure">🔒 Acceso seguro · Sesión protegida</p>
-  `;
-
   res.send(
-    renderAuthPage({
-      documentTitle: "Iniciar sesión · MacBot",
-      cardTitle: "Iniciar sesión",
-      cardSubtitle: "Accede a tu panel MacBot",
-      cardBody,
-      scripts: `${PASSWORD_TOGGLE_SCRIPT}
-<script>
-(function(){
-  var form=document.querySelector(".mb-login__form");
-  if(form){
-    form.addEventListener("submit",function(){
-      var sub=form.querySelector(".mb-login__submit");
-      if(sub&&!sub.disabled){
-        sub.disabled=true;
-        sub.textContent="Verificando...";
-      }
-    });
-  }
-  var googleBtn=document.querySelector(".mb-login__google");
-  if(googleBtn){
-    googleBtn.addEventListener("click",function(e){
-      e.preventDefault();
-    });
-  }
-})();
-</script>`,
+    renderLoginLandingPage({
+      resetOk: req.query.reset === "ok",
     })
   );
+});
+
+router.get("/register", (req, res) => {
+  if (req.session?.usuario) {
+    return res.redirect("/");
+  }
+
+  res.send(renderRegisterPage());
+});
+
+router.post("/register", async (req, res) => {
+  if (req.session?.usuario) {
+    return res.redirect("/");
+  }
+
+  const nombre = String(req.body?.nombre || "").trim();
+  const email = normalizeEmail(req.body?.email);
+  const password = String(req.body?.password || "");
+  const passwordConfirm = String(req.body?.password_confirm || "");
+
+  const values = { nombre, email };
+  const errors = {};
+
+  if (!nombre || nombre.length < 2) {
+    errors.nombre = "Ingresa tu nombre (mínimo 2 caracteres).";
+  }
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    errors.email = "Correo electrónico no válido.";
+  }
+  if (password.length < 6) {
+    errors.password = "La contraseña debe tener al menos 6 caracteres.";
+  }
+  if (password !== passwordConfirm) {
+    errors.password_confirm = "Las contraseñas no coinciden.";
+  }
+
+  if (Object.keys(errors).length > 0) {
+    return res.status(400).send(renderRegisterPage({ errors, values }));
+  }
+
+  try {
+    const existente = await axios.get(
+      `${SUPABASE_URL}/rest/v1/crm_usuarios?email=eq.${encodeURIComponent(email)}&select=id`,
+      { headers: supabaseHeaders() }
+    );
+
+    if (existente.data?.length > 0) {
+      errors._global = "Este correo ya está registrado.";
+      return res.status(400).send(renderRegisterPage({ errors, values }));
+    }
+
+    const password_hash = await bcrypt.hash(password, 10);
+
+    const payload = {
+      nombre,
+      email,
+      password_hash,
+      activo: true,
+      plan: DEFAULTS_PLAN.plan,
+      estado_plan: DEFAULTS_PLAN.estado_plan,
+      max_whatsapp: DEFAULTS_PLAN.max_whatsapp,
+      max_contactos: DEFAULTS_PLAN.max_contactos,
+      max_flujos: DEFAULTS_PLAN.max_flujos,
+    };
+
+    const insertRes = await axios.post(
+      `${SUPABASE_URL}/rest/v1/crm_usuarios`,
+      payload,
+      {
+        headers: supabaseHeaders({
+          "Content-Type": "application/json",
+          Prefer: "return=representation",
+        }),
+      }
+    );
+
+    const usuario = insertRes.data?.[0];
+    if (!usuario?.id) {
+      errors._global = "No se pudo crear la cuenta. Intenta de nuevo.";
+      return res.status(500).send(renderRegisterPage({ errors, values }));
+    }
+
+    req.session.usuario = {
+      id: usuario.id,
+      nombre: usuario.nombre,
+      email: usuario.email,
+    };
+
+    console.log(`[register] cuenta creada usuarioId=${usuario.id} plan=free`);
+    return res.redirect("/");
+  } catch (error) {
+    const pgCode = error.response?.data?.code;
+    if (pgCode === "23505" || error.response?.status === 409) {
+      errors._global = "Este correo ya está registrado.";
+      return res.status(400).send(renderRegisterPage({ errors, values }));
+    }
+    console.log("[register] error:", error.response?.data || error.message);
+    errors._global = "No se pudo crear la cuenta. Intenta de nuevo.";
+    return res.status(500).send(renderRegisterPage({ errors, values }));
+  }
 });
 
 router.post("/login", async (req, res) => {
