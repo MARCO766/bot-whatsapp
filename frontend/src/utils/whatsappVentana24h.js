@@ -1,10 +1,27 @@
 const MS_24H = 24 * 60 * 60 * 1000;
 
+/** PostgREST devuelve timestamptz sin Z; interpretar como UTC. */
+function parseFechaUtc(raw) {
+  const s = String(raw ?? "").trim();
+  if (!s) return null;
+
+  if (/[Zz]$/.test(s) || /[+-]\d{2}:?\d{2}$/.test(s)) {
+    const d = new Date(s);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+
+  let iso = s;
+  if (iso.includes(" ") && !iso.includes("T")) {
+    iso = iso.replace(" ", "T");
+  }
+
+  const d = new Date(`${iso}Z`);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
 function fechaMensaje(msg) {
   const raw = msg?.creado_en || msg?.created_at || msg?.timestamp || msg?.fecha;
-  if (!raw) return null;
-  const d = new Date(raw);
-  return Number.isNaN(d.getTime()) ? null : d;
+  return parseFechaUtc(raw);
 }
 
 /** Último mensaje del lead (entrante), excluye sistema y salientes. */
