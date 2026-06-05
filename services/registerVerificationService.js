@@ -5,6 +5,7 @@ const crypto = require("crypto");
 const axios = require("axios");
 const bcrypt = require("bcryptjs");
 const { sendEmail, isPasswordResetEmailConfigured } = require("./emailService");
+const { enviarCorreoBienvenida } = require("./welcomeEmailService");
 const { escapeHtml } = require("../routes/authPageLayout");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -316,6 +317,11 @@ async function verifyRegistration(body) {
     }
 
     await deletePendingByEmail(email);
+
+    enviarCorreoBienvenida({ nombre: usuario.nombre, email: usuario.email }).catch(
+      (err) => console.log("[register] bienvenida email:", err.message)
+    );
+
     console.log(`[register] cuenta activada usuarioId=${usuario.id} plan=free`);
     return { ok: true, usuario };
   } catch (error) {

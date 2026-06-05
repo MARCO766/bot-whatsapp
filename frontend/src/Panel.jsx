@@ -5,6 +5,8 @@ import { formatNum, formatTendencia } from "./metricas/format";
 import ConexionLineaTabs from "./components/conexion/ConexionLineaTabs";
 import { useMetricasConexion } from "./hooks/useMetricasConexion";
 import { CONEXION_TODAS } from "./utils/conexionesInbox";
+import { useOnboardingEstado } from "./onboarding/useOnboardingEstado";
+import OnboardingChecklist from "./onboarding/OnboardingChecklist";
 
 function Skel({ className = "" }) {
   return <div className={`skel ${className}`} />;
@@ -71,6 +73,9 @@ export default function Panel({ cambiarVista }) {
     conexionSeleccionadaId,
     conexionesLoading
   );
+  const { onboarding } = useOnboardingEstado({ manageWelcomeModal: false });
+  const showChecklist =
+    onboarding?.progreso?.porcentaje != null && onboarding.progreso.porcentaje < 100;
 
   const conexionActiva = conexionesInbox.find(
     (c) => String(c.id) === String(conexionSeleccionadaId)
@@ -150,6 +155,16 @@ export default function Panel({ cambiarVista }) {
         onSeleccionar={seleccionarConexion}
         etiquetaTabConexion={etiquetaTabConexion}
       />
+
+      {showChecklist && (
+        <div className="panelOnboardingCheck">
+          <OnboardingChecklist
+            checklist={onboarding.checklist}
+            progreso={onboarding.progreso}
+            compact
+          />
+        </div>
+      )}
 
       {error && (
         <div className="errorBanner">

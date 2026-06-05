@@ -14,6 +14,7 @@ import Etiquetas from "./Etiquetas";
 import { fetchInbox } from "./services/chatService";
 import { useOnboardingEstado } from "./onboarding/useOnboardingEstado";
 import OnboardingWelcome from "./onboarding/OnboardingWelcome";
+import WelcomeModal from "./onboarding/WelcomeModal";
 
 const NAV_BLOCKED_SIN_WHATSAPP = new Set(["inbox", "flujos", "clientes"]);
 const VISTAS_SIN_ONBOARDING = new Set(["ajustes", "mi-plan"]);
@@ -28,7 +29,13 @@ export default function App() {
   const [activities, setActivities] = useState([]);
   const vistaRef = useRef(vista);
   const { connected } = useSocket() || {};
-  const { needsOnboarding, loading: onboardingLoading } = useOnboardingEstado();
+  const {
+    onboarding,
+    needsOnboarding,
+    loading: onboardingLoading,
+    welcomeOpen,
+    dismissWelcome,
+  } = useOnboardingEstado();
 
   useEffect(() => {
     vistaRef.current = vista;
@@ -167,6 +174,8 @@ export default function App() {
         <OnboardingWelcome
           onConnectWhatsApp={openWhatsAppAjustes}
           onViewPlans={openMiPlan}
+          checklist={onboarding?.checklist}
+          progreso={onboarding?.progreso}
         />
       );
     }
@@ -185,9 +194,20 @@ export default function App() {
     return <Panel cambiarVista={setVista} />;
   }
 
+  function handleWelcomeStart() {
+    dismissWelcome();
+    openWhatsAppAjustes();
+  }
+
   return (
     <div className="appShell">
       <style>{styles}</style>
+
+      <WelcomeModal
+        open={welcomeOpen && !onboardingLoading}
+        onClose={dismissWelcome}
+        onStart={handleWelcomeStart}
+      />
 
       <div className="noise" />
       <div className="orb orbOne" />

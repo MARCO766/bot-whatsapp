@@ -109,7 +109,7 @@ app.use("/api/internal/cron", internalCronApi);
 const legacySeguimientoCronDisabled = require("./routes/legacySeguimientoCronDisabled");
 app.use(legacySeguimientoCronDisabled);
 console.log("✅ API Planes montada en GET /api/planes/mi-plan");
-console.log("✅ API Onboarding montada en GET /api/onboarding/estado");
+console.log("✅ API Onboarding montada en GET /api/onboarding/estado y POST /api/onboarding/bienvenida");
 console.log("✅ API Clientes montada en /api/clientes");
 console.log("✅ API IA montada en POST /api/ai/run");
 console.log("✅ Cron interno montado en POST /api/internal/cron/rm24h (seguimientos HTTP deshabilitado)");

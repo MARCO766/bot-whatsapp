@@ -4,6 +4,16 @@ export const panelStyles = `
   position: relative;
 }
 
+.panelDash .panelOnboardingCheck {
+  margin-bottom: 18px;
+  animation: panelObIn .4s ease both;
+}
+
+@keyframes panelObIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 .panelDash .eyebrow {
   color: #67e8f9;
   font-size: 11px;

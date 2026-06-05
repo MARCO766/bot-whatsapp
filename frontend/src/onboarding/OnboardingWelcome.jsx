@@ -1,33 +1,39 @@
 import React from "react";
+import OnboardingChecklist from "./OnboardingChecklist";
 
 const STEPS = [
   {
     icon: "💬",
-    title: "Conecta WhatsApp API",
+    title: "Conecta tu WhatsApp",
     desc: "Vincula tu número con Meta Cloud API en unos minutos.",
     color: "green",
   },
   {
     icon: "🧩",
     title: "Crea tu primer flujo",
-    desc: "Diseña embudos visuales con IA, condiciones y conversiones.",
+    desc: "Diseña embudos visuales con condiciones y conversiones.",
     color: "purple",
   },
   {
-    icon: "📥",
-    title: "Atiende leads desde la bandeja",
-    desc: "Centraliza conversaciones multi-número en un solo lugar.",
+    icon: "🤖",
+    title: "Activa IA",
+    desc: "Añade IA Pro o Agente OpenAI a tu embudo.",
     color: "cyan",
   },
   {
-    icon: "🔁",
-    title: "Automatiza seguimientos y remarketing",
-    desc: "Reactiva contactos y cierra ventas sin esfuerzo manual.",
+    icon: "📥",
+    title: "Recibe tu primer lead",
+    desc: "Centraliza conversaciones en la bandeja MacBot.",
     color: "orange",
   },
 ];
 
-export default function OnboardingWelcome({ onConnectWhatsApp, onViewPlans }) {
+export default function OnboardingWelcome({
+  onConnectWhatsApp,
+  onViewPlans,
+  checklist = [],
+  progreso,
+}) {
   return (
     <div className="obWelcome">
       <style>{styles}</style>
@@ -42,6 +48,12 @@ export default function OnboardingWelcome({ onConnectWhatsApp, onViewPlans }) {
         <p className="obWelcome__sub">
           Conecta tu primera línea de WhatsApp para empezar a automatizar ventas con IA, flujos y CRM.
         </p>
+
+        {checklist.length > 0 && (
+          <div className="obWelcome__checklistWrap">
+            <OnboardingChecklist checklist={checklist} progreso={progreso} />
+          </div>
+        )}
 
         <div className="obWelcome__flow" aria-hidden="true">
           <span className="obWelcome__node">WA</span>
@@ -146,6 +158,10 @@ const styles = `
   font-weight: 800;
   letter-spacing: -.03em;
   line-height: 1.15;
+}
+
+.obWelcome__checklistWrap {
+  margin-bottom: 24px;
 }
 
 .obWelcome__sub {
