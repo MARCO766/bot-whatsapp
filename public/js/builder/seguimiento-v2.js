@@ -29,7 +29,8 @@ window.MacBotSeguimientoV2 = (function () {
 
   let nodoActivo = null;
   let configActiva = null;
-  let pasoActivoIndex = 0;
+  let pasoActivoIndex = -1;
+  let mostrarSelectorBloques = false;
   const archivosLocales = {};
 
   function esc(str) {
@@ -197,9 +198,11 @@ window.MacBotSeguimientoV2 = (function () {
     return pref + " " + bloque.maxMb + " MB";
   }
 
-  function buildBloquesTipoHtml(tipoActual) {
+  function buildBloquesTipoHtml(tipoActual, opts) {
+    const modoSelector = opts && opts.modoSelector;
     const cards = BLOQUES_TIPO.map(function (item) {
-      const activo = normalizarTipo(tipoActual) === item.id ? " segv2-block-card--active" : "";
+      const activo =
+        !modoSelector && normalizarTipo(tipoActual) === item.id ? " segv2-block-card--active" : "";
       const ancho = item.anchoCompleto ? " segv2-block-card--wide" : "";
       return (
         '<button type="button" class="segv2-block-card' +
@@ -219,15 +222,18 @@ window.MacBotSeguimientoV2 = (function () {
       );
     }).join("");
 
+    const titulo = modoSelector ? "Elige un bloque" : "Tipo de bloque";
+
     return (
-      '<div class="segv2-bloques-wrap">' +
-      '<p class="segv2-bloques-title">AGREGAR BLOQUE</p>' +
+      '<div class="segv2-bloques-wrap' +
+      (modoSelector ? " segv2-bloques-wrap--selector" : "") +
+      '">' +
+      '<p class="segv2-bloques-title">' +
+      esc(titulo) +
+      "</p>" +
       '<div class="segv2-block-picker">' +
       cards +
-      "</div></div>" +
-      '<input type="hidden" id="segv2TipoPaso" value="' +
-      esc(normalizarTipo(tipoActual)) +
-      '">'
+      "</div></div>"
     );
   }
 
@@ -235,11 +241,11 @@ window.MacBotSeguimientoV2 = (function () {
     return normalizarTipo(tipo) !== "texto";
   }
 
-  function crearPasoVacio(index) {
+  function crearPasoDesdeTipo(tipo, index) {
     return {
       pasoId: "paso_" + (index + 1),
       delay: { valor: 5, unidad: "minutos" },
-      tipo: "texto",
+      tipo: normalizarTipo(tipo),
       contenido: "",
     };
   }
@@ -248,7 +254,7 @@ window.MacBotSeguimientoV2 = (function () {
     return {
       version: 1,
       cancelarSiResponde: true,
-      pasos: [crearPasoVacio(0), { ...crearPasoVacio(1), delay: { valor: 1, unidad: "horas" } }],
+      pasos: [],
     };
   }
 
@@ -289,15 +295,11 @@ window.MacBotSeguimientoV2 = (function () {
         errores.push("Paso " + n + ": " + local.uploadError);
       }
       if (!mediaUrl) {
-        if (local?.file && !local.sizeError && !local.uploading) {
-          errores.push(
-            "Paso " +
-              n +
-              ": sube el archivo al servidor o pega una URL manual para guardar."
-          );
-        } else if (!local?.file) {
-          errores.push("Paso " + n + ": sube un archivo o pega una URL manual.");
-        }
+        errores.push(
+          "Paso " +
+            n +
+            ": no puedes guardar este paso hasta subir el archivo o pegar una URL."
+        );
       }
     }
     return errores;
@@ -353,19 +355,18 @@ window.MacBotSeguimientoV2 = (function () {
   }
 
   function parseConfigAlmacenada(raw) {
-    const base = crearConfigDefault();
-    if (!raw || typeof raw !== "object") return base;
+    if (!raw || typeof raw !== "object") return crearConfigDefault();
 
     const pasos = Array.isArray(raw.pasos)
       ? raw.pasos.map(function (p, i) {
           return normalizarPaso(p, i);
         }).filter(Boolean)
-      : base.pasos;
+      : [];
 
     return {
       version: 1,
       cancelarSiResponde: raw.cancelarSiResponde !== false,
-      pasos: pasos.length ? pasos : base.pasos,
+      pasos: pasos,
     };
   }
 
@@ -425,18 +426,38 @@ window.MacBotSeguimientoV2 = (function () {
 
   function resumenConfig(config) {
     const n = (config.pasos || []).length;
+    if (!n) return "Sin pasos · agrega bloques";
     const cancela = config.cancelarSiResponde !== false ? "cancela si responde" : "sin cancelación";
     return n + " paso" + (n === 1 ? "" : "s") + " · " + cancela;
   }
 
+  function normalizarErrorUpload(msg) {
+    const m = String(msg || "").toLowerCase();
+    if (
+      m.indexOf("bucket") >= 0 ||
+      m.indexOf("not found") >= 0 ||
+      m.indexOf("no existe") >= 0 ||
+      m.indexOf("no encontrado") >= 0 ||
+      m.indexOf("público") >= 0 ||
+      m.indexOf("public") >= 0
+    ) {
+      return "No se pudo subir: bucket no existe o no está público.";
+    }
+    return msg || "No se pudo subir el archivo";
+  }
+
   function buildTimelineHtml(pasos) {
     if (!pasos.length) {
-      return '<p class="segv2-empty">Configura pasos en el panel →</p>';
+      return '<p class="segv2-empty">Sin pasos · agrega bloques</p>';
     }
 
+    const maxVisibles = 3;
+    const visibles = pasos.slice(0, maxVisibles);
+    const restantes = pasos.length - visibles.length;
+
     let html = '<div class="segv2-timeline">';
-    pasos.forEach(function (paso, index) {
-      const esUltimo = index === pasos.length - 1;
+    visibles.forEach(function (paso, index) {
+      const esUltimo = index === visibles.length - 1 && restantes <= 0;
       const preview = previewPasoTexto(paso);
 
       html +=
@@ -455,13 +476,21 @@ window.MacBotSeguimientoV2 = (function () {
         " " +
         esc(labelTipo(paso.tipo)) +
         "</span>" +
-        '<span class="segv2-chip segv2-chip--delay">⏱ Espera ' +
+        '<span class="segv2-chip segv2-chip--delay">⏱ ' +
         esc(formatearDelayCorto(paso.delay)) +
         "</span></div>" +
         '<p class="segv2-timeline-preview">' +
         preview +
         "</p></div></div>";
     });
+
+    if (restantes > 0) {
+      html +=
+        '<p class="segv2-timeline-more">+' +
+        esc(String(restantes)) +
+        " más</p>";
+    }
+
     html += "</div>";
     return html;
   }
@@ -485,9 +514,9 @@ window.MacBotSeguimientoV2 = (function () {
       '<span class="segv2-lock" aria-hidden="true">🔒</span>' +
       '<div class="segv2-header-main">' +
       '<span class="segv2-title">🔒 Seguimiento CRM V2</span>' +
-      '<span class="segv2-badge">V2 Seguro</span>' +
+      '<span class="segv2-badge">Seguro multi-número</span>' +
       "</div></div>" +
-      '<p class="segv2-subbadge">Seguro multi-número</p>' +
+      '<p class="segv2-subbadge">Envía mensajes programados sin mezclar líneas.</p>' +
       '<div class="segv2-diag segv2-diag--compact">' +
       '<span class="segv2-diag-item"><strong>' +
       esc(String(pasoCount)) +
@@ -700,7 +729,7 @@ window.MacBotSeguimientoV2 = (function () {
 
     const valorEl = document.getElementById("segv2DelayValor");
     const unidadEl = document.getElementById("segv2DelayUnidad");
-    const tipoEl = document.getElementById("segv2TipoPaso");
+    const tipoEl = document.getElementById("segv2TipoSelect");
     const msgEl = document.getElementById("segv2Mensaje");
     const mediaUrlEl = document.getElementById("segv2MediaUrl");
     const captionEl = document.getElementById("segv2Caption");
@@ -741,6 +770,35 @@ window.MacBotSeguimientoV2 = (function () {
     delete paso.filename;
   }
 
+  function estadoMediaPaso(paso) {
+    const local = archivosLocales[claveArchivoLocal(paso)];
+    const mediaUrl = String(paso?.media_url || "").trim();
+
+    if (local?.uploadError) {
+      const err = normalizarErrorUpload(local.uploadError);
+      const esBucket =
+        err.indexOf("bucket") >= 0 ||
+        String(local.uploadError || "").toLowerCase().indexOf("bucket") >= 0;
+      return {
+        tipo: "error",
+        texto: err,
+        detalle: esBucket
+          ? "Bucket seguimiento-v2-media no encontrado. Créalo en Supabase Storage como público."
+          : err,
+      };
+    }
+    if (local?.uploading) {
+      return { tipo: "uploading", texto: "Subiendo al servidor…" };
+    }
+    if (mediaUrl) {
+      return { tipo: "ready", texto: "Archivo listo para enviar" };
+    }
+    if (local?.file && !local.sizeError) {
+      return { tipo: "local", texto: "Preview local — aún no guardado" };
+    }
+    return { tipo: "empty", texto: "" };
+  }
+
   function renderArchivoLocalBox(paso) {
     const box = document.getElementById("segv2ArchivoLocal");
     if (!box || !paso) return;
@@ -748,6 +806,7 @@ window.MacBotSeguimientoV2 = (function () {
     const tipo = normalizarTipo(paso.tipo);
     const local = archivosLocales[claveArchivoLocal(paso)];
     const limite = textoLimiteTipo(tipo);
+    const estado = estadoMediaPaso(paso);
 
     if (!local?.file) {
       box.innerHTML =
@@ -765,9 +824,6 @@ window.MacBotSeguimientoV2 = (function () {
       return;
     }
 
-    const previewUrl = local.uploadedUrl || local.blobUrl || "";
-    let previewHtml = "";
-
     if (local.uploading) {
       box.innerHTML =
         '<div class="segv2-upload-fileinfo">' +
@@ -781,28 +837,10 @@ window.MacBotSeguimientoV2 = (function () {
       return;
     }
 
-    if (tipo === "imagen" && previewUrl) {
-      previewHtml =
-        '<img src="' +
-        esc(previewUrl) +
-        '" alt="Preview" class="segv2-upload-preview-img">';
-    } else if (tipo === "video" && previewUrl) {
-      previewHtml =
-        '<video src="' +
-        esc(previewUrl) +
-        '" controls muted playsinline class="segv2-upload-preview-video"></video>';
-    } else if (tipo === "audio" && previewUrl) {
-      previewHtml =
-        '<audio src="' +
-        esc(previewUrl) +
-        '" controls class="segv2-upload-preview-audio"></audio>';
-    } else {
-      previewHtml =
-        '<div class="segv2-upload-doc">' +
-        '<span aria-hidden="true">📄</span><span>' +
-        esc(local.nombre || "Archivo") +
-        "</span></div>";
-    }
+    let statusClass = "segv2-media-status--neutral";
+    if (estado.tipo === "ready") statusClass = "segv2-media-status--ready";
+    if (estado.tipo === "local") statusClass = "segv2-media-status--local";
+    if (estado.tipo === "error") statusClass = "segv2-media-status--error";
 
     box.innerHTML =
       '<div class="segv2-upload-fileinfo">' +
@@ -811,11 +849,18 @@ window.MacBotSeguimientoV2 = (function () {
       "</strong>" +
       "<span>" +
       formatearPeso(local.size) +
-      (local.uploadedUrl ? " · ✓ Subido" : " · preview local") +
       "</span></div>" +
-      previewHtml +
-      (local.uploadError
-        ? '<p class="segv2-upload-warn">' + esc(local.uploadError) + "</p>"
+      (estado.texto
+        ? '<p class="segv2-media-status ' +
+          statusClass +
+          '">' +
+          esc(estado.detalle || estado.texto) +
+          "</p>"
+        : "") +
+      (tipo === "documento"
+        ? '<div class="segv2-upload-doc"><span aria-hidden="true">📄</span><span>' +
+          esc(local.nombre || "Archivo") +
+          "</span></div>"
         : "");
   }
 
@@ -905,7 +950,10 @@ window.MacBotSeguimientoV2 = (function () {
       .then(function (r) {
         return r.json().then(function (data) {
           if (!r.ok) {
-            throw new Error(data?.error || "Error subiendo archivo");
+            const errMsg = data?.error || "Error subiendo archivo";
+            const err = new Error(errMsg);
+            err.rawMessage = errMsg;
+            throw err;
           }
           return data;
         });
@@ -932,12 +980,19 @@ window.MacBotSeguimientoV2 = (function () {
       })
       .catch(function (err) {
         local.uploading = false;
-        local.uploadError = err?.message || "No se pudo subir el archivo";
+        const raw = err?.rawMessage || err?.message || "No se pudo subir el archivo";
+        const esBucket =
+          String(raw).toLowerCase().indexOf("bucket") >= 0 ||
+          String(raw).toLowerCase().indexOf("seguimiento-v2-media") >= 0;
+        local.uploadError = esBucket
+          ? "Bucket seguimiento-v2-media no encontrado. Créalo en Supabase Storage como público."
+          : normalizarErrorUpload(raw);
         if (status) {
           status.textContent = "Error al subir";
           status.classList.remove("segv2-upload-status--uploading");
         }
         renderArchivoLocalBox(paso);
+        renderVistaPreviaMensaje();
         renderErroresValidacion();
       });
   }
@@ -985,55 +1040,110 @@ window.MacBotSeguimientoV2 = (function () {
     );
   }
 
-  function wireBloquesTipo(paso) {
+  function wireBloquesTipo(paso, opts) {
+    const modoSelector = opts && opts.modoSelector;
     document.querySelectorAll(".segv2-block-card").forEach(function (btn) {
       btn.addEventListener("click", function () {
         const nuevoTipo = normalizarTipo(btn.getAttribute("data-tipo"));
+
+        if (modoSelector) {
+          agregarPasoDesdeTipo(nuevoTipo);
+          return;
+        }
+
         const tipoAnterior = normalizarTipo(paso.tipo);
         syncPasoDesdeFormulario();
         if (nuevoTipo !== tipoAnterior) {
           limpiarArchivoLocal(paso);
         }
         paso.tipo = nuevoTipo;
-        const hidden = document.getElementById("segv2TipoPaso");
-        if (hidden) hidden.value = nuevoTipo;
         renderFormularioPaso();
         onPanelChange();
       });
     });
   }
 
+  function agregarPasoDesdeTipo(tipo) {
+    if (!configActiva) return;
+    syncPasoDesdeFormulario();
+    const nuevo = crearPasoDesdeTipo(tipo, configActiva.pasos.length);
+    configActiva.pasos.push(nuevo);
+    pasoActivoIndex = configActiva.pasos.length - 1;
+    mostrarSelectorBloques = false;
+    renderSelectorBloques();
+    renderListaPasos();
+    renderFormularioPaso();
+    onPanelChange();
+  }
+
   function renderVistaPreviaMensaje() {
+    const section = document.getElementById("segv2PreviewSection");
     const box = document.getElementById("segv2VistaPrevia");
     if (!box || !configActiva) return;
 
     const paso = configActiva.pasos[pasoActivoIndex];
     if (!paso) {
+      if (section) section.style.display = "none";
       box.innerHTML = "";
       return;
     }
 
+    if (section) section.style.display = "";
+
     const tipo = normalizarTipo(paso.tipo);
     const texto = String(paso.contenido || "").trim();
     const local = archivosLocales[claveArchivoLocal(paso)];
+    const mediaUrlGuardada = String(paso.media_url || "").trim();
     const mediaUrl =
-      String(paso.media_url || "").trim() || (local?.blobUrl && !local.sizeError ? local.blobUrl : "");
+      mediaUrlGuardada || (local?.blobUrl && !local.sizeError ? local.blobUrl : "");
     const delay = formatearDelayCorto(paso.delay);
     const icon = iconoTipoPaso(tipo);
+    const estado = estadoMediaPaso(paso);
+
+    let statusHtml = "";
+    if (esTipoMedia(tipo)) {
+      if (estado.tipo === "error") {
+        statusHtml =
+          '<div class="segv2-preview-status segv2-preview-status--error">' +
+          esc(estado.detalle || estado.texto) +
+          "</div>";
+      } else if (estado.tipo === "local") {
+        statusHtml =
+          '<div class="segv2-preview-status segv2-preview-status--local">' +
+          esc(estado.texto) +
+          "</div>";
+      } else if (estado.tipo === "ready") {
+        statusHtml =
+          '<div class="segv2-preview-status segv2-preview-status--ready">' +
+          esc(estado.texto) +
+          "</div>";
+      } else if (estado.tipo === "uploading") {
+        statusHtml =
+          '<div class="segv2-preview-status segv2-preview-status--uploading">' +
+          esc(estado.texto) +
+          "</div>";
+      }
+    }
 
     if (tipo === "texto" && !texto) {
       box.innerHTML =
+        statusHtml +
         '<div class="segv2-preview-empty">Escribe un mensaje para ver la vista previa</div>';
       return;
     }
 
     if (esTipoMedia(tipo) && local?.sizeError) {
-      box.innerHTML = '<div class="segv2-preview-empty segv2-preview-error">' + esc(local.sizeError) + "</div>";
+      box.innerHTML =
+        statusHtml +
+        '<div class="segv2-preview-empty segv2-preview-error">' +
+        esc(local.sizeError) +
+        "</div>";
       return;
     }
 
     if (esTipoMedia(tipo) && !mediaUrl) {
       box.innerHTML =
+        statusHtml +
         '<div class="segv2-preview-empty">Sube un archivo o pega una URL para ver la vista previa</div>';
       return;
     }
@@ -1085,6 +1195,7 @@ window.MacBotSeguimientoV2 = (function () {
     }
 
     box.innerHTML =
+      statusHtml +
       '<div class="segv2-preview-meta">' +
       icon +
       " " +
@@ -1110,7 +1221,7 @@ window.MacBotSeguimientoV2 = (function () {
 
     box.classList.add("segv2-errores--visible");
     box.innerHTML =
-      "<strong>Revisa la configuración:</strong><ul>" +
+      "<strong>No se puede guardar — corrige los pasos marcados en rojo:</strong><ul>" +
       errores.map(function (e) {
         return "<li>" + esc(e) + "</li>";
       }).join("") +
@@ -1134,11 +1245,45 @@ window.MacBotSeguimientoV2 = (function () {
       '<span class="segv2-diag-value">' +
       (cancelar ? "Sí" : "No") +
       "</span></div>" +
-      '<div class="segv2-diag-card"><span class="segv2-diag-label">Modo</span>' +
-      '<span class="segv2-diag-value">Seguro multi-número</span></div>' +
       '<div class="segv2-diag-card segv2-diag-card--ok"><span class="segv2-diag-label">Estado</span>' +
       '<span class="segv2-diag-value">V2 activo</span></div>' +
       "</div>";
+  }
+
+  function renderEstadoVacio() {
+    const box = document.getElementById("segv2EstadoVacio");
+    if (!box || !configActiva) return;
+
+    const vacio = !configActiva.pasos.length;
+    box.style.display = vacio ? "" : "none";
+
+    if (vacio) {
+      box.innerHTML =
+        '<div class="segv2-empty-state">' +
+        '<p class="segv2-empty-state-title">Aún no hay pasos</p>' +
+        '<p class="segv2-empty-state-desc">Agrega tu primer bloque para iniciar el seguimiento</p>' +
+        "</div>";
+    }
+  }
+
+  function renderSelectorBloques() {
+    const box = document.getElementById("segv2SelectorBloques");
+    const btnAdd = document.getElementById("segv2AddBloque");
+    if (!box || !configActiva) return;
+
+    const sinPasos = !configActiva.pasos.length;
+    const visible = sinPasos || mostrarSelectorBloques;
+
+    box.style.display = visible ? "" : "none";
+    if (btnAdd) btnAdd.style.display = sinPasos ? "none" : "";
+
+    if (!visible) {
+      box.innerHTML = "";
+      return;
+    }
+
+    box.innerHTML = buildBloquesTipoHtml(null, { modoSelector: true });
+    wireBloquesTipo(null, { modoSelector: true });
   }
 
   function moverPaso(index, dir) {
@@ -1170,12 +1315,46 @@ window.MacBotSeguimientoV2 = (function () {
     onPanelChange();
   }
 
-  function renderListaPasos() {
-    const lista = document.getElementById("segv2ListaPasos");
-    if (!lista || !configActiva) return;
+  function captionPasoLista(paso) {
+    const contenido = String(paso.contenido || "").trim();
+    if (contenido) {
+      return esc(contenido.slice(0, 40) + (contenido.length > 40 ? "…" : ""));
+    }
+    return '<span class="segv2-muted">Sin texto</span>';
+  }
+
+  function eliminarPaso(index) {
+    if (!configActiva || !configActiva.pasos[index]) return;
+    syncPasoDesdeFormulario();
+    const paso = configActiva.pasos[index];
+    limpiarArchivoLocal(paso);
+    configActiva.pasos.splice(index, 1);
+    reasignarPasoIds(configActiva.pasos);
 
     if (!configActiva.pasos.length) {
-      lista.innerHTML = '<p class="segv2-panel-empty">Sin pasos — agrega uno abajo.</p>';
+      pasoActivoIndex = -1;
+      mostrarSelectorBloques = true;
+    } else {
+      pasoActivoIndex = Math.min(index, configActiva.pasos.length - 1);
+    }
+
+    renderEstadoVacio();
+    renderSelectorBloques();
+    renderListaPasos();
+    renderFormularioPaso();
+    onPanelChange();
+  }
+
+  function renderListaPasos() {
+    const lista = document.getElementById("segv2ListaPasos");
+    const section = document.getElementById("segv2ListaSection");
+    if (!lista || !configActiva) return;
+
+    const tienePasos = configActiva.pasos.length > 0;
+    if (section) section.style.display = tienePasos ? "" : "none";
+
+    if (!tienePasos) {
+      lista.innerHTML = "";
       return;
     }
 
@@ -1184,9 +1363,16 @@ window.MacBotSeguimientoV2 = (function () {
         const activo = index === pasoActivoIndex ? " segv2-paso-card--active" : "";
         const erroresPaso = validarPaso(paso, index);
         const invalido = erroresPaso.length ? " segv2-paso-card--invalid" : "";
-        const preview = previewPasoTexto(paso);
+        const caption = captionPasoLista(paso);
         const puedeSubir = index > 0;
         const puedeBajar = index < configActiva.pasos.length - 1;
+        const titulo =
+          "Paso " +
+          (index + 1) +
+          " · " +
+          labelTipo(paso.tipo) +
+          " · " +
+          formatearDelayCorto(paso.delay);
 
         return (
           '<div class="segv2-paso-card-wrap' +
@@ -1195,32 +1381,25 @@ window.MacBotSeguimientoV2 = (function () {
           '" data-index="' +
           index +
           '">' +
-          '<button type="button" class="segv2-paso-card" data-action="select">' +
-          '<span class="segv2-paso-card-rail"><span class="segv2-paso-card-num">' +
-          (index + 1) +
-          "</span></span>" +
-          '<span class="segv2-paso-card-body">' +
-          '<span class="segv2-paso-card-badges">' +
-          '<span class="segv2-chip segv2-chip--tipo">' +
-          iconoTipoPaso(paso.tipo) +
-          " " +
-          esc(labelTipo(paso.tipo)) +
+          '<div class="segv2-paso-card">' +
+          '<div class="segv2-paso-card-head">' +
+          '<span class="segv2-paso-card-title">' +
+          esc(titulo) +
           "</span>" +
-          '<span class="segv2-chip segv2-chip--delay">⏱ Espera ' +
-          esc(formatearDelayCorto(paso.delay)) +
-          "</span></span>" +
-          '<span class="segv2-paso-card-msg">' +
-          preview +
-          "</span></span></button>" +
-          '<div class="segv2-paso-card-tools">' +
+          '<span class="segv2-paso-card-caption">' +
+          caption +
+          "</span></div>" +
+          '<div class="segv2-paso-card-actions">' +
+          '<button type="button" class="segv2-paso-action" data-action="select" title="Editar">Editar</button>' +
+          '<button type="button" class="segv2-paso-action" data-action="dup" title="Duplicar">Duplicar</button>' +
+          '<button type="button" class="segv2-paso-action segv2-paso-action--danger" data-action="del" title="Eliminar">Eliminar</button>' +
           '<button type="button" class="segv2-icon-btn" data-action="up"' +
           (puedeSubir ? "" : " disabled") +
           ' title="Mover arriba" aria-label="Mover arriba">↑</button>' +
           '<button type="button" class="segv2-icon-btn" data-action="down"' +
           (puedeBajar ? "" : " disabled") +
           ' title="Mover abajo" aria-label="Mover abajo">↓</button>' +
-          '<button type="button" class="segv2-icon-btn" data-action="dup" title="Duplicar paso" aria-label="Duplicar paso">⧉</button>' +
-          "</div></div>"
+          "</div></div></div>"
         );
       })
       .join("");
@@ -1231,6 +1410,8 @@ window.MacBotSeguimientoV2 = (function () {
       wrap.querySelector('[data-action="select"]')?.addEventListener("click", function () {
         syncPasoDesdeFormulario();
         pasoActivoIndex = index;
+        mostrarSelectorBloques = false;
+        renderSelectorBloques();
         renderListaPasos();
         renderFormularioPaso();
       });
@@ -1249,18 +1430,28 @@ window.MacBotSeguimientoV2 = (function () {
         ev.stopPropagation();
         duplicarPaso(index);
       });
+
+      wrap.querySelector('[data-action="del"]')?.addEventListener("click", function (ev) {
+        ev.stopPropagation();
+        eliminarPaso(index);
+      });
     });
   }
 
   function renderFormularioPaso() {
     const form = document.getElementById("segv2FormPaso");
+    const section = document.getElementById("segv2EditorSection");
     if (!form || !configActiva) return;
 
     const paso = configActiva.pasos[pasoActivoIndex];
     if (!paso) {
       form.innerHTML = "";
+      if (section) section.style.display = "none";
+      renderVistaPreviaMensaje();
       return;
     }
+
+    if (section) section.style.display = "";
 
     const unidadOpts = UNIDADES.map(function (u) {
       const sel = normalizarUnidad(paso.delay?.unidad) === u ? " selected" : "";
@@ -1268,17 +1459,29 @@ window.MacBotSeguimientoV2 = (function () {
       return '<option value="' + u + '"' + sel + ">" + label + "</option>";
     }).join("");
 
+    const tipoOpts = BLOQUES_TIPO.map(function (item) {
+      const sel = normalizarTipo(paso.tipo) === item.id ? " selected" : "";
+      return (
+        '<option value="' +
+        item.id +
+        '"' +
+        sel +
+        ">" +
+        item.icon +
+        " " +
+        esc(item.labelCorto) +
+        "</option>"
+      );
+    }).join("");
+
     const total = configActiva.pasos.length;
-    const puedeSubir = pasoActivoIndex > 0;
-    const puedeBajar = pasoActivoIndex < total - 1;
     const tipoActual = normalizarTipo(paso.tipo);
     const esMedia = esTipoMedia(tipoActual);
-
-    const bloquesHtml = buildBloquesTipoHtml(tipoActual);
+    const erroresPaso = validarPaso(paso, pasoActivoIndex);
 
     const camposTexto = !esMedia
       ? '<div class="segv2-form-row segv2-campo-texto">' +
-        "<label>Mensaje</label>" +
+        "<label>Contenido</label>" +
         '<textarea id="segv2Mensaje" rows="4" placeholder="Texto del seguimiento…">' +
         esc(paso.contenido || "") +
         "</textarea></div>"
@@ -1289,20 +1492,16 @@ window.MacBotSeguimientoV2 = (function () {
     form.innerHTML =
       '<div class="segv2-form">' +
       '<div class="segv2-form-head">' +
-      "<h5>Paso " +
+      "<h5>Editar paso " +
       (pasoActivoIndex + 1) +
       " de " +
       total +
-      "</h5>" +
-      '<div class="segv2-form-tools">' +
-      '<button type="button" class="segv2-icon-btn" id="segv2MoverArriba"' +
-      (puedeSubir ? "" : " disabled") +
-      ' title="Mover arriba">↑</button>' +
-      '<button type="button" class="segv2-icon-btn" id="segv2MoverAbajo"' +
-      (puedeBajar ? "" : " disabled") +
-      ' title="Mover abajo">↓</button>' +
-      '<button type="button" class="segv2-icon-btn" id="segv2DuplicarPaso" title="Duplicar paso">⧉ Duplicar</button>' +
-      "</div></div>" +
+      "</h5></div>" +
+      '<div class="segv2-form-row">' +
+      "<label>Tipo de bloque</label>" +
+      '<select id="segv2TipoSelect" class="segv2-select">' +
+      tipoOpts +
+      "</select></div>" +
       '<div class="segv2-form-row segv2-form-row--delay">' +
       '<label>Tiempo de espera</label>' +
       '<div class="segv2-delay-inputs">' +
@@ -1312,42 +1511,37 @@ window.MacBotSeguimientoV2 = (function () {
       '<select id="segv2DelayUnidad" class="segv2-select" required>' +
       unidadOpts +
       "</select></div></div>" +
-      bloquesHtml +
       camposTexto +
       camposMedia +
-      '<div class="segv2-preview-wrap">' +
-      '<label class="segv2-preview-label">Vista previa</label>' +
-      '<div id="segv2VistaPrevia" class="segv2-preview"></div></div>' +
+      (erroresPaso.length
+        ? '<div class="segv2-paso-errores"><ul>' +
+          erroresPaso
+            .map(function (e) {
+              return "<li>" + esc(e) + "</li>";
+            })
+            .join("") +
+          "</ul></div>"
+        : "") +
       '<button type="button" class="segv2-btn segv2-btn-danger" id="segv2EliminarPaso">Eliminar paso</button>' +
       "</div>";
 
-    document.getElementById("segv2MoverArriba")?.addEventListener("click", function () {
-      moverPaso(pasoActivoIndex, -1);
-    });
-
-    document.getElementById("segv2MoverAbajo")?.addEventListener("click", function () {
-      moverPaso(pasoActivoIndex, 1);
-    });
-
-    document.getElementById("segv2DuplicarPaso")?.addEventListener("click", function () {
-      duplicarPaso(pasoActivoIndex);
-    });
-
     document.getElementById("segv2EliminarPaso")?.addEventListener("click", function () {
-      if (configActiva.pasos.length <= 1) {
-        alert("Debe haber al menos un paso.");
-        return;
-      }
+      eliminarPaso(pasoActivoIndex);
+    });
+
+    document.getElementById("segv2TipoSelect")?.addEventListener("change", function () {
+      const nuevoTipo = normalizarTipo(this.value);
+      const tipoAnterior = normalizarTipo(paso.tipo);
       syncPasoDesdeFormulario();
-      configActiva.pasos.splice(pasoActivoIndex, 1);
-      pasoActivoIndex = Math.min(pasoActivoIndex, configActiva.pasos.length - 1);
-      reasignarPasoIds(configActiva.pasos);
-      renderListaPasos();
+      if (nuevoTipo !== tipoAnterior) {
+        limpiarArchivoLocal(paso);
+        delete paso.media_url;
+        delete paso.media_filename;
+      }
+      paso.tipo = nuevoTipo;
       renderFormularioPaso();
       onPanelChange();
     });
-
-    wireBloquesTipo(paso);
 
     document.getElementById("segv2ArchivoInput")?.addEventListener("change", onArchivoSeleccionado);
 
@@ -1376,10 +1570,28 @@ window.MacBotSeguimientoV2 = (function () {
     configActiva.cancelarSiResponde = !!document.getElementById("segv2CancelarSiResponde")?.checked;
 
     renderPreviewNodo(nodoActivo, buildConfigPreview(configActiva));
+    renderEstadoVacio();
+    renderSelectorBloques();
     renderListaPasos();
     renderDiagPanel();
     renderVistaPreviaMensaje();
     renderErroresValidacion();
+    actualizarBotonGuardar();
+  }
+
+  function actualizarBotonGuardar() {
+    const btn = document.getElementById("btnGuardarFlujo");
+    if (!btn) return;
+    if (!configActiva || !nodoActivo) {
+      btn.disabled = false;
+      btn.title = "";
+      return;
+    }
+    const errores = validarConfig(configActiva);
+    btn.disabled = errores.length > 0;
+    btn.title = errores.length
+      ? "Corrige los pasos inválidos antes de guardar"
+      : "";
   }
 
   function renderPanel(nodo) {
@@ -1387,40 +1599,55 @@ window.MacBotSeguimientoV2 = (function () {
 
     nodoActivo = nodo;
     configActiva = leerConfigDeNodo(nodo);
-    pasoActivoIndex = 0;
+    pasoActivoIndex = configActiva.pasos.length ? 0 : -1;
+    mostrarSelectorBloques = !configActiva.pasos.length;
 
     const contenido = document.getElementById("panelNodoContenido");
     if (!contenido) return;
 
     contenido.innerHTML =
       '<div class="segv2-panel">' +
+      '<header class="segv2-panel-header">' +
       "<h4>🔒 Seguimiento CRM V2</h4>" +
-      '<p class="segv2-panel-desc">Seguimiento seguro multi-número. Los pasos se envían desde la línea que recibió al lead.</p>' +
-      '<div id="segv2DiagPanel" class="segv2-diag-panel"></div>' +
+      '<span class="segv2-panel-badge">Seguro multi-número</span>' +
+      '<p class="segv2-panel-desc">Envía mensajes programados sin mezclar líneas.</p>' +
+      "</header>" +
       '<div id="segv2Errores" class="segv2-errores"></div>' +
+      '<section class="segv2-section segv2-section--resumen">' +
+      '<h5 class="segv2-section-title">Resumen</h5>' +
+      '<div id="segv2DiagPanel" class="segv2-diag-panel"></div>' +
       '<label class="segv2-toggle">' +
       '<input type="checkbox" id="segv2CancelarSiResponde"' +
       (configActiva.cancelarSiResponde !== false ? " checked" : "") +
       "> Cancelar si responde</label>" +
+      "</section>" +
+      '<div id="segv2EstadoVacio" class="segv2-empty-state-wrap"></div>' +
+      '<div id="segv2SelectorBloques" class="segv2-selector-bloques"></div>' +
+      '<section id="segv2ListaSection" class="segv2-section segv2-section--pasos">' +
+      '<h5 class="segv2-section-title">Pasos</h5>' +
       '<div id="segv2ListaPasos" class="segv2-pasos-list"></div>' +
       '<div class="segv2-panel-actions">' +
-      '<button type="button" class="segv2-btn segv2-btn-ghost" id="segv2AddPaso">+ Agregar paso</button>' +
-      "</div>" +
+      '<button type="button" class="segv2-btn segv2-btn-ghost" id="segv2AddBloque">+ Agregar bloque</button>' +
+      "</div></section>" +
+      '<section id="segv2EditorSection" class="segv2-section segv2-section--editor">' +
+      '<h5 class="segv2-section-title">Editor del paso</h5>' +
       '<div id="segv2FormPaso"></div>' +
-      "</div>";
+      "</section>" +
+      '<section id="segv2PreviewSection" class="segv2-section segv2-section--preview">' +
+      '<h5 class="segv2-section-title">Vista previa</h5>' +
+      '<div id="segv2VistaPrevia" class="segv2-preview"></div>' +
+      "</section></div>";
 
     document.getElementById("segv2CancelarSiResponde")?.addEventListener("change", onPanelChange);
 
-    document.getElementById("segv2AddPaso")?.addEventListener("click", function () {
-      syncPasoDesdeFormulario();
-      configActiva.pasos.push(crearPasoVacio(configActiva.pasos.length));
-      pasoActivoIndex = configActiva.pasos.length - 1;
-      renderListaPasos();
-      renderFormularioPaso();
-      onPanelChange();
+    document.getElementById("segv2AddBloque")?.addEventListener("click", function () {
+      mostrarSelectorBloques = true;
+      renderSelectorBloques();
     });
 
     renderDiagPanel();
+    renderEstadoVacio();
+    renderSelectorBloques();
     renderListaPasos();
     renderFormularioPaso();
     onPanelChange();
@@ -1436,6 +1663,8 @@ window.MacBotSeguimientoV2 = (function () {
     const errores = validarConfig(configActiva);
     if (errores.length) {
       renderErroresValidacion();
+      renderListaPasos();
+      actualizarBotonGuardar();
       if (!silent) {
         alert("Seguimiento CRM V2:\n\n" + errores.join("\n"));
       }
@@ -1448,6 +1677,7 @@ window.MacBotSeguimientoV2 = (function () {
     }
 
     configActiva = result.cfg;
+    actualizarBotonGuardar();
     return true;
   }
 
@@ -1465,7 +1695,9 @@ window.MacBotSeguimientoV2 = (function () {
     limpiarTodosArchivosLocales();
     nodoActivo = null;
     configActiva = null;
-    pasoActivoIndex = 0;
+    pasoActivoIndex = -1;
+    mostrarSelectorBloques = false;
+    actualizarBotonGuardar();
   }
 
   function getNodoActivo() {

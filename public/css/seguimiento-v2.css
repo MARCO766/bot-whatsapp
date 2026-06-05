@@ -277,17 +277,78 @@
 }
 
 /* Panel derecho */
+.segv2-panel-header {
+  margin-bottom: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid rgba(34, 211, 238, 0.12);
+}
+
 .segv2-panel h4 {
   margin: 0 0 8px;
   color: #22d3ee;
   font-size: 16px;
 }
 
+.segv2-panel-badge {
+  display: inline-flex;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #083344;
+  background: linear-gradient(90deg, #22d3ee, #38bdf8);
+  box-shadow: 0 0 10px rgba(34, 211, 238, 0.25);
+}
+
 .segv2-panel-desc {
-  margin: 0 0 14px;
+  margin: 10px 0 0;
   color: #94a3b8;
   font-size: 13px;
   line-height: 1.45;
+}
+
+.segv2-section {
+  margin-bottom: 16px;
+}
+
+.segv2-section-title {
+  margin: 0 0 10px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #67e8f9;
+}
+
+.segv2-empty-state-wrap {
+  margin-bottom: 12px;
+}
+
+.segv2-empty-state {
+  padding: 16px;
+  border-radius: 12px;
+  text-align: center;
+  background: rgba(34, 211, 238, 0.04);
+  border: 1px dashed rgba(34, 211, 238, 0.25);
+}
+
+.segv2-empty-state-title {
+  margin: 0 0 6px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #e2e8f0;
+}
+
+.segv2-empty-state-desc {
+  margin: 0;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.segv2-selector-bloques {
+  margin-bottom: 14px;
 }
 
 .segv2-diag-panel {
@@ -374,99 +435,102 @@
 .segv2-pasos-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin-bottom: 12px;
-  max-height: 260px;
+  gap: 6px;
+  margin-bottom: 10px;
+  max-height: 220px;
   overflow-y: auto;
 }
 
 .segv2-paso-card-wrap {
-  display: flex;
-  align-items: stretch;
-  gap: 6px;
-  border-radius: 12px;
+  border-radius: 10px;
   transition: box-shadow 0.2s;
 }
 
 .segv2-paso-card-wrap.segv2-paso-card--active {
-  box-shadow: 0 0 18px rgba(34, 211, 238, 0.15);
+  box-shadow: 0 0 14px rgba(34, 211, 238, 0.12);
 }
 
 .segv2-paso-card-wrap.segv2-paso-card--invalid .segv2-paso-card {
-  border-color: rgba(248, 113, 113, 0.45);
+  border-color: rgba(248, 113, 113, 0.55);
+  background: rgba(248, 113, 113, 0.06);
 }
 
 .segv2-paso-card {
-  flex: 1;
   display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 10px 12px;
-  border-radius: 12px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.03);
-  text-align: left;
-  cursor: pointer;
-  transition: border-color 0.2s, background 0.2s;
-  color: inherit;
-  font: inherit;
   min-width: 0;
 }
 
-.segv2-paso-card:hover {
-  border-color: rgba(34, 211, 238, 0.35);
-}
-
 .segv2-paso-card-wrap.segv2-paso-card--active .segv2-paso-card {
-  border-color: rgba(34, 211, 238, 0.65);
-  background: rgba(34, 211, 238, 0.08);
+  border-color: rgba(34, 211, 238, 0.55);
+  background: rgba(34, 211, 238, 0.07);
 }
 
-.segv2-paso-card-rail {
-  flex-shrink: 0;
-}
-
-.segv2-paso-card-num {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  font-size: 11px;
-  font-weight: 800;
-  color: #0c4a6e;
-  background: linear-gradient(135deg, #22d3ee, #38bdf8);
-  border-radius: 50%;
-  box-shadow: 0 0 10px rgba(34, 211, 238, 0.4);
-}
-
-.segv2-paso-card-body {
+.segv2-paso-card-head {
   flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
 }
 
-.segv2-paso-card-badges {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-
-.segv2-paso-card-msg {
+.segv2-paso-card-title {
   font-size: 12px;
-  color: #94a3b8;
+  font-weight: 700;
+  color: #e2e8f0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.segv2-paso-card-tools {
+.segv2-paso-card-caption {
+  font-size: 11px;
+  color: #64748b;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.segv2-paso-card-actions {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  align-items: center;
+  gap: 3px;
   flex-shrink: 0;
+}
+
+.segv2-paso-action {
+  padding: 4px 7px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  color: #94a3b8;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s, color 0.15s;
+}
+
+.segv2-paso-action:hover {
+  background: rgba(34, 211, 238, 0.1);
+  color: #67e8f9;
+}
+
+.segv2-paso-action--danger:hover {
+  background: rgba(248, 113, 113, 0.12);
+  color: #fecaca;
+}
+
+.segv2-paso-card-actions .segv2-icon-btn {
+  width: 24px;
+  height: 24px;
+  font-size: 11px;
 }
 
 .segv2-icon-btn {
@@ -689,14 +753,18 @@
 
 /* Bloques tipo premium */
 .segv2-bloques-wrap {
-  margin-bottom: 14px;
+  margin-bottom: 10px;
+}
+
+.segv2-bloques-wrap--selector .segv2-block-picker {
+  gap: 6px;
 }
 
 .segv2-bloques-title {
-  margin: 0 0 10px;
+  margin: 0 0 8px;
   font-size: 10px;
   font-weight: 800;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   color: #67e8f9;
 }
@@ -704,7 +772,7 @@
 .segv2-block-picker {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: 8px;
 }
 
 .segv2-block-card {
@@ -712,56 +780,51 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  min-height: 88px;
-  padding: 14px 10px;
+  gap: 4px;
+  min-height: 56px;
+  padding: 8px 6px;
   border: 1px solid rgba(34, 211, 238, 0.22);
-  border-radius: 14px;
+  border-radius: 10px;
   background: linear-gradient(165deg, #0c1929 0%, #0f2238 100%);
   color: #e2e8f0;
   cursor: pointer;
   font: inherit;
   transition:
-    transform 0.2s ease,
-    border-color 0.2s ease,
-    box-shadow 0.2s ease,
-    background 0.2s ease;
+    transform 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    background 0.15s ease;
 }
 
 .segv2-block-card:hover {
-  transform: translateY(-2px);
-  border-color: rgba(56, 189, 248, 0.65);
-  box-shadow:
-    0 12px 24px rgba(0, 0, 0, 0.4),
-    0 0 20px rgba(34, 211, 238, 0.18);
+  transform: translateY(-1px);
+  border-color: rgba(56, 189, 248, 0.55);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3), 0 0 12px rgba(34, 211, 238, 0.12);
   background: linear-gradient(165deg, #102338 0%, #122a45 100%);
 }
 
 .segv2-block-card--active {
-  border-color: rgba(34, 211, 238, 0.85);
-  box-shadow:
-    0 12px 26px rgba(0, 0, 0, 0.45),
-    0 0 0 1px rgba(34, 211, 238, 0.35),
-    0 0 22px rgba(34, 211, 238, 0.28);
-  background: linear-gradient(165deg, rgba(34, 211, 238, 0.16), rgba(8, 22, 40, 0.96));
+  border-color: rgba(34, 211, 238, 0.75);
+  box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.3), 0 0 14px rgba(34, 211, 238, 0.2);
+  background: linear-gradient(165deg, rgba(34, 211, 238, 0.14), rgba(8, 22, 40, 0.96));
 }
 
 .segv2-block-card--wide {
   grid-column: 1 / -1;
-  max-width: 50%;
-  justify-self: center;
+  max-width: 100%;
+  justify-self: stretch;
 }
 
 .segv2-block-icon {
-  font-size: 28px;
+  font-size: 18px;
   line-height: 1;
-  filter: drop-shadow(0 0 8px rgba(34, 211, 238, 0.35));
+  filter: drop-shadow(0 0 6px rgba(34, 211, 238, 0.3));
 }
 
 .segv2-block-label {
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 800;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.08em;
   color: #94a3b8;
 }
 
@@ -938,9 +1001,100 @@
   font-style: normal;
 }
 
+.segv2-preview-status {
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.segv2-preview-status--local {
+  color: #fcd34d;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(251, 191, 36, 0.3);
+}
+
+.segv2-preview-status--ready {
+  color: #6ee7b7;
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(52, 211, 153, 0.3);
+}
+
+.segv2-preview-status--error {
+  color: #fecaca;
+  background: rgba(248, 113, 113, 0.1);
+  border: 1px solid rgba(248, 113, 113, 0.35);
+}
+
+.segv2-preview-status--uploading {
+  color: #fcd34d;
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px dashed rgba(251, 191, 36, 0.3);
+}
+
+.segv2-media-status {
+  margin: 0 0 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.segv2-media-status--local {
+  color: #fcd34d;
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.segv2-media-status--ready {
+  color: #6ee7b7;
+  background: rgba(16, 185, 129, 0.08);
+}
+
+.segv2-media-status--error {
+  color: #fecaca;
+  background: rgba(248, 113, 113, 0.1);
+}
+
+.segv2-paso-errores {
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 11px;
+  color: #fecaca;
+  background: rgba(248, 113, 113, 0.08);
+  border: 1px solid rgba(248, 113, 113, 0.25);
+}
+
+.segv2-paso-errores ul {
+  margin: 0;
+  padding-left: 16px;
+}
+
+.segv2-timeline-more {
+  margin: 4px 0 0 38px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #67e8f9;
+}
+
+.segv2-section--preview .segv2-preview {
+  margin-top: 0;
+}
+
 @media (max-width: 420px) {
   .segv2-block-card--wide {
     max-width: 100%;
+  }
+
+  .segv2-paso-card {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .segv2-paso-card-actions {
+    flex-wrap: wrap;
   }
 }
 
