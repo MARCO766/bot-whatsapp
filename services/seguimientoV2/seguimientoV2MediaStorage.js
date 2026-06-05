@@ -153,10 +153,59 @@ async function subirArchivoSeguimientoV2Media(file, tipo, usuarioId, conexionWha
   };
 }
 
+async function verificarEstadoStorageSeguimientoV2() {
+  if (!SUPABASE_URL || !SUPABASE_KEY) {
+    return {
+      bucketExists: false,
+      publicUrlReady: false,
+      configured: false,
+      message: "Supabase no configurado en el servidor",
+    };
+  }
+
+  let bucketExists = false;
+  let bucketPublic = false;
+
+  try {
+    const res = await axios.get(`${SUPABASE_URL}/storage/v1/bucket/${BUCKET}`, {
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`,
+      },
+      validateStatus: function (status) {
+        return status < 500;
+      },
+    });
+
+    if (res.status === 200 && res.data) {
+      bucketExists = true;
+      bucketPublic = res.data.public === true;
+    }
+  } catch (err) {
+    const status = err?.response?.status;
+    if (status !== 404) {
+      console.error("[SEGV2_STORAGE] error verificando bucket:", mensajeErrorSupabase(err));
+    }
+  }
+
+  return {
+    bucketExists,
+    publicUrlReady: bucketExists && bucketPublic,
+    configured: true,
+    bucket: BUCKET,
+    message: !bucketExists
+      ? `Bucket ${BUCKET} no encontrado. Créalo como público en Supabase Storage.`
+      : !bucketPublic
+        ? `Bucket ${BUCKET} existe pero no es público. Configúralo como público en Supabase Storage.`
+        : null,
+  };
+}
+
 module.exports = {
   BUCKET_SEGUIMIENTO_V2_MEDIA: BUCKET,
   LIMITES_SEGUIMIENTO_V2_MEDIA: LIMITES,
   EXT_BLOQUEADAS_SEGUIMIENTO_V2: EXT_BLOQUEADAS,
   validarArchivoSeguimientoV2,
   subirArchivoSeguimientoV2Media,
+  verificarEstadoStorageSeguimientoV2,
 };

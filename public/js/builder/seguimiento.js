@@ -888,9 +888,18 @@ window.MacBotSeguimiento = (function () {
   }
 
   function esNodoSeguimiento(nodo) {
+    if (!nodo) return false;
+    if (
+      nodo.dataset.tipo === "seguimiento_crm_v2" ||
+      nodo.classList.contains("seguimiento-v2-node") ||
+      nodo.classList.contains("follow-node-v2") ||
+      nodo.classList.contains("node-seguimiento-v2") ||
+      nodo.querySelector(".seguimiento-v2-data")
+    ) {
+      return false;
+    }
     return (
-      nodo &&
-      (nodo.dataset.tipo === "seguimiento" || nodo.classList.contains("follow-node"))
+      nodo.dataset.tipo === "seguimiento" || nodo.classList.contains("follow-node")
     );
   }
 

@@ -2,7 +2,10 @@ const express = require("express");
 const multer = require("multer");
 
 const { protegerPanel } = require("../middlewares/auth");
-const { subirArchivoSeguimientoV2Media } = require("../services/seguimientoV2/seguimientoV2MediaStorage");
+const {
+  subirArchivoSeguimientoV2Media,
+  verificarEstadoStorageSeguimientoV2,
+} = require("../services/seguimientoV2/seguimientoV2MediaStorage");
 
 const router = express.Router();
 
@@ -18,6 +21,27 @@ function leerConexionWhatsappId(req) {
   if (raw == null || String(raw).trim() === "") return null;
   return String(raw).trim();
 }
+
+router.get("/api/seguimiento-v2/storage-status", protegerPanel, async (_req, res) => {
+  try {
+    const estado = await verificarEstadoStorageSeguimientoV2();
+    res.json({
+      bucketExists: !!estado.bucketExists,
+      publicUrlReady: !!estado.publicUrlReady,
+      configured: estado.configured !== false,
+      bucket: estado.bucket,
+      message: estado.message || null,
+    });
+  } catch (error) {
+    console.error("[SEGV2_STORAGE] error:", error.message);
+    res.status(500).json({
+      bucketExists: false,
+      publicUrlReady: false,
+      configured: false,
+      message: error.message || "Error verificando Storage",
+    });
+  }
+});
 
 router.post(
   "/api/seguimiento-v2/upload-media",
