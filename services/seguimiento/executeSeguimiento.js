@@ -104,6 +104,7 @@ function buildOpcionesEnvioSeguimiento(item) {
   return {
     usuarioId: item.usuario_id,
     conexionWhatsappId: conexionId,
+    conexionWhatsappIdFila: item.conexion_whatsapp_id ?? conexionId,
     strictConexionWhatsappId: true,
     origen: "seguimiento",
     seguimientoId: item.id,
@@ -115,6 +116,17 @@ async function enviarMensajeSeguimiento(item) {
   const tipo = (item.mensaje_tipo || payload.tipo || "texto").toLowerCase();
   const opciones = buildOpcionesEnvioSeguimiento(item);
   const botones = Array.isArray(payload.botones) ? payload.botones : [];
+
+  console.log("[SEG_SEND_TRACE]", {
+    seguimiento_id: item.id,
+    cliente_numero: item.cliente_numero,
+    conexion_whatsapp_id_fila: item.conexion_whatsapp_id ?? null,
+    "opciones.conexion_whatsapp_id": opciones.conexionWhatsappId,
+    strictConexionWhatsappId: opciones.strictConexionWhatsappId === true,
+    phone_number_id_resuelto: null,
+    nombre_conexion_resuelta: null,
+    fase: "executeSeguimiento_pre_whatsappService",
+  });
 
   console.log("[SEGUIMIENTO_MULTI] enviando mensaje de seguimiento", {
     seguimiento_id: item.id,

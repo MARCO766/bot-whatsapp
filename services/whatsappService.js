@@ -372,74 +372,101 @@ function logMetaSendFinal(opcionesEnvio, numero, phoneIdEnviar) {
   );
 }
 
-async function resolverCredencialesEnvio(opciones = {}) {
+/** Seguimiento / strict: nunca activo=true ni TOKEN/PHONE_ID globales. */
+function debeResolverSoloConexionExplicita(opciones) {
+  return (
+    esInboxSeguimiento(opciones) || opciones.strictConexionWhatsappId === true
+  );
+}
+
+async function resolverSoloConexionExplicita(opciones) {
   if (esInboxSeguimiento(opciones)) {
     assertOpcionesSeguimiento(opciones);
-
-    const conexion = await resolverConexionWhatsappPorId(
-      opciones.usuarioId,
-      opciones.conexionWhatsappId,
-      { soloSeguimientoStrict: true }
+  } else if (!opciones.conexionWhatsappId || !opciones.usuarioId) {
+    throw new Error(
+      "Modo estricto requiere conexion_whatsapp_id y usuario_id (sin fallback activo)"
     );
+  }
 
-    if (!conexion?.token || !conexion?.phone_id) {
-      throw new Error(
-        "Seguimiento: no se encontró la conexión WhatsApp (id + usuario, sin fallback activo)"
-      );
-    }
+  const conexionSolicitada = normalizarConexionWhatsappIdOpciones(
+    opciones.conexionWhatsappId
+  );
+  const conexion = await resolverConexionWhatsappPorId(
+    opciones.usuarioId,
+    conexionSolicitada,
+    { soloSeguimientoStrict: true }
+  );
 
-    console.log("[STRICT CONEXION RESUELTA]", {
-      origen: "seguimiento",
-      conexion_whatsapp_id: conexion.id || opciones.conexionWhatsappId,
-      activo: conexion.activo,
-      phone_id: conexion.phone_id,
-    });
+  if (!conexion?.token || !conexion?.phone_id) {
+    throw new Error(
+      `Conexión WhatsApp no encontrada para id=${conexionSolicitada} (sin fallback activo=true)`
+    );
+  }
 
-    logResolverCredenciales(opciones, conexion, conexion.phone_id);
+  const idResuelto = normalizarConexionWhatsappIdOpciones(
+    conexion.id || conexionSolicitada
+  );
+  if (idResuelto !== conexionSolicitada) {
+    throw new Error(
+      `Conexión resuelta (${idResuelto}) no coincide con conexion_whatsapp_id solicitada (${conexionSolicitada})`
+    );
+  }
 
-    return {
-      tokenEnviar: conexion.token,
-      phoneIdEnviar: conexion.phone_id,
-      resolvedConexionWhatsappId: conexion.id || opciones.conexionWhatsappId,
-    };
+  console.log("[STRICT CONEXION RESUELTA]", {
+    origen: opciones.origen || null,
+    conexion_whatsapp_id: idResuelto,
+    activo: conexion.activo,
+    phone_id: conexion.phone_id,
+    nombre: conexion.nombre || null,
+  });
+
+  logResolverCredenciales(opciones, conexion, conexion.phone_id);
+
+  return {
+    tokenEnviar: conexion.token,
+    phoneIdEnviar: conexion.phone_id,
+    resolvedConexionWhatsappId: idResuelto,
+    nombreConexionResuelta: conexion.nombre || null,
+  };
+}
+
+function logSegSendTrace(opcionesEnvio, numero, creds) {
+  if (!debeResolverSoloConexionExplicita(opcionesEnvio) && opcionesEnvio?.origen !== "seguimiento") {
+    return;
+  }
+
+  const globalPhone = PHONE_ID || null;
+  const phoneResuelto = creds?.phoneIdEnviar ?? null;
+  const conexionFila =
+    opcionesEnvio?.conexionWhatsappIdFila ?? opcionesEnvio?.conexionWhatsappId ?? null;
+
+  console.log("[SEG_SEND_TRACE]", {
+    seguimiento_id: opcionesEnvio?.seguimientoId ?? null,
+    cliente_numero: String(numero || "").trim() || null,
+    conexion_whatsapp_id_fila: conexionFila,
+    "opciones.conexion_whatsapp_id": opcionesEnvio?.conexionWhatsappId ?? null,
+    strictConexionWhatsappId: opcionesEnvio?.strictConexionWhatsappId === true,
+    phone_number_id_resuelto: phoneResuelto,
+    nombre_conexion_resuelta: creds?.nombreConexionResuelta ?? null,
+    conexion_id_resuelto: creds?.resolvedConexionWhatsappId ?? null,
+    usa_phone_id_env_global: Boolean(
+      globalPhone && phoneResuelto && String(phoneResuelto) === String(globalPhone)
+    ),
+    origen: opcionesEnvio?.origen ?? null,
+    modo_resolver: debeResolverSoloConexionExplicita(opcionesEnvio)
+      ? "solo_conexion_explicita"
+      : "legacy",
+  });
+}
+
+async function resolverCredencialesEnvio(opciones = {}) {
+  if (debeResolverSoloConexionExplicita(opciones)) {
+    return resolverSoloConexionExplicita(opciones);
   }
 
   let tokenEnviar = TOKEN;
   let phoneIdEnviar = PHONE_ID;
   let conexionUsada = null;
-  const strictConexion = Boolean(opciones.strictConexionWhatsappId);
-
-  if (strictConexion) {
-    if (!opciones.conexionWhatsappId || !opciones.usuarioId) {
-      throw new Error("Seguimiento estricto requiere conexion_whatsapp_id y usuario_id");
-    }
-
-    const conexion = await resolverConexionWhatsappPorId(
-      opciones.usuarioId,
-      opciones.conexionWhatsappId,
-      { soloSeguimientoStrict: true }
-    );
-
-    if (!conexion?.token || !conexion?.phone_id) {
-      throw new Error(
-        "No se encontró la conexión WhatsApp del seguimiento (id + usuario, sin filtro activo)"
-      );
-    }
-
-    console.log("[STRICT CONEXION RESUELTA]", {
-      conexion_whatsapp_id: conexion.id || opciones.conexionWhatsappId,
-      activo: conexion.activo,
-      phone_id: conexion.phone_id,
-    });
-
-    logResolverCredenciales(opciones, conexion, conexion.phone_id);
-
-    return {
-      tokenEnviar: conexion.token,
-      phoneIdEnviar: conexion.phone_id,
-      resolvedConexionWhatsappId: conexion.id || opciones.conexionWhatsappId,
-    };
-  }
 
   if (opciones.conexionWhatsappId && opciones.usuarioId) {
     const conexion = await resolverConexionWhatsappPorId(
@@ -451,8 +478,16 @@ async function resolverCredencialesEnvio(opciones = {}) {
       tokenEnviar = conexion.token;
       phoneIdEnviar = conexion.phone_id;
       logResolverCredenciales(opciones, conexionUsada, phoneIdEnviar);
-      return { tokenEnviar, phoneIdEnviar };
+      return {
+        tokenEnviar,
+        phoneIdEnviar,
+        resolvedConexionWhatsappId: conexion.id || opciones.conexionWhatsappId,
+        nombreConexionResuelta: conexion.nombre || null,
+      };
     }
+    throw new Error(
+      `conexion_whatsapp_id=${opciones.conexionWhatsappId} no encontrada (sin fallback activo)`
+    );
   }
 
   if (opciones.usuarioId) {
@@ -665,13 +700,16 @@ async function enviarTextoWhatsApp(numero, texto, opciones = {}) {
   };
 
   try {
+    const credenciales = await resolverCredencialesEnvio(opcionesEnvio);
     const {
       tokenEnviar,
       phoneIdEnviar,
       resolvedConexionWhatsappId,
-    } = await resolverCredencialesEnvio(opcionesEnvio);
+      nombreConexionResuelta,
+    } = credenciales;
     const inbox = resolverParamsInboxSaliente(opcionesEnvio, resolvedConexionWhatsappId);
     logSeguimientoEnvio(opcionesEnvio, numero, phoneIdEnviar);
+    logSegSendTrace(opcionesEnvio, numero, credenciales);
 
     logEmojiDebug("antes enviar whatsapp", textoEnvio);
     console.log("[SEND DEBUG] payload whatsapp:", payloadWhatsapp);
@@ -997,13 +1035,15 @@ async function enviarMediaWhatsApp(numero, tipo, mediaUrl, caption = "", opcione
       urlEnvio = urlOriginal;
     }
 
+    const credenciales = await resolverCredencialesWhatsApp(opcionesEnvio);
     const {
       tokenEnviar,
       phoneIdEnviar,
       resolvedConexionWhatsappId,
-    } = await resolverCredencialesWhatsApp(opcionesEnvio);
+    } = credenciales;
     const inbox = resolverParamsInboxSaliente(opcionesEnvio, resolvedConexionWhatsappId);
     logSeguimientoEnvio(opcionesEnvio, numeroDestino, phoneIdEnviar);
+    logSegSendTrace(opcionesEnvio, numeroDestino, credenciales);
 
     if (!tokenEnviar || !phoneIdEnviar) {
       console.error("?? FALTAN CREDENCIALES WHATSAPP (token o phone_id)");
@@ -1153,13 +1193,11 @@ async function enviarBotonesWhatsApp(numero, texto, botones, opciones = {}) {
     const idempotente = await revisarIdempotenciaSeguimientoAntesEnvio(opcionesEnvio);
     if (idempotente) return idempotente;
 
-    const {
-      tokenEnviar,
-      phoneIdEnviar,
-      resolvedConexionWhatsappId,
-    } = await resolverCredencialesEnvio(opcionesEnvio);
+    const credenciales = await resolverCredencialesEnvio(opcionesEnvio);
+    const { tokenEnviar, phoneIdEnviar, resolvedConexionWhatsappId } = credenciales;
     const inbox = resolverParamsInboxSaliente(opcionesEnvio, resolvedConexionWhatsappId);
     logSeguimientoEnvio(opcionesEnvio, numero, phoneIdEnviar);
+    logSegSendTrace(opcionesEnvio, numero, credenciales);
 
     const lista = (botones || []).slice(0, 3).filter(function (b) {
       return b && String(b.texto || "").trim();
