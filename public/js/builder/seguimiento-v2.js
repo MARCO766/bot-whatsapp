@@ -1698,7 +1698,9 @@ window.MacBotSeguimientoV2 = (function () {
     const label = document.getElementById("segv2CancelarLabel");
     const chk = document.getElementById("segv2CancelarSiResponde");
     if (!label || !chk) return;
-    label.textContent = chk.checked ? "Sí" : "No";
+    label.textContent = chk.checked
+      ? "Cancelar si responde"
+      : "Continuar aunque responda";
   }
 
   function renderResumenPanel() {
@@ -1981,11 +1983,19 @@ window.MacBotSeguimientoV2 = (function () {
       '<h5 class="segv2-resumen-title">📋 Seguimiento configurado</h5>' +
       '<p class="segv2-resumen-stat" id="segv2ResumenPasos"></p>' +
       '<label class="segv2-resumen-cancel">' +
-      '<input type="checkbox" id="segv2CancelarSiResponde"' +
+      '<input type="checkbox" class="segv2-switch-input" id="segv2CancelarSiResponde"' +
       (configActiva.cancelarSiResponde !== false ? " checked" : "") +
-      '><span>Cancelar si responde: <strong id="segv2CancelarLabel">' +
-      (configActiva.cancelarSiResponde !== false ? "Sí" : "No") +
-      "</strong></span></label>" +
+      ">" +
+      '<span class="segv2-switch" aria-hidden="true">' +
+      '<span class="segv2-switch-off">OFF</span>' +
+      '<span class="segv2-switch-thumb"></span>' +
+      '<span class="segv2-switch-on">ON</span>' +
+      "</span>" +
+      '<span class="segv2-switch-label" id="segv2CancelarLabel">' +
+      (configActiva.cancelarSiResponde !== false
+        ? "Cancelar si responde"
+        : "Continuar aunque responda") +
+      "</span></label>" +
       '<p class="segv2-resumen-total">Tiempo total estimado: <strong id="segv2ResumenTotal"></strong></p>' +
       "</div></div>" +
       '<section class="segv2-pasos-section segv2-pasos-section--empty" id="segv2ListaSection">' +
