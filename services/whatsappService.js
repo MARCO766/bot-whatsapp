@@ -11,6 +11,7 @@ const {
   logSegPostMetaFinal,
   esSeguimientoBlockedError,
 } = require("./seguimiento/seguimientoGuards");
+const { validarVentana24hAntesDeEnviar, esWa24hGuardBlockError } = require("./whatsapp24hGuard");
 
 const TOKEN = process.env.TOKEN;
 const PHONE_ID = process.env.PHONE_ID;
@@ -478,6 +479,16 @@ function logMetaSendFinal(opcionesEnvio, numero, phoneIdEnviar) {
   );
 }
 
+async function aplicarGuardVentana24hPreMeta(opcionesEnvio, numero, conexionWhatsappId) {
+  return validarVentana24hAntesDeEnviar({
+    usuarioId: opcionesEnvio?.usuarioId ?? null,
+    clienteNumero: numero,
+    conexionWhatsappId: conexionWhatsappId ?? opcionesEnvio?.conexionWhatsappId ?? null,
+    origen: opcionesEnvio?.origen ?? null,
+    esPlantilla: opcionesEnvio?.esPlantilla === true,
+  });
+}
+
 /** Seguimiento / strict: nunca activo=true ni TOKEN/PHONE_ID globales. */
 function debeResolverSoloConexionExplicita(opciones) {
   return (
@@ -839,6 +850,7 @@ async function enviarTextoWhatsApp(numero, texto, opciones = {}) {
     logEmojiDebug("antes enviar whatsapp", textoEnvio);
     console.log("[SEND DEBUG] payload whatsapp:", payloadWhatsapp);
     logMetaSendFinal(opcionesEnvio, numero, phoneIdEnviar);
+    await aplicarGuardVentana24hPreMeta(opcionesEnvio, numero, inbox.conexionWhatsappId);
 
     const respuestaMeta = await axios.post(
       `https://graph.facebook.com/v19.0/${phoneIdEnviar}/messages`,
@@ -911,7 +923,7 @@ async function enviarTextoWhatsApp(numero, texto, opciones = {}) {
       throw supabaseErr;
     }
   } catch (error) {
-    if (esSeguimientoBlockedError(error)) {
+    if (esSeguimientoBlockedError(error) || esWa24hGuardBlockError(error)) {
       throw error;
     }
     const esSupabase =
@@ -1203,6 +1215,11 @@ async function enviarMediaWhatsApp(numero, tipo, mediaUrl, caption = "", opcione
     }
 
     logMetaSendFinal(opcionesEnvio, numeroDestino, phoneIdEnviar);
+    await aplicarGuardVentana24hPreMeta(
+      opcionesEnvio,
+      numeroDestino,
+      inbox.conexionWhatsappId
+    );
 
     const respuestaMeta = await axios.post(
       `https://graph.facebook.com/v19.0/${phoneIdEnviar}/messages`,
@@ -1325,7 +1342,7 @@ async function enviarMediaWhatsApp(numero, tipo, mediaUrl, caption = "", opcione
 
     return row;
   } catch (error) {
-    if (esSeguimientoBlockedError(error)) {
+    if (esSeguimientoBlockedError(error) || esWa24hGuardBlockError(error)) {
       throw error;
     }
     if (tipoApi === "image") {
@@ -1382,6 +1399,7 @@ async function enviarBotonesWhatsApp(numero, texto, botones, opciones = {}) {
     };
 
     logMetaSendFinal(opcionesEnvio, numero, phoneIdEnviar);
+    await aplicarGuardVentana24hPreMeta(opcionesEnvio, numero, inbox.conexionWhatsappId);
 
     const respuestaMeta = await axios.post(
       `https://graph.facebook.com/v19.0/${phoneIdEnviar}/messages`,
@@ -1473,7 +1491,7 @@ async function enviarBotonesWhatsApp(numero, texto, botones, opciones = {}) {
     }
     return row;
   } catch (error) {
-    if (esSeguimientoBlockedError(error)) {
+    if (esSeguimientoBlockedError(error) || esWa24hGuardBlockError(error)) {
       throw error;
     }
     console.log(

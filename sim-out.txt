@@ -1,0 +1,252 @@
+﻿Ôùç injected env (7) from .env // tip: Ôîÿ override existing { override: true }
+=== simular-ventana-24h ===
+{
+  mensaje_id: '228eb944-9b12-4884-b160-79a752114251',
+  conexion_nombre: 'NUMERO A',
+  usuarioId: '87e61dde-8f67-43e0-9859-634ef6500cd0',
+  numero: '59165818913',
+  conexion: 'a258304e-33da-4849-81c4-eb4ec8c71df0',
+  creado_en_anterior: '2026-06-05T19:18:25.822946',
+  now_utc: '2026-06-05T21:00:43.426Z',
+  creado_simulado_utc: '2026-06-04T20:00:43.426Z',
+  creado_en_db_raw: '2026-06-04T20:00:43.426',
+  creado_leido_utc: '2026-06-04T20:00:43.426Z',
+  diff_horas: 25,
+  horas_solicitadas: 25,
+  ajustes_auxiliares: [
+    {
+      mensaje_id: 'df037ac1-04f5-44d0-adaa-29b9f7f0f09a',
+      creado_en_anterior: '2026-06-05T16:12:29.842217',
+      creado_en_ajustado_utc: '2026-06-04T19:58:43.426Z'
+    },
+    {
+      mensaje_id: '699108b3-c20f-4e10-af9d-6e264cd0e306',
+      creado_en_anterior: '2026-06-05T16:12:23.795469',
+      creado_en_ajustado_utc: '2026-06-04T19:58:43.426Z'
+    },
+    {
+      mensaje_id: 'cab6f9ee-567b-4b8c-af37-59244a60071e',
+      creado_en_anterior: '2026-06-05T16:04:34.987427',
+      creado_en_ajustado_utc: '2026-06-04T19:58:43.426Z'
+    },
+    {
+      mensaje_id: '8cfc8c08-8119-4312-b37d-567b3129c98a',
+      creado_en_anterior: '2026-06-05T16:04:00.900761',
+node : WARN: 40 entrante(s) m├ís reciente(s) desplazado(s) 2 min antes del simulado para que el guard eval├║e el 
+├║ltimo mensaje objetivo.
+En C:\Users\macar\AppData\Local\Temp\ps-script-cbd464e0-d313-4991-b99f-eee3e3a1e7f0.ps1: 104 Carácter: 1
++ node scripts/simular-ventana-24h.js --numero=59165818913 --conexion=a ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (WARN: 40 entran...nsaje objetivo.:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+      creado_en_ajustado_utc: '2026-06-04T19:58:43.426Z'
+    },
+    {
+      mensaje_id: '74556349-a0af-4c22-8648-d5714636abee',
+      creado_en_anterior: '2026-06-05T15:58:19.933672',
+      creado_en_ajustado_utc: '2026-06-04T19:58:43.426Z'
+    },
+    {
+      mensaje_id: '1bad431a-cf5a-4e13-96c2-8ad6ed6ff846',
+      creado_en_anterior: '2026-06-05T15:56:39.90754',
+      creado_en_ajustado_utc: '2026-06-04T19:58:43.426Z'
+    },
+    {
+      mensaje_id: '5bd510ab-c0e6-4d4b-9bc5-bfb560b9fcf5',
+      creado_en_anterior: '2026-06-05T15:56:37.49094',
+      creado_en_ajustado_utc: '2026-06-04T19:58:43.426Z'
+    },
+    {
+      mensaje_id: 'fca66d9b-f12d-4f55-80b4-361fa8e0eaa8',
+      creado_en_anterior: '2026-06-05T15:56:17.947565',
+      creado_en_ajustado_utc: '2026-06-04T19:58:43.426Z'
+    },
+    {
+      mensaje_id: '145b2a1c-6c35-4883-b61c-9ced94377401',
+      creado_en_anterior: '2026-06-05T15:56:09.581594',
+      creado_en_ajustado_utc: '2026-06-04T19:58:43.426Z'
+    },
+    {
+      mensaje_id: 'f5944f19-dbab-4855-b64f-b82d92f9c820',
+      creado_en_anterior: '2026-06-05T15:55:58.48',
+      creado_en_ajustado_utc: '2026-06-04T19:58:43.426Z'
+    },
+    {
+      mensaje_id: 'bfcdd15a-aafd-482c-86d8-b4b89554fdfa',
+      creado_en_anterior: '2026-06-05T15:55:07.840852',
+      creado_en_ajustado_utc: '2026-06-04T19:58:43.426Z'
+    },
+    {
+      mensaje_id: 'dfd2a513-33b0-453a-b076-4ecb2084b5da',
+      creado_en_anterior: '2026-06-05T15:54:45.11038',
+      creado_en_ajustado_utc: '2026-06-04T19:58:43.426Z'
+    },
+    {
+      mensaje_id: '56ca390b-1fd0-4384-b272-d1bd07fed0c1',
+      creado_en_anterior: '2026-06-05T15:53:34.522017',
+      creado_en_ajustado_utc: '2026-06-04T19:58:43.426Z'
+    },
+    {
+      mensaje_id: '00963446-32ca-4fba-bc31-34ccae2bb508',
+      creado_en_anterior: '2026-06-05T15:53:27.92043',
+      creado_en_ajustado_utc: '2026-06-04T19:58:43.426Z'
+    },
+    {
+      mensaje_id: '123fa1d2-5982-4d3b-a034-78f1a2ded6aa',
+      creado_en_anterior: '2026-06-05T15:52:35.475954',
+      creado_en_ajustado_utc: '2026-06-04T19:58:43.426Z'
+    },
+    {
+      mensaje_id: '51b7f137-b9ee-4c42-8514-c73789ef97b4',
+      creado_en_anterior: '2026-06-05T15:52:11.502545',
+      creado_en_ajustado_utc: '2026-06-04T19:58:43.426Z'
+    },
+    {
+      mensaje_id: '6a204b13-c6bb-4c1f-9978-dbb4f064ea25',
+      creado_en_anterior: '2026-06-05T15:47:07.341758',
+      creado_en_ajustado_utc: '2026-06-04T19:58:43.426Z'
+    },
+    {
+      mensaje_id: 'a03b02d1-c88d-405c-b00b-db3423810093',
+      creado_en_anterior: '2026-06-05T15:47:02.480956',
+      creado_en_ajustado_utc: '2026-06-04T19:58:43.426Z'
+    },
+    {
+      mensaje_id: 'e074dd3f-2bb2-4b5c-aff9-cdc8f10ab70a',
+      creado_en_anterior: '2026-06-05T15:45:34.817206',
+      creado_en_ajustado_utc: '2026-06-04T19:58:43.426Z'
+    },
+    {
+      mensaje_id: 'd1286a7e-798c-4cac-bf64-530e05f63c8e',
+      creado_en_anterior: '2026-06-05T15:37:33.86834',
+      creado_en_ajustado_utc: '2026-06-04T19:58:43.426Z'
+    },
+    {
+      mensaje_id: 'e12204ed-08ff-49e4-830e-d1faba96d32d',
+      creado_en_anterior: '2026-06-05T15:37:10.988157',
+      creado_en_ajustado_utc: '2026-06-04T19:58:43.426Z'
+    },
+    {
+      mensaje_id: '889091ac-b2a7-4f2c-a0d7-03ce14d9d6da',
+      creado_en_anterior: '2026-06-05T15:35:59.734835',
+      creado_en_ajustado_utc: '2026-06-04T19:58:43.426Z'
+    },
+    {
+      mensaje_id: '987f9db4-cdbd-491c-9a8b-5d23622e33e3',
+      creado_en_anterior: '2026-06-05T15:35:51.35588',
+      creado_en_ajustado_utc: '2026-06-04T19:58:43.426Z'
+    },
+    {
+      mensaje_id: 'eb6a0133-6ca9-4d11-aa6a-ea183c5db0dd',
+      creado_en_anterior: '2026-06-05T15:30:02.164031',
+      creado_en_ajustado_utc: '2026-06-04T19:58:43.426Z'
+    },
+    {
+      mensaje_id: 'a8252017-9c9a-4013-ae68-1865e286885c',
+      creado_en_anterior: '2026-06-05T15:29:47.627558',
+      creado_en_ajustado_utc: '2026-06-04T19:58:43.426Z'
+    },
+    {
+      mensaje_id: '9e75a9c2-089b-4fef-9a50-1bca4bde2901',
+      creado_en_anterior: '2026-06-05T13:44:04.150399',
+      creado_en_ajustado_utc: '2026-06-04T19:58:43.426Z'
+    },
+    {
+      mensaje_id: '32fca7c5-ec7d-4da0-8f9e-3ca27bca1a0e',
+      creado_en_anterior: '2026-06-05T13:42:48.014431',
+      creado_en_ajustado_utc: '2026-06-04T19:58:43.426Z'
+    },
+    {
+      mensaje_id: 'f8eccb97-e4dc-4101-8ec6-f25eefbb5a3e',
+      creado_en_anterior: '2026-06-05T13:42:41.145308',
+      creado_en_ajustado_utc: '2026-06-04T19:58:43.426Z'
+    },
+    {
+      mensaje_id: 'ec75e2df-525a-4302-94a8-844a1c13525b',
+      creado_en_anterior: '2026-06-05T13:41:42.945907',
+      creado_en_ajustado_utc: '2026-06-04T19:58:43.426Z'
+    },
+    {
+      mensaje_id: 'df62a831-f721-44b3-8937-3c164bf9d8d8',
+      creado_en_anterior: '2026-06-05T13:40:51.439092',
+      creado_en_ajustado_utc: '2026-06-04T19:58:43.426Z'
+    },
+    {
+      mensaje_id: '063459bd-7d98-4a65-85e1-b98029318d01',
+      creado_en_anterior: '2026-06-05T13:40:38.357005',
+      creado_en_ajustado_utc: '2026-06-04T19:58:43.426Z'
+    },
+    {
+      mensaje_id: 'c59e606f-ef7e-4c04-8bff-1bd919ea9832',
+      creado_en_anterior: '2026-06-05T03:43:51.458609',
+      creado_en_ajustado_utc: '2026-06-04T19:58:43.426Z'
+    },
+    {
+      mensaje_id: 'eac4fdfd-8dfe-49bd-93bf-e3f0be920ea7',
+      creado_en_anterior: '2026-06-05T03:35:52.333603',
+      creado_en_ajustado_utc: '2026-06-04T19:58:43.426Z'
+    },
+    {
+      mensaje_id: '95defc2e-bd3b-4af9-987c-2fc7af26b02f',
+      creado_en_anterior: '2026-06-05T03:22:25.266667',
+      creado_en_ajustado_utc: '2026-06-04T19:58:43.426Z'
+    },
+    {
+      mensaje_id: '8cfe379e-de5b-4fec-a64f-843c7684e488',
+      creado_en_anterior: '2026-06-05T03:11:26.792336',
+      creado_en_ajustado_utc: '2026-06-04T19:58:43.426Z'
+    },
+    {
+      mensaje_id: 'edd20ddd-d9d4-4fc5-9ad5-99fd177838fb',
+      creado_en_anterior: '2026-06-05T03:00:14.622759',
+      creado_en_ajustado_utc: '2026-06-04T19:58:43.426Z'
+    },
+    {
+      mensaje_id: '9bd43d8f-abe1-481b-8d39-bdb92bd2d875',
+      creado_en_anterior: '2026-06-05T02:39:18.4157',
+      creado_en_ajustado_utc: '2026-06-04T19:58:43.426Z'
+    },
+    {
+      mensaje_id: '2910db9c-7309-464f-8185-f0cf7f0f0a62',
+      creado_en_anterior: '2026-06-05T02:39:02.588792',
+      creado_en_ajustado_utc: '2026-06-04T19:58:43.426Z'
+    },
+    {
+      mensaje_id: '9d69231d-d8da-4939-b329-48afc522c1fe',
+      creado_en_anterior: '2026-06-05T01:51:59.173866',
+      creado_en_ajustado_utc: '2026-06-04T19:58:43.426Z'
+    },
+    {
+      mensaje_id: 'd9a1b947-21d9-495b-b225-e55bd84fa489',
+      creado_en_anterior: '2026-06-05T01:51:27.358714',
+      creado_en_ajustado_utc: '2026-06-04T19:58:43.426Z'
+    }
+  ]
+}
+[WA_24H_GUARD_WOULD_BLOCK] {
+  usuarioId: '87e61dde-8f67-43e0-9859-634ef6500cd0',
+  clienteNumero: '59165818913',
+  conexionWhatsappId: 'a258304e-33da-4849-81c4-eb4ec8c71df0',
+  origen: 'simulacion_script',
+  ultima_interaccion: '2026-06-04T20:00:43.426',
+  horas_desde_ultima_interaccion: 25,
+  modo: 'log_only',
+  esPlantilla: false
+}
+
+=== resultado guard ===
+{
+  accion: 'WOULD_BLOCK',
+  bloquear: false,
+  usuarioId: '87e61dde-8f67-43e0-9859-634ef6500cd0',
+  clienteNumero: '59165818913',
+  conexionWhatsappId: 'a258304e-33da-4849-81c4-eb4ec8c71df0',
+  origen: 'simulacion_script',
+  ultima_interaccion: '2026-06-04T20:00:43.426',
+  horas_desde_ultima_interaccion: 25,
+  modo: 'log_only',
+  esPlantilla: false
+}
+
+Esperado: horas=25 ÔåÆ WOULD_BLOCK Ô£ô
