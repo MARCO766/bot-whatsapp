@@ -152,7 +152,12 @@ function validarPaso(paso, index) {
   const tipoFinal = normalizarTipo(paso.tipo);
   const contenido = paso.contenido != null ? String(paso.contenido).trim() : "";
   const mediaUrl = paso.media_url != null ? String(paso.media_url).trim() : "";
-  const filename = paso.filename != null ? String(paso.filename).trim() : "";
+  const filename =
+    paso.media_filename != null
+      ? String(paso.media_filename).trim()
+      : paso.filename != null
+        ? String(paso.filename).trim()
+        : "";
   const pasoId = paso.pasoId != null ? String(paso.pasoId).trim() : `paso_${index + 1}`;
 
   if (tipoFinal === "texto") {

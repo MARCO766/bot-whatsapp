@@ -9,23 +9,27 @@ window.MacBotSeguimientoV2 = (function () {
     horas: { one: "hora", many: "horas" },
     dias: { one: "día", many: "días" },
   };
-  const TIPOS_PASO = [
-    { id: "texto", label: "Texto", icon: "💬" },
-    { id: "imagen", label: "Imagen", icon: "🖼" },
-    { id: "audio", label: "Audio", icon: "🎧" },
-    { id: "video", label: "Video", icon: "🎬" },
-    { id: "documento", label: "Documento", icon: "📄" },
+  const BLOQUES_TIPO = [
+    { id: "texto", label: "TEXTO", labelCorto: "Texto", icon: "💬" },
+    { id: "imagen", label: "IMAGEN", labelCorto: "Imagen", icon: "🖼", maxMb: 5 },
+    { id: "audio", label: "AUDIO", labelCorto: "Audio", icon: "🎧", maxMb: 5, recomendado: true },
+    { id: "video", label: "VIDEO", labelCorto: "Video", icon: "🎬", maxMb: 15, recomendado: true },
+    { id: "documento", label: "ARCHIVO", labelCorto: "Archivo", icon: "📄", maxMb: 10, anchoCompleto: true },
   ];
+  const TIPOS_PASO = BLOQUES_TIPO;
   const MEDIA_TYPE_MAP = {
     imagen: "image",
     audio: "audio",
     video: "video",
     documento: "document",
   };
+  const UPLOAD_ENDPOINT = "/subir-archivo";
+  const UPLOAD_V2_HABILITADO = false;
 
   let nodoActivo = null;
   let configActiva = null;
   let pasoActivoIndex = 0;
+  const archivosLocales = {};
 
   function esc(str) {
     return String(str || "")
@@ -72,7 +76,135 @@ window.MacBotSeguimientoV2 = (function () {
     const item = TIPOS_PASO.find(function (x) {
       return x.id === t;
     });
-    return item ? item.label : "Texto";
+    return item ? item.labelCorto || item.label : "Texto";
+  }
+
+  function bloquePorTipo(tipo) {
+    return (
+      BLOQUES_TIPO.find(function (x) {
+        return x.id === normalizarTipo(tipo);
+      }) || BLOQUES_TIPO[0]
+    );
+  }
+
+  function limiteMbPorTipo(tipo) {
+    return bloquePorTipo(tipo).maxMb || null;
+  }
+
+  function formatearPeso(bytes) {
+    const n = Number(bytes) || 0;
+    if (n < 1024) return n + " B";
+    if (n < 1024 * 1024) return (n / 1024).toFixed(1) + " KB";
+    return (n / (1024 * 1024)).toFixed(2) + " MB";
+  }
+
+  function claveArchivoLocal(paso, index) {
+    if (!paso) return "paso_unknown";
+    if (paso.pasoId) return String(paso.pasoId);
+    if (typeof index === "number") return "idx_" + index;
+    return "idx_" + pasoActivoIndex;
+  }
+
+  function limpiarArchivoLocal(paso) {
+    const key = claveArchivoLocal(paso);
+    const prev = archivosLocales[key];
+    if (prev?.blobUrl) {
+      try {
+        URL.revokeObjectURL(prev.blobUrl);
+      } catch (_e) {
+        /* ignore */
+      }
+    }
+    delete archivosLocales[key];
+  }
+
+  function limpiarTodosArchivosLocales() {
+    Object.keys(archivosLocales).forEach(function (key) {
+      const prev = archivosLocales[key];
+      if (prev?.blobUrl) {
+        try {
+          URL.revokeObjectURL(prev.blobUrl);
+        } catch (_e) {
+          /* ignore */
+        }
+      }
+    });
+    Object.keys(archivosLocales).forEach(function (key) {
+      delete archivosLocales[key];
+    });
+  }
+
+  function getAcceptPorTipo(tipo) {
+    const t = normalizarTipo(tipo);
+    if (t === "imagen") return "image/*";
+    if (t === "audio") return "audio/*";
+    if (t === "video") return "video/*";
+    if (t === "documento") return "application/pdf,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,application/*";
+    return "*/*";
+  }
+
+  function validarArchivoLocal(file, tipo) {
+    if (!file) return null;
+    const bloque = bloquePorTipo(tipo);
+    const maxMb = bloque.maxMb;
+    if (!maxMb) return null;
+
+    const maxBytes = maxMb * 1024 * 1024;
+    if (file.size > maxBytes) {
+      const pref = bloque.recomendado ? "recomendado máximo" : "máximo";
+      return (
+        bloque.labelCorto +
+        ": el archivo supera el " +
+        pref +
+        " de " +
+        maxMb +
+        " MB (" +
+        formatearPeso(file.size) +
+        ")."
+      );
+    }
+    return null;
+  }
+
+  function textoLimiteTipo(tipo) {
+    const bloque = bloquePorTipo(tipo);
+    if (!bloque.maxMb) return "";
+    const pref = bloque.recomendado ? "Recomendado máx." : "Máx.";
+    return pref + " " + bloque.maxMb + " MB";
+  }
+
+  function buildBloquesTipoHtml(tipoActual) {
+    const cards = BLOQUES_TIPO.map(function (item) {
+      const activo = normalizarTipo(tipoActual) === item.id ? " segv2-block-card--active" : "";
+      const ancho = item.anchoCompleto ? " segv2-block-card--wide" : "";
+      return (
+        '<button type="button" class="segv2-block-card' +
+        activo +
+        ancho +
+        '" data-tipo="' +
+        item.id +
+        '" aria-label="' +
+        esc(item.label) +
+        '">' +
+        '<span class="segv2-block-icon" aria-hidden="true">' +
+        item.icon +
+        "</span>" +
+        '<span class="segv2-block-label">' +
+        esc(item.label) +
+        "</span></button>"
+      );
+    }).join("");
+
+    return (
+      '<div class="segv2-bloques-wrap">' +
+      '<p class="segv2-bloques-title">AGREGAR BLOQUE</p>' +
+      '<div class="segv2-block-picker">' +
+      cards +
+      "</div></div>" +
+      '<input type="hidden" id="segv2TipoPaso" value="' +
+      esc(normalizarTipo(tipoActual)) +
+      '">'
+    );
   }
 
   function esTipoMedia(tipo) {
@@ -121,8 +253,22 @@ window.MacBotSeguimientoV2 = (function () {
     if (tipo === "texto" && !contenido) {
       errores.push("Paso " + n + ": el mensaje no puede estar vacío.");
     }
-    if (esTipoMedia(tipo) && !mediaUrl) {
-      errores.push("Paso " + n + ": la URL del archivo es obligatoria.");
+    if (esTipoMedia(tipo)) {
+      const local = archivosLocales[claveArchivoLocal(paso, index)];
+      if (local?.sizeError) {
+        errores.push("Paso " + n + ": " + local.sizeError);
+      }
+      if (!mediaUrl) {
+        if (local?.file && !local.sizeError) {
+          errores.push(
+            "Paso " +
+              n +
+              ": sube el archivo al servidor o pega una URL manual para guardar."
+          );
+        } else {
+          errores.push("Paso " + n + ": sube un archivo o pega una URL manual.");
+        }
+      }
     }
     return errores;
   }
@@ -144,7 +290,7 @@ window.MacBotSeguimientoV2 = (function () {
     const tipo = normalizarTipo(paso.tipo);
     const contenido = String(paso.contenido || paso.texto || paso.mensaje || "").trim();
     const mediaUrl = String(paso.media_url || "").trim();
-    const filename = String(paso.filename || "").trim();
+    const filename = String(paso.media_filename || paso.filename || "").trim();
 
     if (isNaN(valor) || valor <= 0) return null;
 
@@ -170,7 +316,7 @@ window.MacBotSeguimientoV2 = (function () {
     };
 
     if (tipo === "documento" && filename) {
-      out.filename = filename;
+      out.media_filename = filename;
     }
 
     return out;
@@ -392,8 +538,9 @@ window.MacBotSeguimientoV2 = (function () {
     if (esTipoMedia(tipo)) {
       out.media_url = String(p.media_url || "");
       out.media_type = tipoToMediaType(tipo);
-      if (tipo === "documento" && p.filename) {
-        out.filename = String(p.filename || "");
+      if (tipo === "documento") {
+        const nombre = String(p.media_filename || p.filename || "").trim();
+        if (nombre) out.media_filename = nombre;
       }
     }
 
@@ -527,7 +674,7 @@ window.MacBotSeguimientoV2 = (function () {
     const msgEl = document.getElementById("segv2Mensaje");
     const mediaUrlEl = document.getElementById("segv2MediaUrl");
     const captionEl = document.getElementById("segv2Caption");
-    const filenameEl = document.getElementById("segv2Filename");
+    const filenameEl = document.getElementById("segv2MediaFilename");
 
     const valor = parseInt(valorEl?.value, 10);
     const tipo = normalizarTipo(tipoEl?.value || paso.tipo || "texto");
@@ -542,6 +689,7 @@ window.MacBotSeguimientoV2 = (function () {
       paso.contenido = String(msgEl?.value || "");
       delete paso.media_url;
       delete paso.media_type;
+      delete paso.media_filename;
       delete paso.filename;
       return;
     }
@@ -551,10 +699,230 @@ window.MacBotSeguimientoV2 = (function () {
     paso.contenido = String(captionEl?.value || "").trim();
 
     if (tipo === "documento") {
-      paso.filename = String(filenameEl?.value || "").trim();
+      const nombreArchivo = String(filenameEl?.value || "").trim();
+      if (nombreArchivo) {
+        paso.media_filename = nombreArchivo;
+      } else {
+        delete paso.media_filename;
+      }
     } else {
-      delete paso.filename;
+      delete paso.media_filename;
     }
+    delete paso.filename;
+  }
+
+  function renderArchivoLocalBox(paso) {
+    const box = document.getElementById("segv2ArchivoLocal");
+    if (!box || !paso) return;
+
+    const tipo = normalizarTipo(paso.tipo);
+    const local = archivosLocales[claveArchivoLocal(paso)];
+    const limite = textoLimiteTipo(tipo);
+
+    if (!local?.file) {
+      box.innerHTML =
+        '<p class="segv2-upload-hint">' +
+        esc(limite) +
+        " · selecciona un archivo desde tu PC</p>";
+      return;
+    }
+
+    if (local.sizeError) {
+      box.innerHTML =
+        '<div class="segv2-upload-error">' +
+        esc(local.sizeError) +
+        "</div>";
+      return;
+    }
+
+    const previewUrl = local.blobUrl || "";
+    let previewHtml = "";
+
+    if (tipo === "imagen" && previewUrl) {
+      previewHtml =
+        '<img src="' +
+        esc(previewUrl) +
+        '" alt="Preview" class="segv2-upload-preview-img">';
+    } else if (tipo === "video" && previewUrl) {
+      previewHtml =
+        '<video src="' +
+        esc(previewUrl) +
+        '" controls muted playsinline class="segv2-upload-preview-video"></video>';
+    } else if (tipo === "audio" && previewUrl) {
+      previewHtml =
+        '<audio src="' +
+        esc(previewUrl) +
+        '" controls class="segv2-upload-preview-audio"></audio>';
+    } else {
+      previewHtml =
+        '<div class="segv2-upload-doc">' +
+        '<span aria-hidden="true">📄</span><span>' +
+        esc(local.nombre || "Archivo") +
+        "</span></div>";
+    }
+
+    box.innerHTML =
+      '<div class="segv2-upload-fileinfo">' +
+      "<strong>" +
+      esc(local.nombre || "Archivo") +
+      "</strong>" +
+      "<span>" +
+      formatearPeso(local.size) +
+      (local.uploadedUrl ? " · ✓ URL lista" : " · preview local") +
+      "</span></div>" +
+      previewHtml +
+      (local.uploadError
+        ? '<p class="segv2-upload-warn">' + esc(local.uploadError) + "</p>"
+        : "");
+  }
+
+  function onArchivoSeleccionado(ev) {
+    const file = ev.target?.files?.[0];
+    const paso = configActiva?.pasos?.[pasoActivoIndex];
+    if (!paso) return;
+
+    limpiarArchivoLocal(paso);
+
+    if (!file) {
+      renderArchivoLocalBox(paso);
+      onPanelChange();
+      return;
+    }
+
+    const tipo = normalizarTipo(paso.tipo);
+    const sizeError = validarArchivoLocal(file, tipo);
+    const key = claveArchivoLocal(paso);
+    const blobUrl = URL.createObjectURL(file);
+
+    archivosLocales[key] = {
+      file: file,
+      blobUrl: blobUrl,
+      size: file.size,
+      nombre: file.name,
+      sizeError: sizeError,
+      uploadedUrl: "",
+      uploadError: "",
+    };
+
+    if (!sizeError && tipo === "documento") {
+      paso.media_filename = file.name;
+      const filenameEl = document.getElementById("segv2MediaFilename");
+      if (filenameEl) filenameEl.value = file.name;
+    }
+
+    renderArchivoLocalBox(paso);
+    renderVistaPreviaMensaje();
+    renderErroresValidacion();
+    onPanelChange();
+
+    if (!sizeError && UPLOAD_V2_HABILITADO) {
+      intentarSubirArchivoLocal(file, paso);
+    }
+  }
+
+  function intentarSubirArchivoLocal(file, paso) {
+    const key = claveArchivoLocal(paso);
+    const local = archivosLocales[key];
+    if (!local || local.sizeError) return;
+
+    const status = document.getElementById("segv2UploadStatus");
+    if (status) status.textContent = "Subiendo…";
+
+    const formData = new FormData();
+    formData.append("archivo", file);
+
+    fetch(UPLOAD_ENDPOINT, { method: "POST", body: formData })
+      .then(function (r) {
+        return r.json();
+      })
+      .then(function (data) {
+        if (!data?.url) {
+          throw new Error("Respuesta sin URL");
+        }
+        local.uploadedUrl = data.url;
+        local.uploadError = "";
+        paso.media_url = data.url;
+        if (!paso.media_filename) paso.media_filename = file.name;
+        const urlEl = document.getElementById("segv2MediaUrl");
+        if (urlEl) urlEl.value = data.url;
+        if (status) status.textContent = "✓ Archivo subido — URL aplicada";
+        renderArchivoLocalBox(paso);
+        onPanelChange();
+      })
+      .catch(function () {
+        local.uploadError =
+          "Subida pendiente: conecta " +
+          UPLOAD_ENDPOINT +
+          " o pega una URL manual abajo.";
+        if (status) status.textContent = "Preview local — usa URL manual";
+        renderArchivoLocalBox(paso);
+        renderErroresValidacion();
+      });
+  }
+
+  function buildCamposMediaHtml(paso, tipoActual) {
+    const limite = textoLimiteTipo(tipoActual);
+    const accept = getAcceptPorTipo(tipoActual);
+    const conCaption =
+      tipoActual === "imagen" || tipoActual === "video" || tipoActual === "documento";
+
+    return (
+      '<div class="segv2-media-panel">' +
+      '<p class="segv2-upload-todo">' +
+      "<strong>TODO upload V2:</strong> preview y validación local activas. " +
+      "La subida automática a <code>" +
+      esc(UPLOAD_ENDPOINT) +
+      "</code> se activará en la siguiente fase. " +
+      "Por ahora pega una <strong>URL manual</strong> para guardar y enviar.</p>" +
+      '<div class="segv2-form-row segv2-campo-upload">' +
+      "<label>Subir desde PC <span class=\"segv2-limit-badge\">" +
+      esc(limite) +
+      "</span></label>" +
+      '<div class="segv2-upload-row">' +
+      '<input type="file" id="segv2ArchivoInput" accept="' +
+      esc(accept) +
+      '">' +
+      '<span id="segv2UploadStatus" class="segv2-upload-status">Preview local</span></div>' +
+      '<div id="segv2ArchivoLocal" class="segv2-upload-preview-box"></div></div>' +
+      '<div class="segv2-form-row segv2-campo-url">' +
+      "<label>URL manual (opcional si subes archivo)</label>" +
+      '<input type="url" id="segv2MediaUrl" placeholder="https://…" value="' +
+      esc(paso.media_url || "") +
+      '"></div>' +
+      (conCaption
+        ? '<div class="segv2-form-row segv2-campo-caption">' +
+          "<label>Caption (opcional)</label>" +
+          '<textarea id="segv2Caption" rows="2" placeholder="Texto que acompaña el archivo…">' +
+          esc(paso.contenido || "") +
+          "</textarea></div>"
+        : "") +
+      (tipoActual === "documento"
+        ? '<div class="segv2-form-row segv2-campo-filename">' +
+          "<label>Nombre de archivo (opcional)</label>" +
+          '<input type="text" id="segv2MediaFilename" placeholder="ej. catalogo.pdf" value="' +
+          esc(paso.media_filename || paso.filename || "") +
+          '"></div>'
+        : "") +
+      "</div>"
+    );
+  }
+
+  function wireBloquesTipo(paso) {
+    document.querySelectorAll(".segv2-block-card").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        const nuevoTipo = normalizarTipo(btn.getAttribute("data-tipo"));
+        const tipoAnterior = normalizarTipo(paso.tipo);
+        syncPasoDesdeFormulario();
+        if (nuevoTipo !== tipoAnterior) {
+          limpiarArchivoLocal(paso);
+        }
+        paso.tipo = nuevoTipo;
+        const hidden = document.getElementById("segv2TipoPaso");
+        if (hidden) hidden.value = nuevoTipo;
+        renderFormularioPaso();
+        onPanelChange();
+      });
+    });
   }
 
   function renderVistaPreviaMensaje() {
@@ -569,7 +937,9 @@ window.MacBotSeguimientoV2 = (function () {
 
     const tipo = normalizarTipo(paso.tipo);
     const texto = String(paso.contenido || "").trim();
-    const mediaUrl = String(paso.media_url || "").trim();
+    const local = archivosLocales[claveArchivoLocal(paso)];
+    const mediaUrl =
+      String(paso.media_url || "").trim() || (local?.blobUrl && !local.sizeError ? local.blobUrl : "");
     const delay = formatearDelayCorto(paso.delay);
     const icon = iconoTipoPaso(tipo);
 
@@ -579,9 +949,14 @@ window.MacBotSeguimientoV2 = (function () {
       return;
     }
 
+    if (esTipoMedia(tipo) && local?.sizeError) {
+      box.innerHTML = '<div class="segv2-preview-empty segv2-preview-error">' + esc(local.sizeError) + "</div>";
+      return;
+    }
+
     if (esTipoMedia(tipo) && !mediaUrl) {
       box.innerHTML =
-        '<div class="segv2-preview-empty">Ingresa la URL del archivo para ver la vista previa</div>';
+        '<div class="segv2-preview-empty">Sube un archivo o pega una URL para ver la vista previa</div>';
       return;
     }
 
@@ -618,7 +993,7 @@ window.MacBotSeguimientoV2 = (function () {
         esc(mediaUrl) +
         '" controls class="segv2-preview-audio"></audio></div>';
     } else {
-      const nombre = paso.filename || "Documento";
+      const nombre = paso.media_filename || paso.filename || local?.nombre || "Documento";
       cuerpo =
         '<div class="segv2-preview-doc">' +
         '<span class="segv2-preview-icon" aria-hidden="true">📄</span>' +
@@ -821,20 +1196,7 @@ window.MacBotSeguimientoV2 = (function () {
     const tipoActual = normalizarTipo(paso.tipo);
     const esMedia = esTipoMedia(tipoActual);
 
-    const tipoOpts = TIPOS_PASO.map(function (item) {
-      const sel = tipoActual === item.id ? " selected" : "";
-      return (
-        '<option value="' +
-        item.id +
-        '"' +
-        sel +
-        ">" +
-        item.icon +
-        " " +
-        item.label +
-        "</option>"
-      );
-    }).join("");
+    const bloquesHtml = buildBloquesTipoHtml(tipoActual);
 
     const camposTexto = !esMedia
       ? '<div class="segv2-form-row segv2-campo-texto">' +
@@ -844,27 +1206,7 @@ window.MacBotSeguimientoV2 = (function () {
         "</textarea></div>"
       : "";
 
-    const camposMedia = esMedia
-      ? '<div class="segv2-form-row segv2-campo-media">' +
-        "<label>URL del archivo</label>" +
-        '<input type="url" id="segv2MediaUrl" placeholder="https://…" value="' +
-        esc(paso.media_url || "") +
-        '"></div>' +
-        (tipoActual === "imagen" || tipoActual === "video" || tipoActual === "documento"
-          ? '<div class="segv2-form-row segv2-campo-caption">' +
-            "<label>Caption (opcional)</label>" +
-            '<textarea id="segv2Caption" rows="2" placeholder="Texto que acompaña el archivo…">' +
-            esc(paso.contenido || "") +
-            "</textarea></div>"
-          : "") +
-        (tipoActual === "documento"
-          ? '<div class="segv2-form-row segv2-campo-filename">' +
-            "<label>Nombre de archivo (opcional)</label>" +
-            '<input type="text" id="segv2Filename" placeholder="ej. catalogo.pdf" value="' +
-            esc(paso.filename || "") +
-            '"></div>'
-          : "")
-      : "";
+    const camposMedia = esMedia ? buildCamposMediaHtml(paso, tipoActual) : "";
 
     form.innerHTML =
       '<div class="segv2-form">' +
@@ -892,11 +1234,7 @@ window.MacBotSeguimientoV2 = (function () {
       '<select id="segv2DelayUnidad" class="segv2-select" required>' +
       unidadOpts +
       "</select></div></div>" +
-      '<div class="segv2-form-row">' +
-      "<label>Tipo</label>" +
-      '<select id="segv2TipoPaso" class="segv2-select">' +
-      tipoOpts +
-      "</select></div>" +
+      bloquesHtml +
       camposTexto +
       camposMedia +
       '<div class="segv2-preview-wrap">' +
@@ -931,11 +1269,9 @@ window.MacBotSeguimientoV2 = (function () {
       onPanelChange();
     });
 
-    document.getElementById("segv2TipoPaso")?.addEventListener("change", function () {
-      syncPasoDesdeFormulario();
-      renderFormularioPaso();
-      onPanelChange();
-    });
+    wireBloquesTipo(paso);
+
+    document.getElementById("segv2ArchivoInput")?.addEventListener("change", onArchivoSeleccionado);
 
     [
       "segv2DelayValor",
@@ -943,7 +1279,7 @@ window.MacBotSeguimientoV2 = (function () {
       "segv2Mensaje",
       "segv2MediaUrl",
       "segv2Caption",
-      "segv2Filename",
+      "segv2MediaFilename",
     ].forEach(function (id) {
       const el = document.getElementById(id);
       if (!el) return;
@@ -951,6 +1287,7 @@ window.MacBotSeguimientoV2 = (function () {
       el.addEventListener("change", onPanelChange);
     });
 
+    renderArchivoLocalBox(paso);
     renderVistaPreviaMensaje();
     renderErroresValidacion();
   }
@@ -1047,6 +1384,7 @@ window.MacBotSeguimientoV2 = (function () {
       }
     }
 
+    limpiarTodosArchivosLocales();
     nodoActivo = null;
     configActiva = null;
     pasoActivoIndex = 0;
