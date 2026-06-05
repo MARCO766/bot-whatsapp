@@ -832,7 +832,8 @@ window.MacBotSeguimiento = (function () {
 
     contenido.innerHTML =
       '<div class="seg-panel">' +
-      "<h4>⏱ Seguimiento CRM</h4>" +
+      "<h4>⏱ Seguimiento CRM (Legacy)</h4>" +
+      '<p class="seg-panel-legacy-warn">⚠ Obsoleto — utiliza Seguimiento CRM V2 para flujos nuevos.</p>' +
       '<p class="seg-panel-desc">Automatiza recordatorios si el lead no responde.</p>' +
       '<div class="seg-field seg-estado-linea">' +
       "<label>Vista seguimientos del lead (solo esta línea)</label>" +

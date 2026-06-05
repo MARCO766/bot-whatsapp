@@ -1047,6 +1047,12 @@ async function ejecutarFlujo(
           flow_context_conexion: flowContext.conexionWhatsappId ?? null,
         });
 
+        console.log("[SEGUIMIENTO_LEGACY_USED]", {
+          flujo_id: flujoId,
+          nodo_id: nodoId,
+          usuario_id: usuarioId,
+        });
+
         await ejecutarSeguimientoEnFlujo({
           numero,
           usuarioId,

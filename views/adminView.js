@@ -10,6 +10,7 @@ function renderAdminPage({
   conexionActiva,
   supabaseUrl,
   supabaseAnonKey,
+  seguimientoLegacyEnabled = true,
 }) {
   return `
 
@@ -21,7 +22,7 @@ function renderAdminPage({
 
 <link rel="stylesheet" href="/css/admin.css">
 <link rel="stylesheet" href="/css/flow-builder.css">
-${builder ? '<link rel="stylesheet" href="/css/seguimiento.css"><link rel="stylesheet" href="/css/contenido.css"><link rel="stylesheet" href="/css/conversion-node.css"><link rel="stylesheet" href="/css/lector-pago-node.css"><link rel="stylesheet" href="/css/ia-node.css"><link rel="stylesheet" href="/css/ia-pro-node.css"><link rel="stylesheet" href="/css/openai-agent-node.css">' : ""}
+${builder ? '<link rel="stylesheet" href="/css/seguimiento.css"><link rel="stylesheet" href="/css/seguimiento-v2.css"><link rel="stylesheet" href="/css/contenido.css"><link rel="stylesheet" href="/css/conversion-node.css"><link rel="stylesheet" href="/css/lector-pago-node.css"><link rel="stylesheet" href="/css/ia-node.css"><link rel="stylesheet" href="/css/ia-pro-node.css"><link rel="stylesheet" href="/css/openai-agent-node.css">' : ""}
 </head>
 
 <body>
@@ -48,7 +49,8 @@ ${builder ? '<link rel="stylesheet" href="/css/seguimiento.css"><link rel="style
     <button type="button" class="menu-nodo-btn menu-nodo-btn-ia" onclick="agregarNodoIA()">⚡ Agente Rápido</button>
     <button type="button" class="menu-nodo-btn menu-nodo-btn-ia-pro" onclick="agregarNodoIAPro()">🤖 Agente IA Pro</button>
     <button type="button" class="menu-nodo-btn menu-nodo-btn-openai-agent" onclick="agregarNodoOpenAIAgent()"><span class="menu-nodo-btn-openai-agent__icon" aria-hidden="true"></span> Agente OpenAI</button>
-    <button type="button" class="menu-nodo-btn menu-nodo-btn-seguimiento" onclick="agregarNodo('seguimiento')">🔔 Seguimiento</button>
+    ${seguimientoLegacyEnabled ? `<button type="button" class="menu-nodo-btn menu-nodo-btn-seguimiento menu-nodo-btn-seguimiento--legacy" onclick="agregarNodo('seguimiento')">⏱️ Seguimiento CRM ⚠ Obsoleto</button>` : ""}
+    <button type="button" class="menu-nodo-btn menu-nodo-btn-seguimiento-v2" onclick="agregarNodoSeguimientoV2()">🔒 Seguimiento CRM V2</button>
     <button type="button" class="menu-nodo-btn menu-nodo-btn-rm24h" onclick="agregarNodoRemarketingGlobal()">🔥 Remarketing 24h</button>
     <button type="button" class="menu-nodo-btn menu-nodo-btn-espera" onclick="agregarNodo('espera')">⏳ Espera</button>
     <button type="button" class="menu-nodo-btn menu-nodo-btn-etiqueta" onclick="agregarNodo('etiqueta')">🏷️ Etiqueta</button>
@@ -743,6 +745,7 @@ ${tab === "flujos" && builder ? `
   etiquetasData: etiquetas || [],
   supabaseUrl: supabaseUrl || "",
   supabaseAnonKey: supabaseAnonKey || "",
+  seguimientoLegacyEnabled: seguimientoLegacyEnabled !== false,
 }).replace(/</g, "\\u003c")}</script>
 <script>
 (function () {
@@ -755,6 +758,7 @@ ${builder ? `
 <script src="/js/builder/remarketing-global.js"></script>
 <script src="/js/builder/seguimiento-api.js"></script>
 <script src="/js/builder/seguimiento.js"></script>
+<script src="/js/builder/seguimiento-v2.js"></script>
 <script src="/js/builder/contenido.js"></script>
 <script src="/js/builder/ia.js"></script>
 <script src="/js/builder/ia-pro.js"></script>

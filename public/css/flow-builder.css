@@ -1337,6 +1337,12 @@ body:has(#builderArea) {
   border-left: 3px solid #ff9800;
 }
 
+.menu-nodo-btn-seguimiento--legacy {
+  opacity: 0.92;
+  font-size: 12px;
+  line-height: 1.25;
+}
+
 .menu-nodo-btn-seguimiento:hover:not(:disabled) {
   background: color-mix(in srgb, #ff9800 12%, #263042);
   box-shadow: 0 0 14px rgba(255, 152, 0, 0.28);

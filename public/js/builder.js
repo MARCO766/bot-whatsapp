@@ -8,6 +8,8 @@ let puertoHandleOrigen = null;
 let canvasPanningActive = false;
 
 const MACBOT_BUILDER = window.MACBOT_BUILDER || {};
+const SEGUIMIENTO_LEGACY_ENABLED = MACBOT_BUILDER.seguimientoLegacyEnabled !== false;
+const SEGUIMIENTO_LEGACY_OBSOLETO_MSG = "Este nodo está obsoleto. Utiliza Seguimiento CRM V2.";
 
 let flujoEditandoId = MACBOT_BUILDER.flujoEditandoId || "";
 let flujoCargado = MACBOT_BUILDER.flujoCargado || null;
@@ -359,6 +361,16 @@ function cargarFlujoGuardado(){
     }
   });
 
+  document.querySelectorAll(".seguimiento-v2-node, .follow-node-v2").forEach((nodo) => {
+    try {
+      if(window.MacBotSeguimientoV2){
+        window.MacBotSeguimientoV2.refrescarNodoCargado(nodo);
+      }
+    } catch (e) {
+      console.warn("Seguimiento V2: error al refrescar nodo cargado", e);
+    }
+  });
+
   document.querySelectorAll(".node").forEach((nodo) => {
     try {
       if(window.MacBotContenido && window.MacBotContenido.esNodoContenido(nodo)){
@@ -411,6 +423,22 @@ function cargarFlujoGuardado(){
     });
   }
 
+  if(flujoCargado.nodos && window.MacBotSeguimientoV2){
+    flujoCargado.nodos.forEach((item) => {
+      if(item.tipo !== "seguimiento_crm_v2" && item.type !== "seguimiento_crm_v2") return;
+      const nodo = mapaNodos[item.id];
+      if(!nodo) return;
+      if(item.data && item.data.pasos){
+        window.MacBotSeguimientoV2.guardarConfigEnNodo(nodo, {
+          version: 1,
+          pasos: item.data.pasos,
+          cancelarSiResponde: item.data.cancelarSiResponde !== false,
+        });
+      }
+      window.MacBotSeguimientoV2.refrescarNodoCargado(nodo);
+    });
+  }
+
   document.querySelectorAll(".lector-pago-node").forEach((nodo) => {
     try {
       if(window.MacBotLectorPago){
@@ -451,11 +479,23 @@ function cargarFlujoGuardado(){
    CREAR NODOS
 ========================= */
 
+function agregarNodoSeguimientoV2(){
+  agregarNodo("seguimiento_crm_v2");
+}
+
 function agregarNodo(tipo){
   const canvas = document.getElementById("canvasFlujo");
 
   if(!canvas){
     alert("No existe canvasFlujo");
+    return;
+  }
+
+  if(tipo === "seguimiento" && !SEGUIMIENTO_LEGACY_ENABLED){
+    showBuilderFlowToast(
+      "El nodo Seguimiento CRM (Legacy) está deshabilitado. Utiliza Seguimiento CRM V2.",
+      "warn"
+    );
     return;
   }
 
@@ -489,6 +529,12 @@ function agregarNodo(tipo){
     return;
   }
 
+  if(tipo === "seguimiento_crm_v2" && window.MacBotSeguimientoV2 && window.MacBotSeguimientoV2.crearNodoEnCanvas){
+    registrarHistorialBuilder();
+    window.MacBotSeguimientoV2.crearNodoEnCanvas();
+    return;
+  }
+
   registrarHistorialBuilder();
 
   nodoCount++;
@@ -505,11 +551,11 @@ function agregarNodo(tipo){
   let contenido = "";
 
   if(tipo === "seguimiento"){
-    nodo.classList.add("follow-node", "node-seguimiento");
+    nodo.classList.add("follow-node", "node-seguimiento", "node-seguimiento--legacy");
 
     contenido = `
       <div class="follow-header">
-        <span>⏱️ Seguimiento CRM</span>
+        <span>⏱️ Seguimiento CRM (Legacy)</span>
       </div>
 
       <button class="edit-node" onclick="event.stopPropagation(); abrirEditorSeguimiento('${nodo.id}')">✎</button>
@@ -635,6 +681,7 @@ function agregarNodo(tipo){
 
   if(tipo === "seguimiento" && window.MacBotSeguimiento){
     window.MacBotSeguimiento.initNodoRecienCreado(nodo);
+    showBuilderFlowToast(SEGUIMIENTO_LEGACY_OBSOLETO_MSG, "warn");
   }
 
   if(tipo === "ia" && window.MacBotIA){
@@ -1883,9 +1930,15 @@ function borrarNodo(id){
       ? window.MacBotIA.getNodoActivo()
       : null;
 
+  const nodoActivoSegV2 =
+    window.MacBotSeguimientoV2 && window.MacBotSeguimientoV2.getNodoActivo
+      ? window.MacBotSeguimientoV2.getNodoActivo()
+      : null;
+
   const eraSeleccionado =
     (nodoSeleccionadoPanel && nodoSeleccionadoPanel.id === id) ||
     (nodoActivoSeg && nodoActivoSeg.id === id) ||
+    (nodoActivoSegV2 && nodoActivoSegV2.id === id) ||
     (nodoActivoCnt && nodoActivoCnt.id === id) ||
     (nodoActivoIa && nodoActivoIa.id === id);
 
@@ -1910,6 +1963,10 @@ function borrarNodo(id){
   if(eraSeleccionado){
     if(window.MacBotSeguimiento && window.MacBotSeguimiento.clearPanelActivo){
       window.MacBotSeguimiento.clearPanelActivo();
+    }
+
+    if(window.MacBotSeguimientoV2 && window.MacBotSeguimientoV2.clearPanelActivo){
+      window.MacBotSeguimientoV2.clearPanelActivo();
     }
     cerrarPanelNodo();
   }
@@ -2113,6 +2170,16 @@ async function guardarFlujo(){
       window.MacBotLectorPago.getPersistPayload
     ){
       const extra = window.MacBotLectorPago.getPersistPayload(nodo);
+      payload.type = extra.type;
+      payload.data = extra.data;
+    }
+
+    if(
+      tipoNodo === "seguimiento_crm_v2" &&
+      window.MacBotSeguimientoV2 &&
+      window.MacBotSeguimientoV2.getPersistPayload
+    ){
+      const extra = window.MacBotSeguimientoV2.getPersistPayload(nodo);
       payload.type = extra.type;
       payload.data = extra.data;
     }
@@ -2799,6 +2866,10 @@ function abrirPanelNodo(nodo){
     if(window.MacBotLectorPago && window.MacBotLectorPago.clearPanelActivo){
       window.MacBotLectorPago.clearPanelActivo();
     }
+
+    if(window.MacBotSeguimientoV2 && window.MacBotSeguimientoV2.clearPanelActivo){
+      window.MacBotSeguimientoV2.clearPanelActivo();
+    }
   }
 
   nodoSeleccionadoPanel = nodo;
@@ -2815,6 +2886,11 @@ function abrirPanelNodo(nodo){
 
   if(window.MacBotRemarketingGlobal && window.MacBotRemarketingGlobal.esNodoRemarketingGlobal(nodo)){
     window.MacBotRemarketingGlobal.renderPanel(nodo);
+    return;
+  }
+
+  if(window.MacBotSeguimientoV2 && window.MacBotSeguimientoV2.esNodoSeguimientoV2(nodo)){
+    window.MacBotSeguimientoV2.renderPanel(nodo);
     return;
   }
 
@@ -3233,6 +3309,10 @@ function cerrarPanelNodo(){
     window.MacBotLectorPago.clearPanelActivo();
   }
 
+  if(window.MacBotSeguimientoV2 && window.MacBotSeguimientoV2.clearPanelActivo){
+    window.MacBotSeguimientoV2.clearPanelActivo();
+  }
+
   configPanelOpen = false;
   nodoSeleccionadoPanel = null;
 
@@ -3277,6 +3357,10 @@ function sincronizarPanelAntesDeSnapshot(){
 
   if(window.MacBotLectorPago && window.MacBotLectorPago.flushPanelToNode){
     window.MacBotLectorPago.flushPanelToNode();
+  }
+
+  if(window.MacBotSeguimientoV2 && window.MacBotSeguimientoV2.flushPanelToNode){
+    window.MacBotSeguimientoV2.flushPanelToNode();
   }
 }
 
@@ -3353,13 +3437,31 @@ function restaurarSnapshotBuilder(snapshot){
     hacerMovible(nodo);
     mapaNodos[item.id] = nodo;
 
-    if(item.className && item.className.includes("follow-node")){
+    if(
+      item.className &&
+      item.className.includes("follow-node") &&
+      !item.className.includes("follow-node-v2") &&
+      !item.className.includes("seguimiento-v2-node")
+    ){
       try{
         if(window.MacBotSeguimiento){
           window.MacBotSeguimiento.refrescarNodoCargado(nodo);
         }
       } catch (err) {
         console.warn("Seguimiento: error al restaurar nodo", err.message);
+      }
+    }
+
+    if(
+      item.tipo === "seguimiento_crm_v2" ||
+      (item.className && (item.className.includes("seguimiento-v2-node") || item.className.includes("follow-node-v2")))
+    ){
+      try{
+        if(window.MacBotSeguimientoV2){
+          window.MacBotSeguimientoV2.refrescarNodoCargado(nodo);
+        }
+      } catch (err) {
+        console.warn("Seguimiento V2: error al restaurar nodo", err.message);
       }
     }
 

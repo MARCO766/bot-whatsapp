@@ -3,6 +3,7 @@ const { esAdminEmail } = require("../middlewares/adminAuth");
 const express = require("express");
 const router = express.Router();
 const { renderAdminPage } = require("../views/adminView");
+const { isSeguimientoLegacyEnabled } = require("../config/featureFlags");
 const { renderAdminUsuariosPage } = require("../views/adminUsuariosView");
 const axios = require("axios");
 
@@ -114,6 +115,7 @@ res.send(renderAdminPage({
     process.env.SUPABASE_ANON_KEY ||
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
     "",
+  seguimientoLegacyEnabled: isSeguimientoLegacyEnabled(),
 }));
 
 });
