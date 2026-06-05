@@ -628,6 +628,7 @@ try {
     usuarioId: usuarioIdWebhook,
     numero: from,
     conexionWhatsappId: conexionWhatsappId || null,
+    mensajeAt: creadoEn,
   });
 } catch (cancelV2Err) {
   console.log("[WEBHOOK] cancelar seguimientos V2:", cancelV2Err.message);

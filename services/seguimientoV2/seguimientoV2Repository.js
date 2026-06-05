@@ -248,28 +248,21 @@ async function obtenerPorId(id) {
   return (response.data || [])[0] || null;
 }
 
-async function cancelarPendientesPorRespuestaLead({
-  usuarioId,
-  numero,
-  conexionWhatsappId,
-} = {}) {
-  const conexion = normalizarConexionId(conexionWhatsappId);
-  const cliente = numero != null ? String(numero).trim() : "";
-  const usuario = usuarioId != null ? String(usuarioId).trim() : "";
+async function cancelarPasosPorIds(ids = []) {
+  const idsValidos = (ids || [])
+    .map((id) => (id != null ? String(id).trim() : ""))
+    .filter(Boolean);
 
-  if (!usuario || !cliente || !conexion) {
+  if (!idsValidos.length) {
     return [];
   }
 
   const ahora = nowUtc();
   const estadosCancelables = ESTADOS_ACTIVOS_V2.join(",");
+  const idFilter = idsValidos.map((id) => encodeURIComponent(id)).join(",");
 
   const response = await axios.patch(
-    `${SUPABASE_URL}/rest/v1/${TABLA}?${filtrosClaveTriple({
-      usuarioId: usuario,
-      numero: cliente,
-      conexionWhatsappId: conexion,
-    })}` +
+    `${SUPABASE_URL}/rest/v1/${TABLA}?id=in.(${idFilter})` +
       `&estado=in.(${estadosCancelables})` +
       `&cancelar_si_responde=eq.true`,
     {
@@ -335,7 +328,7 @@ module.exports = {
   listarPorCampana,
   listarPendientesPorClaveTriple,
   cancelarCampana,
-  cancelarPendientesPorRespuestaLead,
+  cancelarPasosPorIds,
   insertarLog,
   obtenerCampanaActiva,
   normalizarConexionId,
