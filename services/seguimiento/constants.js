@@ -4,6 +4,8 @@ const ESTADOS_SEGUIMIENTO = {
   ENVIADO: "enviado",
   CANCELADO: "cancelado",
   RESPONDIDO: "respondido",
+  FALLIDO_CONEXION_MISMATCH: "fallido_conexion_mismatch",
+  ENVIADO_IDEMPOTENTE: "enviado_idempotente",
 };
 
 const UNIDADES_DELAY = ["minutos", "horas", "dias"];

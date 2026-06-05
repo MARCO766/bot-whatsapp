@@ -10,8 +10,6 @@ require("dotenv").config();
 const axios = require("axios");
 const { detectarTipoNodo } = require("../services/seguimiento/detectarTipoNodo");
 const { ejecutarSeguimientoEnFlujo } = require("../services/seguimiento/ejecutarSeguimientoEnFlujo");
-const { procesarSeguimientosVencidos } = require("../services/seguimiento/executeSeguimiento");
-
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
 
@@ -135,7 +133,10 @@ async function main() {
     console.log("run_at forzado a:", runAt, "| id:", ultima.id);
   }
 
-  const workerRes = await procesarSeguimientosVencidos(null);
+  console.log(
+    "[SEG_BLOCK_LEGACY_EXEC] script deshabilitado — ejecutar worker solo vía jobs/seguimientoWorker.js"
+  );
+  const workerRes = { procesados: 0, enviados: 0, lock: "blocked_legacy" };
   console.log("worker resultado:", workerRes);
 
   const filasPost = await listarSeguimientosCliente(NUMERO, USUARIO_ID);

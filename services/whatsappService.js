@@ -5,7 +5,12 @@ const {
   sanitizarUnicodeRoto,
   logEmojiDebug,
 } = require("./textoSeguro");
-const { existeMensajePorSeguimientoId } = require("./seguimiento/mensajesSeguimientoIdempotencia");
+const {
+  aplicarGuardsSeguimientoPreMeta,
+  validarConexionInbox,
+  logSegPostMetaFinal,
+  esSeguimientoBlockedError,
+} = require("./seguimiento/seguimientoGuards");
 
 const TOKEN = process.env.TOKEN;
 const PHONE_ID = process.env.PHONE_ID;
@@ -292,24 +297,6 @@ function assertOpcionesSeguimiento(opciones) {
   return opciones;
 }
 
-async function revisarIdempotenciaSeguimientoAntesEnvio(opcionesEnvio) {
-  if (!esInboxSeguimiento(opcionesEnvio)) return null;
-  assertOpcionesSeguimiento(opcionesEnvio);
-
-  const existente = await existeMensajePorSeguimientoId(
-    opcionesEnvio.seguimientoId,
-    opcionesEnvio.conexionWhatsappId
-  );
-  if (!existente) return null;
-
-  console.log("[SEGUIMIENTO_IDEMPOTENTE] omitiendo Meta — mensaje ya existe", {
-    seguimiento_id: opcionesEnvio.seguimientoId,
-    mensaje_id: existente.id,
-    conexion_whatsapp_id: existente.conexion_whatsapp_id ?? null,
-  });
-  return existente;
-}
-
 function chatListKeySaliente(numero, conexionWhatsappId) {
   const n = String(numero || "").trim();
   const c = normalizarConexionWhatsappIdOpciones(conexionWhatsappId);
@@ -370,16 +357,6 @@ function logMetaSendFinal(opcionesEnvio, numero, phoneIdEnviar) {
   console.log(
     `[META SEND FINAL] seguimiento_id=${opcionesEnvio?.seguimientoId ?? null} origin=${opcionesEnvio?.origen ?? null} conexion_whatsapp_id=${opcionesEnvio?.conexionWhatsappId ?? null} phone_number_id=${phoneIdEnviar ?? null} to=${to} url_phone=${phoneIdEnviar ?? null}`
   );
-}
-
-function logSegPostMeta(opcionesEnvio, phoneIdEnviar, mensajeMetaId) {
-  if (opcionesEnvio?.origen !== "seguimiento" && !opcionesEnvio?.seguimientoId) return;
-  console.log("[SEG_POST_META]", {
-    seguimiento_id: opcionesEnvio?.seguimientoId ?? null,
-    conexion_whatsapp_id: opcionesEnvio?.conexionWhatsappId ?? null,
-    phone_id: phoneIdEnviar ?? null,
-    mensaje_meta_id: mensajeMetaId ?? null,
-  });
 }
 
 /** Seguimiento / strict: nunca activo=true ni TOKEN/PHONE_ID globales. */
@@ -580,7 +557,12 @@ async function registrarMensajeSalienteEnInbox({
   conexionWhatsappId = null,
   origen = null,
   seguimientoId = null,
+  opcionesSeguimiento = null,
 }) {
+  if (opcionesSeguimiento) {
+    validarConexionInbox(opcionesSeguimiento, conexionWhatsappId);
+  }
+
   const guardPrevio = validarGuardInsertMensajeSeguimiento({
     origen,
     seguimientoId,
@@ -698,8 +680,6 @@ async function registrarMensajeSalienteEnInbox({
 
 async function enviarTextoWhatsApp(numero, texto, opciones = {}) {
   const opcionesEnvio = await completarOpcionesEnvio(opciones, numero);
-  const idempotente = await revisarIdempotenciaSeguimientoAntesEnvio(opcionesEnvio);
-  if (idempotente) return idempotente;
 
   const textoEnvio =
     texto != null && typeof texto !== "string" ? String(texto) : String(texto ?? "");
@@ -718,6 +698,7 @@ async function enviarTextoWhatsApp(numero, texto, opciones = {}) {
       nombreConexionResuelta,
     } = credenciales;
     const inbox = resolverParamsInboxSaliente(opcionesEnvio, resolvedConexionWhatsappId);
+    await aplicarGuardsSeguimientoPreMeta(opcionesEnvio, credenciales);
     logSeguimientoEnvio(opcionesEnvio, numero, phoneIdEnviar);
     logSegSendTrace(opcionesEnvio, numero, credenciales);
 
@@ -737,7 +718,7 @@ async function enviarTextoWhatsApp(numero, texto, opciones = {}) {
     );
 
     const meta = respuestaMeta.data;
-    logSegPostMeta(opcionesEnvio, phoneIdEnviar, meta?.messages?.[0]?.id ?? null);
+    logSegPostMetaFinal(opcionesEnvio, credenciales, meta?.messages?.[0]?.id ?? null);
 
     if (opciones._soloEnvioMeta) {
       return meta;
@@ -755,6 +736,8 @@ async function enviarTextoWhatsApp(numero, texto, opciones = {}) {
       conexionParaInbox: inbox.conexionWhatsappId,
     });
 
+    validarConexionInbox(opcionesEnvio, inbox.conexionWhatsappId);
+
     try {
       if (usuarioId) {
         return await registrarMensajeSalienteEnInbox({
@@ -766,6 +749,7 @@ async function enviarTextoWhatsApp(numero, texto, opciones = {}) {
           conexionWhatsappId: inbox.conexionWhatsappId,
           origen: inbox.origen,
           seguimientoId: inbox.seguimientoId,
+          opcionesSeguimiento: opcionesEnvio,
         });
       }
 
@@ -778,6 +762,7 @@ async function enviarTextoWhatsApp(numero, texto, opciones = {}) {
         conexionWhatsappId: inbox.conexionWhatsappId,
         origen: inbox.origen,
         seguimientoId: inbox.seguimientoId,
+        opcionesSeguimiento: opcionesEnvio,
       });
     } catch (supabaseErr) {
       console.log("ERROR ENVIANDO WHATSAPP (SUPABASE mensajes):", {
@@ -790,6 +775,9 @@ async function enviarTextoWhatsApp(numero, texto, opciones = {}) {
       throw supabaseErr;
     }
   } catch (error) {
+    if (esSeguimientoBlockedError(error)) {
+      throw error;
+    }
     const esSupabase =
       String(error.config?.url || "").includes(SUPABASE_URL) ||
       error.response?.data?.code === "PGRST102";
@@ -803,7 +791,7 @@ async function enviarTextoWhatsApp(numero, texto, opciones = {}) {
         bodyEnviado: error.config?.data,
       }
     );
-    if (esInboxSeguimiento(opcionesEnvio)) {
+    if (esInboxSeguimiento(opciones)) {
       throw error;
     }
     return null;
@@ -995,8 +983,6 @@ function aplicarCamposInsertSeguimiento(insertPayload, inbox) {
 async function enviarMediaWhatsApp(numero, tipo, mediaUrl, caption = "", opciones = {}) {
   const numeroDestino = normalizarNumeroWhatsApp(numero);
   const opcionesEnvio = await completarOpcionesEnvio(opciones, numeroDestino);
-  const idempotente = await revisarIdempotenciaSeguimientoAntesEnvio(opcionesEnvio);
-  if (idempotente) return idempotente;
 
   const urlOriginal = String(mediaUrl || "").trim();
   const tipoApi = normalizarTipoMediaWhatsApp(tipo);
@@ -1053,6 +1039,7 @@ async function enviarMediaWhatsApp(numero, tipo, mediaUrl, caption = "", opcione
       resolvedConexionWhatsappId,
     } = credenciales;
     const inbox = resolverParamsInboxSaliente(opcionesEnvio, resolvedConexionWhatsappId);
+    await aplicarGuardsSeguimientoPreMeta(opcionesEnvio, credenciales);
     logSeguimientoEnvio(opcionesEnvio, numeroDestino, phoneIdEnviar);
     logSegSendTrace(opcionesEnvio, numeroDestino, credenciales);
 
@@ -1087,9 +1074,9 @@ async function enviarMediaWhatsApp(numero, tipo, mediaUrl, caption = "", opcione
       }
     );
 
-    logSegPostMeta(
+    logSegPostMetaFinal(
       opcionesEnvio,
-      phoneIdEnviar,
+      credenciales,
       respuestaMeta.data?.messages?.[0]?.id ?? null
     );
 
@@ -1151,6 +1138,8 @@ async function enviarMediaWhatsApp(numero, tipo, mediaUrl, caption = "", opcione
       return false;
     }
 
+    validarConexionInbox(opcionesEnvio, inbox.conexionWhatsappId);
+
     const insertRes = await axios.post(
       `${SUPABASE_URL}/rest/v1/mensajes`,
       insertPayload,
@@ -1192,6 +1181,9 @@ async function enviarMediaWhatsApp(numero, tipo, mediaUrl, caption = "", opcione
 
     return row;
   } catch (error) {
+    if (esSeguimientoBlockedError(error)) {
+      throw error;
+    }
     if (tipoApi === "image") {
       console.error("?? ERROR META IMAGEN:", error.response?.data || error.message);
     } else {
@@ -1207,12 +1199,11 @@ async function enviarMediaWhatsApp(numero, tipo, mediaUrl, caption = "", opcione
 async function enviarBotonesWhatsApp(numero, texto, botones, opciones = {}) {
   try {
     const opcionesEnvio = await completarOpcionesEnvio(opciones, numero);
-    const idempotente = await revisarIdempotenciaSeguimientoAntesEnvio(opcionesEnvio);
-    if (idempotente) return idempotente;
 
     const credenciales = await resolverCredencialesEnvio(opcionesEnvio);
     const { tokenEnviar, phoneIdEnviar, resolvedConexionWhatsappId } = credenciales;
     const inbox = resolverParamsInboxSaliente(opcionesEnvio, resolvedConexionWhatsappId);
+    await aplicarGuardsSeguimientoPreMeta(opcionesEnvio, credenciales);
     logSeguimientoEnvio(opcionesEnvio, numero, phoneIdEnviar);
     logSegSendTrace(opcionesEnvio, numero, credenciales);
 
@@ -1260,7 +1251,7 @@ async function enviarBotonesWhatsApp(numero, texto, botones, opciones = {}) {
     );
 
     const whatsappMessageId = respuestaMeta.data?.messages?.[0]?.id || null;
-    logSegPostMeta(opcionesEnvio, phoneIdEnviar, whatsappMessageId);
+    logSegPostMetaFinal(opcionesEnvio, credenciales, whatsappMessageId);
 
     const insertPayload = normalizarBodyMensajeSupabase({
       usuarioId: opcionesEnvio.usuarioId,
@@ -1294,6 +1285,8 @@ async function enviarBotonesWhatsApp(numero, texto, botones, opciones = {}) {
     if (!guardBotones.ok) {
       return false;
     }
+
+    validarConexionInbox(opcionesEnvio, inbox.conexionWhatsappId);
 
     const insertRes = await axios.post(
       `${SUPABASE_URL}/rest/v1/mensajes`,
@@ -1333,6 +1326,9 @@ async function enviarBotonesWhatsApp(numero, texto, botones, opciones = {}) {
     }
     return row;
   } catch (error) {
+    if (esSeguimientoBlockedError(error)) {
+      throw error;
+    }
     console.log(
       "ERROR ENVIANDO BOTONES WHATSAPP:",
       error.response?.data || error.message

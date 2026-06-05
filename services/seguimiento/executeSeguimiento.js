@@ -22,7 +22,11 @@ const {
   adquirirLockWorkerSeguimiento,
   liberarLockWorkerSeguimiento,
 } = require("./seguimientoWorkerLock");
-const { existeMensajePorSeguimientoId } = require("./mensajesSeguimientoIdempotencia");
+const { existeMensajePorSeguimientoIdDuro } = require("./mensajesSeguimientoIdempotencia");
+const {
+  esSeguimientoBlockedError,
+  CODIGOS_BLOQUEO,
+} = require("./seguimientoGuards");
 
 function obtenerConexionSeguimiento(item) {
   if (item?.conexion_whatsapp_id == null) return null;
@@ -119,7 +123,34 @@ function buildOpcionesEnvioSeguimiento(item) {
     strictConexionWhatsappId: true,
     origen: "seguimiento",
     seguimientoId: item.id,
+    campanaId: item.campana_id ?? null,
+    pasoIndex: item.paso_index ?? null,
+    clienteNumero: item.cliente_numero ?? null,
   };
+}
+
+async function manejarBloqueoEnvioSeguimiento(error, reservado, io) {
+  if (error.code === CODIGOS_BLOQUEO.DUP_META) {
+    await actualizarEstado(reservado.id, ESTADOS_SEGUIMIENTO.ENVIADO_IDEMPOTENTE, {
+      error_detalle: "Idempotente: mensaje ya existía antes de POST Meta",
+    });
+    emitirEstadoSeguimiento(io, reservado, ESTADOS_SEGUIMIENTO.ENVIADO_IDEMPOTENTE);
+    return { ok: true, motivo: "enviado_idempotente" };
+  }
+
+  if (
+    error.code === CODIGOS_BLOQUEO.CONEXION_MISMATCH_OPCIONES ||
+    error.code === CODIGOS_BLOQUEO.CONEXION_MISMATCH_RESUELTA ||
+    error.code === CODIGOS_BLOQUEO.INBOX_MISMATCH
+  ) {
+    await actualizarEstado(reservado.id, ESTADOS_SEGUIMIENTO.FALLIDO_CONEXION_MISMATCH, {
+      error_detalle: error.message || "Conexión programada no coincide con envío/inbox",
+    });
+    emitirEstadoSeguimiento(io, reservado, ESTADOS_SEGUIMIENTO.FALLIDO_CONEXION_MISMATCH);
+    return { ok: false, motivo: "fallido_conexion_mismatch" };
+  }
+
+  return null;
 }
 
 async function enviarMensajeSeguimiento(item) {
@@ -299,23 +330,18 @@ async function intentarReservarYEnviarPaso(item, io) {
   const itemParaEnvio = itemDb || reservado;
   logWorkerItemFinal(itemParaEnvio);
 
-  const mensajePrevio = await existeMensajePorSeguimientoId(
-    reservado.id,
-    obtenerConexionSeguimiento(itemParaEnvio)
-  );
+  const mensajePrevio = await existeMensajePorSeguimientoIdDuro(reservado.id);
   if (mensajePrevio) {
-    // TODO: re-emitir nuevo_mensaje si el panel abierto no tiene este mensaje (idempotencia sin socket)
-    console.log(
-      "[SEGUIMIENTO_IDEMPOTENTE] mensaje ya en bandeja, marcar enviado — sin re-emisión socket",
-      {
-        seguimiento_id: reservado.id,
-        mensaje_id: mensajePrevio.id,
-        conexion_whatsapp_id: mensajePrevio.conexion_whatsapp_id ?? null,
-      }
-    );
-    await actualizarEstado(reservado.id, ESTADOS_SEGUIMIENTO.ENVIADO);
-    emitirEstadoSeguimiento(io, reservado, ESTADOS_SEGUIMIENTO.ENVIADO);
-    return { ok: true, motivo: "idempotente_mensaje_existente" };
+    console.log("[SEG_BLOCK_DUP_META]", {
+      seguimiento_id: reservado.id,
+      mensaje_id: mensajePrevio.id ?? null,
+      fase: "worker_pre_envio",
+    });
+    await actualizarEstado(reservado.id, ESTADOS_SEGUIMIENTO.ENVIADO_IDEMPOTENTE, {
+      error_detalle: "Idempotente: mensaje ya en bandeja",
+    });
+    emitirEstadoSeguimiento(io, reservado, ESTADOS_SEGUIMIENTO.ENVIADO_IDEMPOTENTE);
+    return { ok: true, motivo: "enviado_idempotente" };
   }
 
   try {
@@ -340,6 +366,11 @@ async function intentarReservarYEnviarPaso(item, io) {
     });
     return { ok: true };
   } catch (error) {
+    if (esSeguimientoBlockedError(error)) {
+      const bloqueo = await manejarBloqueoEnvioSeguimiento(error, reservado, io);
+      if (bloqueo) return bloqueo;
+    }
+
     const detalle = error.message || "Error enviando seguimiento";
     console.error("[SEGUIMIENTO_WORKER_DEBUG] error envio", error);
     console.log("[SEGUIMIENTO_WORKER] error", {
@@ -479,9 +510,23 @@ function logCrucesConexionEnLoteWorker(pendientes) {
   }
 }
 
-async function procesarSeguimientosVencidos(io) {
+async function procesarSeguimientosVencidos(io, opts = {}) {
+  if (!opts.fromWorker) {
+    console.log("[SEG_BLOCK_LEGACY_EXEC]", {
+      pid: process.pid,
+      caller: opts.caller || "desconocido",
+    });
+    return { procesados: 0, enviados: 0, lock: "blocked_legacy" };
+  }
+
   const lock = await adquirirLockWorkerSeguimiento();
   if (!lock.acquired) {
+    const sinLockDb = ["sin_supabase", "lock_tabla_ausente", "lock_verificacion_fallida"].includes(
+      lock.motivo
+    );
+    if (sinLockDb) {
+      return { procesados: 0, enviados: 0, lock: "no_lock_db", motivo: lock.motivo };
+    }
     return { procesados: 0, enviados: 0, lock: "skipped" };
   }
 

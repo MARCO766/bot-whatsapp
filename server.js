@@ -232,7 +232,9 @@ io.on("connection", (socket) => {
 
 server.listen(PORT, () => {
   const { startSeguimientoWorker } = require("./jobs/seguimientoWorker");
-  startSeguimientoWorker(app);
+  startSeguimientoWorker(app).catch((err) => {
+    console.error("[SEGUIMIENTO_WORKER] error al arrancar:", err.message);
+  });
   const { startRemarketing24hWorker } = require("./jobs/remarketing24hWorker");
   startRemarketing24hWorker();
   console.log("🚀 Servidor corriendo en puerto", PORT);

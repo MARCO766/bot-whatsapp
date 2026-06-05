@@ -86,7 +86,15 @@ create table if not exists public.seguimientos_programados (
   -- Restricciones
   constraint seguimientos_paso_index_nonneg check (paso_index >= 0),
   constraint seguimientos_estado_valido check (
-    estado in ('pendiente', 'procesando', 'enviado', 'cancelado', 'respondido')
+    estado in (
+      'pendiente',
+      'procesando',
+      'enviado',
+      'cancelado',
+      'respondido',
+      'fallido_conexion_mismatch',
+      'enviado_idempotente'
+    )
   ),
   constraint seguimientos_mensaje_tipo_valido check (
     mensaje_tipo in ('texto', 'imagen', 'audio', 'pdf')

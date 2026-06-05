@@ -8,8 +8,6 @@ const axios = require("axios");
 const { detectarTipoNodo } = require("../services/seguimiento/detectarTipoNodo");
 const { ejecutarSeguimientoEnFlujo } = require("../services/seguimiento/ejecutarSeguimientoEnFlujo");
 const { cancelarSeguimientosPorRespuesta, mensajeEsRespuestaValida } = require("../services/seguimiento/cancelOnReply");
-const { procesarSeguimientosVencidos } = require("../services/seguimiento/executeSeguimiento");
-
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
 
@@ -88,7 +86,10 @@ async function main() {
     { headers: { ...headers(), "Content-Type": "application/json" } }
   );
 
-  const worker = await procesarSeguimientosVencidos(null);
+  console.log(
+    "[SEG_BLOCK_LEGACY_EXEC] script deshabilitado — ejecutar worker solo vía jobs/seguimientoWorker.js"
+  );
+  const worker = { procesados: 0, enviados: 0, lock: "blocked_legacy" };
   const final = (
     await axios.get(
       `${SUPABASE_URL}/rest/v1/seguimientos_programados?id=eq.${row.id}&select=estado,enviado_en,error_detalle,campana_id`,

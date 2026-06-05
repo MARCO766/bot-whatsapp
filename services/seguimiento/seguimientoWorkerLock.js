@@ -25,13 +25,43 @@ function esTablaLockAusente(err) {
   );
 }
 
+async function verificarTablaLockDisponible() {
+  if (!SUPABASE_URL || !SUPABASE_KEY) {
+    return { ok: false, motivo: "sin_supabase" };
+  }
+
+  try {
+    await axios.get(
+      `${SUPABASE_URL}/rest/v1/seguimiento_worker_lock?id=eq.${LOCK_ID}&select=id&limit=1`,
+      { headers: headers() }
+    );
+    return { ok: true };
+  } catch (err) {
+    if (esTablaLockAusente(err)) {
+      return { ok: false, motivo: "lock_tabla_ausente" };
+    }
+    console.log("[WORKER_LOCK] verificar tabla error:", err.response?.data || err.message);
+    return { ok: false, motivo: "lock_verificacion_fallida" };
+  }
+}
+
 /**
  * Adquiere lock global ~28s. Si otro worker tiene lock vigente, devuelve acquired: false.
+ * Sin modo degradado: si la tabla no existe, no se ejecuta el worker.
  */
 async function adquirirLockWorkerSeguimiento() {
   if (!SUPABASE_URL || !SUPABASE_KEY) {
-    console.log("[WORKER_LOCK_SKIPPED] sin SUPABASE_URL/KEY");
+    console.log("[SEG_WORKER_NO_LOCK_DISABLED]", { motivo: "sin_supabase", pid: process.pid });
     return { acquired: false, motivo: "sin_supabase" };
+  }
+
+  const verificacion = await verificarTablaLockDisponible();
+  if (!verificacion.ok) {
+    console.log("[SEG_WORKER_NO_LOCK_DISABLED]", {
+      motivo: verificacion.motivo,
+      pid: process.pid,
+    });
+    return { acquired: false, motivo: verificacion.motivo };
   }
 
   const now = new Date();
@@ -58,10 +88,11 @@ async function adquirirLockWorkerSeguimiento() {
     }
   } catch (patchErr) {
     if (esTablaLockAusente(patchErr)) {
-      console.warn(
-        "[WORKER_LOCK] tabla ausente — ejecuta add_seguimiento_worker_lock.sql; tick sin lock DB"
-      );
-      return { acquired: true, workerId, until: untilIso, degraded: true };
+      console.log("[SEG_WORKER_NO_LOCK_DISABLED]", {
+        motivo: "lock_tabla_ausente",
+        pid: process.pid,
+      });
+      return { acquired: false, motivo: "lock_tabla_ausente" };
     }
     console.log("[WORKER_LOCK] patch error:", patchErr.response?.data || patchErr.message);
   }
@@ -76,10 +107,11 @@ async function adquirirLockWorkerSeguimiento() {
     return { acquired: true, workerId, until: untilIso };
   } catch (insertErr) {
     if (esTablaLockAusente(insertErr)) {
-      console.warn(
-        "[WORKER_LOCK] tabla ausente — ejecuta add_seguimiento_worker_lock.sql; tick sin lock DB"
-      );
-      return { acquired: true, workerId, until: untilIso, degraded: true };
+      console.log("[SEG_WORKER_NO_LOCK_DISABLED]", {
+        motivo: "lock_tabla_ausente",
+        pid: process.pid,
+      });
+      return { acquired: false, motivo: "lock_tabla_ausente" };
     }
     const status = insertErr.response?.status;
     if (status !== 409 && status !== 23505) {
@@ -109,5 +141,6 @@ async function liberarLockWorkerSeguimiento(workerId) {
 module.exports = {
   adquirirLockWorkerSeguimiento,
   liberarLockWorkerSeguimiento,
+  verificarTablaLockDisponible,
   LOCK_TTL_MS,
 };

@@ -17,6 +17,27 @@ function normalizarConexionId(conexionWhatsappId) {
   return String(conexionWhatsappId).trim();
 }
 
+/** Idempotencia dura: cualquier mensaje con este seguimiento_id bloquea POST Meta. */
+async function existeMensajePorSeguimientoIdDuro(seguimientoId) {
+  const id = seguimientoId != null ? String(seguimientoId).trim() : "";
+  if (!id || !SUPABASE_URL || !SUPABASE_KEY) return null;
+
+  try {
+    const res = await axios.get(
+      `${SUPABASE_URL}/rest/v1/mensajes?seguimiento_id=eq.${encodeURIComponent(id)}` +
+        `&select=id,conexion_whatsapp_id,whatsapp_message_id,cliente_numero,usuario_id,creado_en&limit=1`,
+      { headers: headers() }
+    );
+    return res.data?.[0] || null;
+  } catch (err) {
+    const msg = err.response?.data?.message || err.message || "";
+    if (String(msg).includes("seguimiento_id")) {
+      throw new Error("mensajes.seguimiento_id no existe en Supabase");
+    }
+    throw err;
+  }
+}
+
 async function existeMensajePorSeguimientoId(seguimientoId, conexionWhatsappId = null) {
   const id = seguimientoId != null ? String(seguimientoId).trim() : "";
   if (!id || !SUPABASE_URL || !SUPABASE_KEY) return null;
@@ -68,4 +89,5 @@ async function existeMensajePorSeguimientoId(seguimientoId, conexionWhatsappId =
 
 module.exports = {
   existeMensajePorSeguimientoId,
+  existeMensajePorSeguimientoIdDuro,
 };
