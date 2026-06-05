@@ -23,8 +23,9 @@ window.MacBotSeguimientoV2 = (function () {
     video: "video",
     documento: "document",
   };
-  const UPLOAD_ENDPOINT = "/subir-archivo";
-  const UPLOAD_V2_HABILITADO = false;
+  const UPLOAD_ENDPOINT = "/api/seguimiento-v2/upload-media";
+  const UPLOAD_V2_HABILITADO = true;
+  const EXT_BLOQUEADAS = [".exe", ".bat", ".cmd", ".js", ".sh"];
 
   let nodoActivo = null;
   let configActiva = null;
@@ -143,8 +144,31 @@ window.MacBotSeguimientoV2 = (function () {
     return "*/*";
   }
 
+  function extensionArchivo(nombre) {
+    const partes = String(nombre || "").split(".");
+    if (partes.length < 2) return "";
+    return ("." + partes.pop()).toLowerCase();
+  }
+
+  function esExtensionBloqueada(nombre) {
+    return EXT_BLOQUEADAS.indexOf(extensionArchivo(nombre)) >= 0;
+  }
+
+  function obtenerConexionWhatsappIdUpload() {
+    const api = window.MacBotSeguimientoApi;
+    if (api && typeof api.obtenerConexionWhatsappIdBuilderContext === "function") {
+      return api.obtenerConexionWhatsappIdBuilderContext();
+    }
+    return null;
+  }
+
   function validarArchivoLocal(file, tipo) {
     if (!file) return null;
+
+    if (esExtensionBloqueada(file.name)) {
+      return "Tipo de archivo no permitido (.exe, .bat, .cmd, .js, .sh bloqueados).";
+    }
+
     const bloque = bloquePorTipo(tipo);
     const maxMb = bloque.maxMb;
     if (!maxMb) return null;
@@ -258,14 +282,20 @@ window.MacBotSeguimientoV2 = (function () {
       if (local?.sizeError) {
         errores.push("Paso " + n + ": " + local.sizeError);
       }
+      if (local?.uploading) {
+        errores.push("Paso " + n + ": espera a que termine la subida del archivo.");
+      }
+      if (local?.uploadError) {
+        errores.push("Paso " + n + ": " + local.uploadError);
+      }
       if (!mediaUrl) {
-        if (local?.file && !local.sizeError) {
+        if (local?.file && !local.sizeError && !local.uploading) {
           errores.push(
             "Paso " +
               n +
               ": sube el archivo al servidor o pega una URL manual para guardar."
           );
-        } else {
+        } else if (!local?.file) {
           errores.push("Paso " + n + ": sube un archivo o pega una URL manual.");
         }
       }
@@ -315,7 +345,7 @@ window.MacBotSeguimientoV2 = (function () {
       media_type: tipoToMediaType(tipo),
     };
 
-    if (tipo === "documento" && filename) {
+    if (filename) {
       out.media_filename = filename;
     }
 
@@ -705,7 +735,7 @@ window.MacBotSeguimientoV2 = (function () {
       } else {
         delete paso.media_filename;
       }
-    } else {
+    } else if (!paso.media_filename) {
       delete paso.media_filename;
     }
     delete paso.filename;
@@ -735,8 +765,21 @@ window.MacBotSeguimientoV2 = (function () {
       return;
     }
 
-    const previewUrl = local.blobUrl || "";
+    const previewUrl = local.uploadedUrl || local.blobUrl || "";
     let previewHtml = "";
+
+    if (local.uploading) {
+      box.innerHTML =
+        '<div class="segv2-upload-fileinfo">' +
+        "<strong>" +
+        esc(local.nombre || "Archivo") +
+        "</strong>" +
+        "<span>" +
+        formatearPeso(local.size) +
+        " · Subiendo…</span></div>" +
+        '<p class="segv2-upload-hint segv2-upload-status--uploading">Guardando en Supabase Storage…</p>';
+      return;
+    }
 
     if (tipo === "imagen" && previewUrl) {
       previewHtml =
@@ -768,7 +811,7 @@ window.MacBotSeguimientoV2 = (function () {
       "</strong>" +
       "<span>" +
       formatearPeso(local.size) +
-      (local.uploadedUrl ? " · ✓ URL lista" : " · preview local") +
+      (local.uploadedUrl ? " · ✓ Subido" : " · preview local") +
       "</span></div>" +
       previewHtml +
       (local.uploadError
@@ -782,6 +825,10 @@ window.MacBotSeguimientoV2 = (function () {
     if (!paso) return;
 
     limpiarArchivoLocal(paso);
+    delete paso.media_url;
+    delete paso.media_filename;
+    const urlElReset = document.getElementById("segv2MediaUrl");
+    if (urlElReset) urlElReset.value = "";
 
     if (!file) {
       renderArchivoLocalBox(paso);
@@ -802,12 +849,15 @@ window.MacBotSeguimientoV2 = (function () {
       sizeError: sizeError,
       uploadedUrl: "",
       uploadError: "",
+      uploading: false,
     };
 
-    if (!sizeError && tipo === "documento") {
+    if (!sizeError) {
       paso.media_filename = file.name;
-      const filenameEl = document.getElementById("segv2MediaFilename");
-      if (filenameEl) filenameEl.value = file.name;
+      if (tipo === "documento") {
+        const filenameEl = document.getElementById("segv2MediaFilename");
+        if (filenameEl) filenameEl.value = file.name;
+      }
     }
 
     renderArchivoLocalBox(paso);
@@ -825,36 +875,68 @@ window.MacBotSeguimientoV2 = (function () {
     const local = archivosLocales[key];
     if (!local || local.sizeError) return;
 
+    const tipo = normalizarTipo(paso.tipo);
+    const conexionWhatsappId = obtenerConexionWhatsappIdUpload();
     const status = document.getElementById("segv2UploadStatus");
-    if (status) status.textContent = "Subiendo…";
+
+    if (!conexionWhatsappId) {
+      local.uploadError =
+        "Falta la línea de WhatsApp del flujo (conexion_whatsapp_id). Abre el flujo con una línea asignada o pega una URL manual.";
+      if (status) status.textContent = "Sin línea — URL manual";
+      renderArchivoLocalBox(paso);
+      renderErroresValidacion();
+      return;
+    }
+
+    local.uploading = true;
+    local.uploadError = "";
+    if (status) {
+      status.textContent = "Subiendo…";
+      status.classList.add("segv2-upload-status--uploading");
+    }
+    renderArchivoLocalBox(paso);
 
     const formData = new FormData();
-    formData.append("archivo", file);
+    formData.append("file", file);
+    formData.append("tipo", tipo);
+    formData.append("conexion_whatsapp_id", conexionWhatsappId);
 
-    fetch(UPLOAD_ENDPOINT, { method: "POST", body: formData })
+    fetch(UPLOAD_ENDPOINT, { method: "POST", body: formData, credentials: "same-origin" })
       .then(function (r) {
-        return r.json();
+        return r.json().then(function (data) {
+          if (!r.ok) {
+            throw new Error(data?.error || "Error subiendo archivo");
+          }
+          return data;
+        });
       })
       .then(function (data) {
-        if (!data?.url) {
-          throw new Error("Respuesta sin URL");
+        if (!data?.publicUrl) {
+          throw new Error("Respuesta sin URL pública");
         }
-        local.uploadedUrl = data.url;
+        local.uploading = false;
+        local.uploadedUrl = data.publicUrl;
         local.uploadError = "";
-        paso.media_url = data.url;
-        if (!paso.media_filename) paso.media_filename = file.name;
+        paso.media_url = data.publicUrl;
+        paso.media_filename = data.filename || file.name;
         const urlEl = document.getElementById("segv2MediaUrl");
-        if (urlEl) urlEl.value = data.url;
-        if (status) status.textContent = "✓ Archivo subido — URL aplicada";
+        if (urlEl) urlEl.value = data.publicUrl;
+        if (status) {
+          status.textContent = "✓ Archivo subido";
+          status.classList.remove("segv2-upload-status--uploading");
+        }
         renderArchivoLocalBox(paso);
+        renderVistaPreviaMensaje();
+        renderErroresValidacion();
         onPanelChange();
       })
-      .catch(function () {
-        local.uploadError =
-          "Subida pendiente: conecta " +
-          UPLOAD_ENDPOINT +
-          " o pega una URL manual abajo.";
-        if (status) status.textContent = "Preview local — usa URL manual";
+      .catch(function (err) {
+        local.uploading = false;
+        local.uploadError = err?.message || "No se pudo subir el archivo";
+        if (status) {
+          status.textContent = "Error al subir";
+          status.classList.remove("segv2-upload-status--uploading");
+        }
         renderArchivoLocalBox(paso);
         renderErroresValidacion();
       });
@@ -868,12 +950,6 @@ window.MacBotSeguimientoV2 = (function () {
 
     return (
       '<div class="segv2-media-panel">' +
-      '<p class="segv2-upload-todo">' +
-      "<strong>TODO upload V2:</strong> preview y validación local activas. " +
-      "La subida automática a <code>" +
-      esc(UPLOAD_ENDPOINT) +
-      "</code> se activará en la siguiente fase. " +
-      "Por ahora pega una <strong>URL manual</strong> para guardar y enviar.</p>" +
       '<div class="segv2-form-row segv2-campo-upload">' +
       "<label>Subir desde PC <span class=\"segv2-limit-badge\">" +
       esc(limite) +
@@ -882,13 +958,15 @@ window.MacBotSeguimientoV2 = (function () {
       '<input type="file" id="segv2ArchivoInput" accept="' +
       esc(accept) +
       '">' +
-      '<span id="segv2UploadStatus" class="segv2-upload-status">Preview local</span></div>' +
+      '<span id="segv2UploadStatus" class="segv2-upload-status">Selecciona un archivo</span></div>' +
       '<div id="segv2ArchivoLocal" class="segv2-upload-preview-box"></div></div>' +
+      '<details class="segv2-campo-url-advanced">' +
+      "<summary>URL manual (opción avanzada)</summary>" +
       '<div class="segv2-form-row segv2-campo-url">' +
-      "<label>URL manual (opcional si subes archivo)</label>" +
+      "<label>URL pública del archivo</label>" +
       '<input type="url" id="segv2MediaUrl" placeholder="https://…" value="' +
       esc(paso.media_url || "") +
-      '"></div>' +
+      '"></div></details>' +
       (conCaption
         ? '<div class="segv2-form-row segv2-campo-caption">' +
           "<label>Caption (opcional)</label>" +
