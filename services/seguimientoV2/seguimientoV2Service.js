@@ -112,7 +112,7 @@ async function programarSeguimientoV2EnFlujo({
       estado: ESTADOS_SEGUIMIENTO_V2.PENDIENTE,
       run_at: runAt,
       checkpoint_at: checkpointAt,
-      cancelar_si_responde: true,
+      cancelar_si_responde: config.cancelarSiResponde !== false,
     });
   }
 

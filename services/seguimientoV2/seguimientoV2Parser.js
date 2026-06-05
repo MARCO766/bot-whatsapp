@@ -214,6 +214,7 @@ function parseSeguimientoV2Node(nodo) {
 
   return {
     version: 1,
+    cancelarSiResponde: data.cancelarSiResponde !== false,
     pasos,
   };
 }

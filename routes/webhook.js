@@ -16,6 +16,9 @@ const {
   cancelarSeguimientosPorRespuesta,
 } = require("../services/seguimiento/cancelOnReply");
 const {
+  cancelarSeguimientosV2PorRespuesta,
+} = require("../services/seguimientoV2/seguimientoV2CancelOnReply");
+const {
   registrarRespuestaBotonSeguimiento,
 } = require("../services/seguimiento/registrarRespuestaBoton");
 const rt = require("../services/realtimeService");
@@ -618,6 +621,16 @@ try {
   });
 } catch (cancelErr) {
   console.log("[WEBHOOK] cancelar seguimientos:", cancelErr.message);
+}
+
+try {
+  await cancelarSeguimientosV2PorRespuesta({
+    usuarioId: usuarioIdWebhook,
+    numero: from,
+    conexionWhatsappId: conexionWhatsappId || null,
+  });
+} catch (cancelV2Err) {
+  console.log("[WEBHOOK] cancelar seguimientos V2:", cancelV2Err.message);
 }
 
 return res.sendStatus(200);

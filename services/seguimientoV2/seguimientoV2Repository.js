@@ -236,6 +236,55 @@ async function insertarLog({
   return (response.data || [])[0] || null;
 }
 
+async function obtenerPorId(id) {
+  if (!id) return null;
+
+  const response = await axios.get(
+    `${SUPABASE_URL}/rest/v1/${TABLA}?id=eq.${encodeURIComponent(id)}` +
+      `&select=${SELECT_WORKER}&limit=1`,
+    { headers: headers() }
+  );
+
+  return (response.data || [])[0] || null;
+}
+
+async function cancelarPendientesPorRespuestaLead({
+  usuarioId,
+  numero,
+  conexionWhatsappId,
+} = {}) {
+  const conexion = normalizarConexionId(conexionWhatsappId);
+  const cliente = numero != null ? String(numero).trim() : "";
+  const usuario = usuarioId != null ? String(usuarioId).trim() : "";
+
+  if (!usuario || !cliente || !conexion) {
+    return [];
+  }
+
+  const ahora = nowUtc();
+  const estadosCancelables = ESTADOS_ACTIVOS_V2.join(",");
+
+  const response = await axios.patch(
+    `${SUPABASE_URL}/rest/v1/${TABLA}?${filtrosClaveTriple({
+      usuarioId: usuario,
+      numero: cliente,
+      conexionWhatsappId: conexion,
+    })}` +
+      `&estado=in.(${estadosCancelables})` +
+      `&cancelar_si_responde=eq.true`,
+    {
+      estado: ESTADOS_SEGUIMIENTO_V2.RESPONDIDO,
+      respondido_en: ahora,
+      cancelado_en: ahora,
+      error_detalle: "lead_respondio",
+      updated_at: ahora,
+    },
+    { headers: headers({ Prefer: "return=representation" }) }
+  );
+
+  return response.data || [];
+}
+
 async function obtenerCampanaActiva({
   usuarioId,
   numero,
@@ -280,11 +329,13 @@ async function obtenerCampanaActiva({
 module.exports = {
   insertarPasos,
   obtenerPendientesVencidos,
+  obtenerPorId,
   reservarParaEnvio,
   actualizarEstado,
   listarPorCampana,
   listarPendientesPorClaveTriple,
   cancelarCampana,
+  cancelarPendientesPorRespuestaLead,
   insertarLog,
   obtenerCampanaActiva,
   normalizarConexionId,

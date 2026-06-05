@@ -1,5 +1,6 @@
 const {
   obtenerPendientesVencidos,
+  obtenerPorId,
   reservarParaEnvio,
   actualizarEstado,
   insertarLog,
@@ -68,7 +69,20 @@ async function procesarSeguimientoV2Item(item) {
     return { ok: false, motivo: "no_reservado" };
   }
 
-  const resultado = await enviarSeguimientoV2(reservado);
+  const fresca = await obtenerPorId(reservado.id);
+  const estadosNoEnviar = [
+    ESTADOS_SEGUIMIENTO_V2.RESPONDIDO,
+    ESTADOS_SEGUIMIENTO_V2.CANCELADO,
+  ];
+  if (!fresca || estadosNoEnviar.includes(fresca.estado)) {
+    console.log("[SEG_V2_WORKER] omitido — ya cancelado o respondido", {
+      seguimiento_v2_id: reservado.id,
+      estado: fresca?.estado ?? null,
+    });
+    return { ok: false, motivo: "ya_cancelado_o_respondido" };
+  }
+
+  const resultado = await enviarSeguimientoV2(fresca);
 
   if (resultado.omitido) {
     await marcarOmitidoDuplicado(reservado);
