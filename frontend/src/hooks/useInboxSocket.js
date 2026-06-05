@@ -8,7 +8,6 @@ import { RT } from "../realtime/events";
 import {
   normalizeIncomingMessage,
   resolveChatKey,
-  sameChatKey,
 } from "../utils/chatFormat";
 
 export function useInboxSocket({
@@ -74,15 +73,14 @@ export function useInboxSocket({
   useSocketEvent(
     RT.SEGUIMIENTO_ACTUALIZADO,
     (data) => {
-      const sel = selectedChatRef.current;
-      if (!panelActivoRef.current || !sel) return;
+      if (!onSeguimientoEstado) return;
 
       const segKey = resolveChatKey({
         cliente_numero: data?.cliente_numero,
         conexion_whatsapp_id: data?.conexion_whatsapp_id,
         chatKey: data?.chatKey,
       });
-      if (!segKey || !sameChatKey(sel, { chatKey: segKey })) return;
+      if (!segKey) return;
 
       onSeguimientoEstado?.(data);
     },

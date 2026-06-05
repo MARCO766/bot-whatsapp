@@ -376,7 +376,7 @@ export function useInbox({ onUnreadChange } = {}) {
   }, []);
 
   const handleNuevoMensaje = useCallback(
-    ({ msg, chatKey, conexionWhatsappId, isActive }) => {
+    ({ msg, chatKey, conexionWhatsappId }) => {
       const key = String(chatKey || msg?.chatKey || "").trim();
       if (!key) return;
 
@@ -394,11 +394,9 @@ export function useInbox({ onUnreadChange } = {}) {
 
       const sel = selectedChatRef.current;
       const selKey = resolveChatKey(sel);
+      const sameSelectedChat = Boolean(selKey && key === selKey);
       const canPaintPanel =
-        isActive &&
-        selKey &&
-        key === selKey &&
-        selectedChatMatchesTab(sel, tabId);
+        sameSelectedChat && selectedChatMatchesTab(sel, tabId);
 
       if (!canPaintPanel) {
         incrementarNoLeido(key);

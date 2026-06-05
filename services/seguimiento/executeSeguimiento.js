@@ -67,17 +67,31 @@ async function cancelarSeguimientoSinConexion(item, io) {
 function emitirEstadoSeguimiento(io, item, estado) {
   if (!item?.usuario_id) return;
 
-  rt.seguimientoActualizado(io, item.usuario_id, {
+  const conexionId = obtenerConexionSeguimiento(item);
+  const clienteNumero =
+    item.cliente_numero != null ? String(item.cliente_numero).trim() : "";
+
+  const payload = {
     id: item.id,
     campana_id: item.campana_id,
     cliente_numero: item.cliente_numero,
     flujo_id: item.flujo_id,
     nodo_id: item.nodo_id,
-    paso_index: item.paso_index,
-    paso_id: item.paso_id,
     estado,
-    run_at: item.run_at,
-  });
+  };
+
+  if (item.paso_index != null) payload.paso_index = item.paso_index;
+  if (item.paso_id != null) payload.paso_id = item.paso_id;
+  if (item.run_at != null) payload.run_at = item.run_at;
+
+  if (conexionId) {
+    payload.conexion_whatsapp_id = conexionId;
+    if (clienteNumero) {
+      payload.chatKey = `${clienteNumero}::${conexionId}`;
+    }
+  }
+
+  rt.seguimientoActualizado(io, item.usuario_id, payload);
 }
 
 function buildOpcionesEnvioSeguimiento(item) {
@@ -266,11 +280,15 @@ async function intentarReservarYEnviarPaso(item, io) {
     obtenerConexionSeguimiento(itemParaEnvio)
   );
   if (mensajePrevio) {
-    console.log("[SEGUIMIENTO_IDEMPOTENTE] mensaje ya en bandeja, marcar enviado", {
-      seguimiento_id: reservado.id,
-      mensaje_id: mensajePrevio.id,
-      conexion_whatsapp_id: mensajePrevio.conexion_whatsapp_id ?? null,
-    });
+    // TODO: re-emitir nuevo_mensaje si el panel abierto no tiene este mensaje (idempotencia sin socket)
+    console.log(
+      "[SEGUIMIENTO_IDEMPOTENTE] mensaje ya en bandeja, marcar enviado — sin re-emisión socket",
+      {
+        seguimiento_id: reservado.id,
+        mensaje_id: mensajePrevio.id,
+        conexion_whatsapp_id: mensajePrevio.conexion_whatsapp_id ?? null,
+      }
+    );
     await actualizarEstado(reservado.id, ESTADOS_SEGUIMIENTO.ENVIADO);
     emitirEstadoSeguimiento(io, reservado, ESTADOS_SEGUIMIENTO.ENVIADO);
     return { ok: true, motivo: "idempotente_mensaje_existente" };

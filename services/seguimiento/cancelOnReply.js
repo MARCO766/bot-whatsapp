@@ -137,13 +137,29 @@ function mensajeEsRespuestaValida(mensajeAt, seguimiento) {
 }
 
 function emitirCancelacion(io, seg, usuarioId) {
-  rt.seguimientoActualizado(io, usuarioId || seg.usuario_id, {
+  const conexionId =
+    seg?.conexion_whatsapp_id != null ? String(seg.conexion_whatsapp_id).trim() : "";
+  const clienteNumero =
+    seg?.cliente_numero != null ? String(seg.cliente_numero).trim() : "";
+
+  const payload = {
     id: seg.id,
     campana_id: seg.campana_id,
     cliente_numero: seg.cliente_numero,
     estado: ESTADOS_SEGUIMIENTO.RESPONDIDO,
     motivo: "respuesta_cliente",
-  });
+  };
+
+  if (seg?.paso_index != null) payload.paso_index = seg.paso_index;
+
+  if (conexionId) {
+    payload.conexion_whatsapp_id = conexionId;
+    if (clienteNumero) {
+      payload.chatKey = `${clienteNumero}::${conexionId}`;
+    }
+  }
+
+  rt.seguimientoActualizado(io, usuarioId || seg.usuario_id, payload);
 }
 
 module.exports = {
