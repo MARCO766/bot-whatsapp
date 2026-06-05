@@ -232,7 +232,13 @@ export function builderUrl(flow, conexionWhatsappId) {
       ? conexionWhatsappId
       : flow.conexion_whatsapp_id;
   if (conn) params.set("conexion_whatsapp_id", conn);
-  return `${base}/admin?${params.toString()}`;
+  const urlDestino = `${base}/admin?${params.toString()}`;
+  console.log("[FLOW_BUILDER_OPEN]", {
+    flujo_id: flow.id,
+    flujo_nombre: flow.nombre,
+    url_destino: urlDestino,
+  });
+  return urlDestino;
 }
 
 export function exportFlowUrl(id) {

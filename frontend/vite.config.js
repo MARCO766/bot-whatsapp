@@ -28,6 +28,11 @@ export default defineConfig({
   },
   server: {
     proxy: {
+      '/admin': {
+        target: process.env.VITE_DEV_API || 'http://localhost:3000',
+        changeOrigin: true,
+        secure: false,
+      },
       '/api': {
         target: process.env.VITE_DEV_API || 'http://localhost:3000',
         changeOrigin: true,

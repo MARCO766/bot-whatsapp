@@ -11,12 +11,28 @@ const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
 
 router.get("/admin", protegerPanel, async (req, res) => {
-  if (esAdminEmail(req.session.usuario.email)) {
+  const esBuilderRequest = req.query.builder && req.query.flujo_id;
+  const adminEmail = req.session.usuario.email;
+
+  if (esAdminEmail(adminEmail) && !esBuilderRequest) {
+    console.log("[FLOW_BUILDER_REDIRECT_ADMIN]", {
+      motivo: "admin_email_panel_usuarios",
+      query: req.query,
+      email: adminEmail,
+    });
     return res.send(
       renderAdminUsuariosPage({
-        adminEmail: req.session.usuario.email,
+        adminEmail,
       })
     );
+  }
+
+  if (esAdminEmail(adminEmail) && esBuilderRequest) {
+    console.log("[FLOW_BUILDER_ADMIN_BYPASS]", {
+      flujo_id: req.query.flujo_id,
+      query: req.query,
+      email: adminEmail,
+    });
   }
 
 const tab = req.query.tab || "inicio";
