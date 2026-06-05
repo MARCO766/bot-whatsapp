@@ -541,10 +541,8 @@ window.MacBotSeguimientoV2 = (function () {
   function buildCanvasBodyHtml(pasos) {
     if (!pasos.length) {
       return (
-        '<div class="segv2-canvas-empty-wrap">' +
-        '<div class="segv2-canvas-divider" aria-hidden="true"></div>' +
-        '<p class="segv2-canvas-empty">Aún no configurado</p>' +
-        '<p class="segv2-canvas-hint">+ Crear primer paso</p>' +
+        '<div class="segv2-canvas-empty-wrap segv2-canvas-empty-wrap--compact">' +
+        '<p class="segv2-canvas-empty">Sin configurar</p>' +
         "</div>"
       );
     }
@@ -831,13 +829,19 @@ window.MacBotSeguimientoV2 = (function () {
     return { tipo: "empty", texto: "" };
   }
 
-  function fetchStorageStatusSiMedia(tipo) {
-    if (!esTipoMedia(tipo)) {
-      renderStorageBanner(false);
+  function debeMostrarStorageBanner(tipo, paso) {
+    if (!esTipoMedia(tipo)) return false;
+    const local = archivosLocales[claveArchivoLocal(paso)];
+    return !!(local?.file || local?.uploading || local?.uploadError);
+  }
+
+  function fetchStorageStatusSiMedia(tipo, paso) {
+    if (!debeMostrarStorageBanner(tipo, paso)) {
+      renderStorageBanner(tipo, paso);
       return Promise.resolve(null);
     }
     if (storageStatusFetched && storageStatus) {
-      renderStorageBanner(true);
+      renderStorageBanner(tipo, paso);
       return Promise.resolve(storageStatus);
     }
     return fetch(STORAGE_STATUS_ENDPOINT, { credentials: "same-origin" })
@@ -847,22 +851,22 @@ window.MacBotSeguimientoV2 = (function () {
       .then(function (data) {
         storageStatus = data;
         storageStatusFetched = true;
-        renderStorageBanner(true);
+        renderStorageBanner(tipo, paso);
         return data;
       })
       .catch(function () {
         storageStatus = null;
         storageStatusFetched = true;
-        renderStorageBanner(true);
+        renderStorageBanner(tipo, paso);
         return null;
       });
   }
 
-  function renderStorageBanner(mostrarParaMedia) {
+  function renderStorageBanner(tipo, paso) {
     const box = document.getElementById("segv2StorageBanner");
     if (!box) return;
 
-    if (!mostrarParaMedia) {
+    if (!debeMostrarStorageBanner(tipo, paso)) {
       box.innerHTML = "";
       box.style.display = "none";
       return;
@@ -956,6 +960,7 @@ window.MacBotSeguimientoV2 = (function () {
 
     if (!file) {
       renderArchivoLocalBox(paso);
+      renderStorageBanner(normalizarTipo(paso.tipo), paso);
       onPanelChange();
       return;
     }
@@ -988,6 +993,7 @@ window.MacBotSeguimientoV2 = (function () {
     renderVistaPreviaMensaje();
     renderErroresValidacion();
     onPanelChange();
+    fetchStorageStatusSiMedia(tipo, paso);
 
     if (!sizeError && UPLOAD_V2_HABILITADO) {
       intentarSubirArchivoLocal(file, paso);
@@ -1073,6 +1079,7 @@ window.MacBotSeguimientoV2 = (function () {
         renderArchivoLocalBox(paso);
         renderVistaPreviaMensaje();
         renderErroresValidacion();
+        fetchStorageStatusSiMedia(tipo, paso);
       });
   }
 
@@ -1308,15 +1315,24 @@ window.MacBotSeguimientoV2 = (function () {
   }
 
   function renderVistaLista() {
-    const emptyLabel = document.getElementById("segv2EmptyLabel");
+    const emptyWrap = document.getElementById("segv2EmptyWrap");
+    const sectionHeading = document.getElementById("segv2SectionHeading");
+    const listaSection = document.getElementById("segv2ListaSection");
     const btnAgregar = document.getElementById("segv2BtnAgregar");
     const toggleWrap = document.getElementById("segv2ToggleWrap");
     if (!configActiva) return;
 
     const vacio = !configActiva.pasos.length;
-    if (emptyLabel) emptyLabel.style.display = vacio ? "" : "none";
+    const panelRoot = document.querySelector(".segv2-panel");
+    if (panelRoot) panelRoot.classList.toggle("segv2-panel--idle", vacio);
+    if (emptyWrap) emptyWrap.style.display = vacio ? "" : "none";
+    if (sectionHeading) sectionHeading.style.display = vacio ? "none" : "";
+    if (listaSection) {
+      listaSection.classList.toggle("segv2-pasos-section--empty", vacio);
+    }
     if (btnAgregar) {
       btnAgregar.textContent = vacio ? "+ Crear primer paso" : "+ Agregar paso";
+      btnAgregar.classList.toggle("segv2-btn-primary--empty", vacio);
     }
     if (toggleWrap) toggleWrap.style.display = vacio ? "none" : "";
   }
@@ -1361,7 +1377,7 @@ window.MacBotSeguimientoV2 = (function () {
     if (!configActiva.pasos.length) {
       pasoActivoIndex = -1;
       wizardAbierto = false;
-      renderStorageBanner(false);
+      renderStorageBanner(null, null);
       setVistaPanel("lista");
       renderVistaLista();
       renderWizard();
@@ -1554,7 +1570,7 @@ window.MacBotSeguimientoV2 = (function () {
     if (!paso) {
       form.innerHTML = "";
       if (section) section.style.display = "none";
-      renderStorageBanner(false);
+      renderStorageBanner(null, null);
       renderVistaPreviaMensaje();
       return;
     }
@@ -1612,7 +1628,7 @@ window.MacBotSeguimientoV2 = (function () {
     document.getElementById("segv2CerrarEditor")?.addEventListener("click", function () {
       syncPasoDesdeFormulario();
       pasoActivoIndex = -1;
-      renderStorageBanner(false);
+      renderStorageBanner(null, null);
       setVistaPanel("lista");
       renderListaPasos();
       renderFormularioPaso();
@@ -1639,7 +1655,7 @@ window.MacBotSeguimientoV2 = (function () {
       el.addEventListener("change", onPanelChange);
     });
 
-    fetchStorageStatusSiMedia(tipoActual);
+    renderStorageBanner(tipoActual, paso);
     renderArchivoLocalBox(paso);
     renderVistaPreviaMensaje();
     renderErroresValidacion();
@@ -1689,12 +1705,15 @@ window.MacBotSeguimientoV2 = (function () {
     if (!contenido) return;
 
     contenido.innerHTML =
-      '<div class="segv2-panel">' +
-      '<section class="segv2-pasos-section" id="segv2ListaSection">' +
-      '<h5 class="segv2-section-heading">📋 Pasos del seguimiento</h5>' +
-      '<p id="segv2EmptyLabel" class="segv2-panel-empty-label">Sin pasos configurados</p>' +
+      '<div class="segv2-panel segv2-panel--idle">' +
+      '<section class="segv2-pasos-section segv2-pasos-section--empty" id="segv2ListaSection">' +
+      '<div id="segv2EmptyWrap" class="segv2-panel-empty-compact">' +
+      '<p class="segv2-panel-empty-title">🔒 Seguimiento CRM V2</p>' +
+      '<p class="segv2-panel-empty-sub">Sin configurar</p>' +
+      "</div>" +
+      '<h5 class="segv2-section-heading" id="segv2SectionHeading" style="display:none">📋 Pasos del seguimiento</h5>' +
       '<div id="segv2ListaPasos" class="segv2-pasos-list"></div>' +
-      '<button type="button" class="segv2-btn segv2-btn-primary" id="segv2BtnAgregar">+ Crear primer paso</button>' +
+      '<button type="button" class="segv2-btn segv2-btn-primary segv2-btn-primary--empty" id="segv2BtnAgregar">+ Crear primer paso</button>' +
       "</section>" +
       '<div id="segv2WizardHost"></div>' +
       '<section id="segv2EditorSection" class="segv2-section segv2-section--editor" style="display:none">' +
