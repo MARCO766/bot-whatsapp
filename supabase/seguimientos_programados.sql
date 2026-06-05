@@ -50,6 +50,7 @@ create table if not exists public.seguimientos_programados (
   -- Relaciones lógicas (multi-tenant por usuario)
   usuario_id uuid null,
   cliente_numero text not null,
+  conexion_whatsapp_id uuid null,
   flujo_id uuid null,
   nodo_id text not null,
 
@@ -98,6 +99,9 @@ create table if not exists public.seguimientos_programados (
 comment on table public.seguimientos_programados is
   'Pasos de seguimiento automático programados por el motor de flujos MacBot.';
 
+comment on column public.seguimientos_programados.conexion_whatsapp_id is
+  'Línea WhatsApp (conexiones_whatsapp.id). Clave triple con usuario_id y cliente_numero.';
+
 comment on column public.seguimientos_programados.campana_id is
   'Agrupa todos los pasos de una misma activación del nodo Seguimiento.';
 
@@ -141,6 +145,25 @@ exception
     raise notice 'Omitida FK flujo: tabla flujos_builder no encontrada.';
 end $$;
 
+do $$ begin
+  if exists (
+    select 1 from information_schema.tables
+    where table_schema = 'public' and table_name = 'conexiones_whatsapp'
+  ) then
+    alter table public.seguimientos_programados
+      drop constraint if exists seguimientos_conexion_whatsapp_id_fkey;
+    alter table public.seguimientos_programados
+      add constraint seguimientos_conexion_whatsapp_id_fkey
+      foreign key (conexion_whatsapp_id)
+      references public.conexiones_whatsapp (id)
+      on delete set null;
+  end if;
+exception
+  when duplicate_object then null;
+  when undefined_table then
+    raise notice 'Omitida FK conexion: tabla conexiones_whatsapp no encontrada.';
+end $$;
+
 -- Nota: clientes suele usar (numero, usuario_id); no forzamos FK compuesta
 -- para no romper instalaciones con esquemas distintos.
 
@@ -179,6 +202,18 @@ create index if not exists idx_seguimientos_flujo_nodo
 -- Historial por lead
 create index if not exists idx_seguimientos_cliente_creado
   on public.seguimientos_programados (cliente_numero, usuario_id, creado_en desc);
+
+-- Multi-línea: clave triple lead + línea
+create index if not exists idx_seguimientos_programados_triple_key
+  on public.seguimientos_programados (usuario_id, cliente_numero, conexion_whatsapp_id);
+
+-- Worker: pendientes vencidos por línea
+create index if not exists idx_seguimientos_programados_pendientes_conexion
+  on public.seguimientos_programados (estado, run_at, conexion_whatsapp_id);
+
+-- Panel builder: flujo + nodo + línea
+create index if not exists idx_seguimientos_programados_flujo_nodo_conexion
+  on public.seguimientos_programados (usuario_id, flujo_id, nodo_id, conexion_whatsapp_id);
 
 -- -----------------------------------------------------------------------------
 -- 5) Trigger: actualizar actualizado_en automáticamente
