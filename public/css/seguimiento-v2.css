@@ -12,8 +12,8 @@
 
 #builderArea .node.seguimiento-v2-node,
 .seguimiento-v2-node.node {
-  min-width: 240px;
-  max-width: 300px;
+  min-width: 250px;
+  max-width: 320px;
   padding: 0;
   border: 2px solid rgba(34, 211, 238, 0.55);
   border-radius: 18px;
@@ -116,11 +116,28 @@
   border: 1px solid rgba(56, 189, 248, 0.2);
 }
 
-.segv2-paso-count {
-  margin: 0 0 8px;
-  font-size: 12px;
+.segv2-diag--compact {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 10px;
+}
+
+.segv2-diag-item {
+  font-size: 10px;
   font-weight: 700;
   color: #7dd3fc;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(34, 211, 238, 0.08);
+  border: 1px solid rgba(34, 211, 238, 0.18);
+}
+
+.segv2-diag--active {
+  color: #a7f3d0;
+  background: rgba(16, 185, 129, 0.12);
+  border-color: rgba(52, 211, 153, 0.35);
+  box-shadow: 0 0 10px rgba(52, 211, 153, 0.15);
 }
 
 .segv2-body {
@@ -134,60 +151,129 @@
   font-style: italic;
 }
 
+/* Timeline nodo (canvas) */
 .segv2-timeline {
   display: flex;
   flex-direction: column;
   gap: 0;
-  padding-left: 4px;
+  padding: 4px 0 0;
 }
 
 .segv2-timeline-item {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
-  min-height: 28px;
+  min-height: 52px;
   position: relative;
+  padding-bottom: 8px;
 }
 
 .segv2-timeline-rail {
   position: relative;
-  width: 14px;
+  width: 28px;
   align-self: stretch;
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
 }
 
 .segv2-timeline-rail::after {
   content: "";
   position: absolute;
-  top: 14px;
-  bottom: -6px;
+  top: 22px;
+  bottom: -4px;
   left: 50%;
   width: 2px;
   transform: translateX(-50%);
-  background: linear-gradient(180deg, rgba(34, 211, 238, 0.7), rgba(56, 189, 248, 0.15));
+  background: linear-gradient(
+    180deg,
+    rgba(34, 211, 238, 0.85) 0%,
+    rgba(56, 189, 248, 0.35) 60%,
+    rgba(56, 189, 248, 0.08) 100%
+  );
+  box-shadow: 0 0 8px rgba(34, 211, 238, 0.25);
 }
 
-.segv2-timeline-item:last-child .segv2-timeline-rail::after {
+.segv2-timeline-item--last .segv2-timeline-rail::after {
   display: none;
 }
 
-.segv2-timeline-dot {
-  width: 10px;
-  height: 10px;
-  margin-top: 9px;
+.segv2-timeline-num {
+  font-size: 9px;
+  font-weight: 800;
+  color: #0c4a6e;
+  background: linear-gradient(135deg, #22d3ee, #38bdf8);
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
-  background: #22d3ee;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 12px rgba(34, 211, 238, 0.5);
+  z-index: 2;
+  line-height: 1;
+}
+
+.segv2-timeline-dot {
+  width: 8px;
+  height: 8px;
+  margin-top: 4px;
+  border-radius: 50%;
+  background: #67e8f9;
   box-shadow: 0 0 10px rgba(34, 211, 238, 0.65);
   flex-shrink: 0;
   z-index: 1;
 }
 
-.segv2-timeline-label {
-  font-size: 12px;
-  font-weight: 600;
-  color: #e2e8f0;
-  padding: 4px 0;
+.segv2-timeline-content {
+  flex: 1;
+  min-width: 0;
+  padding: 2px 8px 6px;
+  border-radius: 10px;
+  background: rgba(34, 211, 238, 0.04);
+  border: 1px solid rgba(34, 211, 238, 0.1);
+  box-shadow: 0 0 14px rgba(34, 211, 238, 0.06);
+}
+
+.segv2-timeline-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+
+.segv2-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.segv2-chip--tipo {
+  color: #e0f2fe;
+  background: rgba(59, 130, 246, 0.2);
+  border: 1px solid rgba(96, 165, 250, 0.3);
+}
+
+.segv2-chip--delay {
+  color: #fef3c7;
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(251, 191, 36, 0.3);
+}
+
+.segv2-timeline-preview {
+  margin: 0;
+  font-size: 11px;
+  color: #94a3b8;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Panel derecho */
@@ -202,6 +288,73 @@
   color: #94a3b8;
   font-size: 13px;
   line-height: 1.45;
+}
+
+.segv2-diag-panel {
+  margin-bottom: 12px;
+}
+
+.segv2-diag-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.segv2-diag-card {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.segv2-diag-card--ok {
+  border-color: rgba(52, 211, 153, 0.35);
+  background: rgba(16, 185, 129, 0.08);
+  box-shadow: 0 0 16px rgba(52, 211, 153, 0.1);
+}
+
+.segv2-diag-label {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #64748b;
+  margin-bottom: 4px;
+}
+
+.segv2-diag-value {
+  font-size: 13px;
+  font-weight: 700;
+  color: #e2e8f0;
+}
+
+.segv2-diag-card--ok .segv2-diag-value {
+  color: #6ee7b7;
+}
+
+.segv2-errores {
+  display: none;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  color: #fecaca;
+  background: rgba(248, 113, 113, 0.1);
+  border: 1px solid rgba(248, 113, 113, 0.35);
+}
+
+.segv2-errores--visible {
+  display: block;
+}
+
+.segv2-errores ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+
+.segv2-errores li {
+  margin-bottom: 2px;
 }
 
 .segv2-toggle {
@@ -223,15 +376,31 @@
   flex-direction: column;
   gap: 8px;
   margin-bottom: 12px;
-  max-height: 220px;
+  max-height: 260px;
   overflow-y: auto;
 }
 
+.segv2-paso-card-wrap {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  border-radius: 12px;
+  transition: box-shadow 0.2s;
+}
+
+.segv2-paso-card-wrap.segv2-paso-card--active {
+  box-shadow: 0 0 18px rgba(34, 211, 238, 0.15);
+}
+
+.segv2-paso-card-wrap.segv2-paso-card--invalid .segv2-paso-card {
+  border-color: rgba(248, 113, 113, 0.45);
+}
+
 .segv2-paso-card {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  grid-template-rows: auto auto;
-  gap: 2px 10px;
+  flex: 1;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
   padding: 10px 12px;
   border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -241,32 +410,48 @@
   transition: border-color 0.2s, background 0.2s;
   color: inherit;
   font: inherit;
+  min-width: 0;
 }
 
 .segv2-paso-card:hover {
   border-color: rgba(34, 211, 238, 0.35);
 }
 
-.segv2-paso-card--active {
+.segv2-paso-card-wrap.segv2-paso-card--active .segv2-paso-card {
   border-color: rgba(34, 211, 238, 0.65);
   background: rgba(34, 211, 238, 0.08);
-  box-shadow: 0 0 16px rgba(34, 211, 238, 0.12);
+}
+
+.segv2-paso-card-rail {
+  flex-shrink: 0;
 }
 
 .segv2-paso-card-num {
-  grid-row: 1 / span 2;
-  align-self: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
   font-size: 11px;
   font-weight: 800;
-  color: #22d3ee;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  color: #0c4a6e;
+  background: linear-gradient(135deg, #22d3ee, #38bdf8);
+  border-radius: 50%;
+  box-shadow: 0 0 10px rgba(34, 211, 238, 0.4);
 }
 
-.segv2-paso-card-delay {
-  font-size: 12px;
-  font-weight: 700;
-  color: #bae6fd;
+.segv2-paso-card-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.segv2-paso-card-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
 }
 
 .segv2-paso-card-msg {
@@ -275,6 +460,39 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.segv2-paso-card-tools {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.segv2-icon-btn {
+  width: 30px;
+  height: 28px;
+  padding: 0;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  color: #94a3b8;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.segv2-icon-btn:hover:not(:disabled) {
+  background: rgba(34, 211, 238, 0.12);
+  border-color: rgba(34, 211, 238, 0.35);
+  color: #67e8f9;
+}
+
+.segv2-icon-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
 }
 
 .segv2-panel-empty,
@@ -287,10 +505,30 @@
   margin-bottom: 12px;
 }
 
+.segv2-form-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
 .segv2-form h5 {
-  margin: 0 0 10px;
+  margin: 0;
   color: #7dd3fc;
   font-size: 13px;
+}
+
+.segv2-form-tools {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.segv2-form-tools .segv2-icon-btn {
+  width: auto;
+  padding: 0 8px;
+  height: 28px;
 }
 
 .segv2-form-row {
@@ -306,6 +544,22 @@
   color: #94a3b8;
 }
 
+.segv2-delay-inputs {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.segv2-delay-inputs input[type="number"] {
+  width: 88px;
+  flex: 0 0 88px;
+}
+
+.segv2-delay-inputs .segv2-select {
+  flex: 1;
+  min-width: 120px;
+}
+
 .segv2-form-row input[type="number"],
 .segv2-form-row textarea,
 .segv2-select {
@@ -319,20 +573,74 @@
   font-family: inherit;
 }
 
-.segv2-form-row:first-of-type {
-  flex-direction: row;
-  flex-wrap: wrap;
-  align-items: flex-end;
+.segv2-form-row input:invalid,
+.segv2-form-row textarea:invalid {
+  border-color: rgba(248, 113, 113, 0.45);
 }
 
-.segv2-form-row:first-of-type input[type="number"] {
-  width: 88px;
-  flex: 0 0 88px;
+.segv2-preview-wrap {
+  margin-bottom: 12px;
 }
 
-.segv2-form-row:first-of-type .segv2-select {
-  flex: 1;
-  min-width: 120px;
+.segv2-preview-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: #94a3b8;
+  margin-bottom: 8px;
+}
+
+.segv2-preview {
+  padding: 12px;
+  border-radius: 12px;
+  background: linear-gradient(160deg, #0a1628, #0f1f35);
+  border: 1px solid rgba(34, 211, 238, 0.15);
+  box-shadow: inset 0 0 20px rgba(34, 211, 238, 0.04);
+}
+
+.segv2-preview-meta {
+  font-size: 11px;
+  color: #64748b;
+  margin-bottom: 10px;
+}
+
+.segv2-preview-meta strong {
+  color: #fbbf24;
+}
+
+.segv2-preview-empty {
+  font-size: 12px;
+  color: #64748b;
+  font-style: italic;
+  text-align: center;
+  padding: 8px 0;
+}
+
+.segv2-preview-bubble {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: 100%;
+  padding: 10px 12px;
+  border-radius: 12px 12px 12px 4px;
+  background: rgba(34, 211, 238, 0.1);
+  border: 1px solid rgba(34, 211, 238, 0.2);
+  box-shadow: 0 0 16px rgba(34, 211, 238, 0.08);
+}
+
+.segv2-preview-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+  line-height: 1.4;
+}
+
+.segv2-preview-text {
+  margin: 0;
+  font-size: 13px;
+  color: #e2e8f0;
+  line-height: 1.45;
+  word-break: break-word;
+  white-space: pre-wrap;
 }
 
 .segv2-btn {
