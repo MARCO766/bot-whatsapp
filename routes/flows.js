@@ -964,22 +964,12 @@ router.post("/probar-whatsapp", protegerPanel, async (req, res) => {
       return res.send("❌ Primero conecta tu WhatsApp en la pestaña Conexiones");
     }
 
-    await axios.post(
-      `https://graph.facebook.com/v19.0/${conexion.phone_id}/messages`,
-      {
-        messaging_product: "whatsapp",
-        to: numero,
-        text: {
-          body: "✅ MacBot conectado correctamente. Esta es una prueba de WhatsApp API."
-        }
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${conexion.token}`,
-          "Content-Type": "application/json"
-        }
-      }
-    );
+    await enviarTextoWhatsApp(numero, "✅ MacBot conectado correctamente. Esta es una prueba de WhatsApp API.", {
+      usuarioId: req.session.usuario.id,
+      conexionWhatsappId: conexion.id,
+      strictConexionWhatsappId: true,
+      origen: "probar_whatsapp_admin",
+    });
 
     res.redirect("/admin?tab=inicio");
 

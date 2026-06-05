@@ -291,6 +291,39 @@ function htmlTieneSeguimientoCRM(html) {
   );
 }
 
+/** HTML viejo con pasos tiempo+texto embebidos (no CRM) — no enviar por parser síncrono. */
+function htmlPareceSeguimientoLegacyProgramado(html) {
+  const h = String(html || "");
+  if (htmlTieneSeguimientoCRM(h)) return true;
+  const tiempos = (h.match(/tiempo\s*:/gi) || []).length;
+  const textos = (h.match(/texto\s*:/gi) || []).length;
+  return tiempos >= 1 && textos >= 1;
+}
+
+async function enviarTextoFlujoSeguro(numero, texto, opEnvio, ctx = {}) {
+  const conexion = opEnvio?.conexionWhatsappId ?? null;
+  console.log("[FLOW_WA_SEND_TRACE]", {
+    cliente_numero: numero,
+    conexion_whatsapp_id: conexion,
+    strict: opEnvio?.strictConexionWhatsappId === true,
+    fase: ctx.fase || "flowService",
+    nodoId: ctx.nodoId ?? null,
+  });
+  return enviarTextoWhatsApp(numero, texto, opEnvio);
+}
+
+async function enviarMediaFlujoSeguro(numero, tipo, url, caption, opEnvio, ctx = {}) {
+  const conexion = opEnvio?.conexionWhatsappId ?? null;
+  console.log("[FLOW_WA_SEND_TRACE]", {
+    cliente_numero: numero,
+    conexion_whatsapp_id: conexion,
+    tipo,
+    fase: ctx.fase || "flowService",
+    nodoId: ctx.nodoId ?? null,
+  });
+  return enviarMediaWhatsApp(numero, tipo, url, caption, opEnvio);
+}
+
 function nodoEsSeguimientoCRM(nodo) {
   return esNodoSeguimiento(nodo) || htmlTieneSeguimientoCRM(nodo?.html || "");
 }
@@ -443,7 +476,10 @@ async function ejecutarBloqueContenido(
       });
       return null;
     }
-    await enviarTextoWhatsApp(numero, mensaje, opEnvio);
+    await enviarTextoFlujoSeguro(numero, mensaje, opEnvio, {
+      fase: "ejecutarBloqueContenido",
+      nodoId: opts.nodoId ?? null,
+    });
     console.log("✅ TEXTO ENVIADO");
     return mensaje;
   }
@@ -976,7 +1012,13 @@ async function ejecutarFlujo(
         );
       }
 
-      await continuarASiguientes(nodoId, visitados, "seguimiento");
+      console.log("[SEGUIMIENTO_FLUJO_TERMINAL]", {
+        nodoId,
+        flujoId,
+        cliente_numero: numero,
+        conexion_whatsapp_id: conexionLineaEntrante ?? null,
+        motivo: "sin_continuarASiguientes — envíos solo vía worker blindado",
+      });
       return;
     }
 
@@ -1281,6 +1323,16 @@ async function ejecutarFlujo(
       return;
     }
 
+    if (htmlPareceSeguimientoLegacyProgramado(html)) {
+      console.log("[SEG_BLOCK_FLOW_LEGACY_PARSER]", {
+        nodoId,
+        cliente_numero: numero,
+        motivo: "html_con_pasos_tiempo_texto — no envío síncrono; usar worker CRM",
+      });
+      await continuarASiguientes(nodoId, visitados, tipoEjecucion);
+      return;
+    }
+
     const acciones = extraerAccionesLegacyHtml(html);
 
     for (const accion of acciones) {
@@ -1304,7 +1356,10 @@ async function ejecutarFlujo(
 
       if (accion.tipo === "texto") {
         console.log("📤 MENSAJE ENVIADO (nodo):", accion.valor);
-        await enviarTextoWhatsApp(numero, accion.valor, opEnvioNodo());
+        await enviarTextoFlujoSeguro(numero, accion.valor, opEnvioNodo(), {
+          fase: "parser_generico_texto",
+          nodoId,
+        });
       }
 
       if (accion.tipo === "tiempo") {
@@ -1320,13 +1375,19 @@ async function ejecutarFlujo(
         const urlImagen = partes[0].trim();
         const captionImagen = partes[1] ? partes[1].trim() : "";
 
-        await enviarMediaWhatsApp(numero, "image", urlImagen, captionImagen, opEnvioNodo());
+        await enviarMediaFlujoSeguro(numero, "image", urlImagen, captionImagen, opEnvioNodo(), {
+          fase: "parser_generico_imagen",
+          nodoId,
+        });
       }
 
       if (accion.tipo === "audio") {
         console.log("🎧 Nodo audio detectado:", accion.valor);
 
-        await enviarMediaWhatsApp(numero, "audio", accion.valor, "", opEnvioNodo());
+        await enviarMediaFlujoSeguro(numero, "audio", accion.valor, "", opEnvioNodo(), {
+          fase: "parser_generico_audio",
+          nodoId,
+        });
       }
 
       if (accion.tipo === "video") {
@@ -1334,13 +1395,19 @@ async function ejecutarFlujo(
         const urlVideo = partes[0].trim();
         const captionVideo = partes[1] ? partes[1].trim() : "";
 
-        await enviarMediaWhatsApp(numero, "video", urlVideo, captionVideo, opEnvioNodo());
+        await enviarMediaFlujoSeguro(numero, "video", urlVideo, captionVideo, opEnvioNodo(), {
+          fase: "parser_generico_video",
+          nodoId,
+        });
       }
 
       if (accion.tipo === "doc") {
         console.log("📄 Nodo documento detectado:", accion.valor);
 
-        await enviarMediaWhatsApp(numero, "document", accion.valor, "", opEnvioNodo());
+        await enviarMediaFlujoSeguro(numero, "document", accion.valor, "", opEnvioNodo(), {
+          fase: "parser_generico_doc",
+          nodoId,
+        });
       }
     }
 

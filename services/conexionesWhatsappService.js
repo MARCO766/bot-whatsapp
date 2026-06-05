@@ -3,6 +3,7 @@
  * Una conexión activa por usuario en conexiones_whatsapp.
  */
 const axios = require("axios");
+const { enviarTextoWhatsApp } = require("./whatsappService");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
@@ -252,20 +253,14 @@ async function probarWhatsapp(usuarioId, numero) {
     throw err;
   }
 
-  await axios.post(
-    `https://graph.facebook.com/v19.0/${conexion.phone_id}/messages`,
+  await enviarTextoWhatsApp(
+    to,
+    "✅ MacBot conectado correctamente. Esta es una prueba de WhatsApp API.",
     {
-      messaging_product: "whatsapp",
-      to,
-      text: {
-        body: "✅ MacBot conectado correctamente. Esta es una prueba de WhatsApp API.",
-      },
-    },
-    {
-      headers: {
-        Authorization: `Bearer ${conexion.token}`,
-        "Content-Type": "application/json",
-      },
+      usuarioId,
+      conexionWhatsappId: conexion.id,
+      strictConexionWhatsappId: true,
+      origen: "probar_whatsapp",
     }
   );
 
@@ -287,18 +282,14 @@ async function probarWhatsappPorId(usuarioId, conexionId, numero) {
     err.status = 400;
     throw err;
   }
-  await axios.post(
-    `https://graph.facebook.com/v19.0/${conexion.phone_id}/messages`,
+  await enviarTextoWhatsApp(
+    to,
+    "✅ MacBot conectado correctamente. Esta es una prueba de WhatsApp API.",
     {
-      messaging_product: "whatsapp",
-      to,
-      text: { body: "✅ MacBot conectado correctamente. Esta es una prueba de WhatsApp API." },
-    },
-    {
-      headers: {
-        Authorization: `Bearer ${conexion.token}`,
-        "Content-Type": "application/json",
-      },
+      usuarioId,
+      conexionWhatsappId: conexion.id,
+      strictConexionWhatsappId: true,
+      origen: "probar_whatsapp_por_id",
     }
   );
   return { ok: true, mensaje: "Mensaje de prueba enviado" };

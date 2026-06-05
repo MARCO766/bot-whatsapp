@@ -1,5 +1,6 @@
 console.log("🔥 SERVER NUEVO ACTIVO");
 require("dotenv").config();
+require("./services/metaWhatsAppIntercept");
 console.log("[ENV_CHECK]", {
   APP_URL: Boolean(process.env.APP_URL),
   SMTP_HOST: Boolean(process.env.SMTP_HOST),
