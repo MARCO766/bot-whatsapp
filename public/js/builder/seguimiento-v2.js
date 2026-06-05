@@ -9,6 +9,19 @@ window.MacBotSeguimientoV2 = (function () {
     horas: { one: "hora", many: "horas" },
     dias: { one: "día", many: "días" },
   };
+  const TIPOS_PASO = [
+    { id: "texto", label: "Texto", icon: "💬" },
+    { id: "imagen", label: "Imagen", icon: "🖼" },
+    { id: "audio", label: "Audio", icon: "🎧" },
+    { id: "video", label: "Video", icon: "🎬" },
+    { id: "documento", label: "Documento", icon: "📄" },
+  ];
+  const MEDIA_TYPE_MAP = {
+    imagen: "image",
+    audio: "audio",
+    video: "video",
+    documento: "document",
+  };
 
   let nodoActivo = null;
   let configActiva = null;
@@ -41,6 +54,31 @@ window.MacBotSeguimientoV2 = (function () {
     return "minutos";
   }
 
+  function normalizarTipo(tipo) {
+    const t = String(tipo || "texto").toLowerCase();
+    if (t === "image" || t === "imagen") return "imagen";
+    if (t === "document" || t === "documento" || t === "pdf" || t === "doc") return "documento";
+    if (t === "audio") return "audio";
+    if (t === "video") return "video";
+    return "texto";
+  }
+
+  function tipoToMediaType(tipo) {
+    return MEDIA_TYPE_MAP[normalizarTipo(tipo)] || null;
+  }
+
+  function labelTipo(tipo) {
+    const t = normalizarTipo(tipo);
+    const item = TIPOS_PASO.find(function (x) {
+      return x.id === t;
+    });
+    return item ? item.label : "Texto";
+  }
+
+  function esTipoMedia(tipo) {
+    return normalizarTipo(tipo) !== "texto";
+  }
+
   function crearPasoVacio(index) {
     return {
       pasoId: "paso_" + (index + 1),
@@ -70,7 +108,9 @@ window.MacBotSeguimientoV2 = (function () {
     const delay = paso?.delay || {};
     const valor = parseInt(delay.valor, 10);
     const unidad = String(delay.unidad || "").trim();
+    const tipo = normalizarTipo(paso?.tipo);
     const contenido = String(paso?.contenido || "").trim();
+    const mediaUrl = String(paso?.media_url || "").trim();
 
     if (isNaN(valor) || valor < 1) {
       errores.push("Paso " + n + ": el tiempo mínimo es 1.");
@@ -78,8 +118,11 @@ window.MacBotSeguimientoV2 = (function () {
     if (!unidad || UNIDADES.indexOf(normalizarUnidad(unidad)) < 0) {
       errores.push("Paso " + n + ": la unidad de tiempo es obligatoria.");
     }
-    if (!contenido) {
+    if (tipo === "texto" && !contenido) {
       errores.push("Paso " + n + ": el mensaje no puede estar vacío.");
+    }
+    if (esTipoMedia(tipo) && !mediaUrl) {
+      errores.push("Paso " + n + ": la URL del archivo es obligatoria.");
     }
     return errores;
   }
@@ -98,18 +141,39 @@ window.MacBotSeguimientoV2 = (function () {
     const delay = paso.delay || {};
     const valor = parseInt(delay.valor != null ? delay.valor : paso.minutos, 10);
     const unidad = normalizarUnidad(delay.unidad || "minutos");
+    const tipo = normalizarTipo(paso.tipo);
     const contenido = String(paso.contenido || paso.texto || paso.mensaje || "").trim();
-    const tipo = String(paso.tipo || "texto").toLowerCase();
+    const mediaUrl = String(paso.media_url || "").trim();
+    const filename = String(paso.filename || "").trim();
 
     if (isNaN(valor) || valor <= 0) return null;
-    if (!contenido) return null;
 
-    return {
+    if (tipo === "texto") {
+      if (!contenido) return null;
+      return {
+        pasoId: String(paso.pasoId || "paso_" + (index + 1)).trim(),
+        delay: { valor, unidad },
+        tipo: "texto",
+        contenido,
+      };
+    }
+
+    if (!mediaUrl) return null;
+
+    const out = {
       pasoId: String(paso.pasoId || "paso_" + (index + 1)).trim(),
       delay: { valor, unidad },
-      tipo: tipo === "texto" ? "texto" : tipo,
-      contenido,
+      tipo: tipo,
+      contenido: contenido,
+      media_url: mediaUrl,
+      media_type: tipoToMediaType(tipo),
     };
+
+    if (tipo === "documento" && filename) {
+      out.filename = filename;
+    }
+
+    return out;
   }
 
   function parseConfigAlmacenada(raw) {
@@ -153,8 +217,34 @@ window.MacBotSeguimientoV2 = (function () {
   }
 
   function iconoTipoPaso(tipo) {
-    if (tipo === "texto") return "💬";
-    return "📝";
+    const t = normalizarTipo(tipo);
+    const item = TIPOS_PASO.find(function (x) {
+      return x.id === t;
+    });
+    return item ? item.icon : "💬";
+  }
+
+  function previewPasoTexto(paso) {
+    const tipo = normalizarTipo(paso.tipo);
+    const contenido = String(paso.contenido || "").trim();
+    const mediaUrl = String(paso.media_url || "").trim();
+
+    if (tipo === "texto") {
+      return contenido
+        ? esc(contenido.slice(0, 48) + (contenido.length > 48 ? "…" : ""))
+        : '<span class="segv2-muted">Sin mensaje</span>';
+    }
+
+    if (contenido) {
+      return esc(contenido.slice(0, 48) + (contenido.length > 48 ? "…" : ""));
+    }
+
+    if (mediaUrl) {
+      const corta = mediaUrl.length > 42 ? mediaUrl.slice(0, 42) + "…" : mediaUrl;
+      return '<span class="segv2-muted">' + esc(corta) + "</span>";
+    }
+
+    return '<span class="segv2-muted">Sin archivo</span>';
   }
 
   function resumenConfig(config) {
@@ -171,10 +261,7 @@ window.MacBotSeguimientoV2 = (function () {
     let html = '<div class="segv2-timeline">';
     pasos.forEach(function (paso, index) {
       const esUltimo = index === pasos.length - 1;
-      const tieneMsg = !!(paso.contenido && paso.contenido.trim());
-      const preview = tieneMsg
-        ? esc(paso.contenido.slice(0, 36) + (paso.contenido.length > 36 ? "…" : ""))
-        : '<span class="segv2-muted">Sin mensaje</span>';
+      const preview = previewPasoTexto(paso);
 
       html +=
         '<div class="segv2-timeline-item' +
@@ -189,7 +276,9 @@ window.MacBotSeguimientoV2 = (function () {
         '<div class="segv2-timeline-badges">' +
         '<span class="segv2-chip segv2-chip--tipo">' +
         iconoTipoPaso(paso.tipo) +
-        " Texto</span>" +
+        " " +
+        esc(labelTipo(paso.tipo)) +
+        "</span>" +
         '<span class="segv2-chip segv2-chip--delay">⏱ Espera ' +
         esc(formatearDelayCorto(paso.delay)) +
         "</span></div>" +
@@ -286,23 +375,36 @@ window.MacBotSeguimientoV2 = (function () {
     });
   }
 
+  function buildPasoPreview(p, i) {
+    const delay = p.delay || {};
+    const valor = parseInt(delay.valor, 10);
+    const tipo = normalizarTipo(p.tipo);
+    const out = {
+      pasoId: p.pasoId || "paso_" + (i + 1),
+      delay: {
+        valor: isNaN(valor) || valor < 1 ? 1 : valor,
+        unidad: normalizarUnidad(delay.unidad || "minutos"),
+      },
+      tipo: tipo,
+      contenido: String(p.contenido || ""),
+    };
+
+    if (esTipoMedia(tipo)) {
+      out.media_url = String(p.media_url || "");
+      out.media_type = tipoToMediaType(tipo);
+      if (tipo === "documento" && p.filename) {
+        out.filename = String(p.filename || "");
+      }
+    }
+
+    return out;
+  }
+
   function buildConfigPreview(config) {
     return {
       version: 1,
       cancelarSiResponde: config.cancelarSiResponde !== false,
-      pasos: (config.pasos || []).map(function (p, i) {
-        const delay = p.delay || {};
-        const valor = parseInt(delay.valor, 10);
-        return {
-          pasoId: p.pasoId || "paso_" + (i + 1),
-          delay: {
-            valor: isNaN(valor) || valor < 1 ? 1 : valor,
-            unidad: normalizarUnidad(delay.unidad || "minutos"),
-          },
-          tipo: "texto",
-          contenido: String(p.contenido || ""),
-        };
-      }),
+      pasos: (config.pasos || []).map(buildPasoPreview),
     };
   }
 
@@ -421,15 +523,38 @@ window.MacBotSeguimientoV2 = (function () {
 
     const valorEl = document.getElementById("segv2DelayValor");
     const unidadEl = document.getElementById("segv2DelayUnidad");
+    const tipoEl = document.getElementById("segv2TipoPaso");
     const msgEl = document.getElementById("segv2Mensaje");
+    const mediaUrlEl = document.getElementById("segv2MediaUrl");
+    const captionEl = document.getElementById("segv2Caption");
+    const filenameEl = document.getElementById("segv2Filename");
 
     const valor = parseInt(valorEl?.value, 10);
+    const tipo = normalizarTipo(tipoEl?.value || paso.tipo || "texto");
+
     paso.delay = {
       valor: isNaN(valor) || valor < 1 ? 1 : valor,
       unidad: normalizarUnidad(unidadEl?.value || "minutos"),
     };
-    paso.contenido = String(msgEl?.value || "");
-    paso.tipo = "texto";
+    paso.tipo = tipo;
+
+    if (tipo === "texto") {
+      paso.contenido = String(msgEl?.value || "");
+      delete paso.media_url;
+      delete paso.media_type;
+      delete paso.filename;
+      return;
+    }
+
+    paso.media_url = String(mediaUrlEl?.value || "").trim();
+    paso.media_type = tipoToMediaType(tipo);
+    paso.contenido = String(captionEl?.value || "").trim();
+
+    if (tipo === "documento") {
+      paso.filename = String(filenameEl?.value || "").trim();
+    } else {
+      delete paso.filename;
+    }
   }
 
   function renderVistaPreviaMensaje() {
@@ -437,24 +562,84 @@ window.MacBotSeguimientoV2 = (function () {
     if (!box || !configActiva) return;
 
     const paso = configActiva.pasos[pasoActivoIndex];
-    const texto = paso ? String(paso.contenido || "").trim() : "";
-    const delay = paso ? formatearDelayCorto(paso.delay) : "—";
+    if (!paso) {
+      box.innerHTML = "";
+      return;
+    }
 
-    if (!texto) {
+    const tipo = normalizarTipo(paso.tipo);
+    const texto = String(paso.contenido || "").trim();
+    const mediaUrl = String(paso.media_url || "").trim();
+    const delay = formatearDelayCorto(paso.delay);
+    const icon = iconoTipoPaso(tipo);
+
+    if (tipo === "texto" && !texto) {
       box.innerHTML =
         '<div class="segv2-preview-empty">Escribe un mensaje para ver la vista previa</div>';
       return;
     }
 
+    if (esTipoMedia(tipo) && !mediaUrl) {
+      box.innerHTML =
+        '<div class="segv2-preview-empty">Ingresa la URL del archivo para ver la vista previa</div>';
+      return;
+    }
+
+    let cuerpo = "";
+
+    if (tipo === "texto") {
+      cuerpo =
+        '<div class="segv2-preview-bubble">' +
+        '<span class="segv2-preview-icon" aria-hidden="true">' +
+        icon +
+        '</span><p class="segv2-preview-text">' +
+        esc(texto).replace(/\n/g, "<br>") +
+        "</p></div>";
+    } else if (tipo === "imagen") {
+      cuerpo =
+        '<div class="segv2-preview-media">' +
+        '<img src="' +
+        esc(mediaUrl) +
+        '" alt="Vista previa imagen" class="segv2-preview-img" loading="lazy">' +
+        (texto ? '<p class="segv2-preview-caption">' + esc(texto) + "</p>" : "") +
+        "</div>";
+    } else if (tipo === "video") {
+      cuerpo =
+        '<div class="segv2-preview-media">' +
+        '<video src="' +
+        esc(mediaUrl) +
+        '" controls muted playsinline class="segv2-preview-video"></video>' +
+        (texto ? '<p class="segv2-preview-caption">' + esc(texto) + "</p>" : "") +
+        "</div>";
+    } else if (tipo === "audio") {
+      cuerpo =
+        '<div class="segv2-preview-media">' +
+        '<audio src="' +
+        esc(mediaUrl) +
+        '" controls class="segv2-preview-audio"></audio></div>';
+    } else {
+      const nombre = paso.filename || "Documento";
+      cuerpo =
+        '<div class="segv2-preview-doc">' +
+        '<span class="segv2-preview-icon" aria-hidden="true">📄</span>' +
+        '<div><strong>' +
+        esc(nombre) +
+        '</strong><p class="segv2-preview-doc-url">' +
+        esc(mediaUrl) +
+        "</p>" +
+        (texto ? '<p class="segv2-preview-caption">' + esc(texto) + "</p>" : "") +
+        "</div></div>";
+    }
+
     box.innerHTML =
-      '<div class="segv2-preview-meta">Se envía tras <strong>' +
+      '<div class="segv2-preview-meta">' +
+      icon +
+      " " +
+      esc(labelTipo(tipo)) +
+      " · se envía tras <strong>" +
       esc(delay) +
-      '</strong> de espera</div>' +
-      '<div class="segv2-preview-bubble">' +
-      '<span class="segv2-preview-icon" aria-hidden="true">💬</span>' +
-      '<p class="segv2-preview-text">' +
-      esc(texto).replace(/\n/g, "<br>") +
-      "</p></div>";
+      "</strong></div>" +
+      cuerpo;
   }
 
   function renderErroresValidacion() {
@@ -546,9 +731,7 @@ window.MacBotSeguimientoV2 = (function () {
         const activo = index === pasoActivoIndex ? " segv2-paso-card--active" : "";
         const erroresPaso = validarPaso(paso, index);
         const invalido = erroresPaso.length ? " segv2-paso-card--invalid" : "";
-        const preview = paso.contenido
-          ? esc(paso.contenido.slice(0, 48) + (paso.contenido.length > 48 ? "…" : ""))
-          : '<span class="segv2-muted">Sin mensaje</span>';
+        const preview = previewPasoTexto(paso);
         const puedeSubir = index > 0;
         const puedeBajar = index < configActiva.pasos.length - 1;
 
@@ -565,7 +748,11 @@ window.MacBotSeguimientoV2 = (function () {
           "</span></span>" +
           '<span class="segv2-paso-card-body">' +
           '<span class="segv2-paso-card-badges">' +
-          '<span class="segv2-chip segv2-chip--tipo">💬 Texto</span>' +
+          '<span class="segv2-chip segv2-chip--tipo">' +
+          iconoTipoPaso(paso.tipo) +
+          " " +
+          esc(labelTipo(paso.tipo)) +
+          "</span>" +
           '<span class="segv2-chip segv2-chip--delay">⏱ Espera ' +
           esc(formatearDelayCorto(paso.delay)) +
           "</span></span>" +
@@ -631,6 +818,53 @@ window.MacBotSeguimientoV2 = (function () {
     const total = configActiva.pasos.length;
     const puedeSubir = pasoActivoIndex > 0;
     const puedeBajar = pasoActivoIndex < total - 1;
+    const tipoActual = normalizarTipo(paso.tipo);
+    const esMedia = esTipoMedia(tipoActual);
+
+    const tipoOpts = TIPOS_PASO.map(function (item) {
+      const sel = tipoActual === item.id ? " selected" : "";
+      return (
+        '<option value="' +
+        item.id +
+        '"' +
+        sel +
+        ">" +
+        item.icon +
+        " " +
+        item.label +
+        "</option>"
+      );
+    }).join("");
+
+    const camposTexto = !esMedia
+      ? '<div class="segv2-form-row segv2-campo-texto">' +
+        "<label>Mensaje</label>" +
+        '<textarea id="segv2Mensaje" rows="4" placeholder="Texto del seguimiento…">' +
+        esc(paso.contenido || "") +
+        "</textarea></div>"
+      : "";
+
+    const camposMedia = esMedia
+      ? '<div class="segv2-form-row segv2-campo-media">' +
+        "<label>URL del archivo</label>" +
+        '<input type="url" id="segv2MediaUrl" placeholder="https://…" value="' +
+        esc(paso.media_url || "") +
+        '"></div>' +
+        (tipoActual === "imagen" || tipoActual === "video" || tipoActual === "documento"
+          ? '<div class="segv2-form-row segv2-campo-caption">' +
+            "<label>Caption (opcional)</label>" +
+            '<textarea id="segv2Caption" rows="2" placeholder="Texto que acompaña el archivo…">' +
+            esc(paso.contenido || "") +
+            "</textarea></div>"
+          : "") +
+        (tipoActual === "documento"
+          ? '<div class="segv2-form-row segv2-campo-filename">' +
+            "<label>Nombre de archivo (opcional)</label>" +
+            '<input type="text" id="segv2Filename" placeholder="ej. catalogo.pdf" value="' +
+            esc(paso.filename || "") +
+            '"></div>'
+          : "")
+      : "";
 
     form.innerHTML =
       '<div class="segv2-form">' +
@@ -659,10 +893,12 @@ window.MacBotSeguimientoV2 = (function () {
       unidadOpts +
       "</select></div></div>" +
       '<div class="segv2-form-row">' +
-      "<label>Mensaje</label>" +
-      '<textarea id="segv2Mensaje" rows="4" placeholder="Texto del seguimiento…" required>' +
-      esc(paso.contenido || "") +
-      "</textarea></div>" +
+      "<label>Tipo</label>" +
+      '<select id="segv2TipoPaso" class="segv2-select">' +
+      tipoOpts +
+      "</select></div>" +
+      camposTexto +
+      camposMedia +
       '<div class="segv2-preview-wrap">' +
       '<label class="segv2-preview-label">Vista previa</label>' +
       '<div id="segv2VistaPrevia" class="segv2-preview"></div></div>' +
@@ -695,7 +931,20 @@ window.MacBotSeguimientoV2 = (function () {
       onPanelChange();
     });
 
-    ["segv2DelayValor", "segv2DelayUnidad", "segv2Mensaje"].forEach(function (id) {
+    document.getElementById("segv2TipoPaso")?.addEventListener("change", function () {
+      syncPasoDesdeFormulario();
+      renderFormularioPaso();
+      onPanelChange();
+    });
+
+    [
+      "segv2DelayValor",
+      "segv2DelayUnidad",
+      "segv2Mensaje",
+      "segv2MediaUrl",
+      "segv2Caption",
+      "segv2Filename",
+    ].forEach(function (id) {
       const el = document.getElementById(id);
       if (!el) return;
       el.addEventListener("input", onPanelChange);

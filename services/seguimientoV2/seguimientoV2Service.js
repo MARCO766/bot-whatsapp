@@ -108,6 +108,7 @@ async function programarSeguimientoV2EnFlujo({
       contenido: paso.contenido,
       media_url: paso.media_url,
       media_type: paso.media_type,
+      media_filename: paso.filename || null,
       estado: ESTADOS_SEGUIMIENTO_V2.PENDIENTE,
       run_at: runAt,
       checkpoint_at: checkpointAt,

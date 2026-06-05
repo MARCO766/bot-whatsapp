@@ -9,7 +9,7 @@ const TABLA = "seguimientos_v2";
 const TABLA_LOGS = "seguimientos_v2_logs";
 
 const SELECT_WORKER =
-  "id,usuario_id,conexion_whatsapp_id,cliente_numero,flujo_id,nodo_id,campana_id,paso_index,paso_id,tipo,contenido,media_url,media_type,estado,run_at,checkpoint_at,cancelar_si_responde,created_at,updated_at";
+  "id,usuario_id,conexion_whatsapp_id,cliente_numero,flujo_id,nodo_id,campana_id,paso_index,paso_id,tipo,contenido,media_url,media_type,media_filename,estado,run_at,checkpoint_at,cancelar_si_responde,created_at,updated_at";
 
 function headers(extra = {}) {
   return {

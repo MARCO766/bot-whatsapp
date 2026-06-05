@@ -12,7 +12,25 @@ const UNIDADES_VALIDAS = [
   "día",
   "días",
 ];
-const TIPOS_VALIDOS = ["texto", "imagen", "video", "audio", "pdf", "document"];
+
+const TIPOS_ALIASES = {
+  texto: "texto",
+  imagen: "imagen",
+  image: "imagen",
+  audio: "audio",
+  video: "video",
+  documento: "documento",
+  document: "documento",
+  pdf: "documento",
+  doc: "documento",
+};
+
+const MEDIA_TYPE_MAP = {
+  imagen: "image",
+  audio: "audio",
+  video: "video",
+  documento: "document",
+};
 
 function decodeHtmlJson(raw) {
   return (raw || "")
@@ -30,6 +48,15 @@ function normalizarUnidad(unidad) {
   if (u === "dia" || u === "día" || u === "dias" || u === "días") return "dias";
   if (u === "hora" || u === "horas") return "horas";
   return "minutos";
+}
+
+function normalizarTipo(tipo) {
+  const t = String(tipo || "texto").toLowerCase();
+  return TIPOS_ALIASES[t] || "texto";
+}
+
+function tipoToMediaType(tipo) {
+  return MEDIA_TYPE_MAP[normalizarTipo(tipo)] || null;
 }
 
 function delayToSeconds(valor, unidad) {
@@ -122,25 +149,34 @@ function validarPaso(paso, index) {
   }
 
   const delay = validarDelay(paso.delay, index);
-  const tipo = String(paso.tipo || "texto").toLowerCase();
-  const tipoFinal = tipo === "document" || tipo === "doc" ? "pdf" : tipo;
-
-  if (!TIPOS_VALIDOS.includes(tipoFinal)) {
-    throw new Error(`Paso ${index + 1}: tipo inválido (${tipo})`);
-  }
-
+  const tipoFinal = normalizarTipo(paso.tipo);
   const contenido = paso.contenido != null ? String(paso.contenido).trim() : "";
   const mediaUrl = paso.media_url != null ? String(paso.media_url).trim() : "";
-
-  if (tipoFinal === "texto" && !contenido) {
-    throw new Error(`Paso ${index + 1}: contenido obligatorio para tipo texto`);
-  }
-
-  if (tipoFinal !== "texto" && !contenido && !mediaUrl) {
-    throw new Error(`Paso ${index + 1}: contenido o media_url obligatorio`);
-  }
-
+  const filename = paso.filename != null ? String(paso.filename).trim() : "";
   const pasoId = paso.pasoId != null ? String(paso.pasoId).trim() : `paso_${index + 1}`;
+
+  if (tipoFinal === "texto") {
+    if (!contenido) {
+      throw new Error(`Paso ${index + 1}: contenido obligatorio para tipo texto`);
+    }
+
+    return {
+      pasoId,
+      delay,
+      segundos: delay.segundos,
+      tipo: "texto",
+      contenido,
+      media_url: null,
+      media_type: null,
+      filename: null,
+    };
+  }
+
+  if (!mediaUrl) {
+    throw new Error(`Paso ${index + 1}: media_url obligatorio para tipo ${tipoFinal}`);
+  }
+
+  const mediaType = paso.media_type != null ? String(paso.media_type).trim() : tipoToMediaType(tipoFinal);
 
   return {
     pasoId,
@@ -148,8 +184,9 @@ function validarPaso(paso, index) {
     segundos: delay.segundos,
     tipo: tipoFinal,
     contenido,
-    media_url: mediaUrl || null,
-    media_type: paso.media_type != null ? String(paso.media_type).trim() : null,
+    media_url: mediaUrl,
+    media_type: mediaType || tipoToMediaType(tipoFinal),
+    filename: tipoFinal === "documento" && filename ? filename : null,
   };
 }
 
@@ -211,4 +248,6 @@ module.exports = {
   esNodoSeguimientoV2,
   delayToSeconds,
   normalizarUnidad,
+  normalizarTipo,
+  tipoToMediaType,
 };

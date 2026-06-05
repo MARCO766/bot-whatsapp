@@ -31,7 +31,7 @@ function buildOpcionesEnvioV2(item) {
 
 function normalizarTipoMedia(tipo) {
   const t = String(tipo || "texto").toLowerCase();
-  if (t === "pdf" || t === "document" || t === "doc") return "document";
+  if (t === "pdf" || t === "document" || t === "doc" || t === "documento") return "document";
   if (t === "imagen" || t === "image") return "image";
   return t;
 }
@@ -95,14 +95,16 @@ async function enviarSeguimientoV2(item) {
 
       resultado = await enviarTextoWhatsApp(numero, texto, opciones);
     } else {
-      const mediaUrl = String(item.media_url || item.contenido || "").trim();
+      const mediaUrl = String(item.media_url || "").trim();
       if (!mediaUrl) {
         return { ok: false, motivo: "media_url_vacia" };
       }
       const caption = String(item.contenido || "").trim();
       const tipoMedia =
         tipo === "image" ? "image" : tipo === "video" ? "video" : tipo === "audio" ? "audio" : "document";
-      resultado = await enviarMediaWhatsApp(numero, tipoMedia, mediaUrl, caption, opciones);
+      const filename = String(item.media_filename || item.filename || "").trim();
+      const opcionesMedia = filename ? { ...opciones, filename } : opciones;
+      resultado = await enviarMediaWhatsApp(numero, tipoMedia, mediaUrl, caption, opcionesMedia);
     }
   } catch (err) {
     console.log("[SEG_V2_FAIL]", {
