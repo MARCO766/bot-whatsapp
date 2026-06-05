@@ -10,12 +10,21 @@ window.MacBotSeguimientoV2 = (function () {
     dias: { one: "día", many: "días" },
   };
   const BLOQUES_TIPO = [
-    { id: "texto", label: "TEXTO", labelCorto: "Texto", icon: "💬" },
-    { id: "imagen", label: "IMAGEN", labelCorto: "Imagen", icon: "🖼", maxMb: 5 },
-    { id: "video", label: "VIDEO", labelCorto: "Video", icon: "🎬", maxMb: 15, recomendado: true },
-    { id: "documento", label: "ARCHIVO", labelCorto: "Archivo", icon: "📄", maxMb: 10, anchoCompleto: true },
-    { id: "audio", label: "AUDIO", labelCorto: "Audio", icon: "🎧", maxMb: 5, recomendado: true },
+    { id: "texto", label: "Texto", labelCorto: "Texto", icon: "📝" },
+    { id: "imagen", label: "Imagen", labelCorto: "Imagen", icon: "🖼", maxMb: 5 },
+    { id: "video", label: "Video", labelCorto: "Video", icon: "🎥", maxMb: 15, recomendado: true },
+    { id: "audio", label: "Audio", labelCorto: "Audio", icon: "🎵", maxMb: 5, recomendado: true },
+    { id: "documento", label: "Archivo", labelCorto: "Archivo", icon: "📄", maxMb: 10 },
   ];
+  const PRESETS_DELAY = [
+    { key: "10s", label: "10 segundos", valor: 10, unidad: "segundos" },
+    { key: "30s", label: "30 segundos", valor: 30, unidad: "segundos" },
+    { key: "1m", label: "1 minuto", valor: 1, unidad: "minutos" },
+    { key: "5m", label: "5 minutos", valor: 5, unidad: "minutos" },
+    { key: "15m", label: "15 minutos", valor: 15, unidad: "minutos" },
+    { key: "1h", label: "1 hora", valor: 1, unidad: "horas" },
+  ];
+  const NUMEROS_PASO = ["①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩"];
   const TIPOS_PASO = BLOQUES_TIPO;
   const MEDIA_TYPE_MAP = {
     imagen: "image",
@@ -31,8 +40,9 @@ window.MacBotSeguimientoV2 = (function () {
   let nodoActivo = null;
   let configActiva = null;
   let pasoActivoIndex = -1;
-  let mostrarSelectorBloques = false;
+  let wizardAbierto = false;
   let storageStatus = null;
+  let storageStatusFetched = false;
   const archivosLocales = {};
 
   function esc(str) {
@@ -200,42 +210,97 @@ window.MacBotSeguimientoV2 = (function () {
     return pref + " " + bloque.maxMb + " MB";
   }
 
-  function buildBloquesTipoHtml(tipoActual, opts) {
-    const modoSelector = opts && opts.modoSelector;
+  function numeroPasoVisual(index) {
+    return NUMEROS_PASO[index] || String(index + 1);
+  }
+
+  function lineaPasoLista(paso, index) {
+    return (
+      numeroPasoVisual(index) +
+      " " +
+      labelTipo(paso.tipo) +
+      " · " +
+      formatearDelayCorto(paso.delay)
+    );
+  }
+
+  function presetDelayActivo(delay) {
+    if (!delay) return null;
+    const u = normalizarUnidad(delay.unidad);
+    const v = parseInt(delay.valor, 10);
+    return (
+      PRESETS_DELAY.find(function (p) {
+        return p.valor === v && p.unidad === u;
+      }) || null
+    );
+  }
+
+  function buildWizardHtml() {
     const cards = BLOQUES_TIPO.map(function (item) {
-      const activo =
-        !modoSelector && normalizarTipo(tipoActual) === item.id ? " segv2-block-card--active" : "";
-      const ancho = item.anchoCompleto ? " segv2-block-card--wide" : "";
       return (
-        '<button type="button" class="segv2-block-card' +
-        activo +
-        ancho +
-        '" data-tipo="' +
+        '<button type="button" class="segv2-wizard-card" data-tipo="' +
         item.id +
-        '" aria-label="' +
-        esc(item.label) +
         '">' +
-        '<span class="segv2-block-icon" aria-hidden="true">' +
+        '<span class="segv2-wizard-icon" aria-hidden="true">' +
         item.icon +
         "</span>" +
-        '<span class="segv2-block-label">' +
+        '<span class="segv2-wizard-label">' +
         esc(item.label) +
         "</span></button>"
       );
     }).join("");
 
-    const titulo = modoSelector ? "Agrega un bloque" : "Tipo de mensaje";
+    return (
+      '<div class="segv2-wizard-overlay" id="segv2WizardOverlay">' +
+      '<div class="segv2-wizard-sheet" role="dialog" aria-label="Elegir tipo de paso">' +
+      '<button type="button" class="segv2-wizard-close" id="segv2WizardClose" aria-label="Cerrar">×</button>' +
+      '<h5 class="segv2-wizard-title">¿Qué deseas enviar?</h5>' +
+      '<div class="segv2-wizard-grid">' +
+      cards +
+      "</div></div></div>"
+    );
+  }
+
+  function buildPresetsDelayHtml(paso) {
+    const activo = presetDelayActivo(paso.delay);
+    const esCustom = !activo;
+    const unidadOpts = UNIDADES.map(function (u) {
+      const sel = normalizarUnidad(paso.delay?.unidad) === u ? " selected" : "";
+      const label = u.charAt(0).toUpperCase() + u.slice(1);
+      return '<option value="' + u + '"' + sel + ">" + label + "</option>";
+    }).join("");
+
+    const presets = PRESETS_DELAY.map(function (p) {
+      const sel = activo && activo.key === p.key ? " segv2-preset--active" : "";
+      return (
+        '<button type="button" class="segv2-preset' +
+        sel +
+        '" data-preset="' +
+        p.key +
+        '">' +
+        esc(p.label) +
+        "</button>"
+      );
+    }).join("");
 
     return (
-      '<div class="segv2-bloques-wrap' +
-      (modoSelector ? " segv2-bloques-wrap--selector" : "") +
-      '">' +
-      '<p class="segv2-bloques-title">' +
-      esc(titulo) +
-      "</p>" +
-      '<div class="segv2-block-picker">' +
-      cards +
-      "</div></div>"
+      '<div class="segv2-form-row segv2-form-row--delay">' +
+      "<label>Tiempo de espera</label>" +
+      '<div class="segv2-delay-presets">' +
+      presets +
+      '<button type="button" class="segv2-preset' +
+      (esCustom ? " segv2-preset--active" : "") +
+      '" data-preset="custom">Personalizado</button></div>' +
+      '<div class="segv2-delay-custom"' +
+      (esCustom ? "" : ' style="display:none"') +
+      ">" +
+      '<div class="segv2-delay-inputs">' +
+      '<input type="number" id="segv2DelayValor" min="1" step="1" value="' +
+      esc(paso.delay?.valor ?? 5) +
+      '" required>' +
+      '<select id="segv2DelayUnidad" class="segv2-select" required>' +
+      unidadOpts +
+      "</select></div></div></div>"
     );
   }
 
@@ -246,7 +311,7 @@ window.MacBotSeguimientoV2 = (function () {
   function crearPasoDesdeTipo(tipo, index) {
     return {
       pasoId: "paso_" + (index + 1),
-      delay: { valor: 5, unidad: "minutos" },
+      delay: { valor: 1, unidad: "minutos" },
       tipo: normalizarTipo(tipo),
       contenido: "",
     };
@@ -428,9 +493,8 @@ window.MacBotSeguimientoV2 = (function () {
 
   function resumenConfig(config) {
     const n = (config.pasos || []).length;
-    if (!n) return "Sin pasos · agrega bloques";
-    const cancela = config.cancelarSiResponde !== false ? "cancela si responde" : "sin cancelación";
-    return n + " paso" + (n === 1 ? "" : "s") + " · " + cancela;
+    if (!n) return "";
+    return n + " paso" + (n === 1 ? "" : "s");
   }
 
   function normalizarErrorUpload(msg) {
@@ -448,21 +512,8 @@ window.MacBotSeguimientoV2 = (function () {
     return msg || "No se pudo subir el archivo";
   }
 
-  function lineaPasoCanvas(paso, index) {
-    return (
-      "Paso " +
-      (index + 1) +
-      " " +
-      labelTipo(paso.tipo) +
-      " · " +
-      formatearDelayCorto(paso.delay)
-    );
-  }
-
   function buildTimelineHtml(pasos) {
-    if (!pasos.length) {
-      return '<p class="segv2-empty">Sin pasos · agrega bloques</p>';
-    }
+    if (!pasos.length) return "";
 
     const maxVisibles = 3;
     const visibles = pasos.slice(0, maxVisibles);
@@ -472,7 +523,7 @@ window.MacBotSeguimientoV2 = (function () {
     visibles.forEach(function (paso, index) {
       html +=
         '<p class="segv2-timeline-line">' +
-        esc(lineaPasoCanvas(paso, index)) +
+        esc(lineaPasoLista(paso, index)) +
         "</p>";
     });
 
@@ -485,6 +536,25 @@ window.MacBotSeguimientoV2 = (function () {
 
     html += "</div>";
     return html;
+  }
+
+  function buildCanvasBodyHtml(pasos) {
+    if (!pasos.length) {
+      return (
+        '<div class="segv2-canvas-empty-wrap">' +
+        '<div class="segv2-canvas-divider" aria-hidden="true"></div>' +
+        '<p class="segv2-canvas-empty">Aún no configurado</p>' +
+        '<p class="segv2-canvas-hint">+ Crear primer paso</p>' +
+        "</div>"
+      );
+    }
+    const resumen = resumenConfig({ pasos: pasos });
+    return (
+      (resumen ? '<p class="segv2-summary">' + esc(resumen) + "</p>" : "") +
+      '<div class="segv2-body">' +
+      buildTimelineHtml(pasos) +
+      "</div>"
+    );
   }
 
   function buildNodoInnerHtml(nodoId, config) {
@@ -507,15 +577,11 @@ window.MacBotSeguimientoV2 = (function () {
       '<span class="segv2-title">🔒 Seguimiento CRM V2</span>' +
       '<div class="segv2-badges-row">' +
       '<span class="segv2-badge">V2 Seguro</span>' +
-      '<span class="segv2-badge segv2-badge--soft">Seguro multi-número</span>' +
+      '<span class="segv2-badge segv2-badge--soft">Multi-número</span>' +
       "</div></div></div>" +
-      '<p class="segv2-summary">' +
-      esc(resumenConfig(cfg)) +
-      "</p>" +
-      '<div class="segv2-body">' +
-      buildTimelineHtml(cfg.pasos) +
-      "</div>" +
-      "</div>" +
+      '<div class="segv2-canvas-content">' +
+      buildCanvasBodyHtml(cfg.pasos) +
+      "</div></div>" +
       '<textarea class="seguimiento-v2-data" style="display:none;">' +
       json +
       "</textarea>"
@@ -528,13 +594,9 @@ window.MacBotSeguimientoV2 = (function () {
     const cfg =
       config && Array.isArray(config.pasos) ? config : parseConfigAlmacenada(config);
     const persist = opts && opts.persist;
-    const summary = nodo.querySelector(".segv2-summary");
-    const body = nodo.querySelector(".segv2-body");
-
-    if (summary) summary.textContent = resumenConfig(cfg);
-
-    if (body) {
-      body.innerHTML = buildTimelineHtml(cfg.pasos);
+    const canvasContent = nodo.querySelector(".segv2-canvas-content");
+    if (canvasContent) {
+      canvasContent.innerHTML = buildCanvasBodyHtml(cfg.pasos);
     }
 
     if (persist) {
@@ -769,34 +831,44 @@ window.MacBotSeguimientoV2 = (function () {
     return { tipo: "empty", texto: "" };
   }
 
-  function fetchStorageStatus() {
+  function fetchStorageStatusSiMedia(tipo) {
+    if (!esTipoMedia(tipo)) {
+      renderStorageBanner(false);
+      return Promise.resolve(null);
+    }
+    if (storageStatusFetched && storageStatus) {
+      renderStorageBanner(true);
+      return Promise.resolve(storageStatus);
+    }
     return fetch(STORAGE_STATUS_ENDPOINT, { credentials: "same-origin" })
       .then(function (r) {
         return r.json();
       })
       .then(function (data) {
         storageStatus = data;
-        renderStorageBanner();
+        storageStatusFetched = true;
+        renderStorageBanner(true);
         return data;
       })
       .catch(function () {
         storageStatus = null;
-        renderStorageBanner();
+        storageStatusFetched = true;
+        renderStorageBanner(true);
         return null;
       });
   }
 
-  function renderStorageBanner() {
+  function renderStorageBanner(mostrarParaMedia) {
     const box = document.getElementById("segv2StorageBanner");
     if (!box) return;
 
-    if (!storageStatus) {
+    if (!mostrarParaMedia) {
       box.innerHTML = "";
       box.style.display = "none";
       return;
     }
 
-    if (storageStatus.bucketExists && storageStatus.publicUrlReady) {
+    if (!storageStatus || (storageStatus.bucketExists && storageStatus.publicUrlReady)) {
       box.innerHTML = "";
       box.style.display = "none";
       return;
@@ -807,8 +879,7 @@ window.MacBotSeguimientoV2 = (function () {
       "Bucket seguimiento-v2-media no encontrado. Créalo como público en Supabase Storage.";
 
     box.style.display = "";
-    box.innerHTML =
-      '<div class="segv2-storage-warn">' + esc(msg) + "</div>";
+    box.innerHTML = '<div class="segv2-storage-warn">' + esc(msg) + "</div>";
   }
 
   function renderArchivoLocalBox(paso) {
@@ -1014,7 +1085,7 @@ window.MacBotSeguimientoV2 = (function () {
     return (
       '<div class="segv2-media-panel">' +
       '<div class="segv2-form-row segv2-campo-upload">' +
-      "<label>Archivo <span class=\"segv2-limit-badge\">" +
+      "<label>Subir archivo <span class=\"segv2-limit-badge\">" +
       esc(limite) +
       "</span></label>" +
       '<div class="segv2-upload-row">' +
@@ -1049,27 +1120,37 @@ window.MacBotSeguimientoV2 = (function () {
     );
   }
 
-  function wireBloquesTipo(paso, opts) {
-    const modoSelector = opts && opts.modoSelector;
-    document.querySelectorAll(".segv2-block-card").forEach(function (btn) {
+  function abrirWizard() {
+    wizardAbierto = true;
+    renderWizard();
+  }
+
+  function cerrarWizard() {
+    wizardAbierto = false;
+    renderWizard();
+  }
+
+  function wireWizard() {
+    document.getElementById("segv2WizardClose")?.addEventListener("click", cerrarWizard);
+    document.getElementById("segv2WizardOverlay")?.addEventListener("click", function (ev) {
+      if (ev.target?.id === "segv2WizardOverlay") cerrarWizard();
+    });
+    document.querySelectorAll(".segv2-wizard-card").forEach(function (btn) {
       btn.addEventListener("click", function () {
-        const nuevoTipo = normalizarTipo(btn.getAttribute("data-tipo"));
-
-        if (modoSelector) {
-          agregarPasoDesdeTipo(nuevoTipo);
-          return;
-        }
-
-        const tipoAnterior = normalizarTipo(paso.tipo);
-        syncPasoDesdeFormulario();
-        if (nuevoTipo !== tipoAnterior) {
-          limpiarArchivoLocal(paso);
-        }
-        paso.tipo = nuevoTipo;
-        renderFormularioPaso();
-        onPanelChange();
+        agregarPasoDesdeTipo(normalizarTipo(btn.getAttribute("data-tipo")));
       });
     });
+  }
+
+  function renderWizard() {
+    const host = document.getElementById("segv2WizardHost");
+    if (!host) return;
+    if (!wizardAbierto) {
+      host.innerHTML = "";
+      return;
+    }
+    host.innerHTML = buildWizardHtml();
+    wireWizard();
   }
 
   function agregarPasoDesdeTipo(tipo) {
@@ -1077,21 +1158,52 @@ window.MacBotSeguimientoV2 = (function () {
     syncPasoDesdeFormulario();
     const nuevo = crearPasoDesdeTipo(tipo, configActiva.pasos.length);
     configActiva.pasos.push(nuevo);
-    pasoActivoIndex = configActiva.pasos.length - 1;
-    mostrarSelectorBloques = false;
-    renderSelectorBloques();
-    renderListaPasos();
-    renderFormularioPaso();
+    wizardAbierto = false;
+    renderWizard();
+    abrirEditorPaso(configActiva.pasos.length - 1);
     onPanelChange();
+  }
+
+  function wirePresetsDelay(paso) {
+    document.querySelectorAll(".segv2-preset").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        const key = btn.getAttribute("data-preset");
+        const customBox = document.querySelector(".segv2-delay-custom");
+        document.querySelectorAll(".segv2-preset").forEach(function (b) {
+          b.classList.remove("segv2-preset--active");
+        });
+        btn.classList.add("segv2-preset--active");
+
+        if (key === "custom") {
+          if (customBox) customBox.style.display = "";
+          return;
+        }
+
+        if (customBox) customBox.style.display = "none";
+        const preset = PRESETS_DELAY.find(function (p) {
+          return p.key === key;
+        });
+        if (preset) {
+          paso.delay = { valor: preset.valor, unidad: preset.unidad };
+          const valorEl = document.getElementById("segv2DelayValor");
+          const unidadEl = document.getElementById("segv2DelayUnidad");
+          if (valorEl) valorEl.value = String(preset.valor);
+          if (unidadEl) unidadEl.value = preset.unidad;
+        }
+        onPanelChange();
+      });
+    });
   }
 
   function renderVistaPreviaMensaje() {
     const box = document.getElementById("segv2VistaPrevia");
+    const wrap = document.getElementById("segv2PreviewWrap");
     if (!box || !configActiva) return;
 
     const paso = configActiva.pasos[pasoActivoIndex];
     if (!paso) {
       box.innerHTML = "";
+      if (wrap) wrap.style.display = "none";
       return;
     }
 
@@ -1103,60 +1215,54 @@ window.MacBotSeguimientoV2 = (function () {
       mediaUrlGuardada || (local?.blobUrl && !local.sizeError ? local.blobUrl : "");
 
     if (tipo === "texto" && !texto) {
-      box.innerHTML =
-        '<div class="segv2-preview-empty">Escribe un mensaje para ver la vista previa</div>';
-      return;
-    }
-
-    if (esTipoMedia(tipo) && local?.sizeError) {
-      box.innerHTML =
-        '<div class="segv2-preview-empty segv2-preview-error">' +
-        esc(local.sizeError) +
-        "</div>";
+      box.innerHTML = "";
+      if (wrap) wrap.style.display = "none";
       return;
     }
 
     if (esTipoMedia(tipo) && !mediaUrl) {
-      box.innerHTML =
-        '<div class="segv2-preview-empty">Selecciona un archivo para ver la vista previa</div>';
+      box.innerHTML = "";
+      if (wrap) wrap.style.display = "none";
       return;
     }
 
-    let cuerpo = "";
+    if (wrap) wrap.style.display = "";
+
+    let burbuja = "";
 
     if (tipo === "texto") {
-      cuerpo =
-        '<div class="segv2-preview-bubble">' +
+      burbuja =
+        '<div class="segv2-wa-bubble">' +
         '<p class="segv2-preview-text">' +
         esc(texto).replace(/\n/g, "<br>") +
         "</p></div>";
     } else if (tipo === "imagen") {
-      cuerpo =
-        '<div class="segv2-preview-media">' +
+      burbuja =
+        '<div class="segv2-wa-bubble segv2-wa-bubble--media">' +
         '<img src="' +
         esc(mediaUrl) +
-        '" alt="Vista previa" class="segv2-preview-img" loading="lazy">' +
+        '" alt="" class="segv2-preview-img" loading="lazy">' +
         (texto ? '<p class="segv2-preview-caption">' + esc(texto) + "</p>" : "") +
         "</div>";
     } else if (tipo === "video") {
-      cuerpo =
-        '<div class="segv2-preview-media">' +
+      burbuja =
+        '<div class="segv2-wa-bubble segv2-wa-bubble--media">' +
         '<video src="' +
         esc(mediaUrl) +
         '" controls muted playsinline class="segv2-preview-video"></video>' +
         (texto ? '<p class="segv2-preview-caption">' + esc(texto) + "</p>" : "") +
         "</div>";
     } else if (tipo === "audio") {
-      cuerpo =
-        '<div class="segv2-preview-media">' +
+      burbuja =
+        '<div class="segv2-wa-bubble segv2-wa-bubble--media">' +
         '<audio src="' +
         esc(mediaUrl) +
         '" controls class="segv2-preview-audio"></audio></div>';
     } else {
       const nombre = paso.media_filename || paso.filename || local?.nombre || "Archivo";
       const peso = local?.size ? formatearPeso(local.size) : "";
-      cuerpo =
-        '<div class="segv2-preview-doc">' +
+      burbuja =
+        '<div class="segv2-wa-bubble segv2-wa-bubble--doc">' +
         '<span class="segv2-preview-icon" aria-hidden="true">📄</span>' +
         "<div><strong>" +
         esc(nombre) +
@@ -1166,12 +1272,22 @@ window.MacBotSeguimientoV2 = (function () {
         "</div></div>";
     }
 
-    box.innerHTML = cuerpo;
+    box.innerHTML =
+      '<div class="segv2-wa-phone">' +
+      '<div class="segv2-wa-chat">' +
+      burbuja +
+      "</div></div>";
   }
 
   function renderErroresValidacion() {
     const box = document.getElementById("segv2Errores");
-    if (!box || !configActiva) return;
+    if (!box || !configActiva || pasoActivoIndex < 0) {
+      if (box) {
+        box.innerHTML = "";
+        box.classList.remove("segv2-errores--visible");
+      }
+      return;
+    }
 
     syncPasoDesdeFormulario();
     const errores = validarConfig(configActiva);
@@ -1184,47 +1300,25 @@ window.MacBotSeguimientoV2 = (function () {
 
     box.classList.add("segv2-errores--visible");
     box.innerHTML =
-      "<strong>No se puede guardar — corrige los pasos marcados en rojo:</strong><ul>" +
+      "<strong>Revisa este paso antes de guardar:</strong><ul>" +
       errores.map(function (e) {
         return "<li>" + esc(e) + "</li>";
       }).join("") +
       "</ul>";
   }
 
-  function renderEstadoVacio() {
-    const box = document.getElementById("segv2EstadoVacio");
-    if (!box || !configActiva) return;
+  function renderVistaLista() {
+    const emptyLabel = document.getElementById("segv2EmptyLabel");
+    const btnAgregar = document.getElementById("segv2BtnAgregar");
+    const toggleWrap = document.getElementById("segv2ToggleWrap");
+    if (!configActiva) return;
 
     const vacio = !configActiva.pasos.length;
-    box.style.display = vacio ? "" : "none";
-
-    if (vacio) {
-      box.innerHTML =
-        '<div class="segv2-empty-state">' +
-        '<p class="segv2-empty-state-title">Aún no hay pasos</p>' +
-        '<p class="segv2-empty-state-desc">Agrega un bloque para iniciar</p>' +
-        "</div>";
+    if (emptyLabel) emptyLabel.style.display = vacio ? "" : "none";
+    if (btnAgregar) {
+      btnAgregar.textContent = vacio ? "+ Crear primer paso" : "+ Agregar paso";
     }
-  }
-
-  function renderSelectorBloques() {
-    const box = document.getElementById("segv2SelectorBloques");
-    const btnAdd = document.getElementById("segv2AddBloque");
-    if (!box || !configActiva) return;
-
-    const sinPasos = !configActiva.pasos.length;
-    const visible = sinPasos || mostrarSelectorBloques;
-
-    box.style.display = visible ? "" : "none";
-    if (btnAdd) btnAdd.style.display = sinPasos ? "none" : "";
-
-    if (!visible) {
-      box.innerHTML = "";
-      return;
-    }
-
-    box.innerHTML = buildBloquesTipoHtml(null, { modoSelector: true });
-    wireBloquesTipo(null, { modoSelector: true });
+    if (toggleWrap) toggleWrap.style.display = vacio ? "none" : "";
   }
 
   function moverPaso(index, dir) {
@@ -1250,9 +1344,7 @@ window.MacBotSeguimientoV2 = (function () {
     const copia = JSON.parse(JSON.stringify(configActiva.pasos[index]));
     configActiva.pasos.splice(index + 1, 0, copia);
     reasignarPasoIds(configActiva.pasos);
-    pasoActivoIndex = index + 1;
-    renderListaPasos();
-    renderFormularioPaso();
+    abrirEditorPaso(index + 1);
     onPanelChange();
   }
 
@@ -1264,70 +1356,193 @@ window.MacBotSeguimientoV2 = (function () {
     configActiva.pasos.splice(index, 1);
     reasignarPasoIds(configActiva.pasos);
 
+    const estabaEditando = pasoActivoIndex >= 0;
+
     if (!configActiva.pasos.length) {
       pasoActivoIndex = -1;
-      mostrarSelectorBloques = true;
-    } else {
-      pasoActivoIndex = Math.min(index, configActiva.pasos.length - 1);
+      wizardAbierto = false;
+      renderStorageBanner(false);
+      setVistaPanel("lista");
+      renderVistaLista();
+      renderWizard();
+      renderListaPasos();
+      renderFormularioPaso();
+      onPanelChange();
+      return;
     }
 
-    renderEstadoVacio();
-    renderSelectorBloques();
+    if (pasoActivoIndex === index) {
+      pasoActivoIndex = Math.min(index, configActiva.pasos.length - 1);
+    } else if (pasoActivoIndex > index) {
+      pasoActivoIndex -= 1;
+    }
+
+    if (estabaEditando) {
+      abrirEditorPaso(pasoActivoIndex);
+    } else {
+      renderVistaLista();
+      renderWizard();
+      renderListaPasos();
+      renderFormularioPaso();
+    }
+    onPanelChange();
+  }
+
+  function reordenarPaso(fromIndex, toIndex) {
+    if (!configActiva || fromIndex === toIndex) return;
+    if (fromIndex < 0 || toIndex < 0) return;
+    if (fromIndex >= configActiva.pasos.length || toIndex >= configActiva.pasos.length) return;
+
+    syncPasoDesdeFormulario();
+    const pasos = configActiva.pasos;
+    const item = pasos.splice(fromIndex, 1)[0];
+    pasos.splice(toIndex, 0, item);
+    reasignarPasoIds(pasos);
+
+    if (pasoActivoIndex === fromIndex) pasoActivoIndex = toIndex;
+    else if (fromIndex < pasoActivoIndex && toIndex >= pasoActivoIndex) pasoActivoIndex -= 1;
+    else if (fromIndex > pasoActivoIndex && toIndex <= pasoActivoIndex) pasoActivoIndex += 1;
+
     renderListaPasos();
     renderFormularioPaso();
     onPanelChange();
   }
 
+  function wireDragDropLista() {
+    const lista = document.getElementById("segv2ListaPasos");
+    if (!lista) return;
+
+    let dragIndex = null;
+
+    lista.querySelectorAll(".segv2-paso-item").forEach(function (item) {
+      item.addEventListener("dragstart", function (ev) {
+        dragIndex = parseInt(item.getAttribute("data-index"), 10);
+        item.classList.add("segv2-paso-item--dragging");
+        if (ev.dataTransfer) {
+          ev.dataTransfer.effectAllowed = "move";
+          ev.dataTransfer.setData("text/plain", String(dragIndex));
+        }
+      });
+
+      item.addEventListener("dragend", function () {
+        item.classList.remove("segv2-paso-item--dragging");
+        lista.querySelectorAll(".segv2-paso-item").forEach(function (el) {
+          el.classList.remove("segv2-paso-item--over");
+        });
+        dragIndex = null;
+      });
+
+      item.addEventListener("dragover", function (ev) {
+        ev.preventDefault();
+        if (ev.dataTransfer) ev.dataTransfer.dropEffect = "move";
+        item.classList.add("segv2-paso-item--over");
+      });
+
+      item.addEventListener("dragleave", function () {
+        item.classList.remove("segv2-paso-item--over");
+      });
+
+      item.addEventListener("drop", function (ev) {
+        ev.preventDefault();
+        item.classList.remove("segv2-paso-item--over");
+        const from =
+          dragIndex != null
+            ? dragIndex
+            : parseInt(ev.dataTransfer?.getData("text/plain"), 10);
+        const to = parseInt(item.getAttribute("data-index"), 10);
+        if (!isNaN(from) && !isNaN(to)) reordenarPaso(from, to);
+      });
+    });
+  }
+
+  function setVistaPanel(modo) {
+    const listaSection = document.getElementById("segv2ListaSection");
+    const editorSection = document.getElementById("segv2EditorSection");
+    const errores = document.getElementById("segv2Errores");
+    const toggleWrap = document.getElementById("segv2ToggleWrap");
+
+    if (modo === "editar") {
+      if (listaSection) listaSection.style.display = "none";
+      if (editorSection) editorSection.style.display = "";
+      if (toggleWrap) toggleWrap.style.display = "none";
+    } else {
+      if (listaSection) listaSection.style.display = "";
+      if (editorSection) editorSection.style.display = "none";
+      if (toggleWrap) toggleWrap.style.display = configActiva?.pasos?.length ? "" : "none";
+      if (errores && modo === "lista") {
+        errores.innerHTML = "";
+        errores.classList.remove("segv2-errores--visible");
+      }
+    }
+  }
+
+  function abrirEditorPaso(index) {
+    syncPasoDesdeFormulario();
+    pasoActivoIndex = index;
+    wizardAbierto = false;
+    renderWizard();
+    setVistaPanel("editar");
+    renderListaPasos();
+    renderFormularioPaso();
+  }
+
   function renderListaPasos() {
     const lista = document.getElementById("segv2ListaPasos");
-    const section = document.getElementById("segv2ListaSection");
     if (!lista || !configActiva) return;
 
-    const tienePasos = configActiva.pasos.length > 0;
-    if (section) section.style.display = tienePasos ? "" : "none";
-
-    if (!tienePasos) {
+    if (!configActiva.pasos.length) {
       lista.innerHTML = "";
+      renderVistaLista();
       return;
     }
 
     lista.innerHTML = configActiva.pasos
       .map(function (paso, index) {
-        const activo = index === pasoActivoIndex ? " segv2-paso-card--active" : "";
+        const activo = index === pasoActivoIndex ? " segv2-paso-item--active" : "";
         const erroresPaso = validarPaso(paso, index);
-        const invalido = erroresPaso.length ? " segv2-paso-card--invalid" : "";
-        const titulo =
-          "Paso " +
-          (index + 1) +
-          " · " +
-          labelTipo(paso.tipo) +
-          " · " +
-          formatearDelayCorto(paso.delay);
+        const invalido = erroresPaso.length ? " segv2-paso-item--invalid" : "";
 
         return (
-          '<button type="button" class="segv2-paso-compact' +
+          '<div class="segv2-paso-item' +
           activo +
           invalido +
           '" data-index="' +
           index +
-          '">' +
-          esc(titulo) +
-          "</button>"
+          '" draggable="true">' +
+          '<span class="segv2-paso-drag" title="Arrastrar" aria-hidden="true">⠿</span>' +
+          '<span class="segv2-paso-label">' +
+          esc(lineaPasoLista(paso, index)) +
+          "</span>" +
+          '<div class="segv2-paso-actions">' +
+          '<button type="button" class="segv2-paso-icon-btn" data-action="edit" title="Editar" aria-label="Editar">✏</button>' +
+          '<button type="button" class="segv2-paso-icon-btn" data-action="dup" title="Duplicar" aria-label="Duplicar">⧉</button>' +
+          '<button type="button" class="segv2-paso-icon-btn segv2-paso-icon-btn--danger" data-action="del" title="Eliminar" aria-label="Eliminar">🗑</button>' +
+          "</div></div>"
         );
       })
       .join("");
 
-    lista.querySelectorAll(".segv2-paso-compact").forEach(function (btn) {
-      const index = parseInt(btn.getAttribute("data-index"), 10) || 0;
-      btn.addEventListener("click", function () {
-        syncPasoDesdeFormulario();
-        pasoActivoIndex = index;
-        mostrarSelectorBloques = false;
-        renderSelectorBloques();
-        renderListaPasos();
-        renderFormularioPaso();
+    lista.querySelectorAll(".segv2-paso-item").forEach(function (wrap) {
+      const index = parseInt(wrap.getAttribute("data-index"), 10) || 0;
+
+      wrap.querySelector('[data-action="edit"]')?.addEventListener("click", function (ev) {
+        ev.stopPropagation();
+        abrirEditorPaso(index);
+      });
+
+      wrap.querySelector('[data-action="dup"]')?.addEventListener("click", function (ev) {
+        ev.stopPropagation();
+        duplicarPaso(index);
+      });
+
+      wrap.querySelector('[data-action="del"]')?.addEventListener("click", function (ev) {
+        ev.stopPropagation();
+        eliminarPaso(index);
       });
     });
+
+    wireDragDropLista();
+    renderVistaLista();
   }
 
   function renderFormularioPaso() {
@@ -1339,29 +1554,22 @@ window.MacBotSeguimientoV2 = (function () {
     if (!paso) {
       form.innerHTML = "";
       if (section) section.style.display = "none";
+      renderStorageBanner(false);
       renderVistaPreviaMensaje();
       return;
     }
 
     if (section) section.style.display = "";
 
-    const unidadOpts = UNIDADES.map(function (u) {
-      const sel = normalizarUnidad(paso.delay?.unidad) === u ? " selected" : "";
-      const label = u.charAt(0).toUpperCase() + u.slice(1);
-      return '<option value="' + u + '"' + sel + ">" + label + "</option>";
-    }).join("");
-
-    const total = configActiva.pasos.length;
     const tipoActual = normalizarTipo(paso.tipo);
     const esMedia = esTipoMedia(tipoActual);
+    const bloque = bloquePorTipo(tipoActual);
     const erroresPaso = validarPaso(paso, pasoActivoIndex);
 
     const camposTexto = !esMedia
-      ? '<div class="segv2-form-row segv2-campo-texto">' +
-        "<label>Mensaje</label>" +
-        '<textarea id="segv2Mensaje" rows="4" placeholder="Texto del seguimiento…">' +
+      ? '<textarea id="segv2Mensaje" rows="4" placeholder="Escribe el mensaje…">' +
         esc(paso.contenido || "") +
-        "</textarea></div>"
+        "</textarea>"
       : "";
 
     const camposMedia = esMedia ? buildCamposMediaHtml(paso, tipoActual) : "";
@@ -1369,25 +1577,24 @@ window.MacBotSeguimientoV2 = (function () {
     form.innerHTML =
       '<div class="segv2-form">' +
       '<div class="segv2-form-head">' +
-      "<h5>Paso " +
+      "<h5>PASO " +
       (pasoActivoIndex + 1) +
-      " de " +
-      total +
-      "</h5></div>" +
-      '<div class="segv2-form-row segv2-form-row--delay">' +
-      '<label>Tiempo de espera</label>' +
-      '<div class="segv2-delay-inputs">' +
-      '<input type="number" id="segv2DelayValor" min="1" step="1" value="' +
-      esc(paso.delay?.valor ?? 5) +
-      '" required>' +
-      '<select id="segv2DelayUnidad" class="segv2-select" required>' +
-      unidadOpts +
-      "</select></div></div>" +
-      buildBloquesTipoHtml(tipoActual) +
-      camposTexto +
-      camposMedia +
-      '<div class="segv2-form-row segv2-form-row--preview">' +
-      "<label>Vista previa</label>" +
+      "</h5>" +
+      '<button type="button" class="segv2-form-back" id="segv2CerrarEditor">← Volver</button></div>' +
+      '<div class="segv2-tipo-badge">' +
+      '<span class="segv2-tipo-badge-icon" aria-hidden="true">' +
+      bloque.icon +
+      "</span>" +
+      "<span>Tipo: <strong>" +
+      esc(bloque.label) +
+      "</strong></span></div>" +
+      buildPresetsDelayHtml(paso) +
+      '<div class="segv2-form-row segv2-campo-contenido">' +
+      "<label>Contenido</label>" +
+      (esMedia ? camposMedia : camposTexto) +
+      "</div>" +
+      '<div id="segv2StorageBanner" class="segv2-storage-banner" style="display:none"></div>' +
+      '<div id="segv2PreviewWrap" class="segv2-preview-wrap" style="display:none">' +
       '<div id="segv2VistaPrevia" class="segv2-preview"></div></div>' +
       (erroresPaso.length
         ? '<div class="segv2-paso-errores"><ul>' +
@@ -1398,13 +1605,18 @@ window.MacBotSeguimientoV2 = (function () {
             .join("") +
           "</ul></div>"
         : "") +
-      '<button type="button" class="segv2-btn segv2-btn-danger" id="segv2EliminarPaso">Eliminar paso</button>' +
       "</div>";
 
-    wireBloquesTipo(paso);
+    wirePresetsDelay(paso);
 
-    document.getElementById("segv2EliminarPaso")?.addEventListener("click", function () {
-      eliminarPaso(pasoActivoIndex);
+    document.getElementById("segv2CerrarEditor")?.addEventListener("click", function () {
+      syncPasoDesdeFormulario();
+      pasoActivoIndex = -1;
+      renderStorageBanner(false);
+      setVistaPanel("lista");
+      renderListaPasos();
+      renderFormularioPaso();
+      onPanelChange();
     });
 
     document.getElementById("segv2BtnSeleccionar")?.addEventListener("click", function () {
@@ -1427,6 +1639,7 @@ window.MacBotSeguimientoV2 = (function () {
       el.addEventListener("change", onPanelChange);
     });
 
+    fetchStorageStatusSiMedia(tipoActual);
     renderArchivoLocalBox(paso);
     renderVistaPreviaMensaje();
     renderErroresValidacion();
@@ -1438,11 +1651,12 @@ window.MacBotSeguimientoV2 = (function () {
     configActiva.cancelarSiResponde = !!document.getElementById("segv2CancelarSiResponde")?.checked;
 
     renderPreviewNodo(nodoActivo, buildConfigPreview(configActiva));
-    renderEstadoVacio();
-    renderSelectorBloques();
-    renderListaPasos();
-    renderVistaPreviaMensaje();
-    renderErroresValidacion();
+    renderVistaLista();
+    if (pasoActivoIndex >= 0) {
+      renderListaPasos();
+      renderVistaPreviaMensaje();
+      renderErroresValidacion();
+    }
     actualizarBotonGuardar();
   }
 
@@ -1466,48 +1680,40 @@ window.MacBotSeguimientoV2 = (function () {
 
     nodoActivo = nodo;
     configActiva = leerConfigDeNodo(nodo);
-    pasoActivoIndex = configActiva.pasos.length ? 0 : -1;
-    mostrarSelectorBloques = !configActiva.pasos.length;
+    pasoActivoIndex = -1;
+    wizardAbierto = false;
+    storageStatus = null;
+    storageStatusFetched = false;
 
     const contenido = document.getElementById("panelNodoContenido");
     if (!contenido) return;
 
     contenido.innerHTML =
       '<div class="segv2-panel">' +
-      '<header class="segv2-panel-header">' +
-      "<h4>🔒 Seguimiento CRM V2</h4>" +
-      '<div class="segv2-panel-badges">' +
-      '<span class="segv2-panel-badge">V2 Seguro</span>' +
-      '<span class="segv2-panel-badge segv2-panel-badge--soft">Seguro multi-número</span>' +
-      "</div>" +
-      "</header>" +
-      '<div id="segv2StorageBanner" class="segv2-storage-banner" style="display:none"></div>' +
+      '<section class="segv2-pasos-section" id="segv2ListaSection">' +
+      '<h5 class="segv2-section-heading">📋 Pasos del seguimiento</h5>' +
+      '<p id="segv2EmptyLabel" class="segv2-panel-empty-label">Sin pasos configurados</p>' +
+      '<div id="segv2ListaPasos" class="segv2-pasos-list"></div>' +
+      '<button type="button" class="segv2-btn segv2-btn-primary" id="segv2BtnAgregar">+ Crear primer paso</button>' +
+      "</section>" +
+      '<div id="segv2WizardHost"></div>' +
+      '<section id="segv2EditorSection" class="segv2-section segv2-section--editor" style="display:none">' +
+      '<div id="segv2FormPaso"></div>' +
+      "</section>" +
       '<div id="segv2Errores" class="segv2-errores"></div>' +
-      '<label class="segv2-toggle">' +
+      '<label class="segv2-toggle-minimal" id="segv2ToggleWrap" style="display:none">' +
       '<input type="checkbox" id="segv2CancelarSiResponde"' +
       (configActiva.cancelarSiResponde !== false ? " checked" : "") +
       "> Cancelar si responde</label>" +
-      '<div id="segv2EstadoVacio" class="segv2-empty-state-wrap"></div>' +
-      '<div id="segv2SelectorBloques" class="segv2-selector-bloques"></div>' +
-      '<section id="segv2ListaSection" class="segv2-section segv2-section--pasos">' +
-      '<div id="segv2ListaPasos" class="segv2-pasos-list"></div>' +
-      '<div class="segv2-panel-actions">' +
-      '<button type="button" class="segv2-btn segv2-btn-ghost" id="segv2AddBloque">+ Paso</button>' +
-      "</div></section>" +
-      '<section id="segv2EditorSection" class="segv2-section segv2-section--editor">' +
-      '<div id="segv2FormPaso"></div>' +
-      "</section></div>";
+      "</div>";
 
     document.getElementById("segv2CancelarSiResponde")?.addEventListener("change", onPanelChange);
 
-    document.getElementById("segv2AddBloque")?.addEventListener("click", function () {
-      mostrarSelectorBloques = true;
-      renderSelectorBloques();
+    document.getElementById("segv2BtnAgregar")?.addEventListener("click", function () {
+      abrirWizard();
     });
 
-    fetchStorageStatus();
-    renderEstadoVacio();
-    renderSelectorBloques();
+    renderVistaLista();
     renderListaPasos();
     renderFormularioPaso();
     onPanelChange();
@@ -1556,7 +1762,9 @@ window.MacBotSeguimientoV2 = (function () {
     nodoActivo = null;
     configActiva = null;
     pasoActivoIndex = -1;
-    mostrarSelectorBloques = false;
+    wizardAbierto = false;
+    storageStatus = null;
+    storageStatusFetched = false;
     actualizarBotonGuardar();
   }
 
