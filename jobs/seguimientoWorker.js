@@ -5,11 +5,20 @@ let procesando = false;
 
 function startSeguimientoWorker(app) {
   if (global.__macbotSeguimientoWorkerIniciado || workerIniciado) {
-    console.log("⏱️ Worker de seguimientos ya activo — no se duplica");
+    console.log("⏱️ Worker de seguimientos ya activo — no se duplica", {
+      pid: process.pid,
+      timestamp: new Date().toISOString(),
+    });
     return;
   }
   global.__macbotSeguimientoWorkerIniciado = true;
   workerIniciado = true;
+
+  console.log("[SEG_WORKER_START]", {
+    pid: process.pid,
+    timestamp: new Date().toISOString(),
+    intervalo_ms: parseInt(process.env.SEGUIMIENTO_POLL_MS || "15000", 10),
+  });
 
   const intervaloMs = parseInt(process.env.SEGUIMIENTO_POLL_MS || "15000", 10);
 

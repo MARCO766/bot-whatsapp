@@ -39,6 +39,17 @@ function textoContenidoSeguimiento(item) {
   return String(payload.caption || payload.url || payload.texto || "").trim();
 }
 
+function logSegExecTrace(item) {
+  console.log("[SEG_EXEC_TRACE]", {
+    seguimiento_id: item?.id ?? null,
+    campana_id: item?.campana_id ?? null,
+    paso_index: item?.paso_index ?? null,
+    conexion_whatsapp_id: item?.conexion_whatsapp_id ?? null,
+    estado_actual: item?.estado ?? null,
+    timestamp: new Date().toISOString(),
+  });
+}
+
 function logWorkerItemFinal(item) {
   console.log("[WORKER_ITEM_FINAL]", {
     id: item?.id ?? null,
@@ -204,6 +215,7 @@ async function enviarMensajeSeguimiento(item) {
 }
 
 async function intentarReservarYEnviarPaso(item, io) {
+  logSegExecTrace(item);
   const clave = buildClaveDedupPaso(item);
   console.log("[SEGUIMIENTO_FIX] lote_id", item.campana_id);
   console.log("[SEGUIMIENTO DEBUG] paso candidato:", {
@@ -344,6 +356,7 @@ async function intentarReservarYEnviarPaso(item, io) {
 }
 
 async function procesarSeguimientoItem(item, io) {
+  logSegExecTrace(item);
   console.log("[EXECUTE SEGUIMIENTO START]", {
     id: item.id,
     cliente_numero: item.cliente_numero,

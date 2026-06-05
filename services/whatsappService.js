@@ -372,6 +372,16 @@ function logMetaSendFinal(opcionesEnvio, numero, phoneIdEnviar) {
   );
 }
 
+function logSegPostMeta(opcionesEnvio, phoneIdEnviar, mensajeMetaId) {
+  if (opcionesEnvio?.origen !== "seguimiento" && !opcionesEnvio?.seguimientoId) return;
+  console.log("[SEG_POST_META]", {
+    seguimiento_id: opcionesEnvio?.seguimientoId ?? null,
+    conexion_whatsapp_id: opcionesEnvio?.conexionWhatsappId ?? null,
+    phone_id: phoneIdEnviar ?? null,
+    mensaje_meta_id: mensajeMetaId ?? null,
+  });
+}
+
 /** Seguimiento / strict: nunca activo=true ni TOKEN/PHONE_ID globales. */
 function debeResolverSoloConexionExplicita(opciones) {
   return (
@@ -727,6 +737,7 @@ async function enviarTextoWhatsApp(numero, texto, opciones = {}) {
     );
 
     const meta = respuestaMeta.data;
+    logSegPostMeta(opcionesEnvio, phoneIdEnviar, meta?.messages?.[0]?.id ?? null);
 
     if (opciones._soloEnvioMeta) {
       return meta;
@@ -1076,6 +1087,12 @@ async function enviarMediaWhatsApp(numero, tipo, mediaUrl, caption = "", opcione
       }
     );
 
+    logSegPostMeta(
+      opcionesEnvio,
+      phoneIdEnviar,
+      respuestaMeta.data?.messages?.[0]?.id ?? null
+    );
+
     if (tipoApi === "image") {
       console.log("??? RESPUESTA META IMAGEN:", respuestaMeta.data);
     } else {
@@ -1243,6 +1260,7 @@ async function enviarBotonesWhatsApp(numero, texto, botones, opciones = {}) {
     );
 
     const whatsappMessageId = respuestaMeta.data?.messages?.[0]?.id || null;
+    logSegPostMeta(opcionesEnvio, phoneIdEnviar, whatsappMessageId);
 
     const insertPayload = normalizarBodyMensajeSupabase({
       usuarioId: opcionesEnvio.usuarioId,
