@@ -7,7 +7,11 @@ const {
   normalizarConexionId,
 } = require("./seguimientoV2Repository");
 const { ESTADOS_SEGUIMIENTO_V2 } = require("./constants");
-const { logSegV2Test } = require("./seguimientoV2TestLog");
+const {
+  esNodoSeguimientoV2Test,
+  aplicarVariantePasosTest,
+} = require("./seguimientoV2TestNode");
+const { logSegV2Test, logSegV2TestVariant } = require("./seguimientoV2TestLog");
 
 function toTimestamptzUtc(value) {
   const date = value instanceof Date ? value : new Date(value);
@@ -67,8 +71,11 @@ async function programarSeguimientoV2EnFlujo({
   }
 
   const config = parseSeguimientoV2Node(nodo);
+  const pasosProgramar = esNodoSeguimientoV2Test(nodo)
+    ? aplicarVariantePasosTest(config.pasos, conexionId)
+    : config.pasos;
 
-  if (!config.pasos.length) {
+  if (!pasosProgramar.length) {
     console.log("[SEG_V2_SIN_PASOS]", {
       nodo_id: nodoId,
       flujo_id: flujoId ?? null,
@@ -83,8 +90,8 @@ async function programarSeguimientoV2EnFlujo({
   let acumuladoSegundos = 0;
   const rows = [];
 
-  for (let index = 0; index < config.pasos.length; index++) {
-    const paso = config.pasos[index];
+  for (let index = 0; index < pasosProgramar.length; index++) {
+    const paso = pasosProgramar[index];
     acumuladoSegundos += paso.segundos;
     const runAt = toTimestamptzUtc(Date.now() + acumuladoSegundos * 1000);
 
@@ -148,6 +155,15 @@ async function programarSeguimientoV2EnFlujo({
       cliente_numero: numero,
       prueba: "programado",
     });
+
+    if (esNodoSeguimientoV2Test(nodo)) {
+      logSegV2TestVariant({
+        conexion_whatsapp_id: conexionId,
+        contenido: fila.contenido,
+        campana_id: campanaId,
+        paso_index: fila.paso_index,
+      });
+    }
   }
 
   return {

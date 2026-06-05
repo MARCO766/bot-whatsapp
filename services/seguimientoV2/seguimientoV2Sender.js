@@ -8,7 +8,7 @@ const {
   existeMensajePorSeguimientoV2Id,
   resolverConexionV2,
 } = require("./seguimientoV2Guards");
-const { logSegV2Test } = require("./seguimientoV2TestLog");
+const { logSegV2Test, logSegV2TestVariant } = require("./seguimientoV2TestLog");
 
 function buildOpcionesEnvioV2(item) {
   const conexionId = obtenerConexionItem(item);
@@ -83,6 +83,16 @@ async function enviarSeguimientoV2(item) {
       if (!texto) {
         return { ok: false, motivo: "contenido_vacio" };
       }
+
+      if (/^SEGUIMIENTO V2 \d[AB]$/.test(texto)) {
+        logSegV2TestVariant({
+          conexion_whatsapp_id: conexionId,
+          contenido: texto,
+          campana_id: item.campana_id ?? null,
+          paso_index: item.paso_index ?? null,
+        });
+      }
+
       resultado = await enviarTextoWhatsApp(numero, texto, opciones);
     } else {
       const mediaUrl = String(item.media_url || item.contenido || "").trim();

@@ -13,6 +13,7 @@
  *
  * Opcional:
  *   TEST_V2_REPETICIONES=10 — pruebas A y B (default 10)
+ *   TEST_V2_FORZAR_RUN_AT=true — forzar run_at al vencer (default true)
  */
 require("dotenv").config();
 const crypto = require("crypto");
@@ -23,6 +24,7 @@ const {
   NODO_SEGUIMIENTO_V2_TEST_ID,
   FLUJO_SEGUIMIENTO_V2_TEST_ID,
   configSeguimientoV2Test,
+  contenidoPasoTestV2,
 } = require("../services/seguimientoV2/seguimientoV2TestNode");
 const { programarSeguimientoV2EnFlujo } = require("../services/seguimientoV2/seguimientoV2Service");
 const { procesarSeguimientosV2Vencidos } = require("../services/seguimientoV2/seguimientoV2Worker");
@@ -39,12 +41,17 @@ const CONEXION_A = process.env.TEST_V2_CONEXION_A || process.env.VALIDAR_V2_CONE
 const CONEXION_B = process.env.TEST_V2_CONEXION_B || process.env.VALIDAR_V2_CONEXION_B;
 const NUMERO_LEAD = process.env.TEST_V2_NUMERO || process.env.DIAG_SEG_NUMERO;
 const REPETICIONES = parseInt(process.env.TEST_V2_REPETICIONES || "10", 10);
+const FORZAR_RUN_AT = process.env.TEST_V2_FORZAR_RUN_AT !== "false";
+
+function contenidoEsperadoPorLinea(linea, pasoIndex) {
+  return contenidoPasoTestV2(pasoIndex, linea);
+}
 
 const campanasLimpieza = [];
 
 const resultados = {
-  pruebaA: { ok: 0, fail: 0, mezclas: 0 },
-  pruebaB: { ok: 0, fail: 0, mezclas: 0 },
+  pruebaA: { paso0: 0, paso1: 0, campanasOk: 0, fallos: 0, mezclas: 0 },
+  pruebaB: { paso0: 0, paso1: 0, campanasOk: 0, fallos: 0, mezclas: 0 },
   prueba4: false,
   prueba5: false,
   prueba6: false,
@@ -82,6 +89,14 @@ function parseSoloArg() {
   const idx = process.argv.indexOf("--solo");
   if (idx === -1) return null;
   return parseInt(process.argv[idx + 1], 10) || null;
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function runAtVencido(runAt) {
+  return new Date(runAt).getTime() <= Date.now();
 }
 
 async function obtenerFila(id) {
@@ -143,15 +158,83 @@ async function simularLeadEnLinea({ numero, conexionId, nodoId = NODO_SEGUIMIENT
   });
 }
 
-async function ejecutarWorkerParaFila(filaId) {
-  await forzarRunAtPasado(filaId);
+async function ejecutarWorkerTick() {
   return procesarSeguimientosV2Vencidos({ fromWorker: true });
+}
+
+async function esperarRunAtVencido(filaId, maxEsperaMs = 120000) {
+  const inicio = Date.now();
+
+  while (Date.now() - inicio < maxEsperaMs) {
+    const fila = await obtenerFila(filaId);
+    if (!fila) {
+      throw new Error(`Fila no encontrada: ${filaId}`);
+    }
+
+    if (fila.estado !== ESTADOS_SEGUIMIENTO_V2.PENDIENTE) {
+      return fila;
+    }
+
+    if (runAtVencido(fila.run_at)) {
+      return fila;
+    }
+
+    const restante = new Date(fila.run_at).getTime() - Date.now();
+    info(`  run_at pendiente en ${Math.ceil(restante / 1000)}s (id=${filaId.slice(0, 8)}… paso_index=${fila.paso_index})`);
+    await sleep(Math.min(2000, Math.max(500, restante)));
+  }
+
+  if (FORZAR_RUN_AT) {
+    info(`  timeout espera run_at — forzando al pasado (id=${filaId.slice(0, 8)}…)`);
+    await forzarRunAtPasado(filaId);
+  }
+
+  return obtenerFila(filaId);
+}
+
+async function ejecutarWorkerHastaEstadoFinal(filaId, maxTicks = 8) {
+  for (let tick = 0; tick < maxTicks; tick++) {
+    const fila = await obtenerFila(filaId);
+    if (!fila) {
+      return null;
+    }
+
+    const estadosFinales = [
+      ESTADOS_SEGUIMIENTO_V2.ENVIADO,
+      ESTADOS_SEGUIMIENTO_V2.OMITIDO_DUPLICADO,
+      ESTADOS_SEGUIMIENTO_V2.FALLIDO,
+      ESTADOS_SEGUIMIENTO_V2.CANCELADO,
+    ];
+
+    if (estadosFinales.includes(fila.estado)) {
+      return fila;
+    }
+
+    if (fila.estado === ESTADOS_SEGUIMIENTO_V2.PENDIENTE) {
+      if (!runAtVencido(fila.run_at)) {
+        await esperarRunAtVencido(filaId);
+      } else if (FORZAR_RUN_AT) {
+        await forzarRunAtPasado(filaId);
+      }
+      await ejecutarWorkerTick();
+    }
+
+    if (fila.estado === ESTADOS_SEGUIMIENTO_V2.PROCESANDO) {
+      await sleep(1500);
+      await ejecutarWorkerTick();
+    }
+
+    await sleep(1000);
+  }
+
+  return obtenerFila(filaId);
 }
 
 async function verificarEnvioLinea({
   fila,
   conexionEsperada,
   phoneIdEsperado,
+  contenidoEsperado,
   linea,
   pruebaNum,
 }) {
@@ -177,6 +260,14 @@ async function verificarEnvioLinea({
       ok: false,
       motivo: "estado_inesperado",
       detalle: `${actualizada.estado} / ${actualizada.error_detalle || "—"}`,
+    };
+  }
+
+  if (contenidoEsperado && actualizada.contenido !== contenidoEsperado) {
+    return {
+      ok: false,
+      motivo: "contenido_incorrecto",
+      detalle: `esperado "${contenidoEsperado}", obtuvo "${actualizada.contenido}"`,
     };
   }
 
@@ -223,6 +314,78 @@ async function verificarEnvioLinea({
   return { ok: true, fila: actualizada, phoneId: phoneIdUsado };
 }
 
+async function ejecutarCicloCampanaCompleta({
+  prog,
+  conexionId,
+  phoneId,
+  linea,
+  pruebaNum,
+  stats,
+}) {
+  const fila0 = prog.items.find((f) => f.paso_index === 0) || prog.items[0];
+  const fila1 = prog.items.find((f) => f.paso_index === 1) || prog.items[1];
+
+  if (!fila0 || !fila1) {
+    fallo(`[${linea}${pruebaNum}] campaña sin 2 pasos (items=${prog.items?.length ?? 0})`);
+    stats.fallos++;
+    return false;
+  }
+
+  const contenidoPaso0 = contenidoEsperadoPorLinea(linea, 0);
+  const contenidoPaso1 = contenidoEsperadoPorLinea(linea, 1);
+
+  info(`[${linea}${pruebaNum}] campana_id=${prog.campanaId} — ciclo completo`);
+
+  info(`[${linea}${pruebaNum}] Paso 0 — esperar y verificar "${contenidoPaso0}"`);
+  await esperarRunAtVencido(fila0.id, 45000);
+  await ejecutarWorkerHastaEstadoFinal(fila0.id);
+
+  const ver0 = await verificarEnvioLinea({
+    fila: fila0,
+    conexionEsperada: conexionId,
+    phoneIdEsperado: phoneId,
+    contenidoEsperado: contenidoPaso0,
+    linea,
+    pruebaNum,
+  });
+
+  if (!ver0.ok) {
+    if (ver0.motivo?.includes("mezcla")) stats.mezclas++;
+    fallo(`[${linea}${pruebaNum}] paso 0: ${ver0.motivo} ${ver0.detalle || ""}`);
+    stats.fallos++;
+    return false;
+  }
+
+  ok(`[${linea}${pruebaNum}] paso 0 enviado — "${contenidoPaso0}" por conexión ${conexionId}`);
+  stats.paso0++;
+
+  info(`[${linea}${pruebaNum}] Paso 1 — esperar y verificar "${contenidoPaso1}"`);
+  await esperarRunAtVencido(fila1.id, 120000);
+  await ejecutarWorkerHastaEstadoFinal(fila1.id);
+
+  const ver1 = await verificarEnvioLinea({
+    fila: fila1,
+    conexionEsperada: conexionId,
+    phoneIdEsperado: phoneId,
+    contenidoEsperado: contenidoPaso1,
+    linea,
+    pruebaNum,
+  });
+
+  if (!ver1.ok) {
+    if (ver1.motivo?.includes("mezcla")) stats.mezclas++;
+    fallo(`[${linea}${pruebaNum}] paso 1: ${ver1.motivo} ${ver1.detalle || ""}`);
+    stats.fallos++;
+    return false;
+  }
+
+  ok(`[${linea}${pruebaNum}] paso 1 enviado — "${contenidoPaso1}" por conexión ${conexionId}`);
+  stats.paso1++;
+  stats.campanasOk++;
+
+  return true;
+}
+
 async function prueba1NodoHardcodeado() {
   seccion("PRUEBA 1 — Nodo temporal V2 hardcodeado");
   const nodo = crearNodoSeguimientoV2Test();
@@ -254,7 +417,7 @@ async function prueba1NodoHardcodeado() {
     return false;
   }
 
-  ok("Nodo V2 test: 30s + 60s, SEGUIMIENTO V2 1 / SEGUIMIENTO V2 2");
+  ok("Nodo V2 test: 30s + 60s, variantes A/B por conexion_whatsapp_id (1A/2A o 1B/2B)");
   return true;
 }
 
@@ -281,31 +444,27 @@ async function pruebaLineaRepetida({ conexionId, linea, phoneId, repeticiones })
       conexionId,
     });
 
-    const fila0 = prog.items[0];
-    await ejecutarWorkerParaFila(fila0.id);
-
-    const ver = await verificarEnvioLinea({
-      fila: fila0,
-      conexionEsperada: conexionId,
-      phoneIdEsperado: phoneId,
+    await ejecutarCicloCampanaCompleta({
+      prog,
+      conexionId,
+      phoneId,
       linea,
       pruebaNum: i,
+      stats,
     });
-
-    if (!ver.ok) {
-      if (ver.motivo?.includes("mezcla")) stats.mezclas++;
-      fallo(`[${linea}${i}/${repeticiones}] ${ver.motivo}: ${ver.detalle || ""}`);
-      stats.fail++;
-    } else {
-      ok(`[${linea}${i}/${repeticiones}] ${ver.fila.estado} — conexión ${conexionId} → phone_id ${ver.phoneId || "—"}`);
-      stats.ok++;
-    }
 
     await cancelarCampanaPrueba(prog.campanaId, numero, conexionId);
   }
 
-  info(`Línea ${linea}: ${stats.ok}/${repeticiones} OK, ${stats.fail} fallos, ${stats.mezclas} mezclas`);
-  return stats.ok === repeticiones && stats.mezclas === 0;
+  info(
+    `Línea ${linea}: paso0=${stats.paso0}/${repeticiones} paso1=${stats.paso1}/${repeticiones} campanas=${stats.campanasOk}/${repeticiones} fallos=${stats.fallos} mezclas=${stats.mezclas}`
+  );
+  return (
+    stats.paso0 === repeticiones &&
+    stats.paso1 === repeticiones &&
+    stats.campanasOk === repeticiones &&
+    stats.mezclas === 0
+  );
 }
 
 async function prueba4CampanasSeparadas() {
@@ -486,7 +645,8 @@ async function prueba6ConexionInexistente() {
   }
 
   const fila = prog.items[0];
-  await ejecutarWorkerParaFila(fila.id);
+  await forzarRunAtPasado(fila.id);
+  await ejecutarWorkerTick();
 
   const actualizada = await obtenerFila(fila.id);
   if (actualizada.estado !== ESTADOS_SEGUIMIENTO_V2.FALLIDO) {
@@ -584,33 +744,52 @@ async function main() {
     ok("Campañas de prueba canceladas");
   }
 
-  seccion("CRITERIO DE ÉXITO");
-  const totalA = resultados.pruebaA.ok;
-  const totalB = resultados.pruebaB.ok;
-  const mezclas = resultados.pruebaA.mezclas + resultados.pruebaB.mezclas;
-  const corrioEnvio = solo !== 1;
-  const aprobado =
-    !process.exitCode &&
-    (!corrioEnvio ||
-      (totalA === REPETICIONES &&
-        totalB === REPETICIONES &&
-        mezclas === 0 &&
-        resultados.prueba4 &&
-        resultados.prueba5 &&
-        resultados.prueba6));
+  seccion("RESUMEN FINAL");
+  const paso0Total = resultados.pruebaA.paso0 + resultados.pruebaB.paso0;
+  const paso1Total = resultados.pruebaA.paso1 + resultados.pruebaB.paso1;
+  const paso0Esperado = REPETICIONES * 2;
+  const paso1Esperado = REPETICIONES * 2;
+  const mezclas =
+    resultados.pruebaA.mezclas + resultados.pruebaB.mezclas;
+  const fallos =
+    resultados.pruebaA.fallos + resultados.pruebaB.fallos;
 
-  console.log(`  A → A: ${totalA}/${REPETICIONES}`);
-  console.log(`  B → B: ${totalB}/${REPETICIONES}`);
-  console.log(`  Mezclas: ${mezclas}`);
+  console.log(`  Paso 0 enviados:  ${paso0Total}/${paso0Esperado}  (A=${resultados.pruebaA.paso0} B=${resultados.pruebaB.paso0})`);
+  console.log(`  Paso 1 enviados:  ${paso1Total}/${paso1Esperado}  (A=${resultados.pruebaA.paso1} B=${resultados.pruebaB.paso1})`);
+  console.log(`  Mezclas detectadas: ${mezclas}`);
+  console.log(`  Fallos detectados:  ${fallos}`);
   console.log(`  Prueba 4 (campañas separadas): ${resultados.prueba4 ? "OK" : "FAIL"}`);
   console.log(`  Prueba 5 (duplicado): ${resultados.prueba5 ? "OK" : "FAIL"}`);
   console.log(`  Prueba 6 (conexión inexistente): ${resultados.prueba6 ? "OK" : "FAIL"}`);
 
+  const corrioEnvio = solo !== 1;
+  const suiteCompleta = !solo;
+  const pasoAOk =
+    solo && solo !== 2
+      ? true
+      : resultados.pruebaA.paso0 === REPETICIONES &&
+        resultados.pruebaA.paso1 === REPETICIONES;
+  const pasoBOk =
+    solo && solo !== 3
+      ? true
+      : resultados.pruebaB.paso0 === REPETICIONES &&
+        resultados.pruebaB.paso1 === REPETICIONES;
+  const aprobado =
+    !process.exitCode &&
+    (!corrioEnvio ||
+      (pasoAOk &&
+        pasoBOk &&
+        mezclas === 0 &&
+        fallos === 0 &&
+        (!suiteCompleta ||
+          (resultados.prueba4 && resultados.prueba5 && resultados.prueba6))));
+
   if (aprobado) {
-    console.log("\n✅ SEGUIMIENTO CRM V2 APROBADO — listo para UI premium.");
+    console.log("\n✅ SEGUIMIENTO CRM V2 APROBADO — ciclo completo validado.");
+    console.log("   SEGUIMIENTO V2 1A/2A o 1B/2B según conexión — sin mezcla A/B");
     console.log("   0 mezclas | 0 fallback | strict conexión por línea");
   } else {
-    console.log("\n❌ Pruebas con fallos — revisar logs [SEG_V2_TEST] arriba.");
+    console.log("\n❌ Pruebas con fallos — revisar logs [SEG_V2_TEST] y [SEG_V2_STEP] arriba.");
     process.exit(process.exitCode || 1);
   }
 }

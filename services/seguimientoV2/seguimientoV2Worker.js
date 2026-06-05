@@ -11,7 +11,7 @@ const {
   adquirirLockWorkerSeguimientoV2,
   liberarLockWorkerSeguimientoV2,
 } = require("./seguimientoV2WorkerLock");
-const { logSegV2Test } = require("./seguimientoV2TestLog");
+const { logSegV2Test, logSegV2Step, logSegV2PendingCount } = require("./seguimientoV2TestLog");
 
 async function marcarFallido(item, motivo, evento) {
   await actualizarEstado(item.id, ESTADOS_SEGUIMIENTO_V2.FALLIDO, {
@@ -150,6 +150,18 @@ async function procesarSeguimientosV2Vencidos(opts = {}) {
 
   try {
     const pendientes = await obtenerPendientesVencidos({ limite: 40 });
+
+    const porPasoIndex = {};
+    for (const item of pendientes) {
+      const idx = item.paso_index ?? "?";
+      porPasoIndex[idx] = (porPasoIndex[idx] || 0) + 1;
+    }
+
+    logSegV2PendingCount(pendientes.length, {
+      por_paso_index: porPasoIndex,
+      ahora: new Date().toISOString(),
+    });
+
     if (!pendientes.length) {
       return { procesados: 0, enviados: 0, lock: "acquired" };
     }
@@ -160,6 +172,15 @@ async function procesarSeguimientosV2Vencidos(opts = {}) {
     let enviados = 0;
 
     for (const item of pendientes) {
+      logSegV2Step({
+        campana_id: item.campana_id,
+        seguimiento_v2_id: item.id,
+        paso_index: item.paso_index,
+        estado: item.estado,
+        run_at: item.run_at,
+        conexion_whatsapp_id: item.conexion_whatsapp_id,
+        contenido: item.contenido,
+      });
       const res = await procesarSeguimientoV2Item(item);
       procesados++;
       if (res?.ok && res.motivo === "enviado") {
