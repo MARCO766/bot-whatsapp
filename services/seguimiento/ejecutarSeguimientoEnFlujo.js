@@ -75,6 +75,7 @@ async function ejecutarSeguimientoEnFlujo({
     nodoId,
     html,
     conexionWhatsappId: conexionId,
+    origen: "ejecutarSeguimientoEnFlujo",
   });
 
   console.log("[SEGUIMIENTO] insert seguimiento", {

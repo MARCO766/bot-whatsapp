@@ -952,6 +952,15 @@ async function ejecutarFlujo(
           );
         }
 
+        console.log("[FLUJO_SEGUIMIENTO_PROGRAMAR]", {
+          cliente_numero: numero,
+          flujo_id: flujoId,
+          nodo_id: nodoId,
+          conexion_whatsapp_id: conexionParaSeguimiento,
+          conexion_linea_entrante: conexionLineaEntrante,
+          flow_context_conexion: flowContext.conexionWhatsappId ?? null,
+        });
+
         await ejecutarSeguimientoEnFlujo({
           numero,
           usuarioId,
@@ -1811,7 +1820,25 @@ async function cargarActivadoresActivos(usuarioId, conexionWhatsappId) {
       `${SUPABASE_URL}/rest/v1/activadores?select=id,frase,flujo_id,activo,prioridad,coincidencia,veces_usado,repetible,tipo_activador,palabras_clave_array,conexion_whatsapp_id&activo=eq.true&usuario_id=eq.${usuarioId}&conexion_whatsapp_id=eq.${connEnc}`,
       { headers: supabaseHeaders() }
     );
-    return responseActivadores.data || [];
+    const lista = responseActivadores.data || [];
+    const testbEnLinea = lista.filter((a) =>
+      String(a.frase || "")
+        .toLowerCase()
+        .includes("testb")
+    );
+    if (testbEnLinea.length) {
+      console.log("[ACTIVADOR_TESTB_EN_LINEA]", {
+        conexion_whatsapp_id: conexionWhatsappId,
+        total_activadores_linea: lista.length,
+        activadores_testb: testbEnLinea.map((a) => ({
+          id: a.id,
+          frase: a.frase,
+          flujo_id: a.flujo_id,
+          conexion_whatsapp_id: a.conexion_whatsapp_id ?? null,
+        })),
+      });
+    }
+    return lista;
   } catch (e) {
     console.log(
       "[ACTIVADOR] fallback sin columnas extendidas:",
@@ -1863,6 +1890,16 @@ async function resolverActivadorEntrante(
   }
 
   if (!activador || !matchInfo) return null;
+
+  console.log("[ACTIVADOR_MATCH_TRACE]", {
+    texto_norm: textoNorm,
+    activador_id: activador.id,
+    frase: activador.frase,
+    activador_conexion_whatsapp_id: activador.conexion_whatsapp_id ?? null,
+    conexion_entrante: conexionWhatsappId,
+    flujo_id: activador.flujo_id,
+    tipo_match: matchInfo.tipo,
+  });
 
   const flowId = activador.flujo_id;
   if (!flowId || flowId === "undefined" || flowId === "null") return null;

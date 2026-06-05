@@ -534,6 +534,132 @@ async function listarPorNodo(flujoId, nodoId, usuarioId, limite = 30) {
   return response.data || [];
 }
 
+/** Estados activos cancelables al reemplazar por otra línea (cross-line). */
+const ESTADOS_ACTIVOS_CANCELABLES_CROSS_LINE = [
+  ESTADOS_SEGUIMIENTO.PENDIENTE,
+  "programado",
+  "reintentando",
+  "activo",
+  ESTADOS_SEGUIMIENTO.PROCESANDO,
+];
+
+async function patchCancelacionConMotivoOpcional(url, motivo) {
+  const ahora = nowUtc();
+  const base = {
+    estado: ESTADOS_SEGUIMIENTO.CANCELADO,
+    actualizado_en: ahora,
+    cancelado_en: ahora,
+    error_detalle: motivo || null,
+  };
+
+  try {
+    return await axios.patch(url, { ...base, cancel_reason: motivo || null }, {
+      headers: headers({ Prefer: "return=representation" }),
+    });
+  } catch (err) {
+    const msg = String(err.response?.data?.message || err.message || "");
+    if (msg.includes("cancel_reason")) {
+      return await axios.patch(url, base, {
+        headers: headers({ Prefer: "return=representation" }),
+      });
+    }
+    throw err;
+  }
+}
+
+/**
+ * Al programar en línea nueva: cancela seguimientos activos del mismo flujo/nodo en otras líneas.
+ */
+async function cancelarActivosOtrasConexiones({
+  usuarioId,
+  numero,
+  flujoId,
+  nodoId,
+  conexionWhatsappId,
+  motivo = "cross_line_replaced",
+}) {
+  const conexionNueva = normalizarConexionId(conexionWhatsappId);
+  const cliente = numero != null ? String(numero).trim() : "";
+  const usuario = usuarioId != null ? String(usuarioId).trim() : "";
+
+  if (!conexionNueva || !cliente || !usuario || !nodoId) {
+    return { cancelados: 0, filas: [] };
+  }
+
+  const estados = ESTADOS_ACTIVOS_CANCELABLES_CROSS_LINE.join(",");
+
+  const url =
+    `${SUPABASE_URL}/rest/v1/seguimientos_programados?` +
+    `cliente_numero=eq.${encodeURIComponent(cliente)}` +
+    `&usuario_id=eq.${encodeURIComponent(usuario)}` +
+    `&${filtroEqCampo("flujo_id", flujoId)}` +
+    `&nodo_id=eq.${encodeURIComponent(nodoId)}` +
+    `&conexion_whatsapp_id=not.is.null` +
+    `&conexion_whatsapp_id=neq.${encodeURIComponent(conexionNueva)}` +
+    `&estado=in.(${estados})`;
+
+  try {
+    const response = await patchCancelacionConMotivoOpcional(url, motivo);
+    const filas = response.data || [];
+    return { cancelados: filas.length, filas };
+  } catch (error) {
+    console.log(
+      "[SEG_CROSS_LINE_CANCEL] error cancelando otras líneas:",
+      error.response?.data || error.message
+    );
+    throw error;
+  }
+}
+
+/**
+ * Mismo lead + flujo + nodo + paso en otra línea WhatsApp (diagnóstico A+B).
+ * No filtra por conexion_whatsapp_id de la clave lead.
+ */
+async function listarMismoPasoOtraConexion({
+  numero,
+  usuarioId,
+  conexionWhatsappId,
+  flujoId,
+  nodoId,
+  pasoIndex,
+}) {
+  const conexionNueva = normalizarConexionId(conexionWhatsappId);
+  if (!numero || !usuarioId || !conexionNueva || !nodoId || pasoIndex == null) {
+    return [];
+  }
+
+  const estados = [
+    ESTADOS_SEGUIMIENTO.PENDIENTE,
+    ESTADOS_SEGUIMIENTO.PROCESANDO,
+    ESTADOS_SEGUIMIENTO.ENVIADO,
+  ].join(",");
+
+  const url =
+    `${SUPABASE_URL}/rest/v1/seguimientos_programados?` +
+    `cliente_numero=eq.${encodeURIComponent(numero)}` +
+    `&usuario_id=eq.${encodeURIComponent(usuarioId)}` +
+    `&${filtroEqCampo("flujo_id", flujoId)}` +
+    `&nodo_id=eq.${encodeURIComponent(nodoId)}` +
+    `&paso_index=eq.${pasoIndex}` +
+    `&estado=in.(${estados})` +
+    `&conexion_whatsapp_id=neq.${encodeURIComponent(conexionNueva)}` +
+    `&select=id,campana_id,estado,conexion_whatsapp_id,run_at,creado_en,enviado_en` +
+    `&order=creado_en.desc&limit=5`;
+
+  try {
+    const response = await axios.get(url, { headers: headers() });
+    return (response.data || []).filter(
+      (row) => normalizarConexionId(row.conexion_whatsapp_id) !== conexionNueva
+    );
+  } catch (error) {
+    console.log(
+      "[SEGUIMIENTO_CROSS_LINE] error consultando paso en otra línea:",
+      error.response?.data || error.message
+    );
+    return [];
+  }
+}
+
 /** Campaña activa (pendiente/procesando) para la misma clave de programación. */
 async function obtenerCampanaActivaProgramacion({
   numero,
@@ -601,4 +727,6 @@ module.exports = {
   listarPorCliente,
   listarPorNodo,
   obtenerCampanaActivaProgramacion,
+  listarMismoPasoOtraConexion,
+  cancelarActivosOtrasConexiones,
 };

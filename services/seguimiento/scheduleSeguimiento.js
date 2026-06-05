@@ -3,6 +3,8 @@ const { parseSeguimientoFromHtml } = require("./parseSeguimientoNode");
 const {
   insertarProgramados,
   obtenerCampanaActivaProgramacion,
+  listarMismoPasoOtraConexion,
+  cancelarActivosOtrasConexiones,
 } = require("./seguimientoRepository");
 const { ESTADOS_SEGUIMIENTO } = require("./constants");
 const { nowUtc, toTimestamptzUtc } = require("./timestamps");
@@ -19,6 +21,41 @@ function normalizarConexionProgramar(conexionWhatsappId) {
   return String(conexionWhatsappId).trim();
 }
 
+async function logearDupCrossLineAlProgramar({
+  numero,
+  usuarioId,
+  conexionWhatsappId,
+  flujoId,
+  nodoId,
+  pasoIndex,
+  origen,
+}) {
+  const existentes = await listarMismoPasoOtraConexion({
+    numero,
+    usuarioId,
+    conexionWhatsappId,
+    flujoId,
+    nodoId,
+    pasoIndex,
+  });
+
+  for (const row of existentes) {
+    console.log("[SEG_DUP_CROSS_LINE_DETECTED]", {
+      cliente_numero: numero,
+      flujo_id: flujoId ?? null,
+      nodo_id: nodoId,
+      paso_index: pasoIndex,
+      conexion_existente: row.conexion_whatsapp_id ?? null,
+      conexion_nueva: conexionWhatsappId,
+      estado_existente: row.estado ?? null,
+      seguimiento_existente_id: row.id ?? null,
+      campana_existente_id: row.campana_id ?? null,
+      run_at_existente: row.run_at ?? null,
+      origen: origen || null,
+    });
+  }
+}
+
 async function programarSeguimientoNodo({
   numero,
   usuarioId,
@@ -26,6 +63,7 @@ async function programarSeguimientoNodo({
   nodoId,
   html,
   conexionWhatsappId = null,
+  origen = "programarSeguimientoNodo",
 }) {
   const conexionId = normalizarConexionProgramar(conexionWhatsappId);
   if (!conexionId) {
@@ -66,6 +104,33 @@ async function programarSeguimientoNodo({
     };
   }
 
+  const { cancelados: canceladosCrossLine, filas: filasCanceladasCrossLine } =
+    await cancelarActivosOtrasConexiones({
+      usuarioId,
+      numero,
+      flujoId,
+      nodoId,
+      conexionWhatsappId: conexionId,
+      motivo: "cross_line_replaced",
+    });
+
+  console.log("[SEG_CROSS_LINE_CANCEL]", {
+    usuario_id: usuarioId,
+    cliente_numero: numero,
+    flujo_id: flujoId ?? null,
+    nodo_id: nodoId,
+    conexion_nueva: conexionId,
+    cancelados: canceladosCrossLine,
+    ids: (filasCanceladasCrossLine || []).map((r) => r.id),
+    conexiones_canceladas: [
+      ...new Set(
+        (filasCanceladasCrossLine || [])
+          .map((r) => r.conexion_whatsapp_id)
+          .filter(Boolean)
+      ),
+    ],
+  });
+
   const campanaId = crypto.randomUUID();
   const checkpointAt = checkpointAlProgramar();
   let acumuladoSegundos = 0;
@@ -85,9 +150,31 @@ async function programarSeguimientoNodo({
   });
   const rows = [];
 
-  config.pasos.forEach((paso, index) => {
+  for (let index = 0; index < config.pasos.length; index++) {
+    const paso = config.pasos[index];
     acumuladoSegundos += paso.segundos;
     const runAt = toTimestamptzUtc(Date.now() + acumuladoSegundos * 1000);
+
+    await logearDupCrossLineAlProgramar({
+      numero,
+      usuarioId,
+      conexionWhatsappId: conexionId,
+      flujoId,
+      nodoId,
+      pasoIndex: index,
+      origen,
+    });
+
+    console.log("[SEG_SCHEDULE_TRACE]", {
+      cliente_numero: numero,
+      flujo_id: flujoId ?? null,
+      nodo_id: nodoId,
+      conexion_whatsapp_id: conexionId,
+      paso_index: index,
+      run_at: runAt,
+      origen,
+      campana_id: campanaId,
+    });
 
     const row = {
       campana_id: campanaId,
@@ -124,7 +211,7 @@ async function programarSeguimientoNodo({
       mensaje: String(mensaje).trim(),
       conexionWhatsappId: conexionId,
     });
-  });
+  }
 
   console.log(
     `[SCHEDULE SEGUIMIENTO] cliente_numero=${numero} flujo_id=${flujoId ?? null} nodo_id=${nodoId} conexion_whatsapp_id=${conexionId}`

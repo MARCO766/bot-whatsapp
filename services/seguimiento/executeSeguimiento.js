@@ -419,6 +419,53 @@ async function procesarSeguimientoItem(item, io) {
   return intentarReservarYEnviarPaso(item, io);
 }
 
+function logCrucesConexionEnLoteWorker(pendientes) {
+  const grupos = new Map();
+
+  for (const item of pendientes) {
+    const key = [
+      item.usuario_id || "",
+      item.cliente_numero || "",
+      item.flujo_id || "",
+      item.nodo_id || "",
+      String(item.paso_index ?? ""),
+    ].join("|");
+
+    if (!grupos.has(key)) grupos.set(key, []);
+    grupos.get(key).push(item);
+  }
+
+  for (const [, items] of grupos) {
+    if (items.length < 2) continue;
+
+    const conexiones = [
+      ...new Set(
+        items
+          .map((i) =>
+            i.conexion_whatsapp_id != null ? String(i.conexion_whatsapp_id).trim() : ""
+          )
+          .filter(Boolean)
+      ),
+    ];
+
+    if (conexiones.length < 2) continue;
+
+    console.log("[SEG_WORKER_CROSS_LINE_BATCH]", {
+      cliente_numero: items[0].cliente_numero,
+      flujo_id: items[0].flujo_id ?? null,
+      nodo_id: items[0].nodo_id ?? null,
+      paso_index: items[0].paso_index ?? null,
+      conexiones,
+      filas: items.map((i) => ({
+        id: i.id,
+        conexion_whatsapp_id: i.conexion_whatsapp_id ?? null,
+        run_at: i.run_at ?? null,
+        estado: i.estado ?? null,
+      })),
+    });
+  }
+}
+
 async function procesarSeguimientosVencidos(io) {
   const lock = await adquirirLockWorkerSeguimiento();
   if (!lock.acquired) {
@@ -431,6 +478,7 @@ async function procesarSeguimientosVencidos(io) {
     if (!pendientes.length) return { procesados: 0, enviados: 0, lock: "acquired" };
 
     console.log("[SEGUIMIENTO_WORKER] pendientes:", pendientes.length);
+    logCrucesConexionEnLoteWorker(pendientes);
 
     let procesados = 0;
     let enviados = 0;
