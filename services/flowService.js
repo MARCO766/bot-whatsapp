@@ -7,6 +7,10 @@ const { ejecutarSeguimientoEnFlujo } = require("./seguimiento/ejecutarSeguimient
 const { esNodoSeguimientoV2 } = require("./seguimientoV2/seguimientoV2Parser");
 const { programarSeguimientoV2EnFlujo } = require("./seguimientoV2/seguimientoV2Service");
 const {
+  crearNodoSeguimientoV2Test,
+  esNodoSeguimientoV2Test,
+} = require("./seguimientoV2/seguimientoV2TestNode");
+const {
   registrarConversion,
   parseConversionFromNodo,
 } = require("./conversionService");
@@ -975,12 +979,16 @@ async function ejecutarFlujo(
           );
         }
 
+        const nodoV2 = esNodoSeguimientoV2Test(nodo)
+          ? crearNodoSeguimientoV2Test({ id: nodoId })
+          : nodo;
+
         await programarSeguimientoV2EnFlujo({
           numero,
           usuarioId,
           flujoId,
           nodoId,
-          nodo,
+          nodo: nodoV2,
           conexionWhatsappId: conexionParaSeguimientoV2,
         });
       } catch (err) {

@@ -8,6 +8,7 @@ const {
   existeMensajePorSeguimientoV2Id,
   resolverConexionV2,
 } = require("./seguimientoV2Guards");
+const { logSegV2Test } = require("./seguimientoV2TestLog");
 
 function buildOpcionesEnvioV2(item) {
   const conexionId = obtenerConexionItem(item);
@@ -118,6 +119,17 @@ async function enviarSeguimientoV2(item) {
     conexion_whatsapp_id: conexionId,
     phone_id: conexion.phone_id,
     meta_message_id: metaMessageId,
+  });
+
+  logSegV2Test({
+    campana_id: item.campana_id ?? null,
+    seguimiento_v2_id: seguimientoV2Id,
+    conexion_whatsapp_id: conexionId,
+    phone_id: conexion.phone_id,
+    estado: "post_meta",
+    paso_index: item.paso_index ?? null,
+    cliente_numero: item.cliente_numero ?? null,
+    prueba: "envio",
   });
 
   return {

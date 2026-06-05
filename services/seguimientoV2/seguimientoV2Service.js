@@ -7,6 +7,7 @@ const {
   normalizarConexionId,
 } = require("./seguimientoV2Repository");
 const { ESTADOS_SEGUIMIENTO_V2 } = require("./constants");
+const { logSegV2Test } = require("./seguimientoV2TestLog");
 
 function toTimestamptzUtc(value) {
   const date = value instanceof Date ? value : new Date(value);
@@ -136,6 +137,18 @@ async function programarSeguimientoV2EnFlujo({
     nodo_id: nodoId,
     checkpoint_at: checkpointAt,
   });
+
+  for (const fila of insertados) {
+    logSegV2Test({
+      campana_id: campanaId,
+      seguimiento_v2_id: fila.id,
+      conexion_whatsapp_id: conexionId,
+      estado: fila.estado,
+      paso_index: fila.paso_index,
+      cliente_numero: numero,
+      prueba: "programado",
+    });
+  }
 
   return {
     campanaId,

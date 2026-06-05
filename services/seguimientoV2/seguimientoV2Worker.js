@@ -11,6 +11,7 @@ const {
   adquirirLockWorkerSeguimientoV2,
   liberarLockWorkerSeguimientoV2,
 } = require("./seguimientoV2WorkerLock");
+const { logSegV2Test } = require("./seguimientoV2TestLog");
 
 async function marcarFallido(item, motivo, evento) {
   await actualizarEstado(item.id, ESTADOS_SEGUIMIENTO_V2.FALLIDO, {
@@ -71,17 +72,48 @@ async function procesarSeguimientoV2Item(item) {
 
   if (resultado.omitido) {
     await marcarOmitidoDuplicado(reservado);
+    logSegV2Test({
+      campana_id: reservado.campana_id,
+      seguimiento_v2_id: reservado.id,
+      conexion_whatsapp_id: conexionId,
+      estado: ESTADOS_SEGUIMIENTO_V2.OMITIDO_DUPLICADO,
+      paso_index: reservado.paso_index,
+      cliente_numero: reservado.cliente_numero,
+      prueba: "worker",
+      motivo: "omitido_duplicado",
+    });
     return { ok: true, motivo: "omitido_duplicado" };
   }
 
   if (!resultado.ok) {
     const motivo = resultado.motivo || "error_envio";
     await marcarFallido(reservado, motivo, motivo);
+    logSegV2Test({
+      campana_id: reservado.campana_id,
+      seguimiento_v2_id: reservado.id,
+      conexion_whatsapp_id: conexionId,
+      estado: ESTADOS_SEGUIMIENTO_V2.FALLIDO,
+      paso_index: reservado.paso_index,
+      cliente_numero: reservado.cliente_numero,
+      prueba: "worker",
+      motivo,
+    });
     return { ok: false, motivo };
   }
 
   await actualizarEstado(reservado.id, ESTADOS_SEGUIMIENTO_V2.ENVIADO, {
     meta_message_id: resultado.metaMessageId || null,
+  });
+
+  logSegV2Test({
+    campana_id: reservado.campana_id,
+    seguimiento_v2_id: reservado.id,
+    conexion_whatsapp_id: conexionId,
+    phone_id: resultado.phoneId || null,
+    estado: ESTADOS_SEGUIMIENTO_V2.ENVIADO,
+    paso_index: reservado.paso_index,
+    cliente_numero: reservado.cliente_numero,
+    prueba: "worker",
   });
 
   await insertarLog({

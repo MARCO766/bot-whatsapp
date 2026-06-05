@@ -1,4 +1,17 @@
-const UNIDADES_VALIDAS = ["minutos", "minuto", "horas", "hora", "dias", "dia", "día", "días"];
+const UNIDADES_VALIDAS = [
+  "segundos",
+  "segundo",
+  "sec",
+  "s",
+  "minutos",
+  "minuto",
+  "horas",
+  "hora",
+  "dias",
+  "dia",
+  "día",
+  "días",
+];
 const TIPOS_VALIDOS = ["texto", "imagen", "video", "audio", "pdf", "document"];
 
 function decodeHtmlJson(raw) {
@@ -13,6 +26,7 @@ function decodeHtmlJson(raw) {
 
 function normalizarUnidad(unidad) {
   const u = String(unidad || "minutos").toLowerCase();
+  if (u === "segundo" || u === "segundos" || u === "sec" || u === "s") return "segundos";
   if (u === "dia" || u === "día" || u === "dias" || u === "días") return "dias";
   if (u === "hora" || u === "horas") return "horas";
   return "minutos";
@@ -23,6 +37,7 @@ function delayToSeconds(valor, unidad) {
   if (isNaN(n) || n <= 0) return 0;
 
   const u = normalizarUnidad(unidad);
+  if (u === "segundos") return n;
   if (u === "horas") return n * 3600;
   if (u === "dias") return n * 86400;
   return n * 60;
