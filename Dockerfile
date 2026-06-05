@@ -48,6 +48,7 @@ COPY --chown=macbot:nodejs \
   ./
 
 COPY --chown=macbot:nodejs routes ./routes
+COPY --chown=macbot:nodejs config ./config
 COPY --chown=macbot:nodejs services ./services
 COPY --chown=macbot:nodejs middlewares ./middlewares
 COPY --chown=macbot:nodejs jobs ./jobs
