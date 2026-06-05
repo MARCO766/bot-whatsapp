@@ -1,4 +1,5 @@
 const { esNodoSeguimiento } = require("./parseSeguimientoNode");
+const { esNodoSeguimientoV2 } = require("../seguimientoV2/seguimientoV2Parser");
 
 function resolverTipoRaw(nodo) {
   return String(
@@ -90,6 +91,10 @@ function detectarTipoNodo(nodo) {
 
   if (esTipoIA(nodo)) {
     return "ia";
+  }
+
+  if (esNodoSeguimientoV2(nodo)) {
+    return "seguimiento_crm_v2";
   }
 
   if (esNodoSeguimiento(nodo)) {

@@ -4,6 +4,8 @@ const { enviarTextoWhatsApp, enviarMediaWhatsApp } = require("./whatsappService"
 const { esperarSegundos } = require("../utils/timers");
 const { detectarTipoNodo } = require("./seguimiento/detectarTipoNodo");
 const { ejecutarSeguimientoEnFlujo } = require("./seguimiento/ejecutarSeguimientoEnFlujo");
+const { esNodoSeguimientoV2 } = require("./seguimientoV2/seguimientoV2Parser");
+const { programarSeguimientoV2EnFlujo } = require("./seguimientoV2/seguimientoV2Service");
 const {
   registrarConversion,
   parseConversionFromNodo,
@@ -858,8 +860,13 @@ async function ejecutarFlujo(
     const html = nodo.html || "";
     const tipoNodo = detectarTipoNodo(nodo);
     const tipoRaw = resolverTipoRaw(nodo);
-    const esSeguimientoCRM = nodoEsSeguimientoCRM(nodo);
-    const tipoEjecucion = esSeguimientoCRM ? "seguimiento" : tipoNodo;
+    const esSeguimientoV2 = esNodoSeguimientoV2(nodo);
+    const esSeguimientoCRM = !esSeguimientoV2 && nodoEsSeguimientoCRM(nodo);
+    const tipoEjecucion = esSeguimientoV2
+      ? "seguimiento_crm_v2"
+      : esSeguimientoCRM
+        ? "seguimiento"
+        : tipoNodo;
 
     if (esSeguimientoCRM && tipoNodo !== "seguimiento") {
       logSeguimientoLegacyBloqueado({
@@ -955,6 +962,41 @@ async function ejecutarFlujo(
       }
 
       await continuarASiguientes(nodoId, visitados, "conversion");
+      return;
+    }
+
+    if (tipoEjecucion === "seguimiento_crm_v2") {
+      try {
+        const conexionParaSeguimientoV2 = conexionLineaEntrante;
+
+        if (!conexionParaSeguimientoV2) {
+          throw new Error(
+            "Seguimiento V2 en flujo: falta conexion_whatsapp_id de la línea entrante (webhook)"
+          );
+        }
+
+        await programarSeguimientoV2EnFlujo({
+          numero,
+          usuarioId,
+          flujoId,
+          nodoId,
+          nodo,
+          conexionWhatsappId: conexionParaSeguimientoV2,
+        });
+      } catch (err) {
+        console.error(
+          "[FLUJO] ✗ Error programando seguimiento V2:",
+          err.response?.data || err.message
+        );
+      }
+
+      console.log("[SEGUIMIENTO_V2_FLUJO_TERMINAL]", {
+        nodoId,
+        flujoId,
+        cliente_numero: numero,
+        conexion_whatsapp_id: conexionLineaEntrante ?? null,
+        motivo: "sin_continuarASiguientes — envíos solo vía worker V2 (futuro)",
+      });
       return;
     }
 

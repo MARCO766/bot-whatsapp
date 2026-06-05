@@ -236,6 +236,10 @@ server.listen(PORT, () => {
   startSeguimientoWorker(app).catch((err) => {
     console.error("[SEGUIMIENTO_WORKER] error al arrancar:", err.message);
   });
+  const { startSeguimientoV2Worker } = require("./jobs/seguimientoV2Worker");
+  startSeguimientoV2Worker(app).catch((err) => {
+    console.error("[SEG_V2_WORKER] error al arrancar:", err.message);
+  });
   const { startRemarketing24hWorker } = require("./jobs/remarketing24hWorker");
   startRemarketing24hWorker();
   console.log("🚀 Servidor corriendo en puerto", PORT);
