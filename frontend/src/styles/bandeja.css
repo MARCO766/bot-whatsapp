@@ -1167,12 +1167,12 @@
 
 .messageRow.in {
   justify-content: flex-start;
-  padding-right: 12%;
+  padding-right: 6%;
 }
 
 .messageRow.out {
   justify-content: flex-end;
-  padding-left: 12%;
+  padding-left: 6%;
 }
 
 .messageRow.system {
