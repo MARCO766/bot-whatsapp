@@ -1165,14 +1165,18 @@
   padding: 1px 0;
 }
 
+.messageRow.in,
+.messageRow.out {
+  padding-left: 0;
+  padding-right: 0;
+}
+
 .messageRow.in {
   justify-content: flex-start;
-  padding-right: 6%;
 }
 
 .messageRow.out {
   justify-content: flex-end;
-  padding-left: 6%;
 }
 
 .messageRow.system {
@@ -1183,7 +1187,7 @@
 
 .bubble {
   position: relative;
-  max-width: 62%;
+  max-width: min(62%, 480px);
   width: fit-content;
   min-width: 72px;
   padding: 8px 10px 6px 11px;
@@ -1202,12 +1206,14 @@
 }
 
 .bubble.client {
+  margin-right: auto;
   background: #202c33;
   color: #e9edef;
   border-top-left-radius: 0;
 }
 
 .bubble.me {
+  margin-left: auto;
   background: #005c4b;
   color: #e9edef;
   border-top-right-radius: 0;
@@ -1682,14 +1688,6 @@
   .chatWindow {
     min-height: 0;
     height: 100%;
-  }
-
-  .messageRow.in {
-    padding-right: 6%;
-  }
-
-  .messageRow.out {
-    padding-left: 6%;
   }
 
   .bubble {
