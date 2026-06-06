@@ -20,7 +20,7 @@ function messageMime(msg) {
   ).trim();
 }
 
-export default function MessageBubble({ msg, uploadProgress }) {
+export default function MessageBubble({ msg, uploadProgress, onMediaLayout }) {
   const isMe = msg.direccion === "saliente";
   const isSystem = msg.direccion === "sistema";
   const kind = resolveMediaKind(msg);
@@ -29,6 +29,8 @@ export default function MessageBubble({ msg, uploadProgress }) {
   const mime = messageMime(msg);
   const checks =
     isMe && uploadProgress == null ? messageChecks(msg.estado_envio) : null;
+
+  const notifyMediaLayout = () => onMediaLayout?.();
 
   const timeLabel =
     uploadProgress != null && uploadProgress < 100
@@ -52,7 +54,11 @@ export default function MessageBubble({ msg, uploadProgress }) {
         className={`bubble ${isMe ? "me" : "client"}${hasMedia ? " hasMedia" : ""}`}
       >
         {msg._localPreview && uploadProgress != null && (
-          <UploadPreview preview={msg._localPreview} progress={uploadProgress} />
+          <UploadPreview
+            preview={msg._localPreview}
+            progress={uploadProgress}
+            onMediaLayout={notifyMediaLayout}
+          />
         )}
 
         {!msg._localPreview && kind === "image" && url && (
@@ -62,7 +68,13 @@ export default function MessageBubble({ msg, uploadProgress }) {
             rel="noopener noreferrer"
             className="mediaCard"
           >
-            <img src={url} alt="" className="media-img" loading="lazy" />
+            <img
+              src={url}
+              alt=""
+              className="media-img"
+              loading="lazy"
+              onLoad={notifyMediaLayout}
+            />
           </a>
         )}
 
@@ -74,6 +86,7 @@ export default function MessageBubble({ msg, uploadProgress }) {
               className="media-video"
               preload="metadata"
               playsInline
+              onLoadedMetadata={notifyMediaLayout}
             >
               {mime ? <source src={url} type={mime} /> : null}
             </video>
@@ -85,7 +98,12 @@ export default function MessageBubble({ msg, uploadProgress }) {
             <span className="audioIcon" aria-hidden>
               🎵
             </span>
-            <audio controls className="media-audio" preload="metadata">
+            <audio
+              controls
+              className="media-audio"
+              preload="metadata"
+              onLoadedMetadata={notifyMediaLayout}
+            >
               <source src={url} type={mime || undefined} />
             </audio>
           </div>
@@ -120,13 +138,14 @@ export default function MessageBubble({ msg, uploadProgress }) {
   );
 }
 
-function UploadPreview({ preview, progress }) {
+function UploadPreview({ preview, progress, onMediaLayout }) {
   const mime = preview.mimeType || "";
+  const notify = () => onMediaLayout?.();
 
   if (preview.kind === "image" && preview.url) {
     return (
       <div className="mediaCard">
-        <img src={preview.url} alt="" className="media-img" />
+        <img src={preview.url} alt="" className="media-img" onLoad={notify} />
         {progress < 100 && <span className="uploadPct">{progress}%</span>}
       </div>
     );
@@ -141,6 +160,7 @@ function UploadPreview({ preview, progress }) {
           className="media-video"
           preload="metadata"
           playsInline
+          onLoadedMetadata={notify}
         >
           {mime ? <source src={preview.url} type={mime} /> : null}
         </video>
@@ -155,7 +175,12 @@ function UploadPreview({ preview, progress }) {
         <span className="audioIcon" aria-hidden>
           🎵
         </span>
-        <audio controls className="media-audio" preload="metadata">
+        <audio
+          controls
+          className="media-audio"
+          preload="metadata"
+          onLoadedMetadata={notify}
+        >
           <source src={preview.url} type={mime || undefined} />
         </audio>
         {progress < 100 && <span className="uploadPct">{progress}%</span>}

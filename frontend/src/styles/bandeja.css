@@ -1135,6 +1135,10 @@
   pointer-events: none;
 }
 
+.messagesInner {
+  display: block;
+}
+
 .loadingChat {
   display: flex;
   align-items: center;

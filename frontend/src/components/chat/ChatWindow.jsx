@@ -8,6 +8,9 @@ import {
   etiquetaVentanaBadge,
 } from "../../utils/whatsappVentana24h";
 
+/** Distancia al fondo (px) para considerar que el usuario sigue al final del hilo. */
+const NEAR_BOTTOM_PX = 120;
+
 export default function ChatWindow({
   panelActivo = false,
   chat,
@@ -23,6 +26,9 @@ export default function ChatWindow({
   onPatchBotPause,
 }) {
   const scrollRef = useRef(null);
+  const messagesContentRef = useRef(null);
+  const pinnedToBottomRef = useRef(true);
+  const autoScrollingRef = useRef(false);
   const [ventanaTick, setVentanaTick] = useState(0);
   const [flowLoading, setFlowLoading] = useState(false);
   const numero = panelActivo ? chat?.numero || chat?.cliente_numero : null;
@@ -55,9 +61,23 @@ export default function ChatWindow({
     return () => clearInterval(id);
   }, [numero, ventanaAbierta]);
 
-  const scrollToBottom = useCallback((instant = false) => {
+  const isNearBottom = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return true;
+    return el.scrollHeight - el.scrollTop - el.clientHeight <= NEAR_BOTTOM_PX;
+  }, []);
+
+  const syncPinnedFromScroll = useCallback(() => {
+    if (autoScrollingRef.current) return;
+    pinnedToBottomRef.current = isNearBottom();
+  }, [isNearBottom]);
+
+  const scrollToBottom = useCallback((instant = false, { force = false } = {}) => {
     const el = scrollRef.current;
     if (!el) return;
+    if (!force && !pinnedToBottomRef.current) return;
+
+    autoScrollingRef.current = true;
 
     const run = () => {
       if (instant) {
@@ -69,24 +89,51 @@ export default function ChatWindow({
 
     requestAnimationFrame(() => {
       run();
-      requestAnimationFrame(run);
+      requestAnimationFrame(() => {
+        run();
+        autoScrollingRef.current = false;
+        pinnedToBottomRef.current = true;
+      });
     });
+
+    if (force) {
+      pinnedToBottomRef.current = true;
+    }
   }, []);
+
+  const handleMediaLayout = useCallback(() => {
+    scrollToBottom(false, { force: false });
+  }, [scrollToBottom]);
 
   useEffect(() => {
     if (!numero) return;
-    scrollToBottom(true);
+    pinnedToBottomRef.current = true;
+    scrollToBottom(true, { force: true });
   }, [numero, scrollToBottom]);
 
   useEffect(() => {
     if (!numero || cargando) return;
-    scrollToBottom(false);
-  }, [mensajes, cargando, numero, scrollToBottom]);
+    scrollToBottom(true, { force: true });
+  }, [cargando, numero, scrollToBottom]);
 
   useEffect(() => {
     if (!numero || cargando) return;
-    scrollToBottom(true);
-  }, [cargando, numero, scrollToBottom]);
+    scrollToBottom(false, { force: false });
+  }, [mensajes, cargando, numero, scrollToBottom]);
+
+  useEffect(() => {
+    const contentEl = messagesContentRef.current;
+    if (!contentEl || !numero) return undefined;
+
+    const ro = new ResizeObserver(() => {
+      if (pinnedToBottomRef.current) {
+        scrollToBottom(true, { force: false });
+      }
+    });
+
+    ro.observe(contentEl);
+    return () => ro.disconnect();
+  }, [numero, scrollToBottom, mensajesOrdenados.length, cargando]);
 
   const conexionChat = String(conexionWhatsappId || "").trim();
   const conexionTab = String(conexionSeleccionada || "").trim();
@@ -292,19 +339,24 @@ export default function ChatWindow({
         ref={scrollRef}
         className="messages"
         aria-label="Mensajes del chat"
+        onScroll={syncPinnedFromScroll}
       >
           {cargando && (
             <div className="loadingChat">Cargando conversación...</div>
           )}
 
-          {!cargando &&
-            mensajesOrdenados.map((m) => (
-              <MessageBubble
-                key={m.id || `${m.creado_en}-${m.contenido}`}
-                msg={m}
-                uploadProgress={m._uploadProgress}
-              />
-            ))}
+          {!cargando && (
+            <div ref={messagesContentRef} className="messagesInner">
+              {mensajesOrdenados.map((m) => (
+                <MessageBubble
+                  key={m.id || `${m.creado_en}-${m.contenido}`}
+                  msg={m}
+                  uploadProgress={m._uploadProgress}
+                  onMediaLayout={handleMediaLayout}
+                />
+              ))}
+            </div>
+          )}
 
         <div className="messagesEnd" />
       </div>
