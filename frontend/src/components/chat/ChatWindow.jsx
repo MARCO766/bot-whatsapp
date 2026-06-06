@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import MessageBubble from "./MessageBubble";
 import ChatComposer from "./ChatComposer";
 import { setBotPause } from "../../services/chatService";
+import { sortMensajesPorCreadoEn } from "../../utils/chatFormat";
 import {
   calcularVentana24h,
   etiquetaVentanaBadge,
@@ -42,6 +43,11 @@ export default function ChatWindow({
     [mensajes, ventanaTick]
   );
   const ventanaAbierta = ventana.abierta;
+
+  const mensajesOrdenados = useMemo(
+    () => sortMensajesPorCreadoEn(mensajes),
+    [mensajes]
+  );
 
   useEffect(() => {
     if (!numero || !ventanaAbierta) return undefined;
@@ -292,7 +298,7 @@ export default function ChatWindow({
           )}
 
           {!cargando &&
-            mensajes.map((m) => (
+            mensajesOrdenados.map((m) => (
               <MessageBubble
                 key={m.id || `${m.creado_en}-${m.contenido}`}
                 msg={m}

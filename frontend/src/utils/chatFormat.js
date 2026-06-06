@@ -51,6 +51,16 @@ export function formatHora(fecha) {
   return d.toLocaleTimeString("es-BO", HORA_BO_OPTIONS);
 }
 
+/** Orden cronológico ASC para render del chat (desempate estable por id). */
+export function sortMensajesPorCreadoEn(mensajes) {
+  return [...(mensajes || [])].sort((a, b) => {
+    const ta = parseFechaUtc(a?.creado_en)?.getTime() ?? 0;
+    const tb = parseFechaUtc(b?.creado_en)?.getTime() ?? 0;
+    if (ta !== tb) return ta - tb;
+    return String(a?.id ?? "").localeCompare(String(b?.id ?? ""));
+  });
+}
+
 export function messageChecks(estadoEnvio) {
   if (estadoEnvio === "read") return { className: "read", text: "✓✓" };
   if (estadoEnvio === "delivered") return { className: "delivered", text: "✓✓" };
