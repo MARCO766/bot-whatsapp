@@ -665,7 +665,6 @@ function construirMensajesOpenAI(config, mensajeLead, chatHistory, lastReplies, 
   const bloqueBiblioteca = construirPromptBibliotecas(config?.mediaLibrary);
   if (bloqueBiblioteca) {
     system += "\n\n" + bloqueBiblioteca;
-    console.log("[OPENAI_MEDIA_LIBRARY_PROMPT]", bloqueBiblioteca);
   }
 
   const messages = [{ role: "system", content: system }];

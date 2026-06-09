@@ -141,22 +141,61 @@ function listasParaPrompt(mediaLibrary) {
   return ml.lists;
 }
 
+const INTENCIONES_BIBLIOTECA_POR_ID = {
+  muestras: "fotos, muestras, ejemplos, cómo se ve, resultados",
+  catalogo: "catálogo, modelos, diseños disponibles",
+  testimonios: "opiniones, reseñas, referencias, testimonios",
+  comprobantes: "comprobantes, pagos, pruebas de pago",
+};
+
 function construirPromptBibliotecas(mediaLibrary) {
   const listas = listasParaPrompt(mediaLibrary);
   if (!listas.length) return "";
+
+  const idsDisponibles = listas.map(function (lista) {
+    return lista.id;
+  });
 
   const lineas = listas.map(function (lista) {
     const desc = lista.description || lista.name;
     return `- ${lista.id}: ${desc}`;
   });
 
-  return (
+  const lineasIntencion = idsDisponibles
+    .filter(function (id) {
+      return !!INTENCIONES_BIBLIOTECA_POR_ID[id];
+    })
+    .map(function (id) {
+      return (
+        "   - Si pide " +
+        INTENCIONES_BIBLIOTECA_POR_ID[id] +
+        ": usar " +
+        id +
+        " SOLO si existe en la lista anterior."
+      );
+    });
+
+  const bloque =
     "Bibliotecas multimedia disponibles:\n" +
     lineas.join("\n") +
-    "\n\nSi necesitas usar una biblioteca responde exactamente:\n" +
+    "\n\nREGLAS OBLIGATORIAS (Biblioteca Multimedia):\n" +
+    "1. Solo puedes usar bibliotecas que aparezcan en \"Bibliotecas multimedia disponibles\".\n" +
+    "2. Si el lead pide una biblioteca que NO existe en esa lista, NO uses otra biblioteca parecida ni ACCION_BIBLIOTECA. Responde solo con texto normal explicando que no tienes esa biblioteca disponible.\n" +
+    '   Ejemplo: si solo existe "muestras" y piden testimonios, NO respondas ACCION_BIBLIOTECA:muestras con texto sobre testimonios. Responde algo como: "Por ahora no tengo testimonios cargados, pero sí puedo mostrarte algunas muestras del producto si deseas."\n' +
+    "3. Nunca describas una biblioteca con el nombre de otra. Si usas ACCION_BIBLIOTECA:<id>, el TEXTO debe hablar de esa misma biblioteca (muestras → muestras/ejemplos/fotos del producto; testimonios → testimonios/referencias; etc.).\n" +
+    "4. Reglas de intención (aplican SOLO si esa biblioteca existe en la lista):\n" +
+    (lineasIntencion.length ? lineasIntencion.join("\n") + "\n" : "") +
+    "5. Si la biblioteca correcta para la intención del lead no existe, responde texto normal sin ACCION_BIBLIOTECA.\n\n" +
+    "Si y solo si corresponde usar una biblioteca disponible, responde exactamente:\n" +
     "ACCION_BIBLIOTECA:<id_lista>\n" +
-    "TEXTO:<mensaje corto opcional>"
-  );
+    "TEXTO:<mensaje corto opcional>";
+
+  console.log("[OPENAI_MEDIA_LIBRARY_STRICT_PROMPT]", {
+    listasDisponibles: idsDisponibles,
+    bloque: bloque,
+  });
+
+  return bloque;
 }
 
 function parsearAccionBiblioteca(textoRespuesta) {
