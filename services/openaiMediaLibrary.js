@@ -285,6 +285,78 @@ function resolverAccionBibliotecaDesdeRespuesta(textoRespuesta, mediaLibrary) {
   };
 }
 
+function debeLoggearMediaLibraryRuntime(mensajeLead, mediaLibrary) {
+  const msg = String(mensajeLead || "").trim();
+  if (/testimonio/i.test(msg)) return true;
+  return !!(mediaLibrary && mediaLibrary.enabled === true);
+}
+
+/**
+ * Traza diagnóstico runtime: JSON → normalizar → listasParaPrompt → bloque prompt.
+ * Solo observabilidad; no altera comportamiento.
+ * @returns {{ mlNorm: object, listasPrompt: object[], bloque: string }}
+ */
+function logMediaLibraryRuntimeDiagnostico(mediaLibraryRaw, mensajeLead, opts = {}) {
+  const mediaLibraryDesdeNodo = opts.mediaLibraryDesdeNodo ?? null;
+  const mlNorm = normalizarMediaLibrary(mediaLibraryRaw);
+  const listasPrompt = listasParaPrompt(mediaLibraryRaw);
+  const bloque = construirPromptBibliotecas(mediaLibraryRaw);
+
+  function resumirListasBiblioteca(ml) {
+    if (!ml || !Array.isArray(ml.lists)) return [];
+    return ml.lists.map((lista) => ({
+      id: lista.id,
+      name: lista.name,
+      description: lista.description,
+      fotos: (lista.items || []).length,
+    }));
+  }
+
+  console.log("[MEDIA_LIBRARY_RUNTIME]", {
+    mensajeLead: String(mensajeLead || "").trim(),
+    mediaLibraryDesdeNodo,
+    listasDesdeNodo: resumirListasBiblioteca(mediaLibraryDesdeNodo),
+    configMediaLibrary: mediaLibraryRaw,
+    listasEnConfig: resumirListasBiblioteca(mediaLibraryRaw),
+    mediaLibraryNormalizado: mlNorm,
+    listasNormalizadas: resumirListasBiblioteca(mlNorm),
+  });
+
+  const idsDisponibles = listasPrompt.map((lista) => lista.id);
+
+  console.log("[MEDIA_LIBRARY_LISTS]", {
+    enabled: mlNorm.enabled,
+    idsDisponibles,
+    incluyeTestimonios: idsDisponibles.includes("testimonios"),
+    incluyeMuestras: idsDisponibles.includes("muestras"),
+    detalleNormalizado: mlNorm.lists.map((lista) => ({
+      id: lista.id,
+      name: lista.name,
+      description: lista.description,
+      fotos: (lista.items || []).length,
+      pasaFiltroServidor: !!(lista.id && (lista.name || lista.description)),
+      enListasParaPrompt: idsDisponibles.includes(lista.id),
+    })),
+  });
+
+  const lineasBiblioteca = bloque
+    ? bloque.split("\n").filter((linea) => linea.startsWith("- "))
+    : [];
+
+  console.log("[MEDIA_LIBRARY_PROMPT]", {
+    bloqueExacto: bloque,
+    lineasBiblioteca,
+    tieneLineaTestimonios: lineasBiblioteca.some((linea) =>
+      linea.startsWith("- testimonios:")
+    ),
+    tieneLineaMuestras: lineasBiblioteca.some((linea) =>
+      linea.startsWith("- muestras:")
+    ),
+  });
+
+  return { mlNorm, listasPrompt, bloque };
+}
+
 module.exports = {
   MAX_FOTOS_SEGURO,
   crearMediaLibraryPorDefecto,
@@ -299,4 +371,6 @@ module.exports = {
   limiteFotosAEnviar,
   seleccionarItemsBiblioteca,
   resolverCaptionBiblioteca,
+  debeLoggearMediaLibraryRuntime,
+  logMediaLibraryRuntimeDiagnostico,
 };

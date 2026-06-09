@@ -21,6 +21,8 @@ const {
   textoFallbackSinAccionBiblioteca,
   seleccionarItemsBiblioteca,
   resolverCaptionBiblioteca,
+  debeLoggearMediaLibraryRuntime,
+  logMediaLibraryRuntimeDiagnostico,
 } = require("./openaiMediaLibrary");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -172,6 +174,21 @@ function parseOpenAIAgentFromNodo(nodo) {
   }
 
   return normalizarConfigOpenAI(cfg);
+}
+
+function extraerMediaLibraryRawDeNodo(nodo) {
+  const html = nodo?.html || "";
+  const match = html.match(
+    /<textarea[^>]*class="openai-agent-data"[^>]*>([\s\S]*?)<\/textarea>/i
+  );
+  if (!match) return null;
+  try {
+    const raw = decodeHtmlEntities(match[1].trim());
+    const parsed = JSON.parse(raw);
+    return parsed?.mediaLibrary ?? null;
+  } catch {
+    return null;
+  }
 }
 
 function trimChatHistory(history) {
@@ -662,7 +679,17 @@ function construirMensajesOpenAI(config, mensajeLead, chatHistory, lastReplies, 
     system += "\nReformula con otras palabras. No repitas la frase anterior.";
   }
 
-  const bloqueBiblioteca = construirPromptBibliotecas(config?.mediaLibrary);
+  let bloqueBiblioteca = "";
+  if (debeLoggearMediaLibraryRuntime(mensajeLead, config?.mediaLibrary)) {
+    const trace = logMediaLibraryRuntimeDiagnostico(
+      config?.mediaLibrary,
+      mensajeLead,
+      { mediaLibraryDesdeNodo: config?.mediaLibraryDesdeNodo ?? null }
+    );
+    bloqueBiblioteca = trace.bloque;
+  } else {
+    bloqueBiblioteca = construirPromptBibliotecas(config?.mediaLibrary);
+  }
   if (bloqueBiblioteca) {
     system += "\n\n" + bloqueBiblioteca;
   }
@@ -831,6 +858,12 @@ async function generarReply(config, mensajeLead, chatHistory, lastReplies) {
     );
 
     console.log("[OPENAI DEBUG] respuesta raw:", respuestaOpenAI);
+    if (debeLoggearMediaLibraryRuntime(mensajeLead, config?.mediaLibrary)) {
+      console.log("[OPENAI_RAW_RESPONSE]", {
+        mensajeLead: String(mensajeLead || "").trim(),
+        respuestaOpenAI: respuestaOpenAI,
+      });
+    }
     logEmojiDebug("respuesta openai original", respuestaOpenAI);
 
     const reply = limpiarReply(respuestaOpenAI, { preservarEmojis: true });
@@ -1134,6 +1167,20 @@ async function ejecutarNodoOpenAIAgent(nodo, contexto, opts = {}) {
 
   try {
     const config = parseOpenAIAgentFromNodo(nodo);
+    const mediaLibraryDesdeNodo = extraerMediaLibraryRawDeNodo(nodo);
+    config.mediaLibraryDesdeNodo = mediaLibraryDesdeNodo;
+
+    if (
+      debeLoggearMediaLibraryRuntime(mensajeLead, config.mediaLibrary) &&
+      opts.resume
+    ) {
+      console.log("[MEDIA_LIBRARY_RUNTIME] nodo → config parseado", {
+        mensajeLead,
+        nodoId,
+        mediaLibraryDesdeNodo,
+        configMediaLibrary: config.mediaLibrary,
+      });
+    }
 
     if (!opts.resume) {
       return {
