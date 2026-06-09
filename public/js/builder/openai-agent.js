@@ -134,6 +134,80 @@ window.MacBotOpenAIAgent = (function () {
     },
   ];
 
+  const TIPOS_LISTA_OPCIONES = [
+    { value: "muestras", label: "muestras" },
+    { value: "catalogo", label: "catálogo" },
+    { value: "testimonios", label: "testimonios" },
+    { value: "comprobantes", label: "comprobantes" },
+    { value: "personalizada", label: "personalizada" },
+  ];
+
+  function esIdTipoListaPreset(id) {
+    return LISTAS_PREDETERMINADAS_BIBLIOTECA.some(function (def) {
+      return def.id === String(id || "").trim();
+    });
+  }
+
+  function obtenerDefTipoListaPreset(tipoId) {
+    return (
+      LISTAS_PREDETERMINADAS_BIBLIOTECA.find(function (def) {
+        return def.id === String(tipoId || "").trim();
+      }) || null
+    );
+  }
+
+  function resolverTipoListaDesdeLista(lista) {
+    const id = String(lista?.id || "").trim();
+    if (esIdTipoListaPreset(id)) return id;
+    return "personalizada";
+  }
+
+  function etiquetaTipoLista(lista) {
+    const tipo = resolverTipoListaDesdeLista(lista);
+    if (tipo === "personalizada") {
+      return String(lista?.name || "").trim() || "personalizada";
+    }
+    const op = TIPOS_LISTA_OPCIONES.find(function (o) {
+      return o.value === tipo;
+    });
+    return op ? op.label : tipo;
+  }
+
+  function tiposListaOcupados(excluirListId) {
+    const ocupados = new Set();
+    const excluir = String(excluirListId || "").trim();
+    (configActiva?.mediaLibrary?.lists || []).forEach(function (lista) {
+      if (String(lista.id || "").trim() === excluir) return;
+      const tipo = resolverTipoListaDesdeLista(lista);
+      if (tipo !== "personalizada") ocupados.add(tipo);
+    });
+    return ocupados;
+  }
+
+  function renderOpcionesTipoLista(lista) {
+    const tipoActual = resolverTipoListaDesdeLista(lista);
+    const ocupados = tiposListaOcupados(lista.id);
+    return TIPOS_LISTA_OPCIONES.map(function (op) {
+      const selected = tipoActual === op.value ? " selected" : "";
+      const disabled =
+        op.value !== "personalizada" &&
+        ocupados.has(op.value) &&
+        tipoActual !== op.value
+          ? " disabled"
+          : "";
+      return (
+        '<option value="' +
+        esc(op.value) +
+        '"' +
+        selected +
+        disabled +
+        ">" +
+        esc(op.label) +
+        "</option>"
+      );
+    }).join("");
+  }
+
   function crearListaBibliotecaVacia(overrides) {
     const base = overrides && typeof overrides === "object" ? overrides : {};
     return {
@@ -192,8 +266,13 @@ window.MacBotOpenAIAgent = (function () {
   }
 
   function normalizarListaBiblioteca(lista, conservarVacias) {
-    const name = String(lista?.name || "").trim();
-    const id = String(lista?.id || "").trim() || generarListId();
+    let id = String(lista?.id || "").trim() || generarListId();
+    const preset = obtenerDefTipoListaPreset(id);
+    let name = String(lista?.name || "").trim();
+    if (preset) {
+      id = preset.id;
+      name = preset.name;
+    }
     const sendMode = SEND_MODES_VALIDOS.includes(lista?.sendMode)
       ? lista.sendMode
       : "random";
@@ -698,9 +777,26 @@ window.MacBotOpenAIAgent = (function () {
         });
       });
 
+      const tipoSel =
+        row.querySelector(".oai-media-list-tipo")?.value || "personalizada";
+      let idLista = listId;
+      let nombreLista = "";
+
+      if (tipoSel !== "personalizada" && obtenerDefTipoListaPreset(tipoSel)) {
+        const def = obtenerDefTipoListaPreset(tipoSel);
+        idLista = def.id;
+        nombreLista = def.name;
+      } else {
+        if (esIdTipoListaPreset(listId)) {
+          idLista = generarListId();
+        }
+        nombreLista =
+          row.querySelector(".oai-media-list-custom-name")?.value.trim() || "";
+      }
+
       lists.push({
-        id: listId,
-        name: row.querySelector(".oai-media-list-name")?.value.trim() || "",
+        id: idLista,
+        name: nombreLista,
         description:
           row.querySelector(".oai-media-list-desc")?.value.trim() || "",
         sendMode: row.querySelector(".oai-media-list-sendmode")?.value || "random",
@@ -901,7 +997,35 @@ window.MacBotOpenAIAgent = (function () {
       });
     });
 
+    wrap.querySelectorAll(".oai-media-list-tipo").forEach(function (sel) {
+      sel.addEventListener("change", function () {
+        const row = sel.closest(".oai-media-list-row");
+        if (!row) return;
+
+        const wrapNombre = row.querySelector(".oai-media-list-custom-name-wrap");
+        const esPersonalizada = sel.value === "personalizada";
+        if (wrapNombre) {
+          wrapNombre.style.display = esPersonalizada ? "" : "none";
+        }
+
+        if (!esPersonalizada && obtenerDefTipoListaPreset(sel.value)) {
+          row.dataset.listId = sel.value;
+          const hint = row.querySelector(".oai-media-list-id-hint code");
+          if (hint) hint.textContent = sel.value;
+        } else if (esPersonalizada && esIdTipoListaPreset(row.dataset.listId)) {
+          const nuevoId = generarListId();
+          row.dataset.listId = nuevoId;
+          const hint = row.querySelector(".oai-media-list-id-hint code");
+          if (hint) hint.textContent = nuevoId;
+        }
+
+        onFormChange();
+        renderMediaLibraryEditor();
+      });
+    });
+
     wrap.querySelectorAll("input, textarea, select").forEach(function (el) {
+      if (el.classList.contains("oai-media-list-tipo")) return;
       el.addEventListener("input", onFormChange);
       el.addEventListener("change", onFormChange);
     });
@@ -922,7 +1046,9 @@ window.MacBotOpenAIAgent = (function () {
 
     wrap.innerHTML = lists
       .map(function (lista, index) {
-        const label = lista.name || "Sin nombre";
+        const label = etiquetaTipoLista(lista);
+        const tipoLista = resolverTipoListaDesdeLista(lista);
+        const esPersonalizada = tipoLista === "personalizada";
         return (
           '<div class="oai-media-list-row" data-list-id="' +
           esc(lista.id) +
@@ -939,10 +1065,16 @@ window.MacBotOpenAIAgent = (function () {
           esc(lista.id) +
           '">Eliminar lista</button></div>' +
           '<div class="oai-media-list-body">' +
-          '<div class="panel-campo oai-field"><label>Nombre de lista</label>' +
-          '<input class="oai-media-list-name oai-input" value="' +
-          esc(lista.name || "") +
-          '"></div>' +
+          '<div class="panel-campo oai-field"><label>Tipo de lista</label>' +
+          '<select class="oai-media-list-tipo oai-input">' +
+          renderOpcionesTipoLista(lista) +
+          "</select></div>" +
+          '<div class="oai-media-list-custom-name-wrap panel-campo oai-field"' +
+          (esPersonalizada ? "" : ' style="display:none;"') +
+          '><label>Nombre personalizado</label>' +
+          '<input class="oai-media-list-custom-name oai-input" value="' +
+          esc(esPersonalizada ? lista.name || "" : "") +
+          '" placeholder="Ej: promociones"></div>' +
           '<div class="panel-campo oai-field"><label>Descripción para IA</label>' +
           '<textarea class="oai-media-list-desc oai-input oai-textarea" rows="2" placeholder="Ej: Fotos de ejemplos del producto">' +
           esc(lista.description || "") +
@@ -979,7 +1111,7 @@ window.MacBotOpenAIAgent = (function () {
           '<option value="none"' +
           (lista.captionMode === "none" ? " selected" : "") +
           '>Sin caption</option></select></div></div>' +
-          '<p class="ia-handle-hint oai-handle-hint">ID lista: <code>' +
+          '<p class="ia-handle-hint oai-handle-hint oai-media-list-id-hint">ID lista: <code>' +
           esc(lista.id) +
           "</code></p>" +
           '<div class="oai-media-items-wrap">' +
