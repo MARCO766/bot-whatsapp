@@ -111,6 +111,59 @@ window.MacBotOpenAIAgent = (function () {
   const SEND_MODES_VALIDOS = ["random", "all", "first"];
   const CAPTION_MODES_VALIDOS = ["caption_item", "same_caption", "none"];
 
+  const LISTAS_PREDETERMINADAS_BIBLIOTECA = [
+    {
+      id: "muestras",
+      name: "Muestras",
+      description: "Fotos de ejemplos terminados del producto",
+    },
+    {
+      id: "catalogo",
+      name: "Catálogo",
+      description: "Fotos del catálogo o productos disponibles",
+    },
+    {
+      id: "testimonios",
+      name: "Testimonios",
+      description: "Capturas o fotos de clientes satisfechos",
+    },
+    {
+      id: "comprobantes",
+      name: "Comprobantes",
+      description: "Ejemplos de comprobantes o pagos",
+    },
+  ];
+
+  function crearListaBibliotecaVacia(overrides) {
+    const base = overrides && typeof overrides === "object" ? overrides : {};
+    return {
+      id: String(base.id || "").trim() || generarListId(),
+      name: String(base.name || "").trim(),
+      description: String(base.description || "").trim(),
+      sendMode: "random",
+      sendCount: 3,
+      introText: "",
+      captionMode: "caption_item",
+      items: [],
+    };
+  }
+
+  function crearListasPredeterminadasBiblioteca() {
+    return LISTAS_PREDETERMINADAS_BIBLIOTECA.map(function (def) {
+      return crearListaBibliotecaVacia(def);
+    });
+  }
+
+  /**
+   * Solo si lists está vacío: crea las 4 listas premium por defecto.
+   * @returns {boolean} true si se sembraron listas
+   */
+  function sembrarListasPredeterminadasBiblioteca(ml) {
+    if (!ml || !Array.isArray(ml.lists) || ml.lists.length > 0) return false;
+    ml.lists = crearListasPredeterminadasBiblioteca();
+    return true;
+  }
+
   function crearMediaLibraryPorDefecto() {
     return {
       enabled: false,
@@ -662,6 +715,9 @@ window.MacBotOpenAIAgent = (function () {
     });
 
     ml.lists = lists;
+    if (ml.enabled && ml.lists.length === 0) {
+      sembrarListasPredeterminadasBiblioteca(ml);
+    }
     configActiva.mediaLibrary = ml;
     return ml;
   }
@@ -996,16 +1052,7 @@ window.MacBotOpenAIAgent = (function () {
     syncCamposPanelDraft();
     asegurarMediaLibrary(configActiva);
     configActiva.mediaLibrary.enabled = true;
-    configActiva.mediaLibrary.lists.push({
-      id: generarListId(),
-      name: "",
-      description: "",
-      sendMode: "random",
-      sendCount: 3,
-      introText: "",
-      captionMode: "caption_item",
-      items: [],
-    });
+    configActiva.mediaLibrary.lists.push(crearListaBibliotecaVacia());
     const enabledEl = document.getElementById("openaiAgentMediaEnabled");
     if (enabledEl) enabledEl.checked = true;
     renderMediaLibraryEditor();
@@ -1018,6 +1065,9 @@ window.MacBotOpenAIAgent = (function () {
     configActiva = leerConfigDeNodo(nodo);
     asegurarIdsEnRoutes(configActiva);
     asegurarMediaLibrary(configActiva);
+    if (configActiva.mediaLibrary.enabled) {
+      sembrarListasPredeterminadasBiblioteca(configActiva.mediaLibrary);
+    }
     const ml = configActiva.mediaLibrary;
     const contenido = document.getElementById("panelNodoContenido");
     if (!contenido) return;
@@ -1131,7 +1181,15 @@ window.MacBotOpenAIAgent = (function () {
   }
 
   function onFormChange() {
+    const listasAntes =
+      configActiva?.mediaLibrary?.lists?.length || 0;
     syncCamposPanelDraft();
+    if (
+      document.getElementById("openaiAgentMediaLists") &&
+      configActiva?.mediaLibrary?.lists?.length > listasAntes
+    ) {
+      renderMediaLibraryEditor();
+    }
     scheduleRenderVisual();
     if (typeof window.macbotRecordHistoryDebounced === "function") {
       window.macbotRecordHistoryDebounced();
