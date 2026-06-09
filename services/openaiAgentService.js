@@ -43,6 +43,7 @@ const PROMPT_SISTEMA_FIJO =
 const CARITAS_PERMITIDOS = ["🙂", "😊", "😌", "🤔", "😅", "😍", "🥹", "😉", "😎", "🙌", "😇"];
 
 const lastRepliesPorChat = new Map();
+const respuestasBotContadorPorChat = new Map();
 
 let openaiClient = null;
 
@@ -218,6 +219,17 @@ function getLastReplies(usuarioId, conexionWhatsappId, numero) {
   return Array.isArray(list) ? list.slice(-MAX_LAST_REPLIES) : [];
 }
 
+function getContadorRespuestasBot(usuarioId, conexionWhatsappId, numero) {
+  return respuestasBotContadorPorChat.get(chatKey(usuarioId, conexionWhatsappId, numero)) || 0;
+}
+
+function incrementarContadorRespuestasBot(usuarioId, conexionWhatsappId, numero) {
+  const key = chatKey(usuarioId, conexionWhatsappId, numero);
+  const next = getContadorRespuestasBot(usuarioId, conexionWhatsappId, numero) + 1;
+  respuestasBotContadorPorChat.set(key, next);
+  return next;
+}
+
 function pushLastReply(usuarioId, conexionWhatsappId, numero, reply) {
   const key = chatKey(usuarioId, conexionWhatsappId, numero);
   const next = [
@@ -227,6 +239,7 @@ function pushLastReply(usuarioId, conexionWhatsappId, numero, reply) {
     .filter(Boolean)
     .slice(-MAX_LAST_REPLIES);
   lastRepliesPorChat.set(key, next);
+  incrementarContadorRespuestasBot(usuarioId, conexionWhatsappId, numero);
   return next;
 }
 
@@ -238,9 +251,9 @@ function limpiarLastReplies(usuarioId, conexionWhatsappId, numero) {
   ) {
     return;
   }
-  lastRepliesPorChat.delete(
-    chatKey(usuarioId, String(conexionWhatsappId).trim(), numero)
-  );
+  const key = chatKey(usuarioId, String(conexionWhatsappId).trim(), numero);
+  lastRepliesPorChat.delete(key);
+  respuestasBotContadorPorChat.delete(key);
 }
 
 function normMsg(texto) {
@@ -693,78 +706,51 @@ function resolverNombreLeadValido(nombre, numero) {
   return n;
 }
 
-function patronNombreLead(nombreLead) {
-  return new RegExp(
-    `\\b${String(nombreLead).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`,
-    "i"
-  );
-}
-
-function esPrimeraRespuestaConversacion(chatHistory, lastReplies) {
-  const assistantMsgs = trimChatHistory(chatHistory).filter(
-    (t) => t.role === "assistant" || t.role === "bot"
-  );
-  const tieneLastReplies =
-    Array.isArray(lastReplies) && lastReplies.some((r) => String(r || "").trim());
-  return assistantMsgs.length === 0 && !tieneLastReplies;
-}
-
-function nombreUsadoEnUltimaRespuesta(nombreLead, chatHistory, lastReplies) {
-  if (!nombreLead) return false;
-
-  const patron = patronNombreLead(nombreLead);
-
-  if (Array.isArray(lastReplies) && lastReplies.length) {
-    const ultima = String(lastReplies[lastReplies.length - 1] || "");
-    if (patron.test(ultima)) return true;
-  }
-
-  const assistantMsgs = trimChatHistory(chatHistory).filter(
-    (t) => t.role === "assistant" || t.role === "bot"
-  );
-  const ultima = assistantMsgs[assistantMsgs.length - 1];
-  if (ultima && patron.test(String(ultima.text || ""))) return true;
-
-  return false;
-}
-
-function resolverUsoNombreLead(nombreLead, chatHistory, lastReplies) {
+function resolverUsoNombreLead(nombreLead, chatScope = null) {
   if (!nombreLead) {
     return {
       primeraRespuestaConversacion: false,
       nombrePermitido: false,
+      respuestasBotPrevias: 0,
+      numeroProximaRespuesta: 0,
     };
   }
 
-  const primeraRespuestaConversacion = esPrimeraRespuestaConversacion(
-    chatHistory,
-    lastReplies
+  const usuarioId = chatScope?.usuarioId ?? null;
+  const conexionWhatsappId = chatScope?.conexionWhatsappId ?? null;
+  const numero = chatScope?.numero ?? null;
+  const respuestasBotPrevias = getContadorRespuestasBot(
+    usuarioId,
+    conexionWhatsappId,
+    numero
   );
-  const usadoEnUltima = nombreUsadoEnUltimaRespuesta(
-    nombreLead,
-    chatHistory,
-    lastReplies
-  );
+  const numeroProximaRespuesta = respuestasBotPrevias + 1;
+  const nombrePermitido = numeroProximaRespuesta % 2 === 1;
 
   return {
-    primeraRespuestaConversacion,
-    nombrePermitido: !usadoEnUltima,
+    primeraRespuestaConversacion: respuestasBotPrevias === 0,
+    nombrePermitido,
+    respuestasBotPrevias,
+    numeroProximaRespuesta,
   };
 }
 
-function construirBloqueDatosLead(nombreLead, chatHistory, lastReplies) {
+function construirBloqueDatosLead(nombreLead, chatScope = null) {
   if (!nombreLead) return "";
 
-  const { primeraRespuestaConversacion, nombrePermitido } = resolverUsoNombreLead(
-    nombreLead,
-    chatHistory,
-    lastReplies
-  );
+  const {
+    primeraRespuestaConversacion,
+    nombrePermitido,
+    respuestasBotPrevias,
+    numeroProximaRespuesta,
+  } = resolverUsoNombreLead(nombreLead, chatScope);
 
   console.log("[OPENAI_NAME_USAGE]", {
     nombreLead,
     primeraRespuestaConversacion,
     nombrePermitido,
+    respuestasBotPrevias,
+    numeroProximaRespuesta,
   });
 
   let bloque = `Datos del lead:
@@ -794,12 +780,13 @@ function construirMensajesOpenAI(
   chatHistory,
   lastReplies,
   reescribir,
-  nombreLead = null
+  nombreLead = null,
+  chatScope = null
 ) {
   const openaiPrompt = resolverOpenaiPrompt(config);
   let system = PROMPT_SISTEMA_FIJO;
 
-  const bloqueLead = construirBloqueDatosLead(nombreLead, chatHistory, lastReplies);
+  const bloqueLead = construirBloqueDatosLead(nombreLead, chatScope);
   if (bloqueLead) {
     system += "\n\n" + bloqueLead;
   }
@@ -878,7 +865,8 @@ async function llamarOpenAI(
   chatHistory,
   lastReplies,
   reescribir,
-  nombreLead = null
+  nombreLead = null,
+  chatScope = null
 ) {
   const client = getOpenAIClient();
   if (!client) {
@@ -893,7 +881,8 @@ async function llamarOpenAI(
     chatHistory,
     lastReplies,
     reescribir,
-    nombreLead
+    nombreLead,
+    chatScope
   );
   const promptFinal = JSON.stringify({ model, temperature: config.temperature ?? 0.7, messages });
 
@@ -935,7 +924,8 @@ function llamarOpenAIConTimeout(
   chatHistory,
   lastReplies,
   reescribir,
-  nombreLead = null
+  nombreLead = null,
+  chatScope = null
 ) {
   const trabajo = llamarOpenAI(
     config,
@@ -943,7 +933,8 @@ function llamarOpenAIConTimeout(
     chatHistory,
     lastReplies,
     reescribir,
-    nombreLead
+    nombreLead,
+    chatScope
   );
   const timeout = new Promise((_, reject) => {
     setTimeout(() => {
@@ -968,7 +959,14 @@ function formatoErrorOpenAI(err) {
   return err.message || String(err);
 }
 
-async function generarReply(config, mensajeLead, chatHistory, lastReplies, nombreLead = null) {
+async function generarReply(
+  config,
+  mensajeLead,
+  chatHistory,
+  lastReplies,
+  nombreLead = null,
+  chatScope = null
+) {
   console.log("[OPENAI SERVICE ENTRANTE]", {
     mensaje: String(mensajeLead || "").slice(0, 80),
     tieneKey: !!String(process.env.OPENAI_API_KEY || "").trim(),
@@ -997,7 +995,8 @@ async function generarReply(config, mensajeLead, chatHistory, lastReplies, nombr
       chatHistory,
       lastReplies,
       false,
-      nombreLead
+      nombreLead,
+      chatScope
     );
     promptFinal = JSON.stringify({
       system: PROMPT_SISTEMA_FIJO,
@@ -1016,7 +1015,8 @@ async function generarReply(config, mensajeLead, chatHistory, lastReplies, nombr
       chatHistory,
       lastReplies,
       false,
-      nombreLead
+      nombreLead,
+      chatScope
     );
 
     console.log("[OPENAI DEBUG] respuesta raw:", respuestaOpenAI);
@@ -1238,7 +1238,8 @@ async function resolverAnalisisOpenAI(
   chatHistory,
   memoria,
   lastReplies,
-  nombreLead = null
+  nombreLead = null,
+  chatScope = null
 ) {
   const analisis = analizarCaminosOpenAI(config, mensajeLead);
 
@@ -1265,7 +1266,8 @@ async function resolverAnalisisOpenAI(
     mensajeLead,
     chatHistory,
     lastReplies,
-    nombreLead
+    nombreLead,
+    chatScope
   );
 
   const accionBiblioteca = resolverAccionBibliotecaDesdeRespuesta(
@@ -1380,13 +1382,16 @@ async function ejecutarNodoOpenAIAgent(nodo, contexto, opts = {}) {
     const lastReplies = getLastReplies(usuarioId, conexionWhatsappId, numero);
     const memoria = contexto.memoriaIA || {};
 
+    const chatScope = { usuarioId, conexionWhatsappId, numero };
+
     const resultado = await resolverAnalisisOpenAI(
       config,
       mensajeLead,
       chatHistory,
       memoria,
       lastReplies,
-      nombreLead
+      nombreLead,
+      chatScope
     );
 
     contexto.intent = resultado.intent || "";
