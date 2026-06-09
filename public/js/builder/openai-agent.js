@@ -896,13 +896,13 @@ window.MacBotOpenAIAgent = (function () {
           '<select class="oai-media-list-sendmode oai-input">' +
           '<option value="random"' +
           (lista.sendMode === "random" ? " selected" : "") +
-          ">Aleatorio</option>" +
+          '>Aleatorio</option>' +
           '<option value="all"' +
           (lista.sendMode === "all" ? " selected" : "") +
-          ">Todas</option>" +
+          '>Todas</option>' +
           '<option value="first"' +
           (lista.sendMode === "first" ? " selected" : "") +
-          ">Primera</option></select></div>' +
+          '>Primera</option></select></div>' +
           '<div class="panel-campo oai-field oai-field--half"><label>Cantidad</label>' +
           '<input type="number" class="oai-media-list-sendcount oai-input" min="1" max="20" value="' +
           (lista.sendCount || 3) +
@@ -916,13 +916,13 @@ window.MacBotOpenAIAgent = (function () {
           '<select class="oai-media-list-captionmode oai-input">' +
           '<option value="caption_item"' +
           (lista.captionMode === "caption_item" ? " selected" : "") +
-          ">Por foto</option>" +
+          '>Por foto</option>' +
           '<option value="same_caption"' +
           (lista.captionMode === "same_caption" ? " selected" : "") +
-          ">Igual todas</option>" +
+          '>Igual todas</option>' +
           '<option value="none"' +
           (lista.captionMode === "none" ? " selected" : "") +
-          ">Sin caption</option></select></div></div>' +
+          '>Sin caption</option></select></div></div>' +
           '<p class="ia-handle-hint oai-handle-hint">ID lista: <code>' +
           esc(lista.id) +
           "</code></p>" +
@@ -1072,13 +1072,13 @@ window.MacBotOpenAIAgent = (function () {
       '<select id="openaiAgentPriorityMode" class="oai-input">' +
       '<option value="routes_library_gpt"' +
       (ml.priorityMode === "routes_library_gpt" ? " selected" : "") +
-      ">Caminos → Biblioteca → GPT</option>" +
+      '>Caminos → Biblioteca → GPT</option>' +
       '<option value="library_routes_gpt"' +
       (ml.priorityMode === "library_routes_gpt" ? " selected" : "") +
-      ">Biblioteca → Caminos → GPT</option>" +
+      '>Biblioteca → Caminos → GPT</option>' +
       '<option value="gpt_only"' +
       (ml.priorityMode === "gpt_only" ? " selected" : "") +
-      ">Solo GPT</option></select></div>' +
+      '>Solo GPT</option></select></div>' +
       '<div id="openaiAgentMediaLists" class="oai-media-lists"></div>' +
       '<button type="button" class="panel-btn oai-btn oai-btn--add" id="openaiAgentAgregarLista">+ Lista</button>' +
       "</section>" +
