@@ -772,18 +772,17 @@ Nombre: ${nombreLead}
 
 Reglas de uso del nombre:
 - No inventes nombres.
-- No uses el nombre en todos los mensajes.
 - No lo repitas en mensajes consecutivos.`;
 
-  if (primeraRespuestaConversacion) {
+  if (nombrePermitido) {
     bloque +=
-      "\n- En esta primera respuesta de la conversación, intenta usar el nombre del lead de forma natural y cercana.";
-  } else if (nombrePermitido) {
-    bloque +=
-      "\n- En respuestas siguientes, puedes usar el nombre del lead ocasionalmente cuando encaje de forma natural.";
+      "\n- DEBES incluir el nombre del lead una sola vez en esta respuesta, de forma natural.";
+    if (primeraRespuestaConversacion) {
+      bloque += "\n- Es la primera respuesta de la conversación.";
+    }
   } else {
     bloque +=
-      "\n- No uses el nombre del lead en esta respuesta (apareció en tu mensaje anterior).";
+      "\n- NO debes usar el nombre del lead en esta respuesta (apareció en tu mensaje anterior).";
   }
 
   return bloque;
