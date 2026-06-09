@@ -85,6 +85,119 @@ window.MacBotOpenAIAgent = (function () {
     );
   }
 
+  function generarListId() {
+    return (
+      "list_" +
+      Date.now() +
+      "_" +
+      Math.random().toString(36).slice(2, 8)
+    );
+  }
+
+  function generarItemId() {
+    return (
+      "foto_" +
+      Date.now() +
+      "_" +
+      Math.random().toString(36).slice(2, 8)
+    );
+  }
+
+  const PRIORITY_MODES_VALIDOS = [
+    "routes_library_gpt",
+    "library_routes_gpt",
+    "gpt_only",
+  ];
+  const SEND_MODES_VALIDOS = ["random", "all", "first"];
+  const CAPTION_MODES_VALIDOS = ["caption_item", "same_caption", "none"];
+
+  function crearMediaLibraryPorDefecto() {
+    return {
+      enabled: false,
+      priorityMode: "routes_library_gpt",
+      lists: [],
+    };
+  }
+
+  function asegurarMediaLibrary(cfg) {
+    if (!cfg || typeof cfg !== "object") return crearMediaLibraryPorDefecto();
+    if (!cfg.mediaLibrary || typeof cfg.mediaLibrary !== "object") {
+      cfg.mediaLibrary = crearMediaLibraryPorDefecto();
+    }
+    if (!Array.isArray(cfg.mediaLibrary.lists)) {
+      cfg.mediaLibrary.lists = [];
+    }
+    return cfg.mediaLibrary;
+  }
+
+  function normalizarItemBiblioteca(item) {
+    return {
+      id: String(item?.id || "").trim() || generarItemId(),
+      url: String(item?.url || "").trim(),
+      caption: String(item?.caption || "").trim(),
+    };
+  }
+
+  function normalizarListaBiblioteca(lista, conservarVacias) {
+    const name = String(lista?.name || "").trim();
+    const id = String(lista?.id || "").trim() || generarListId();
+    const sendMode = SEND_MODES_VALIDOS.includes(lista?.sendMode)
+      ? lista.sendMode
+      : "random";
+    const captionMode = CAPTION_MODES_VALIDOS.includes(lista?.captionMode)
+      ? lista.captionMode
+      : "caption_item";
+    const sendCount = Math.min(20, Math.max(1, parseInt(lista?.sendCount, 10) || 3));
+    const items = Array.isArray(lista?.items)
+      ? lista.items.map(normalizarItemBiblioteca)
+      : [];
+    const itemsFiltrados = conservarVacias
+      ? items
+      : items.filter(function (it) {
+          return !!(it.url || it.caption);
+        });
+
+    return {
+      id: id,
+      name: name,
+      description: String(lista?.description || "").trim(),
+      sendMode: sendMode,
+      sendCount: sendCount,
+      introText: String(lista?.introText || "").trim(),
+      captionMode: captionMode,
+      items: itemsFiltrados,
+    };
+  }
+
+  function normalizarMediaLibrary(raw, conservarVacias) {
+    const src = raw && typeof raw === "object" ? raw : {};
+    const priorityMode = PRIORITY_MODES_VALIDOS.includes(src.priorityMode)
+      ? src.priorityMode
+      : "routes_library_gpt";
+    const lists = Array.isArray(src.lists)
+      ? src.lists.map(function (lista) {
+          return normalizarListaBiblioteca(lista, conservarVacias);
+        })
+      : [];
+    const listsFiltradas = conservarVacias
+      ? lists
+      : lists.filter(function (lista) {
+          return !!(lista.name || lista.description || lista.items.length);
+        });
+
+    return {
+      enabled: src.enabled === true,
+      priorityMode: priorityMode,
+      lists: listsFiltradas,
+    };
+  }
+
+  function contarListasBiblioteca(config) {
+    const ml = config?.mediaLibrary;
+    if (!ml?.enabled || !Array.isArray(ml.lists)) return 0;
+    return ml.lists.length;
+  }
+
   function obtenerRouteId(route) {
     return String(route?.id || route?.handle || route?.routeId || "").trim();
   }
@@ -122,6 +235,7 @@ window.MacBotOpenAIAgent = (function () {
       temperature: 0.7,
       model: "gpt-4o-mini",
       openaiPrompt: "",
+      mediaLibrary: crearMediaLibraryPorDefecto(),
       caminos: [],
       routes: [],
     };
@@ -203,6 +317,7 @@ window.MacBotOpenAIAgent = (function () {
       temperature: Number.isFinite(temp) ? Math.min(1, Math.max(0, temp)) : 0.7,
       model: String(src.model || "gpt-4o-mini").trim() || "gpt-4o-mini",
       openaiPrompt: openaiPrompt,
+      mediaLibrary: normalizarMediaLibrary(src.mediaLibrary, false),
       caminos: routes,
       routes: routes,
     };
@@ -314,6 +429,7 @@ window.MacBotOpenAIAgent = (function () {
 
   function renderVisualNodo(nodo, config) {
     const activos = caminosParaVisual(config);
+    const numListas = contarListasBiblioteca(config);
     ensureEstructuraCircular(nodo);
     ensureBadgeEnCirculo(nodo.querySelector(".openai-agent-circle"));
 
@@ -329,16 +445,37 @@ window.MacBotOpenAIAgent = (function () {
     titleEl.textContent = config.nombreNodo || "Agente OpenAI";
     nodo.classList.remove("openai-agent-node--with-routes");
 
+    const partesCuerpo = [];
+    partesCuerpo.push(
+      '<p class="openai-agent-subtitle' +
+        (activos.length || numListas ? "" : " openai-agent-subtitle--muted") +
+        '">OpenAI responde o enruta por caminos</p>'
+    );
+
+    if (numListas > 0) {
+      partesCuerpo.push(
+        '<p class="openai-agent-media-pill">🖼 ' +
+          numListas +
+          (numListas === 1 ? " lista" : " listas") +
+          "</p>"
+      );
+    }
+
+    if (!activos.length && !numListas) {
+      partesCuerpo.push(
+        '<p class="openai-agent-desc-pill openai-agent-desc-pill--empty">Doble click para configurar</p>'
+      );
+      body.innerHTML = partesCuerpo.join("");
+      return;
+    }
+
+    body.innerHTML = partesCuerpo.join("");
+
     if (!activos.length) {
-      body.innerHTML =
-        '<p class="openai-agent-subtitle openai-agent-subtitle--muted">OpenAI responde o enruta por caminos</p>' +
-        '<p class="openai-agent-desc-pill openai-agent-desc-pill--empty">Doble click para configurar</p>';
       return;
     }
 
     nodo.classList.add("openai-agent-node--with-routes");
-    body.innerHTML =
-      '<p class="openai-agent-subtitle">OpenAI responde o enruta por caminos</p>';
 
     const shell = nodo.querySelector(".openai-agent-node-shell");
     const branch = document.createElement(TAG_DIV);
@@ -477,6 +614,58 @@ window.MacBotOpenAIAgent = (function () {
     onFormChange();
   }
 
+  function syncMediaLibraryDesdeDom() {
+    const ml = asegurarMediaLibrary(configActiva);
+    ml.enabled =
+      document.getElementById("openaiAgentMediaEnabled")?.checked === true;
+    const priorityRaw =
+      document.getElementById("openaiAgentPriorityMode")?.value || "";
+    ml.priorityMode = PRIORITY_MODES_VALIDOS.includes(priorityRaw)
+      ? priorityRaw
+      : "routes_library_gpt";
+
+    const wrap = document.getElementById("openaiAgentMediaLists");
+    const rows = wrap ? wrap.querySelectorAll(".oai-media-list-row") : [];
+    const lists = [];
+
+    rows.forEach(function (row) {
+      const listId = String(row.dataset.listId || "").trim();
+      if (!listId) return;
+
+      const itemRows = row.querySelectorAll(".oai-media-item-row");
+      const items = [];
+      itemRows.forEach(function (itemRow) {
+        const itemId = String(itemRow.dataset.itemId || "").trim();
+        if (!itemId) return;
+        items.push({
+          id: itemId,
+          url: itemRow.querySelector(".oai-media-item-url")?.value.trim() || "",
+          caption:
+            itemRow.querySelector(".oai-media-item-caption")?.value.trim() || "",
+        });
+      });
+
+      lists.push({
+        id: listId,
+        name: row.querySelector(".oai-media-list-name")?.value.trim() || "",
+        description:
+          row.querySelector(".oai-media-list-desc")?.value.trim() || "",
+        sendMode: row.querySelector(".oai-media-list-sendmode")?.value || "random",
+        sendCount:
+          parseInt(row.querySelector(".oai-media-list-sendcount")?.value, 10) || 3,
+        introText:
+          row.querySelector(".oai-media-list-intro")?.value.trim() || "",
+        captionMode:
+          row.querySelector(".oai-media-list-captionmode")?.value || "caption_item",
+        items: items,
+      });
+    });
+
+    ml.lists = lists;
+    configActiva.mediaLibrary = ml;
+    return ml;
+  }
+
   function syncCamposPanelDraft() {
     if (!configActiva || typeof configActiva !== "object") {
       configActiva = crearConfigPorDefecto();
@@ -495,6 +684,11 @@ window.MacBotOpenAIAgent = (function () {
       document.getElementById("openaiAgentPrompt")?.value.trim() || "";
     syncCaminosDesdeDom();
     asegurarArraysCaminos(configActiva);
+    if (document.getElementById("openaiAgentMediaLists")) {
+      syncMediaLibraryDesdeDom();
+    } else {
+      asegurarMediaLibrary(configActiva);
+    }
     return configActiva;
   }
 
@@ -590,11 +784,241 @@ window.MacBotOpenAIAgent = (function () {
     if (nodoActivo) renderVisualNodo(nodoActivo, configActiva);
   }
 
+  function renderItemsBibliotecaEditor(lista) {
+    const items = Array.isArray(lista?.items) ? lista.items : [];
+    if (!items.length) {
+      return '<p class="oai-media-items-empty">Sin fotos. Agrega una por URL.</p>';
+    }
+    return items
+      .map(function (item, idx) {
+        return (
+          '<div class="oai-media-item-row" data-item-id="' +
+          esc(item.id) +
+          '">' +
+          '<div class="oai-media-item-head">' +
+          '<span class="oai-media-item-badge">Foto ' +
+          (idx + 1) +
+          "</span>" +
+          '<button type="button" class="oai-media-item-del oai-btn oai-btn--danger oai-btn--sm" data-list-id="' +
+          esc(lista.id) +
+          '" data-item-id="' +
+          esc(item.id) +
+          '">Eliminar</button></div>' +
+          '<div class="panel-campo oai-field"><label>URL imagen</label>' +
+          '<input class="oai-media-item-url oai-input" value="' +
+          esc(item.url || "") +
+          '" placeholder="https://..."></div>' +
+          '<div class="panel-campo oai-field"><label>Caption</label>' +
+          '<input class="oai-media-item-caption oai-input" value="' +
+          esc(item.caption || "") +
+          '"></div></div>'
+        );
+      })
+      .join("");
+  }
+
+  function bindMediaLibraryEditorEvents() {
+    const wrap = document.getElementById("openaiAgentMediaLists");
+    if (!wrap) return;
+
+    wrap.querySelectorAll(".oai-media-list-del").forEach(function (btn) {
+      btn.addEventListener("click", function (ev) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        eliminarListaPorId(btn.dataset.listId);
+      });
+    });
+
+    wrap.querySelectorAll(".oai-media-item-del").forEach(function (btn) {
+      btn.addEventListener("click", function (ev) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        eliminarFotoPorId(btn.dataset.listId, btn.dataset.itemId);
+      });
+    });
+
+    wrap.querySelectorAll(".oai-media-list-add-foto").forEach(function (btn) {
+      btn.addEventListener("click", function (ev) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        agregarFotoALista(btn.dataset.listId);
+      });
+    });
+
+    wrap.querySelectorAll("input, textarea, select").forEach(function (el) {
+      el.addEventListener("input", onFormChange);
+      el.addEventListener("change", onFormChange);
+    });
+  }
+
+  function renderMediaLibraryEditor() {
+    const wrap = document.getElementById("openaiAgentMediaLists");
+    if (!wrap) return;
+
+    asegurarMediaLibrary(configActiva);
+    const lists = configActiva.mediaLibrary.lists || [];
+
+    if (!lists.length) {
+      wrap.innerHTML =
+        '<p class="oai-media-lists-empty">No hay listas. Agrega una biblioteca.</p>';
+      return;
+    }
+
+    wrap.innerHTML = lists
+      .map(function (lista, index) {
+        const label = lista.name || "Sin nombre";
+        return (
+          '<div class="oai-media-list-row" data-list-id="' +
+          esc(lista.id) +
+          '">' +
+          '<div class="oai-media-list-head">' +
+          '<div class="oai-media-list-title">' +
+          '<span class="oai-media-list-badge">Lista ' +
+          (index + 1) +
+          "</span>" +
+          '<span class="oai-media-list-name-preview">' +
+          esc(label) +
+          "</span></div>" +
+          '<button type="button" class="oai-media-list-del oai-btn oai-btn--danger oai-btn--sm" data-list-id="' +
+          esc(lista.id) +
+          '">Eliminar lista</button></div>' +
+          '<div class="oai-media-list-body">' +
+          '<div class="panel-campo oai-field"><label>Nombre de lista</label>' +
+          '<input class="oai-media-list-name oai-input" value="' +
+          esc(lista.name || "") +
+          '"></div>' +
+          '<div class="panel-campo oai-field"><label>Descripción para IA</label>' +
+          '<textarea class="oai-media-list-desc oai-input oai-textarea" rows="2" placeholder="Ej: Fotos de ejemplos del producto">' +
+          esc(lista.description || "") +
+          "</textarea></div>" +
+          '<div class="oai-field-row">' +
+          '<div class="panel-campo oai-field oai-field--half"><label>Modo envío</label>' +
+          '<select class="oai-media-list-sendmode oai-input">' +
+          '<option value="random"' +
+          (lista.sendMode === "random" ? " selected" : "") +
+          ">Aleatorio</option>" +
+          '<option value="all"' +
+          (lista.sendMode === "all" ? " selected" : "") +
+          ">Todas</option>" +
+          '<option value="first"' +
+          (lista.sendMode === "first" ? " selected" : "") +
+          ">Primera</option></select></div>' +
+          '<div class="panel-campo oai-field oai-field--half"><label>Cantidad</label>' +
+          '<input type="number" class="oai-media-list-sendcount oai-input" min="1" max="20" value="' +
+          (lista.sendCount || 3) +
+          '"></div></div>' +
+          '<div class="oai-field-row">' +
+          '<div class="panel-campo oai-field oai-field--grow"><label>Texto previo</label>' +
+          '<input class="oai-media-list-intro oai-input" value="' +
+          esc(lista.introText || "") +
+          '" placeholder="Mensaje antes de enviar fotos"></div>' +
+          '<div class="panel-campo oai-field oai-field--half"><label>Caption</label>' +
+          '<select class="oai-media-list-captionmode oai-input">' +
+          '<option value="caption_item"' +
+          (lista.captionMode === "caption_item" ? " selected" : "") +
+          ">Por foto</option>" +
+          '<option value="same_caption"' +
+          (lista.captionMode === "same_caption" ? " selected" : "") +
+          ">Igual todas</option>" +
+          '<option value="none"' +
+          (lista.captionMode === "none" ? " selected" : "") +
+          ">Sin caption</option></select></div></div>' +
+          '<p class="ia-handle-hint oai-handle-hint">ID lista: <code>' +
+          esc(lista.id) +
+          "</code></p>" +
+          '<div class="oai-media-items-wrap">' +
+          renderItemsBibliotecaEditor(lista) +
+          "</div>" +
+          '<button type="button" class="oai-media-list-add-foto oai-btn oai-btn--add oai-btn--sm" data-list-id="' +
+          esc(lista.id) +
+          '">+ Agregar foto (URL)</button></div></div>'
+        );
+      })
+      .join("");
+
+    bindMediaLibraryEditorEvents();
+  }
+
+  function eliminarListaPorId(listId) {
+    const lid = String(listId || "").trim();
+    if (!lid) return;
+
+    syncMediaLibraryDesdeDom();
+    asegurarMediaLibrary(configActiva);
+    configActiva.mediaLibrary.lists = configActiva.mediaLibrary.lists.filter(
+      function (lista) {
+        return lista.id !== lid;
+      }
+    );
+    renderMediaLibraryEditor();
+    onFormChange();
+  }
+
+  function eliminarFotoPorId(listId, itemId) {
+    const lid = String(listId || "").trim();
+    const iid = String(itemId || "").trim();
+    if (!lid || !iid) return;
+
+    syncMediaLibraryDesdeDom();
+    asegurarMediaLibrary(configActiva);
+    const lista = configActiva.mediaLibrary.lists.find(function (l) {
+      return l.id === lid;
+    });
+    if (!lista) return;
+    lista.items = (lista.items || []).filter(function (it) {
+      return it.id !== iid;
+    });
+    renderMediaLibraryEditor();
+    onFormChange();
+  }
+
+  function agregarFotoALista(listId) {
+    const lid = String(listId || "").trim();
+    if (!lid) return;
+
+    syncMediaLibraryDesdeDom();
+    asegurarMediaLibrary(configActiva);
+    const lista = configActiva.mediaLibrary.lists.find(function (l) {
+      return l.id === lid;
+    });
+    if (!lista) return;
+    if (!Array.isArray(lista.items)) lista.items = [];
+    lista.items.push({
+      id: generarItemId(),
+      url: "",
+      caption: "",
+    });
+    renderMediaLibraryEditor();
+    onFormChange();
+  }
+
+  function agregarListaBiblioteca() {
+    syncCamposPanelDraft();
+    asegurarMediaLibrary(configActiva);
+    configActiva.mediaLibrary.enabled = true;
+    configActiva.mediaLibrary.lists.push({
+      id: generarListId(),
+      name: "",
+      description: "",
+      sendMode: "random",
+      sendCount: 3,
+      introText: "",
+      captionMode: "caption_item",
+      items: [],
+    });
+    const enabledEl = document.getElementById("openaiAgentMediaEnabled");
+    if (enabledEl) enabledEl.checked = true;
+    renderMediaLibraryEditor();
+    onFormChange();
+  }
+
   function renderPanel(nodo) {
     if (!nodo) return;
     nodoActivo = nodo;
     configActiva = leerConfigDeNodo(nodo);
     asegurarIdsEnRoutes(configActiva);
+    asegurarMediaLibrary(configActiva);
+    const ml = configActiva.mediaLibrary;
     const contenido = document.getElementById("panelNodoContenido");
     if (!contenido) return;
 
@@ -637,6 +1061,27 @@ window.MacBotOpenAIAgent = (function () {
       '">' +
       esc(configActiva.openaiPrompt || "") +
       "</textarea></div></section>" +
+      '<section class="oai-card oai-card--media-library">' +
+      '<h5 class="oai-card__title">🖼 Biblioteca Multimedia IA</h5>' +
+      '<p class="oai-card__hint">Listas de fotos que OpenAI podrá elegir por nombre (sin analizar imágenes).</p>' +
+      '<div class="oai-field-row oai-field-row--media-toggle">' +
+      '<label class="oai-toggle oai-toggle--media"><input type="checkbox" id="openaiAgentMediaEnabled"' +
+      (ml.enabled ? " checked" : "") +
+      '><span class="oai-toggle__track" aria-hidden="true"></span><span class="oai-toggle__label">Biblioteca activa</span></label></div>' +
+      '<div class="panel-campo oai-field"><label>Prioridad</label>' +
+      '<select id="openaiAgentPriorityMode" class="oai-input">' +
+      '<option value="routes_library_gpt"' +
+      (ml.priorityMode === "routes_library_gpt" ? " selected" : "") +
+      ">Caminos → Biblioteca → GPT</option>" +
+      '<option value="library_routes_gpt"' +
+      (ml.priorityMode === "library_routes_gpt" ? " selected" : "") +
+      ">Biblioteca → Caminos → GPT</option>" +
+      '<option value="gpt_only"' +
+      (ml.priorityMode === "gpt_only" ? " selected" : "") +
+      ">Solo GPT</option></select></div>' +
+      '<div id="openaiAgentMediaLists" class="oai-media-lists"></div>' +
+      '<button type="button" class="panel-btn oai-btn oai-btn--add" id="openaiAgentAgregarLista">+ Lista</button>' +
+      "</section>" +
       '<section class="oai-card oai-card--routes">' +
       '<h5 class="oai-card__title">Caminos inteligentes</h5>' +
       '<p class="oai-card__hint">Cada salida usa sinónimos para detectar intención del lead.</p>' +
@@ -648,7 +1093,12 @@ window.MacBotOpenAIAgent = (function () {
       '<button type="button" class="panel-btn oai-btn oai-btn--save" id="openaiAgentGuardarPanel">Guardar Agente OpenAI</button>' +
       "</section></div></div>";
 
+    renderMediaLibraryEditor();
     renderCaminosEditor();
+    document.getElementById("openaiAgentAgregarLista")?.addEventListener("click", function (ev) {
+      ev.preventDefault();
+      agregarListaBiblioteca();
+    });
     document.getElementById("openaiAgentAgregarCamino")?.addEventListener("click", function (ev) {
       ev.preventDefault();
       agregarCamino();
@@ -663,6 +1113,8 @@ window.MacBotOpenAIAgent = (function () {
       "openaiAgentTemperature",
       "openaiAgentModel",
       "openaiAgentPrompt",
+      "openaiAgentMediaEnabled",
+      "openaiAgentPriorityMode",
     ].forEach(function (id) {
       document.getElementById(id)?.addEventListener("input", onFormChange);
       document.getElementById(id)?.addEventListener("change", onFormChange);

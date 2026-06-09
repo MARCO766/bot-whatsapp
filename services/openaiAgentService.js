@@ -4,7 +4,7 @@
  */
 
 const axios = require("axios");
-const { enviarTextoWhatsApp } = require("./whatsappService");
+const { enviarTextoWhatsApp, enviarMediaWhatsApp } = require("./whatsappService");
 const {
   analizarCaminosOpenAI,
   normalizarCaminosOpenAI,
@@ -13,6 +13,15 @@ const {
   sanitizarUnicodeRoto,
   logEmojiDebug,
 } = require("./textoSeguro");
+const {
+  crearMediaLibraryPorDefecto,
+  normalizarMediaLibrary,
+  construirPromptBibliotecas,
+  resolverAccionBibliotecaDesdeRespuesta,
+  textoFallbackSinAccionBiblioteca,
+  seleccionarItemsBiblioteca,
+  resolverCaptionBiblioteca,
+} = require("./openaiMediaLibrary");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
@@ -52,6 +61,7 @@ function crearConfigOpenAIPorDefecto() {
     temperature: 0.7,
     model: "gpt-4o-mini",
     openaiPrompt: "",
+    mediaLibrary: crearMediaLibraryPorDefecto(),
     caminos: [],
     routes: [],
   };
@@ -137,6 +147,7 @@ function normalizarConfigOpenAI(cfg) {
     model: model || "gpt-4o-mini",
     openaiPrompt,
     productData: normalizarProductData(base.productData),
+    mediaLibrary: normalizarMediaLibrary(base.mediaLibrary),
     caminos: router.caminos,
     routes: router.caminos,
   };
@@ -651,6 +662,12 @@ function construirMensajesOpenAI(config, mensajeLead, chatHistory, lastReplies, 
     system += "\nReformula con otras palabras. No repitas la frase anterior.";
   }
 
+  const bloqueBiblioteca = construirPromptBibliotecas(config?.mediaLibrary);
+  if (bloqueBiblioteca) {
+    system += "\n\n" + bloqueBiblioteca;
+    console.log("[OPENAI_MEDIA_LIBRARY_PROMPT]", bloqueBiblioteca);
+  }
+
   const messages = [{ role: "system", content: system }];
 
   if (openaiPrompt) {
@@ -853,6 +870,125 @@ async function generarReply(config, mensajeLead, chatHistory, lastReplies) {
   }
 }
 
+function opcionesEnvioOpenAI(usuarioId, conexionWhatsappId) {
+  const op = { usuarioId };
+  const conexion =
+    conexionWhatsappId != null && String(conexionWhatsappId).trim() !== ""
+      ? String(conexionWhatsappId).trim()
+      : null;
+  if (conexion) {
+    op.conexionWhatsappId = conexion;
+    op.strictConexionWhatsappId = true;
+  }
+  return op;
+}
+
+async function enviarFotosBibliotecaOpenAI(
+  numero,
+  lista,
+  mediaLibrary,
+  opts = {}
+) {
+  const numeroCanon = String(numero || "").trim();
+  const uid =
+    opts.usuarioId != null && opts.usuarioId !== ""
+      ? String(opts.usuarioId).trim()
+      : null;
+  const conexion =
+    opts.conexionWhatsappId != null && String(opts.conexionWhatsappId).trim() !== ""
+      ? String(opts.conexionWhatsappId).trim()
+      : null;
+  const textoAccion = String(opts.textoAccion || "").trim();
+
+  if (!numeroCanon || !uid || !conexion) {
+    console.log("[OPENAI_MEDIA_LIBRARY_SEND_DONE]", {
+      listId: lista?.id || null,
+      enviadas: 0,
+      errores: 0,
+      omitido: "sin_numero_usuario_o_conexion",
+    });
+    return { enviadas: 0, errores: 0 };
+  }
+
+  const items = seleccionarItemsBiblioteca(lista, mediaLibrary);
+  if (!items.length) {
+    console.log("[OPENAI_MEDIA_LIBRARY_SEND_DONE]", {
+      listId: lista?.id || null,
+      enviadas: 0,
+      errores: 0,
+      omitido: "sin_items",
+    });
+    return { enviadas: 0, errores: 0 };
+  }
+
+  const opEnvio = opcionesEnvioOpenAI(uid, conexion);
+
+  console.log("[OPENAI_MEDIA_LIBRARY_SEND_START]", {
+    listId: lista.id,
+    sendMode: lista.sendMode,
+    sendCount: lista.sendCount,
+    seleccionadas: items.length,
+    captionMode: lista.captionMode,
+  });
+
+  let enviadas = 0;
+  let errores = 0;
+
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    const caption = resolverCaptionBiblioteca(lista, item, textoAccion);
+
+    try {
+      const res = await enviarMediaWhatsApp(
+        numeroCanon,
+        "image",
+        item.url,
+        caption,
+        opEnvio
+      );
+
+      if (res) {
+        enviadas++;
+        console.log("[OPENAI_MEDIA_LIBRARY_SEND_ITEM]", {
+          index: i + 1,
+          total: items.length,
+          itemId: item.id,
+          url: item.url,
+          caption: caption || "",
+          whatsapp_message_id: res.whatsapp_message_id || res.id || null,
+        });
+      } else {
+        errores++;
+        console.log("[OPENAI_MEDIA_LIBRARY_SEND_ERROR]", {
+          index: i + 1,
+          total: items.length,
+          itemId: item.id,
+          url: item.url,
+          error: "envio_sin_confirmar",
+        });
+      }
+    } catch (err) {
+      errores++;
+      console.log("[OPENAI_MEDIA_LIBRARY_SEND_ERROR]", {
+        index: i + 1,
+        total: items.length,
+        itemId: item.id,
+        url: item.url,
+        error: err.message || String(err),
+      });
+    }
+  }
+
+  console.log("[OPENAI_MEDIA_LIBRARY_SEND_DONE]", {
+    listId: lista.id,
+    enviadas,
+    errores,
+    total: items.length,
+  });
+
+  return { enviadas, errores };
+}
+
 /** Mismo pipeline que IA Pro: envío Meta + guardado en bandeja en un solo paso. */
 async function enviarOpenAIConPipelineManual(
   numero,
@@ -924,13 +1060,52 @@ async function resolverAnalisisOpenAI(config, mensajeLead, chatHistory, memoria,
   }
 
   const generado = await generarReply(config, mensajeLead, chatHistory, lastReplies);
+
+  const accionBiblioteca = resolverAccionBibliotecaDesdeRespuesta(
+    generado.respuestaOpenAI,
+    config.mediaLibrary
+  );
+
+  if (accionBiblioteca) {
+    return {
+      ok: true,
+      action: "media_library",
+      intent: clasificarConsultaIntent(mensajeLead),
+      score: analisis.score || 0,
+      routeId: null,
+      listId: accionBiblioteca.listId,
+      lista: accionBiblioteca.lista,
+      texto: accionBiblioteca.texto,
+      reply: accionBiblioteca.texto || "",
+      source: "openai-media-library",
+      promptFinal: generado.promptFinal,
+      respuestaOpenAI: generado.respuestaOpenAI,
+    };
+  }
+
+  let replyFinal = generado.reply;
+  if (/ACCION_BIBLIOTECA\s*:/i.test(String(generado.respuestaOpenAI || ""))) {
+    const fallback = textoFallbackSinAccionBiblioteca(generado.respuestaOpenAI);
+    if (fallback) {
+      replyFinal = limpiarReply(fallback, { preservarEmojis: true });
+      replyFinal = aplicarAntiRepeticion(
+        replyFinal,
+        config,
+        mensajeLead,
+        chatHistory,
+        lastReplies,
+        { fromOpenAI: true }
+      );
+    }
+  }
+
   return {
     ok: true,
     action: "reply",
     intent: clasificarConsultaIntent(mensajeLead),
     score: analisis.score || 0,
     routeId: null,
-    reply: generado.reply,
+    reply: replyFinal,
     source: generado.source,
     promptFinal: generado.promptFinal,
     respuestaOpenAI: generado.respuestaOpenAI,
@@ -1009,6 +1184,62 @@ async function ejecutarNodoOpenAIAgent(nodo, contexto, opts = {}) {
         openaiAgentEjecutada: true,
         chat_history: chatHistory,
         intent: resultado.intent,
+        score: resultado.score,
+      };
+    }
+
+    if (resultado.action === "media_library" && resultado.listId) {
+      const textoBiblioteca = limpiarReply(String(resultado.texto || "").trim());
+      const listaBiblioteca = resultado.lista || null;
+      const uidEnvio =
+        contexto?.usuarioId ?? opts?.usuarioId ?? usuarioId ?? null;
+
+      console.log("[IA DEBUG] acción biblioteca detectada:", {
+        listId: resultado.listId,
+        texto: textoBiblioteca || "(sin texto)",
+        fotosEnLista: listaBiblioteca?.items?.length || 0,
+      });
+
+      if (textoBiblioteca && numero) {
+        logEmojiDebug("antes enviar texto biblioteca", textoBiblioteca);
+        await enviarOpenAIConPipelineManual(
+          numero,
+          textoBiblioteca,
+          uidEnvio,
+          conexionWhatsappId
+        );
+        contexto.ultimaRespuestaIA = textoBiblioteca;
+        chatHistory = appendChatHistory(chatHistory, "assistant", textoBiblioteca);
+        pushLastReply(usuarioId, conexionWhatsappId, numero, textoBiblioteca);
+      }
+
+      let fotosEnviadas = 0;
+      if (listaBiblioteca && numero) {
+        const envioFotos = await enviarFotosBibliotecaOpenAI(
+          numero,
+          listaBiblioteca,
+          config.mediaLibrary,
+          {
+            usuarioId: uidEnvio,
+            conexionWhatsappId,
+            textoAccion: textoBiblioteca,
+          }
+        );
+        fotosEnviadas = envioFotos.enviadas || 0;
+      }
+
+      return {
+        ...contexto,
+        openaiAgentPausar: true,
+        iaPausar: true,
+        openaiAgentReply: !!(textoBiblioteca || fotosEnviadas),
+        openaiAgentEjecutada: true,
+        openaiAgentMediaLibrary: true,
+        openaiAgentMediaLibraryListId: resultado.listId,
+        openaiAgentMediaLibraryTexto: textoBiblioteca,
+        openaiAgentMediaLibraryFotosEnviadas: fotosEnviadas,
+        chat_history: chatHistory,
+        intent: resultado.intent || "media_library",
         score: resultado.score,
       };
     }
