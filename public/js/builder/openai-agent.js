@@ -891,6 +891,11 @@ window.MacBotOpenAIAgent = (function () {
     const rows = wrap
       ? wrap.querySelectorAll(".openai-agent-ruta-row")
       : [];
+    const prevPorId = new Map();
+    obtenerRoutes(configActiva).forEach(function (r) {
+      const rid = obtenerRouteId(r);
+      if (rid) prevPorId.set(rid, r);
+    });
     const caminos = [];
     rows.forEach(function (row) {
       const id = String(row.dataset.routeId || "").trim();
@@ -903,7 +908,9 @@ window.MacBotOpenAIAgent = (function () {
           return s.trim();
         })
         .filter(Boolean);
-      caminos.push({
+      const prev = prevPorId.get(id);
+      const mediaIdLegado = prev?.mediaId ? String(prev.mediaId).trim() : "";
+      const camino = {
         id: id,
         text: text,
         name: text,
@@ -911,9 +918,10 @@ window.MacBotOpenAIAgent = (function () {
         type: "texto",
         synonyms: syns,
         priority: parseInt(row.querySelector(".openai-agent-ruta-prioridad")?.value, 10) || 50,
-        mediaId: row.querySelector(".openai-agent-ruta-media")?.value.trim() || null,
         enabled: row.querySelector(".openai-agent-ruta-enabled")?.checked !== false,
-      });
+      };
+      if (mediaIdLegado) camino.mediaId = mediaIdLegado;
+      caminos.push(camino);
     });
     configActiva.caminos = caminos;
     configActiva.routes = caminos;
@@ -1114,13 +1122,9 @@ window.MacBotOpenAIAgent = (function () {
           '<div class="panel-campo oai-field"><label>Sinónimos (coma)</label><textarea class="openai-agent-ruta-sinonimos ia-textarea oai-input oai-textarea" rows="2">' +
           esc(syns) +
           "</textarea></div>" +
-          '<div class="oai-field-row">' +
-          '<div class="panel-campo oai-field oai-field--half"><label>Prioridad</label><input type="number" class="openai-agent-ruta-prioridad oai-input" min="0" max="100" value="' +
+          '<div class="panel-campo oai-field oai-field--sm"><label>Prioridad</label><input type="number" class="openai-agent-ruta-prioridad oai-input" min="0" max="100" value="' +
           (route.priority || 50) +
           '"></div>' +
-          '<div class="panel-campo oai-field oai-field--half"><label>Media ID / URL</label><input class="openai-agent-ruta-media oai-input" value="' +
-          esc(route.mediaId || "") +
-          '"></div></div>' +
           '<p class="ia-handle-hint oai-handle-hint">Handle conexión: <code>' +
           esc(route.id) +
           "</code></p></div></div>"
@@ -1153,7 +1157,6 @@ window.MacBotOpenAIAgent = (function () {
       nombre: "",
       synonyms: [],
       priority: 50,
-      mediaId: null,
       enabled: true,
     };
     asegurarArraysCaminos(configActiva);
