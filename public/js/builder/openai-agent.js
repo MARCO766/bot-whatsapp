@@ -111,26 +111,45 @@ window.MacBotOpenAIAgent = (function () {
   const SEND_MODES_VALIDOS = ["random", "all", "first"];
   const CAPTION_MODES_VALIDOS = ["caption_item", "same_caption", "none"];
 
+  const DESCRIPCIONES_IA_BIBLIOTECA = {
+    muestras:
+      "Contiene ejemplos reales y trabajos terminados. Usa esta biblioteca cuando el lead pida fotos, muestras, ejemplos o quiera ver cómo se ve el producto final.",
+    catalogo:
+      "Contiene imágenes del catálogo completo de productos. Usa esta biblioteca cuando el lead quiera ver productos, diseños disponibles, modelos o catálogo.",
+    testimonios:
+      "Contiene capturas y pruebas de clientes satisfechos. Usa esta biblioteca cuando el lead tenga dudas sobre la calidad o solicite referencias.",
+    comprobantes:
+      "Contiene ejemplos de pagos y comprobantes. Usa esta biblioteca cuando el lead pregunte cómo pagan otros clientes o solicite evidencia de pagos.",
+  };
+
+  /** Textos cortos de versiones anteriores — para no pisar descripciones ya personalizadas. */
+  const DESCRIPCIONES_IA_LEGACY_BIBLIOTECA = [
+    "Fotos de ejemplos terminados del producto",
+    "Fotos del catálogo o productos disponibles",
+    "Capturas o fotos de clientes satisfechos",
+    "Ejemplos de comprobantes o pagos",
+  ];
+
   const LISTAS_PREDETERMINADAS_BIBLIOTECA = [
     {
       id: "muestras",
       name: "Muestras",
-      description: "Fotos de ejemplos terminados del producto",
+      description: DESCRIPCIONES_IA_BIBLIOTECA.muestras,
     },
     {
       id: "catalogo",
       name: "Catálogo",
-      description: "Fotos del catálogo o productos disponibles",
+      description: DESCRIPCIONES_IA_BIBLIOTECA.catalogo,
     },
     {
       id: "testimonios",
       name: "Testimonios",
-      description: "Capturas o fotos de clientes satisfechos",
+      description: DESCRIPCIONES_IA_BIBLIOTECA.testimonios,
     },
     {
       id: "comprobantes",
       name: "Comprobantes",
-      description: "Ejemplos de comprobantes o pagos",
+      description: DESCRIPCIONES_IA_BIBLIOTECA.comprobantes,
     },
   ];
 
@@ -154,6 +173,46 @@ window.MacBotOpenAIAgent = (function () {
         return def.id === String(tipoId || "").trim();
       }) || null
     );
+  }
+
+  function obtenerDescripcionIAPorTipo(tipoId) {
+    const id = String(tipoId || "").trim();
+    if (!id || id === "personalizada") return "";
+    return String(DESCRIPCIONES_IA_BIBLIOTECA[id] || "").trim();
+  }
+
+  function conjuntoDescripcionesDefaultBiblioteca() {
+    const conocidas = new Set();
+    Object.keys(DESCRIPCIONES_IA_BIBLIOTECA).forEach(function (key) {
+      const t = String(DESCRIPCIONES_IA_BIBLIOTECA[key] || "").trim();
+      if (t) conocidas.add(t);
+    });
+    DESCRIPCIONES_IA_LEGACY_BIBLIOTECA.forEach(function (t) {
+      const s = String(t || "").trim();
+      if (s) conocidas.add(s);
+    });
+    return conocidas;
+  }
+
+  function debeAutorrellenarDescripcionIA(texto) {
+    const actual = String(texto || "").trim();
+    if (!actual) return true;
+    return conjuntoDescripcionesDefaultBiblioteca().has(actual);
+  }
+
+  function aplicarDescripcionIATipoEnFila(row, tipoNuevo) {
+    const descEl = row.querySelector(".oai-media-list-desc");
+    if (!descEl) return;
+
+    const tipo = String(tipoNuevo || "").trim();
+    if (!tipo || tipo === "personalizada") return;
+
+    const sugerida = obtenerDescripcionIAPorTipo(tipo);
+    if (!sugerida) return;
+
+    if (debeAutorrellenarDescripcionIA(descEl.value)) {
+      descEl.value = sugerida;
+    }
   }
 
   function resolverTipoListaDesdeLista(lista) {
@@ -1018,6 +1077,8 @@ window.MacBotOpenAIAgent = (function () {
           const hint = row.querySelector(".oai-media-list-id-hint code");
           if (hint) hint.textContent = nuevoId;
         }
+
+        aplicarDescripcionIATipoEnFila(row, sel.value);
 
         onFormChange();
         renderMediaLibraryEditor();
