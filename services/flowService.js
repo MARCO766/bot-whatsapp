@@ -26,12 +26,17 @@ const {
   parseIAFromNodo,
 } = require("./aiService");
 const { ejecutarNodoIAPro, parseIAProFromNodo } = require("./iaProService");
-const { ejecutarNodoOpenAIAgent } = require("./openaiAgentService");
+const {
+  ejecutarNodoOpenAIAgent,
+  trimChatHistory,
+  appendChatHistory,
+} = require("./openaiAgentService");
 const {
   guardarSesionIAPendiente,
   obtenerSesionIAPendiente,
   limpiarSesionIAPendiente,
   logFlowKey,
+  logChatHistorySource,
 } = require("./iaFlowSession");
 const {
   esComandoResetFlujo,
@@ -1153,6 +1158,12 @@ async function ejecutarFlujo(
             ultimoNodo: nodoId,
           };
           flowContext.ultimoNodoContenido = nodoId;
+          flowContext.chat_history = appendChatHistory(
+            flowContext.chat_history,
+            "assistant",
+            ultimoTexto
+          );
+          logChatHistorySource("contenido_nodo_respuesta_bot", flowContext.chat_history);
         }
       }
       await continuarASiguientes(nodoId, visitados, "contenido");
@@ -1176,6 +1187,8 @@ async function ejecutarFlujo(
         mensajeLead: mensajeLeadOpenAI,
       });
 
+      logChatHistorySource("flowService_antes_openai_agent", flowContext.chat_history);
+
       try {
         flowContext = await ejecutarNodoOpenAIAgent(
           nodo,
@@ -1192,6 +1205,7 @@ async function ejecutarFlujo(
           },
           { resume: resumeIA, usuarioId, nodoId }
         );
+        logChatHistorySource("flowService_despues_openai_agent", flowContext.chat_history);
       } catch (error) {
         console.error("❌ OPENAI_AGENT ERROR", error.message || error);
         flowContext = {
@@ -1202,6 +1216,28 @@ async function ejecutarFlujo(
       }
 
       if (flowContext.openaiAgentPausar && !resumeIA) {
+        const flowContextGuardar = { ...flowContext };
+        const ultimoBot =
+          flowContextGuardar.ultimaSalidaBot ||
+          flowContextGuardar.memoriaIA?.ultimoMensajeBot ||
+          "";
+        if (ultimoBot) {
+          const historialActual = trimChatHistory(flowContextGuardar.chat_history);
+          const yaIncluido = historialActual.some(
+            (t) => t.role === "assistant" && t.text === ultimoBot
+          );
+          if (!yaIncluido) {
+            flowContextGuardar.chat_history = appendChatHistory(
+              historialActual,
+              "assistant",
+              ultimoBot
+            );
+          }
+        }
+        logChatHistorySource(
+          "openai_agent_primera_pausa_antes_guardar",
+          flowContextGuardar.chat_history
+        );
         guardarSesionIAPendiente({
           usuarioId,
           conexionWhatsappId: flowContext.conexionWhatsappId,
@@ -1210,7 +1246,7 @@ async function ejecutarFlujo(
           nodoId,
           visitados: Array.from(visitados),
           flowContext: {
-            ...flowContext,
+            ...flowContextGuardar,
             ultimo_mensaje: "",
           },
         });
@@ -1225,6 +1261,22 @@ async function ejecutarFlujo(
         null;
 
       if (flowContext.openaiAgentPausar && resumeIA && !routeHandle) {
+        logChatHistorySource(
+          "openai_agent_respuesta_pausa_antes_guardar",
+          flowContext.chat_history
+        );
+        guardarSesionIAPendiente({
+          usuarioId,
+          conexionWhatsappId: flowContext.conexionWhatsappId,
+          numero,
+          flujoId,
+          nodoId,
+          visitados: Array.from(visitados),
+          flowContext: {
+            ...flowContext,
+            ultimo_mensaje: "",
+          },
+        });
         console.log("⏸️ Agente OpenAI sigue esperando");
         return;
       }
@@ -1651,6 +1703,7 @@ async function reanudarFlujoIAPendiente(numero, mensaje, usuarioId, conexionWhat
   const tipoPendiente = nodoPendiente ? detectarTipoNodo(nodoPendiente) : "?";
 
   console.log("[FLUJO] Reanudando IA pendiente | nodo:", sesion.nodoId, "| tipo:", tipoPendiente);
+  logChatHistorySource("reanudar_sesion_cargada", sesion.flowContext?.chat_history);
 
   const sesionConexion =
     conexionWhatsappId ||

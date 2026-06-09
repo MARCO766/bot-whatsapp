@@ -4,6 +4,7 @@
  */
 
 const axios = require("axios");
+const { logChatHistorySource } = require("./iaFlowSession");
 const { enviarTextoWhatsApp, enviarMediaWhatsApp } = require("./whatsappService");
 const {
   analizarCaminosOpenAI,
@@ -1416,6 +1417,7 @@ async function ejecutarNodoOpenAIAgent(nodo, contexto, opts = {}) {
   ).trim();
 
   const nombreLead = resolverNombreLeadValido(contexto?.nombre, numero);
+  logChatHistorySource("openaiAgentService_contexto_recibido", contexto?.chat_history);
   console.log("[OPENAI_LEAD_CONTEXT]", { nombreLead: nombreLead || null });
 
   console.log("🤖 OPENAI_AGENT iniciado", {

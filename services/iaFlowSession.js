@@ -20,6 +20,32 @@ function logFlowKey(usuarioId, conexionWhatsappId, numero) {
   return flowKey;
 }
 
+function logChatHistorySource(origen, chatHistory) {
+  const historial = (Array.isArray(chatHistory) ? chatHistory : []).map((t) => ({
+    role: t.role || "?",
+    text: String(t.text || t.content || "").slice(0, 300),
+  }));
+  const cantidadUser = historial.filter((t) => t.role === "user").length;
+  const cantidadAssistant = historial.filter(
+    (t) => t.role === "assistant" || t.role === "bot" || t.role === "ia"
+  ).length;
+
+  console.log(
+    "[CHAT_HISTORY_SOURCE]",
+    JSON.stringify(
+      {
+        origen,
+        total: historial.length,
+        cantidadUser,
+        cantidadAssistant,
+        chat_history: historial,
+      },
+      null,
+      2
+    )
+  );
+}
+
 function guardarSesionIAPendiente(payload) {
   const { usuarioId, conexionWhatsappId, numero } = payload;
   const conexionLinea =
@@ -50,6 +76,10 @@ function guardarSesionIAPendiente(payload) {
   };
 
   sesiones.set(key, sesion);
+  logChatHistorySource(
+    `sesion_guardada:nodo=${payload.nodoId || "?"}`,
+    payload.flowContext?.chat_history
+  );
   console.log("[IA] Sesión pendiente guardada:", key, "| nodo:", payload.nodoId);
   return sesion;
 }
@@ -84,6 +114,7 @@ function limpiarSesionIAPendiente(usuarioId, conexionWhatsappId, numero) {
 module.exports = {
   claveSesion,
   logFlowKey,
+  logChatHistorySource,
   guardarSesionIAPendiente,
   obtenerSesionIAPendiente,
   limpiarSesionIAPendiente,
