@@ -7,6 +7,8 @@ window.MacBotContenido = (function () {
   const COMPACT_FROM = 4;
   const SCROLL_FROM = 7;
   const MAX_IMAGEN_FLUJO_BYTES = 2 * 1024 * 1024;
+  const MAX_BOTONES = 3;
+  const MAX_TEXTO_BOTON = 20;
   let subidaImagenActiva = false;
 
   const ETIQUETAS = {
@@ -32,6 +34,7 @@ window.MacBotContenido = (function () {
     audio: "Subir audio",
     video: "Subir video",
     doc: "Agregar documento",
+    boton: "Agregar botón",
   };
   const BTN_GUARDAR_CAMBIOS = "Guardar cambios";
 
@@ -68,6 +71,7 @@ window.MacBotContenido = (function () {
       { tipo: "audio", icon: "🎵", label: "AUDIO" },
       { tipo: "video", icon: "🎬", label: "VIDEO" },
       { tipo: "doc", icon: "📁", label: "ARCHIVO" },
+      { tipo: "boton", icon: "🔘", label: "BOTÓN" },
     ];
 
     return (
@@ -157,7 +161,12 @@ window.MacBotContenido = (function () {
       return !isNaN(s) && s > 0;
     }
     if (item.tipo === "boton") {
-      return !!(item.valor || item.texto || item.descripcion);
+      const texto = String(item.texto || item.valor || item.descripcion || "").trim();
+      const lista = Array.isArray(item.botones) ? item.botones : [];
+      const conTexto = lista.filter(function (b) {
+        return b && String(b.texto || "").trim();
+      });
+      return !!texto && conTexto.length >= 1;
     }
     return !!(item.valor || item.descripcion);
   }
@@ -262,9 +271,27 @@ window.MacBotContenido = (function () {
     }
 
     if (item.tipo === "boton") {
-      const lbl = truncar(item.valor || item.texto || item.descripcion || "Botón", 24);
-      if (!lbl) return "";
-      return '<div class="cnt-cta">' + esc(lbl) + "</div>";
+      const body = String(item.texto || item.valor || item.descripcion || "").trim();
+      const botones = Array.isArray(item.botones) ? item.botones : [];
+      if (!body && !botones.length) return "";
+
+      let html = "";
+      if (body) {
+        html +=
+          '<div class="cnt-bubble cnt-bubble--text">' + esc(truncar(body, 72)) + "</div>";
+      }
+      const pills = botones
+        .map(function (b) {
+          const t = String(b?.texto || "").trim();
+          if (!t) return "";
+          return '<span class="cnt-btn-pill">' + esc(t) + "</span>";
+        })
+        .filter(Boolean)
+        .join("");
+      if (pills) {
+        html += '<div class="cnt-btn-pills">' + pills + "</div>";
+      }
+      return html;
     }
 
     return "";
@@ -525,9 +552,126 @@ window.MacBotContenido = (function () {
       audio: "cntSubirAudio",
       video: "cntSubirVideo",
       doc: "cntAddDoc",
+      boton: "cntAddBoton",
     };
     const id = map[tipo];
     return id ? document.getElementById(id) : null;
+  }
+
+  function generarBloqueIdNuevo() {
+    const base = String(nodoActivo?.id || "nodo").replace(/^nodo_/, "");
+    return base + "_" + Date.now().toString(36);
+  }
+
+  function asegurarBloqueId(item) {
+    if (!item.bloqueId) {
+      item.bloqueId = generarBloqueIdNuevo();
+    }
+    return item.bloqueId;
+  }
+
+  function normalizarBotonesContenido(botonesRaw, bloqueId) {
+    const idBase = String(bloqueId || generarBloqueIdNuevo()).trim();
+    if (!Array.isArray(botonesRaw)) return [];
+
+    return botonesRaw
+      .slice(0, MAX_BOTONES)
+      .map(function (btn, index) {
+        const texto = String(btn?.texto || btn?.text || "")
+          .trim()
+          .slice(0, MAX_TEXTO_BOTON);
+        if (!texto) return null;
+        const idPref =
+          btn?.id && String(btn.id).startsWith("cnt_")
+            ? String(btn.id).slice(0, 128)
+            : "cnt_" + idBase + "_b" + index;
+        return { id: idPref, texto };
+      })
+      .filter(Boolean);
+  }
+
+  function leerBotonesDesdeFormularioContenido() {
+    const inputs = document.querySelectorAll(
+      '#cntBotonesLista input[data-cnt-boton="1"]'
+    );
+    const lista = [];
+
+    inputs.forEach(function (input) {
+      const texto = String(input.value || "")
+        .trim()
+        .slice(0, MAX_TEXTO_BOTON);
+      if (!texto) return;
+      lista.push({ texto });
+    });
+
+    return lista;
+  }
+
+  function renderFormularioBotonesContenido(botones, bloqueId) {
+    const box = document.getElementById("cntBotonesLista");
+    if (!box) return;
+
+    const lista = Array.isArray(botones) ? botones : [];
+    const slots = Math.max(1, Math.min(MAX_BOTONES, lista.length + 1));
+
+    let html =
+      '<p class="cnt-botones-hint">Máx. ' +
+      MAX_BOTONES +
+      " botones · " +
+      MAX_TEXTO_BOTON +
+      " caracteres c/u</p>";
+
+    for (let i = 0; i < slots; i++) {
+      const btn = lista[i] || { texto: "" };
+      html +=
+        '<div class="cnt-boton-row"><span class="cnt-boton-num">' +
+        (i + 1) +
+        '</span><input type="text" data-cnt-boton="1" maxlength="' +
+        MAX_TEXTO_BOTON +
+        '" placeholder="Ej: QR" value="' +
+        esc(btn.texto) +
+        '"></div>';
+    }
+
+    if (lista.length < MAX_BOTONES) {
+      html +=
+        '<button type="button" class="cnt-btn cnt-btn-ghost cnt-btn-sm" id="cntAddBotonSlot">+ Botón</button>';
+    }
+
+    box.innerHTML = html;
+    box.dataset.bloqueId = bloqueId || "";
+
+    box.querySelectorAll('input[data-cnt-boton="1"]').forEach(function (input) {
+      input.addEventListener("input", function () {
+        if (input.value.length > MAX_TEXTO_BOTON) {
+          input.value = input.value.slice(0, MAX_TEXTO_BOTON);
+        }
+      });
+    });
+
+    document.getElementById("cntAddBotonSlot")?.addEventListener("click", function () {
+      const actuales = leerBotonesDesdeFormularioContenido();
+      if (actuales.length >= MAX_BOTONES) return;
+      actuales.push({ texto: "" });
+      renderFormularioBotonesContenido(actuales, box.dataset.bloqueId || bloqueId);
+    });
+  }
+
+  function construirItemBotonDesdePanel(bloqueIdExistente) {
+    const textoEl = document.getElementById("cntPanelBotonTexto");
+    const texto = String(textoEl?.value || "").trim();
+    const bloqueId = bloqueIdExistente || generarBloqueIdNuevo();
+    const botones = normalizarBotonesContenido(
+      leerBotonesDesdeFormularioContenido(),
+      bloqueId
+    );
+
+    return {
+      tipo: "boton",
+      texto,
+      bloqueId,
+      botones,
+    };
   }
 
   function restaurarBotonesAgregar() {
@@ -564,6 +708,10 @@ window.MacBotContenido = (function () {
     if (fileVid) fileVid.value = "";
     if (done) done.style.display = "none";
     ocultarProgresoImagen();
+
+    const botonTexto = document.getElementById("cntPanelBotonTexto");
+    if (botonTexto) botonTexto.value = "";
+    renderFormularioBotonesContenido([], null);
   }
 
   function mostrarCampoTipoEnPanel(tipo) {
@@ -574,6 +722,7 @@ window.MacBotContenido = (function () {
       audio: "cntFieldAudio",
       video: "cntFieldVideo",
       doc: "cntFieldDoc",
+      boton: "cntFieldBoton",
     };
 
     Object.keys(fields).forEach(function (k) {
@@ -620,6 +769,11 @@ window.MacBotContenido = (function () {
     } else if (item.tipo === "doc") {
       const el = document.getElementById("cntPanelDocUrl");
       if (el) el.value = item.valor || "";
+    } else if (item.tipo === "boton") {
+      const el = document.getElementById("cntPanelBotonTexto");
+      if (el) el.value = item.texto || item.valor || "";
+      asegurarBloqueId(item);
+      renderFormularioBotonesContenido(item.botones || [], item.bloqueId);
     }
 
     aplicarBotonModoEdicion(item.tipo);
@@ -630,7 +784,7 @@ window.MacBotContenido = (function () {
     const item = variante[index];
     if (!item || !item.tipo) return;
 
-    const editables = ["texto", "tiempo", "imagen", "audio", "video", "doc"];
+    const editables = ["texto", "tiempo", "imagen", "audio", "video", "doc", "boton"];
     if (editables.indexOf(item.tipo) < 0) return;
 
     if (isEditingBlock && editingBlockIndex === index) return;
@@ -677,10 +831,15 @@ window.MacBotContenido = (function () {
         let resumen = "";
         if (item.tipo === "texto") resumen = truncar(item.valor, 40);
         else if (item.tipo === "tiempo") resumen = item.valor + "s";
-        else if (item.tipo === "boton") resumen = truncar(item.valor || item.texto, 30);
+        else if (item.tipo === "boton") {
+          const nBtn = (item.botones || []).length;
+          resumen =
+            truncar(item.texto || item.valor, 28) +
+            (nBtn ? " · " + nBtn + " btn" : "");
+        }
         else resumen = truncar(item.descripcion || item.valor || "", 36);
 
-        const editables = ["texto", "tiempo", "imagen", "audio", "video", "doc"];
+        const editables = ["texto", "tiempo", "imagen", "audio", "video", "doc", "boton"];
         const puedeEditar = editables.indexOf(item.tipo) >= 0;
         const editando =
           isEditingBlock && editingBlockIndex === index;
@@ -1144,6 +1303,34 @@ window.MacBotContenido = (function () {
     onPanelChange();
   }
 
+  function agregarBotonDesdePanel() {
+    let bloqueIdExistente = null;
+    if (isEditingBlock && editingBlockIndex >= 0) {
+      const existing = varianteActualPanel()[editingBlockIndex];
+      if (existing?.bloqueId) bloqueIdExistente = existing.bloqueId;
+    }
+
+    const item = construirItemBotonDesdePanel(bloqueIdExistente);
+
+    if (!item.texto) {
+      document.getElementById("cntPanelBotonTexto")?.focus();
+      mostrarToastContenido("⚠️ Escribe el texto del mensaje.");
+      return;
+    }
+    if (!item.botones.length) {
+      mostrarToastContenido("⚠️ Agrega al menos un botón.");
+      return;
+    }
+
+    if (finalizarEdicionBloque(item)) return;
+
+    varianteActualPanel().push(item);
+    const textoEl = document.getElementById("cntPanelBotonTexto");
+    if (textoEl) textoEl.value = "";
+    renderFormularioBotonesContenido([], null);
+    onPanelChange();
+  }
+
   function guardarDesdePanel() {
     if (!nodoActivo) return;
     guardarVariantesEnNodo(nodoActivo, variantesActivas);
@@ -1218,6 +1405,12 @@ window.MacBotContenido = (function () {
       "<label>Documento (URL)</label>" +
       '<input type="text" id="cntPanelDocUrl" placeholder="URL pública del PDF">' +
       '<button type="button" class="cnt-btn cnt-btn-ghost" id="cntAddDoc" style="margin-top:6px;">Agregar documento</button></div>' +
+      '<div class="cnt-panel-field" id="cntFieldBoton" style="display:none;">' +
+      "<label>Texto del mensaje</label>" +
+      '<textarea id="cntPanelBotonTexto" rows="3" placeholder="¿Cómo deseas pagar?"></textarea>' +
+      "<label>Botones WhatsApp</label>" +
+      '<div id="cntBotonesLista" class="cnt-botones-lista"></div>' +
+      '<button type="button" class="cnt-btn cnt-btn-ghost" id="cntAddBoton" style="margin-top:6px;">Agregar botón</button></div>' +
       '<div class="cnt-panel-field"><label>Vista previa en vivo</label>' +
       '<div id="cntPanelPreview" class="cnt-panel-preview"></div></div>' +
       '<div class="cnt-panel-field"><label>Bloques de la variante</label>' +
@@ -1233,12 +1426,16 @@ window.MacBotContenido = (function () {
       audio: "cntFieldAudio",
       video: "cntFieldVideo",
       doc: "cntFieldDoc",
+      boton: "cntFieldBoton",
     };
 
     contenido.querySelectorAll(".content-block-card[data-tipo]").forEach(function (btn) {
       btn.addEventListener("click", function () {
         if (isEditingBlock) cancelarEdicionBloque();
         mostrarCampoTipoEnPanel(btn.dataset.tipo);
+        if (btn.dataset.tipo === "boton") {
+          renderFormularioBotonesContenido([], null);
+        }
       });
     });
 
@@ -1258,6 +1455,7 @@ window.MacBotContenido = (function () {
     document.getElementById("cntSubirAudio")?.addEventListener("click", guardarAudioDesdePanel);
     document.getElementById("cntSubirVideo")?.addEventListener("click", guardarVideoDesdePanel);
     document.getElementById("cntAddDoc")?.addEventListener("click", agregarDocDesdePanel);
+    document.getElementById("cntAddBoton")?.addEventListener("click", agregarBotonDesdePanel);
     document.getElementById("cntGuardarPanel")?.addEventListener("click", guardarDesdePanel);
 
     renderPanelStats();

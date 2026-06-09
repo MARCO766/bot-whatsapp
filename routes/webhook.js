@@ -203,6 +203,16 @@ if (message.type === "text") {
   text = message.text.body;
 }
 
+if (message.type === "interactive" && message.interactive?.button_reply) {
+  const reply = message.interactive.button_reply;
+  text = reply.title || reply.id || "";
+  console.log("[WEBHOOK_BUTTON_REPLY]", {
+    id: reply.id || null,
+    title: reply.title || null,
+    text,
+  });
+}
+
 console.log("📩 MENSAJE ENTRANTE:", text, from);
 
 await axios.post(
@@ -534,7 +544,6 @@ if (conversacionActual) {
 
 if (message.type === "interactive" && message.interactive?.button_reply) {
   const reply = message.interactive.button_reply;
-  text = reply.title || reply.id || "";
 
   if (String(reply.id || "").startsWith("seg_")) {
     await registrarRespuestaBotonSeguimiento({

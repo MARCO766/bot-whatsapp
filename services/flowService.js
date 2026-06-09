@@ -1,6 +1,11 @@
 const axios = require("axios");
 
-const { enviarTextoWhatsApp, enviarMediaWhatsApp } = require("./whatsappService");
+const {
+  enviarTextoWhatsApp,
+  enviarMediaWhatsApp,
+  enviarBotonesWhatsApp,
+} = require("./whatsappService");
+const { normalizarBotones } = require("./seguimiento/normalizarBotones");
 const { esperarSegundos } = require("../utils/timers");
 const { detectarTipoNodo } = require("./seguimiento/detectarTipoNodo");
 const { ejecutarSeguimientoEnFlujo } = require("./seguimiento/ejecutarSeguimientoEnFlujo");
@@ -504,6 +509,47 @@ async function ejecutarBloqueContenido(
     console.log("⏳ PAUSA:", segundos);
     await esperarSegundos(segundos);
     return;
+  }
+
+  if (tipo === "boton") {
+    const texto = valorTextoBloque(bloque);
+    if (!texto) {
+      console.log("⚠️ BOTÓN SIN TEXTO, SE OMITE");
+      return null;
+    }
+    if (esTextoReservadoSeguimiento(texto, opts.textosReservadosSeguimiento)) {
+      logSeguimientoLegacyBloqueado({
+        motivo: "boton_paso_seguimiento_en_ejecutarBloqueContenido",
+        nodoId: opts.nodoId || null,
+        cliente_numero: numero,
+        texto,
+      });
+      return null;
+    }
+
+    const bloqueId = bloque.bloqueId || opts.nodoId || "cnt";
+    const botones = normalizarBotones(bloque.botones, bloqueId);
+    const ctxEnvio = {
+      fase: "ejecutarBloqueContenido",
+      nodoId: opts.nodoId ?? null,
+    };
+
+    if (!botones.length) {
+      console.log("[CONTENIDO_BOTON] fallback_texto", {
+        numero,
+        nodoId: opts.nodoId ?? null,
+      });
+      await enviarTextoFlujoSeguro(numero, texto, opEnvio, ctxEnvio);
+      return texto;
+    }
+
+    console.log("[CONTENIDO_BOTON] enviando", {
+      numero,
+      nodoId: opts.nodoId ?? null,
+      botones: botones.length,
+    });
+    await enviarBotonesWhatsApp(numero, texto, botones, opEnvio);
+    return texto;
   }
 
   const media = urlMediaBloque(bloque);

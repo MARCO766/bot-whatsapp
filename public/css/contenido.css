@@ -251,6 +251,39 @@
   max-width: 92%;
 }
 
+.cnt-btn-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  max-width: 92%;
+}
+
+.cnt-btn-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 9px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cnt-panel-preview .cnt-btn-pills {
+  gap: 6px;
+}
+
+.cnt-panel-preview .cnt-btn-pill {
+  font-size: 11px;
+  padding: 5px 11px;
+}
+
 .content-empty {
   color: #64748b;
   font-size: 12px;
@@ -547,6 +580,55 @@
   color: #e5e7eb;
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.cnt-btn-sm {
+  padding: 6px 10px;
+  font-size: 12px;
+  margin-top: 6px;
+}
+
+.cnt-botones-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cnt-botones-hint {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: #64748b;
+  line-height: 1.4;
+}
+
+.cnt-boton-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cnt-boton-num {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-size: 11px;
+  font-weight: 800;
+  color: #67e8f9;
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+}
+
+.cnt-boton-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+#cntFieldBoton label + label {
+  margin-top: 12px;
 }
 
 .cnt-blocks-mini {
