@@ -1194,6 +1194,32 @@
   white-space: nowrap;
 }
 
+.oai-media-list-title-heading {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: #f8fafc;
+  letter-spacing: 0.01em;
+}
+
+.oai-media-list-row--preset {
+  border-color: rgba(52, 211, 153, 0.32);
+}
+
+.oai-media-list-row--highlight {
+  box-shadow: 0 0 0 2px rgba(52, 211, 153, 0.45);
+}
+
+.oai-media-list-upload-wrap {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed rgba(103, 232, 249, 0.15);
+}
+
+.oai-media-item-row--highlight {
+  box-shadow: 0 0 0 2px rgba(103, 232, 249, 0.4);
+}
+
 .oai-media-list-body {
   padding: 12px;
   display: flex;

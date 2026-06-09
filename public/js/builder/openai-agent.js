@@ -292,20 +292,129 @@ window.MacBotOpenAIAgent = (function () {
     };
   }
 
-  function crearListasPredeterminadasBiblioteca() {
-    return LISTAS_PREDETERMINADAS_BIBLIOTECA.map(function (def) {
-      return crearListaBibliotecaVacia(def);
+  function tituloListaBiblioteca(lista) {
+    const tipo = resolverTipoListaDesdeLista(lista);
+    const def = obtenerDefTipoListaPreset(tipo);
+    if (def) return def.name;
+    const custom = String(lista?.name || "").trim();
+    return custom || "Lista personalizada";
+  }
+
+  function fusionarItemsLista(destino, origen) {
+    const items = Array.isArray(origen?.items) ? origen.items : [];
+    if (!Array.isArray(destino.items)) destino.items = [];
+    const idsVistos = new Set(
+      destino.items.map(function (it) {
+        return String(it?.id || "").trim();
+      })
+    );
+    items.forEach(function (it) {
+      const normalizado = normalizarItemBiblioteca(it);
+      if (!normalizado.url && !normalizado.caption) return;
+      if (normalizado.id && idsVistos.has(normalizado.id)) return;
+      destino.items.push(normalizado);
+      if (normalizado.id) idsVistos.add(normalizado.id);
     });
   }
 
+  function deduplicarListasBiblioteca(ml) {
+    if (!ml || !Array.isArray(ml.lists)) return ml;
+
+    const resultado = [];
+    const porId = new Map();
+    const porTipoPreset = new Map();
+
+    ml.lists.forEach(function (lista) {
+      const normalizada = normalizarListaBiblioteca(lista, true);
+      const tipo = resolverTipoListaDesdeLista(normalizada);
+
+      if (tipo !== "personalizada") {
+        if (porTipoPreset.has(tipo)) {
+          fusionarItemsLista(porTipoPreset.get(tipo), normalizada);
+          return;
+        }
+        const canonica = { ...normalizada, id: tipo };
+        const def = obtenerDefTipoListaPreset(tipo);
+        if (def) canonica.name = def.name;
+        porTipoPreset.set(tipo, canonica);
+        porId.set(tipo, canonica);
+        resultado.push(canonica);
+        return;
+      }
+
+      const id = String(normalizada.id || "").trim() || generarListId();
+      normalizada.id = id;
+      if (porId.has(id)) {
+        fusionarItemsLista(porId.get(id), normalizada);
+        return;
+      }
+      porId.set(id, normalizada);
+      resultado.push(normalizada);
+    });
+
+    ml.lists = resultado;
+    return ml;
+  }
+
   /**
-   * Solo si lists está vacío: crea las 4 listas premium por defecto.
-   * @returns {boolean} true si se sembraron listas
+   * Agrega solo las listas predeterminadas que aún no existen (por tipo/id).
+   * @returns {boolean} true si se agregó al menos una lista
    */
-  function sembrarListasPredeterminadasBiblioteca(ml) {
-    if (!ml || !Array.isArray(ml.lists) || ml.lists.length > 0) return false;
-    ml.lists = crearListasPredeterminadasBiblioteca();
-    return true;
+  function asegurarListasPredeterminadasBiblioteca(ml) {
+    if (!ml || !ml.enabled || !Array.isArray(ml.lists)) return false;
+
+    deduplicarListasBiblioteca(ml);
+    let agregadas = false;
+
+    LISTAS_PREDETERMINADAS_BIBLIOTECA.forEach(function (def) {
+      const existe = ml.lists.some(function (lista) {
+        return resolverTipoListaDesdeLista(lista) === def.id;
+      });
+      if (!existe) {
+        ml.lists.push(crearListaBibliotecaVacia(def));
+        agregadas = true;
+      }
+    });
+
+    if (agregadas) deduplicarListasBiblioteca(ml);
+    return agregadas;
+  }
+
+  function persistirBibliotecaActivaEnNodo() {
+    if (!configActiva) return;
+    deduplicarListasBiblioteca(configActiva.mediaLibrary);
+    if (nodoActivo) {
+      actualizarHTMLNodo(nodoActivo, sanitizeOpenAIData(configActiva));
+    }
+  }
+
+  function scrollToListaBiblioteca(listId) {
+    const lid = String(listId || "").trim();
+    if (!lid) return;
+    const row = document.querySelector(
+      '.oai-media-list-row[data-list-id="' + lid + '"]'
+    );
+    if (!row) return;
+    row.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    row.classList.add("oai-media-list-row--highlight");
+    window.setTimeout(function () {
+      row.classList.remove("oai-media-list-row--highlight");
+    }, 2200);
+  }
+
+  function resaltarUltimaFotoLista(listId) {
+    const lid = String(listId || "").trim();
+    const row = document.querySelector(
+      '.oai-media-list-row[data-list-id="' + lid + '"]'
+    );
+    if (!row) return;
+    const fotos = row.querySelectorAll(".oai-media-item-row");
+    const ultima = fotos[fotos.length - 1];
+    if (!ultima) return;
+    ultima.classList.add("oai-media-item-row--highlight");
+    window.setTimeout(function () {
+      ultima.classList.remove("oai-media-item-row--highlight");
+    }, 2200);
   }
 
   function crearMediaLibraryPorDefecto() {
@@ -439,11 +548,12 @@ window.MacBotOpenAIAgent = (function () {
           return !!(lista.name || lista.description || lista.items.length);
         });
 
-    return {
+    const ml = {
       enabled: src.enabled === true,
       priorityMode: priorityMode,
       lists: listsFiltradas,
     };
+    return deduplicarListasBiblioteca(ml);
   }
 
   function contarListasBiblioteca(config) {
@@ -927,7 +1037,7 @@ window.MacBotOpenAIAgent = (function () {
           row.querySelector(".oai-media-list-custom-name")?.value.trim() || "";
       }
 
-      lists.push({
+      const listaNueva = {
         id: idLista,
         name: nombreLista,
         description:
@@ -940,12 +1050,23 @@ window.MacBotOpenAIAgent = (function () {
         captionMode:
           row.querySelector(".oai-media-list-captionmode")?.value || "caption_item",
         items: items,
+      };
+
+      const duplicada = lists.find(function (l) {
+        return l.id === listaNueva.id;
       });
+      if (duplicada) {
+        fusionarItemsLista(duplicada, listaNueva);
+        return;
+      }
+
+      lists.push(listaNueva);
     });
 
     ml.lists = lists;
+    deduplicarListasBiblioteca(ml);
     if (ml.enabled && ml.lists.length === 0) {
-      sembrarListasPredeterminadasBiblioteca(ml);
+      asegurarListasPredeterminadasBiblioteca(ml);
     }
     configActiva.mediaLibrary = ml;
     return ml;
@@ -1143,6 +1264,7 @@ window.MacBotOpenAIAgent = (function () {
 
   function subirFotoBiblioteca(listId, file) {
     const lid = String(listId || "").trim();
+    let listIdCanon = lid;
     if (!lid || !file || subidaFotoBibliotecaActiva) return;
 
     if (!esImagenBibliotecaPermitida(file)) {
@@ -1169,13 +1291,18 @@ window.MacBotOpenAIAgent = (function () {
 
     syncCamposPanelDraft();
     asegurarMediaLibrary(configActiva);
-    const lista = configActiva.mediaLibrary.lists.find(function (l) {
+    deduplicarListasBiblioteca(configActiva.mediaLibrary);
+
+    const listaRef = configActiva.mediaLibrary.lists.find(function (l) {
       return l.id === lid;
     });
-    if (!lista) return;
+    if (!listaRef) return;
+
+    const tituloLista = tituloListaBiblioteca(listaRef);
+    listIdCanon = listaRef.id;
 
     subidaFotoBibliotecaActiva = true;
-    marcarSubidaFotoBiblioteca(lid, true);
+    marcarSubidaFotoBiblioteca(listIdCanon, true);
 
     const formData = new FormData();
     formData.append("file", file);
@@ -1201,6 +1328,13 @@ window.MacBotOpenAIAgent = (function () {
           throw new Error("Respuesta sin URL pública");
         }
 
+        const lista = configActiva.mediaLibrary.lists.find(function (l) {
+          return l.id === listIdCanon;
+        });
+        if (!lista) {
+          throw new Error("La lista ya no existe en el panel");
+        }
+
         if (!Array.isArray(lista.items)) lista.items = [];
         lista.items.push({
           id: generarItemId(),
@@ -1210,9 +1344,13 @@ window.MacBotOpenAIAgent = (function () {
           sizeBytes: data.size || file.size || 0,
         });
 
+        deduplicarListasBiblioteca(configActiva.mediaLibrary);
         renderMediaLibraryEditor();
-        onFormChange();
-        mostrarToastBiblioteca("✅ Foto subida", "success");
+        persistirBibliotecaActivaEnNodo();
+        scheduleRenderVisual();
+        scrollToListaBiblioteca(listIdCanon);
+        resaltarUltimaFotoLista(listIdCanon);
+        mostrarToastBiblioteca("Foto subida a " + tituloLista, "success");
       })
       .catch(function (err) {
         mostrarToastBiblioteca(
@@ -1222,7 +1360,7 @@ window.MacBotOpenAIAgent = (function () {
       })
       .finally(function () {
         subidaFotoBibliotecaActiva = false;
-        marcarSubidaFotoBiblioteca(lid, false);
+        marcarSubidaFotoBiblioteca(listIdCanon, false);
       });
   }
 
@@ -1315,6 +1453,7 @@ window.MacBotOpenAIAgent = (function () {
     if (!wrap) return;
 
     asegurarMediaLibrary(configActiva);
+    deduplicarListasBiblioteca(configActiva.mediaLibrary);
     const lists = configActiva.mediaLibrary.lists || [];
 
     if (!lists.length) {
@@ -1325,11 +1464,14 @@ window.MacBotOpenAIAgent = (function () {
 
     wrap.innerHTML = lists
       .map(function (lista, index) {
-        const label = etiquetaTipoLista(lista);
+        const titulo = tituloListaBiblioteca(lista);
         const tipoLista = resolverTipoListaDesdeLista(lista);
         const esPersonalizada = tipoLista === "personalizada";
+        const esPreset = tipoLista !== "personalizada";
         return (
-          '<div class="oai-media-list-row" data-list-id="' +
+          '<div class="oai-media-list-row' +
+          (esPreset ? " oai-media-list-row--preset" : "") +
+          '" data-list-id="' +
           esc(lista.id) +
           '">' +
           '<div class="oai-media-list-head">' +
@@ -1337,9 +1479,9 @@ window.MacBotOpenAIAgent = (function () {
           '<span class="oai-media-list-badge">Lista ' +
           (index + 1) +
           "</span>" +
-          '<span class="oai-media-list-name-preview">' +
-          esc(label) +
-          "</span></div>" +
+          '<h6 class="oai-media-list-title-heading">' +
+          esc(titulo) +
+          "</h6></div>" +
           '<button type="button" class="oai-media-list-del oai-btn oai-btn--danger oai-btn--sm" data-list-id="' +
           esc(lista.id) +
           '">Eliminar lista</button></div>' +
@@ -1396,12 +1538,13 @@ window.MacBotOpenAIAgent = (function () {
           '<div class="oai-media-items-wrap">' +
           renderItemsBibliotecaEditor(lista) +
           "</div>" +
+          '<div class="oai-media-list-upload-wrap">' +
           '<input type="file" class="oai-media-file-input" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" style="display:none" data-list-id="' +
           esc(lista.id) +
           '">' +
           '<button type="button" class="oai-media-list-upload-foto oai-btn oai-btn--add oai-btn--sm" data-list-id="' +
           esc(lista.id) +
-          '">Subir foto</button></div></div>'
+          '">Subir foto</button></div></div></div>'
         );
       })
       .join("");
@@ -1459,8 +1602,9 @@ window.MacBotOpenAIAgent = (function () {
     configActiva = leerConfigDeNodo(nodo);
     asegurarIdsEnRoutes(configActiva);
     asegurarMediaLibrary(configActiva);
+    deduplicarListasBiblioteca(configActiva.mediaLibrary);
     if (configActiva.mediaLibrary.enabled) {
-      sembrarListasPredeterminadasBiblioteca(configActiva.mediaLibrary);
+      asegurarListasPredeterminadasBiblioteca(configActiva.mediaLibrary);
     }
     const ml = configActiva.mediaLibrary;
     const contenido = document.getElementById("panelNodoContenido");
@@ -1577,11 +1721,14 @@ window.MacBotOpenAIAgent = (function () {
   function onFormChange() {
     const listasAntes =
       configActiva?.mediaLibrary?.lists?.length || 0;
+    const enabledAntes = configActiva?.mediaLibrary?.enabled === true;
     syncCamposPanelDraft();
-    if (
+    const ml = configActiva?.mediaLibrary;
+    const debeRenderBiblioteca =
       document.getElementById("openaiAgentMediaLists") &&
-      configActiva?.mediaLibrary?.lists?.length > listasAntes
-    ) {
+      (ml?.lists?.length !== listasAntes ||
+        (ml?.enabled && !enabledAntes && ml?.lists?.length > 0));
+    if (debeRenderBiblioteca) {
       renderMediaLibraryEditor();
     }
     scheduleRenderVisual();
