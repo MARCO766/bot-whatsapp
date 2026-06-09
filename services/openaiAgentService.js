@@ -706,6 +706,43 @@ function resolverNombreLeadValido(nombre, numero) {
   return n;
 }
 
+function respuestaContieneNombreLead(texto, nombreLead) {
+  if (!texto || !nombreLead) return false;
+  const patron = new RegExp(
+    `\\b${String(nombreLead).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`,
+    "i"
+  );
+  return patron.test(String(texto));
+}
+
+function esRespuestaTecnicaBiblioteca(texto) {
+  return /ACCION_BIBLIOTECA\s*:/i.test(String(texto || ""));
+}
+
+function aplicarNombreForzadoEnRespuesta(texto, nombreLead, nombrePermitido) {
+  const antes = String(texto || "").trim();
+  if (!antes || !nombreLead) return antes;
+
+  if (!nombrePermitido) {
+    console.log("[OPENAI_NAME_NOT_ALLOWED]", { nombreLead });
+    return antes;
+  }
+
+  if (esRespuestaTecnicaBiblioteca(antes)) {
+    return antes;
+  }
+
+  if (respuestaContieneNombreLead(antes, nombreLead)) {
+    console.log("[OPENAI_NAME_ALREADY_PRESENT]", { nombreLead });
+    return antes;
+  }
+
+  const resto = antes.charAt(0).toLowerCase() + antes.slice(1);
+  const despues = `${nombreLead}, ${resto}`;
+  console.log("[OPENAI_NAME_FORCED]", { nombreLead, antes, despues });
+  return despues;
+}
+
 function resolverUsoNombreLead(nombreLead, chatScope = null) {
   if (!nombreLead) {
     return {
@@ -1383,6 +1420,7 @@ async function ejecutarNodoOpenAIAgent(nodo, contexto, opts = {}) {
     const memoria = contexto.memoriaIA || {};
 
     const chatScope = { usuarioId, conexionWhatsappId, numero };
+    const { nombrePermitido } = resolverUsoNombreLead(nombreLead, chatScope);
 
     const resultado = await resolverAnalisisOpenAI(
       config,
@@ -1420,27 +1458,34 @@ async function ejecutarNodoOpenAIAgent(nodo, contexto, opts = {}) {
 
     if (resultado.action === "media_library" && resultado.listId) {
       const textoBiblioteca = limpiarReply(String(resultado.texto || "").trim());
+      const textoBibliotecaEnvio = textoBiblioteca
+        ? aplicarNombreForzadoEnRespuesta(
+            textoBiblioteca,
+            nombreLead,
+            nombrePermitido
+          )
+        : "";
       const listaBiblioteca = resultado.lista || null;
       const uidEnvio =
         contexto?.usuarioId ?? opts?.usuarioId ?? usuarioId ?? null;
 
       console.log("[IA DEBUG] acción biblioteca detectada:", {
         listId: resultado.listId,
-        texto: textoBiblioteca || "(sin texto)",
+        texto: textoBibliotecaEnvio || textoBiblioteca || "(sin texto)",
         fotosEnLista: listaBiblioteca?.items?.length || 0,
       });
 
-      if (textoBiblioteca && numero) {
-        logEmojiDebug("antes enviar texto biblioteca", textoBiblioteca);
+      if (textoBibliotecaEnvio && numero) {
+        logEmojiDebug("antes enviar texto biblioteca", textoBibliotecaEnvio);
         await enviarOpenAIConPipelineManual(
           numero,
-          textoBiblioteca,
+          textoBibliotecaEnvio,
           uidEnvio,
           conexionWhatsappId
         );
-        contexto.ultimaRespuestaIA = textoBiblioteca;
-        chatHistory = appendChatHistory(chatHistory, "assistant", textoBiblioteca);
-        pushLastReply(usuarioId, conexionWhatsappId, numero, textoBiblioteca);
+        contexto.ultimaRespuestaIA = textoBibliotecaEnvio;
+        chatHistory = appendChatHistory(chatHistory, "assistant", textoBibliotecaEnvio);
+        pushLastReply(usuarioId, conexionWhatsappId, numero, textoBibliotecaEnvio);
       }
 
       let fotosEnviadas = 0;
@@ -1462,11 +1507,11 @@ async function ejecutarNodoOpenAIAgent(nodo, contexto, opts = {}) {
         ...contexto,
         openaiAgentPausar: true,
         iaPausar: true,
-        openaiAgentReply: !!(textoBiblioteca || fotosEnviadas),
+        openaiAgentReply: !!(textoBibliotecaEnvio || fotosEnviadas),
         openaiAgentEjecutada: true,
         openaiAgentMediaLibrary: true,
         openaiAgentMediaLibraryListId: resultado.listId,
-        openaiAgentMediaLibraryTexto: textoBiblioteca,
+        openaiAgentMediaLibraryTexto: textoBibliotecaEnvio || textoBiblioteca,
         openaiAgentMediaLibraryFotosEnviadas: fotosEnviadas,
         chat_history: chatHistory,
         intent: resultado.intent || "media_library",
@@ -1475,6 +1520,9 @@ async function ejecutarNodoOpenAIAgent(nodo, contexto, opts = {}) {
     }
 
     let reply = limpiarReply(String(resultado.reply || "").trim());
+    if (reply) {
+      reply = aplicarNombreForzadoEnRespuesta(reply, nombreLead, nombrePermitido);
+    }
 
     console.log("[IA DEBUG] mensaje lead:", mensajeLead);
     console.log("[IA DEBUG] prompt usado:", resultado.promptFinal || "(n/a)");
