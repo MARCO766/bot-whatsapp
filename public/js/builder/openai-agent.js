@@ -356,30 +356,6 @@ window.MacBotOpenAIAgent = (function () {
     return ml;
   }
 
-  /**
-   * Agrega solo las listas predeterminadas que aún no existen (por tipo/id).
-   * @returns {boolean} true si se agregó al menos una lista
-   */
-  function asegurarListasPredeterminadasBiblioteca(ml) {
-    if (!ml || !ml.enabled || !Array.isArray(ml.lists)) return false;
-
-    deduplicarListasBiblioteca(ml);
-    let agregadas = false;
-
-    LISTAS_PREDETERMINADAS_BIBLIOTECA.forEach(function (def) {
-      const existe = ml.lists.some(function (lista) {
-        return resolverTipoListaDesdeLista(lista) === def.id;
-      });
-      if (!existe) {
-        ml.lists.push(crearListaBibliotecaVacia(def));
-        agregadas = true;
-      }
-    });
-
-    if (agregadas) deduplicarListasBiblioteca(ml);
-    return agregadas;
-  }
-
   function persistirBibliotecaActivaEnNodo() {
     if (!configActiva) return;
     deduplicarListasBiblioteca(configActiva.mediaLibrary);
@@ -1065,9 +1041,6 @@ window.MacBotOpenAIAgent = (function () {
 
     ml.lists = lists;
     deduplicarListasBiblioteca(ml);
-    if (ml.enabled && ml.lists.length === 0) {
-      asegurarListasPredeterminadasBiblioteca(ml);
-    }
     configActiva.mediaLibrary = ml;
     return ml;
   }
@@ -1458,7 +1431,7 @@ window.MacBotOpenAIAgent = (function () {
 
     if (!lists.length) {
       wrap.innerHTML =
-        '<p class="oai-media-lists-empty">No hay listas. Agrega una biblioteca.</p>';
+        '<p class="oai-media-lists-empty">No hay listas. Agrega una lista.</p>';
       return;
     }
 
@@ -1603,9 +1576,6 @@ window.MacBotOpenAIAgent = (function () {
     asegurarIdsEnRoutes(configActiva);
     asegurarMediaLibrary(configActiva);
     deduplicarListasBiblioteca(configActiva.mediaLibrary);
-    if (configActiva.mediaLibrary.enabled) {
-      asegurarListasPredeterminadasBiblioteca(configActiva.mediaLibrary);
-    }
     const ml = configActiva.mediaLibrary;
     const contenido = document.getElementById("panelNodoContenido");
     if (!contenido) return;
