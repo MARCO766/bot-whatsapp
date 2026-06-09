@@ -669,9 +669,83 @@ function aplicarAntiRepeticion(reply, config, mensaje, chatHistory, lastReplies,
   return r;
 }
 
-function construirMensajesOpenAI(config, mensajeLead, chatHistory, lastReplies, reescribir) {
+function nombrePareceTelefono(nombre, numero) {
+  const n = String(nombre || "").trim();
+  if (!n) return true;
+
+  const soloDigitosNombre = n.replace(/\D/g, "");
+  const compacto = n.replace(/\s/g, "");
+  if (soloDigitosNombre.length >= 8 && soloDigitosNombre.length / Math.max(compacto.length, 1) > 0.7) {
+    return true;
+  }
+
+  const numCanon = String(numero || "").replace(/\D/g, "");
+  if (numCanon && soloDigitosNombre === numCanon) return true;
+
+  return false;
+}
+
+function resolverNombreLeadValido(nombre, numero) {
+  const n = String(nombre || "").trim();
+  if (!n) return null;
+  if (n.toLowerCase() === "amiga") return null;
+  if (nombrePareceTelefono(n, numero)) return null;
+  return n;
+}
+
+function nombreUsadoRecientementeEnChat(nombreLead, chatHistory, lastReplies) {
+  if (!nombreLead) return false;
+
+  const patron = new RegExp(
+    `\\b${String(nombreLead).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`,
+    "i"
+  );
+  const fuentes = [
+    ...trimChatHistory(chatHistory)
+      .filter((t) => t.role === "assistant" || t.role === "bot")
+      .map((t) => t.text),
+    ...(Array.isArray(lastReplies) ? lastReplies : []),
+  ];
+
+  return fuentes.some((t) => patron.test(String(t || "")));
+}
+
+function construirBloqueDatosLead(nombreLead, chatHistory, lastReplies) {
+  if (!nombreLead) return "";
+
+  let bloque = `Datos del lead:
+Nombre: ${nombreLead}
+
+Reglas:
+- Usa el nombre del lead de forma natural cuando ayude a sonar más humano.
+- No uses el nombre en todos los mensajes.
+- No repitas el nombre si ya lo usaste recientemente.
+- No inventes nombres.`;
+
+  if (nombreUsadoRecientementeEnChat(nombreLead, chatHistory, lastReplies)) {
+    bloque +=
+      "\n- En las respuestas recientes ya se usó el nombre del lead; evita repetirlo en esta respuesta.";
+  }
+
+  return bloque;
+}
+
+function construirMensajesOpenAI(
+  config,
+  mensajeLead,
+  chatHistory,
+  lastReplies,
+  reescribir,
+  nombreLead = null
+) {
   const openaiPrompt = resolverOpenaiPrompt(config);
   let system = PROMPT_SISTEMA_FIJO;
+
+  const bloqueLead = construirBloqueDatosLead(nombreLead, chatHistory, lastReplies);
+  if (bloqueLead) {
+    system += "\n\n" + bloqueLead;
+  }
+
   if (lastReplies.length) {
     system += `\nNo repitas estas respuestas recientes: ${lastReplies.join(" | ")}`;
   }
@@ -740,7 +814,14 @@ function getOpenAIClient() {
   return openaiClient;
 }
 
-async function llamarOpenAI(config, mensajeLead, chatHistory, lastReplies, reescribir) {
+async function llamarOpenAI(
+  config,
+  mensajeLead,
+  chatHistory,
+  lastReplies,
+  reescribir,
+  nombreLead = null
+) {
   const client = getOpenAIClient();
   if (!client) {
     console.log("[OPENAI DEBUG] getOpenAIClient() = null (sin API key)");
@@ -748,7 +829,14 @@ async function llamarOpenAI(config, mensajeLead, chatHistory, lastReplies, reesc
   }
 
   const model = config.model || process.env.OPENAI_MODEL || "gpt-4o-mini";
-  const messages = construirMensajesOpenAI(config, mensajeLead, chatHistory, lastReplies, reescribir);
+  const messages = construirMensajesOpenAI(
+    config,
+    mensajeLead,
+    chatHistory,
+    lastReplies,
+    reescribir,
+    nombreLead
+  );
   const promptFinal = JSON.stringify({ model, temperature: config.temperature ?? 0.7, messages });
 
   console.log("[OPENAI DEBUG] API KEY EXISTE:", !!process.env.OPENAI_API_KEY);
@@ -783,8 +871,22 @@ async function llamarOpenAI(config, mensajeLead, chatHistory, lastReplies, reesc
   }
 }
 
-function llamarOpenAIConTimeout(config, mensajeLead, chatHistory, lastReplies, reescribir) {
-  const trabajo = llamarOpenAI(config, mensajeLead, chatHistory, lastReplies, reescribir);
+function llamarOpenAIConTimeout(
+  config,
+  mensajeLead,
+  chatHistory,
+  lastReplies,
+  reescribir,
+  nombreLead = null
+) {
+  const trabajo = llamarOpenAI(
+    config,
+    mensajeLead,
+    chatHistory,
+    lastReplies,
+    reescribir,
+    nombreLead
+  );
   const timeout = new Promise((_, reject) => {
     setTimeout(() => {
       console.log("[OPENAI ERROR] OPENAI_TIMEOUT después de", OPENAI_TIMEOUT_MS, "ms");
@@ -808,7 +910,7 @@ function formatoErrorOpenAI(err) {
   return err.message || String(err);
 }
 
-async function generarReply(config, mensajeLead, chatHistory, lastReplies) {
+async function generarReply(config, mensajeLead, chatHistory, lastReplies, nombreLead = null) {
   console.log("[OPENAI SERVICE ENTRANTE]", {
     mensaje: String(mensajeLead || "").slice(0, 80),
     tieneKey: !!String(process.env.OPENAI_API_KEY || "").trim(),
@@ -836,7 +938,8 @@ async function generarReply(config, mensajeLead, chatHistory, lastReplies) {
       mensajeLead,
       chatHistory,
       lastReplies,
-      false
+      false,
+      nombreLead
     );
     promptFinal = JSON.stringify({
       system: PROMPT_SISTEMA_FIJO,
@@ -854,7 +957,8 @@ async function generarReply(config, mensajeLead, chatHistory, lastReplies) {
       mensajeLead,
       chatHistory,
       lastReplies,
-      false
+      false,
+      nombreLead
     );
 
     console.log("[OPENAI DEBUG] respuesta raw:", respuestaOpenAI);
@@ -1070,7 +1174,14 @@ async function enviarOpenAIConPipelineManual(
   return row?.whatsapp_message_id || null;
 }
 
-async function resolverAnalisisOpenAI(config, mensajeLead, chatHistory, memoria, lastReplies) {
+async function resolverAnalisisOpenAI(
+  config,
+  mensajeLead,
+  chatHistory,
+  memoria,
+  lastReplies,
+  nombreLead = null
+) {
   const analisis = analizarCaminosOpenAI(config, mensajeLead);
 
   if (analisis.matched && analisis.routeId) {
@@ -1091,7 +1202,13 @@ async function resolverAnalisisOpenAI(config, mensajeLead, chatHistory, memoria,
     console.log("[OPENAI PATH DEBUG] empate entre caminos — sigue conversación GPT");
   }
 
-  const generado = await generarReply(config, mensajeLead, chatHistory, lastReplies);
+  const generado = await generarReply(
+    config,
+    mensajeLead,
+    chatHistory,
+    lastReplies,
+    nombreLead
+  );
 
   const accionBiblioteca = resolverAccionBibliotecaDesdeRespuesta(
     generado.respuestaOpenAI,
@@ -1159,6 +1276,9 @@ async function ejecutarNodoOpenAIAgent(nodo, contexto, opts = {}) {
       ""
   ).trim();
 
+  const nombreLead = resolverNombreLeadValido(contexto?.nombre, numero);
+  console.log("[OPENAI_LEAD_CONTEXT]", { nombreLead: nombreLead || null });
+
   console.log("🤖 OPENAI_AGENT iniciado", {
     nodoId,
     numero,
@@ -1207,7 +1327,8 @@ async function ejecutarNodoOpenAIAgent(nodo, contexto, opts = {}) {
       mensajeLead,
       chatHistory,
       memoria,
-      lastReplies
+      lastReplies,
+      nombreLead
     );
 
     contexto.intent = resultado.intent || "";
