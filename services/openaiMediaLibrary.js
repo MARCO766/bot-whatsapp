@@ -141,12 +141,35 @@ function listasParaPrompt(mediaLibrary) {
   return ml.lists;
 }
 
-const INTENCIONES_BIBLIOTECA_POR_ID = {
-  muestras: "fotos, muestras, ejemplos, cómo se ve, resultados",
-  catalogo: "catálogo, modelos, diseños disponibles",
-  testimonios: "opiniones, reseñas, referencias, testimonios",
-  comprobantes: "comprobantes, pagos, pruebas de pago",
+/** Intenciones → activación obligatoria cuando el id existe en la lista disponible. */
+const ACTIVACION_OBLIGATORIA_POR_ID = {
+  testimonios:
+    "testimonios, reseñas, referencias, opiniones o experiencias",
+  muestras: "muestras, ejemplos, fotos o resultados",
+  catalogo: "catálogo, modelos o diseños disponibles",
+  comprobantes: "comprobantes, pagos o pruebas de pago",
 };
+
+function construirReglasActivacionObligatoria(idsDisponibles) {
+  return idsDisponibles
+    .filter(function (id) {
+      return !!ACTIVACION_OBLIGATORIA_POR_ID[id];
+    })
+    .map(function (id) {
+      const intenciones = ACTIVACION_OBLIGATORIA_POR_ID[id];
+      return (
+        "   - Si el lead pide " +
+        intenciones +
+        " → DEBES responder exactamente:\n" +
+        "     ACCION_BIBLIOTECA:" +
+        id +
+        "\n" +
+        "     TEXTO:<mensaje corto sobre " +
+        id +
+        ">"
+      );
+    });
+}
 
 function construirPromptBibliotecas(mediaLibrary) {
   const listas = listasParaPrompt(mediaLibrary);
@@ -161,34 +184,20 @@ function construirPromptBibliotecas(mediaLibrary) {
     return `- ${lista.id}: ${desc}`;
   });
 
-  const lineasIntencion = idsDisponibles
-    .filter(function (id) {
-      return !!INTENCIONES_BIBLIOTECA_POR_ID[id];
-    })
-    .map(function (id) {
-      return (
-        "   - Si pide " +
-        INTENCIONES_BIBLIOTECA_POR_ID[id] +
-        ": usar " +
-        id +
-        " SOLO si existe en la lista anterior."
-      );
-    });
+  const reglasActivacion = construirReglasActivacionObligatoria(idsDisponibles);
 
   const bloque =
     "Bibliotecas multimedia disponibles:\n" +
     lineas.join("\n") +
     "\n\nREGLAS OBLIGATORIAS (Biblioteca Multimedia):\n" +
-    "1. Solo puedes usar bibliotecas que aparezcan en \"Bibliotecas multimedia disponibles\".\n" +
-    "2. Si el lead pide una biblioteca que NO existe en esa lista, NO uses otra biblioteca parecida ni ACCION_BIBLIOTECA. Responde solo con texto normal explicando que no tienes esa biblioteca disponible.\n" +
-    '   Ejemplo: si solo existe "muestras" y piden testimonios, NO respondas ACCION_BIBLIOTECA:muestras con texto sobre testimonios. Responde algo como: "Por ahora no tengo testimonios cargados, pero sí puedo mostrarte algunas muestras del producto si deseas."\n' +
-    "3. Nunca describas una biblioteca con el nombre de otra. Si usas ACCION_BIBLIOTECA:<id>, el TEXTO debe hablar de esa misma biblioteca (muestras → muestras/ejemplos/fotos del producto; testimonios → testimonios/referencias; etc.).\n" +
-    "4. Reglas de intención (aplican SOLO si esa biblioteca existe en la lista):\n" +
-    (lineasIntencion.length ? lineasIntencion.join("\n") + "\n" : "") +
-    "5. Si la biblioteca correcta para la intención del lead no existe, responde texto normal sin ACCION_BIBLIOTECA.\n\n" +
-    "Si y solo si corresponde usar una biblioteca disponible, responde exactamente:\n" +
-    "ACCION_BIBLIOTECA:<id_lista>\n" +
-    "TEXTO:<mensaje corto opcional>";
+    "1. Solo puedes activar bibliotecas cuyo id aparezca en \"Bibliotecas multimedia disponibles\".\n" +
+    "2. Activación obligatoria por intención (si el id existe en la lista anterior):\n" +
+    (reglasActivacion.length ? reglasActivacion.join("\n") + "\n" : "") +
+    "3. El TEXTO debe referirse a la misma biblioteca del ACCION_BIBLIOTECA. No mezcles nombres de bibliotecas distintas.\n" +
+    "4. Si el lead pide una biblioteca cuyo id NO está en la lista anterior, responde solo con texto normal sin ACCION_BIBLIOTECA. No sustituyas por otra biblioteca.\n" +
+    "5. Formato exacto al activar una biblioteca disponible:\n" +
+    "   ACCION_BIBLIOTECA:<id_lista>\n" +
+    "   TEXTO:<mensaje corto opcional>";
 
   console.log("[OPENAI_MEDIA_LIBRARY_STRICT_PROMPT]", {
     listasDisponibles: idsDisponibles,
