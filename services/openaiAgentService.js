@@ -878,6 +878,47 @@ function historialParaOpenAI(chatHistory) {
   }));
 }
 
+function logOpenAIHistoryDebug(messages, mensajeActual, chatHistoryRecibido) {
+  const historial = (Array.isArray(messages) ? messages : []).map((m) => ({
+    role: m.role,
+    content: String(m.content || "").slice(0, 300),
+  }));
+
+  const conversacion = historial.filter((m) => m.role === "user" || m.role === "assistant");
+  const ultimosMensajesLead = conversacion
+    .filter((m) => m.role === "user")
+    .map((m) => m.content)
+    .slice(-3);
+  const ultimosMensajesBot = conversacion
+    .filter((m) => m.role === "assistant")
+    .map((m) => m.content)
+    .slice(-3);
+
+  const chatHistoryEntrada = (Array.isArray(chatHistoryRecibido) ? chatHistoryRecibido : []).map(
+    (t) => ({
+      role: t.role,
+      text: String(t.text || t.content || "").slice(0, 300),
+    })
+  );
+
+  console.log(
+    "[OPENAI_HISTORY_DEBUG]",
+    JSON.stringify(
+      {
+        totalMensajes: historial.length,
+        historial,
+        ultimosMensajesLead,
+        ultimosMensajesBot,
+        mensajeActual: String(mensajeActual || "").trim(),
+        chatHistoryEntrada,
+        chatHistoryEntradaCantidad: chatHistoryEntrada.length,
+      },
+      null,
+      2
+    )
+  );
+}
+
 function tieneOpenAIKey() {
   return !!String(process.env.OPENAI_API_KEY || "").trim();
 }
@@ -921,6 +962,7 @@ async function llamarOpenAI(
     nombreLead,
     chatScope
   );
+  logOpenAIHistoryDebug(messages, mensajeLead, chatHistory);
   const promptFinal = JSON.stringify({ model, temperature: config.temperature ?? 0.7, messages });
 
   console.log("[OPENAI DEBUG] API KEY EXISTE:", !!process.env.OPENAI_API_KEY);
@@ -1411,10 +1453,32 @@ async function ejecutarNodoOpenAIAgent(nodo, contexto, opts = {}) {
 
     console.log("💬 OPENAI pregunta:", mensajeLead);
 
-    let chatHistory = trimChatHistory(contexto.chat_history);
+    const chatHistoryCrudo = trimChatHistory(contexto.chat_history);
+    let chatHistory = chatHistoryCrudo;
     if (mensajeLead) {
       chatHistory = appendChatHistory(chatHistory, "user", mensajeLead);
     }
+
+    console.log(
+      "[OPENAI_HISTORY_DEBUG] contexto antes de OpenAI",
+      JSON.stringify(
+        {
+          mensajeActual: mensajeLead,
+          chatHistoryContextoCantidad: chatHistoryCrudo.length,
+          chatHistoryContexto: chatHistoryCrudo.map((t) => ({
+            role: t.role,
+            text: String(t.text || "").slice(0, 300),
+          })),
+          chatHistoryConMensajeActualCantidad: chatHistory.length,
+          chatHistoryConMensajeActual: chatHistory.map((t) => ({
+            role: t.role,
+            text: String(t.text || "").slice(0, 300),
+          })),
+        },
+        null,
+        2
+      )
+    );
 
     const lastReplies = getLastReplies(usuarioId, conexionWhatsappId, numero);
     const memoria = contexto.memoriaIA || {};
