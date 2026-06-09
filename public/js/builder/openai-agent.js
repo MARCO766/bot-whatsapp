@@ -111,6 +111,17 @@ window.MacBotOpenAIAgent = (function () {
   const SEND_MODES_VALIDOS = ["random", "all", "first"];
   const CAPTION_MODES_VALIDOS = ["caption_item", "same_caption", "none"];
 
+  const MAX_FOTO_BIBLIOTECA_BYTES = 5 * 1024 * 1024;
+  const UPLOAD_BIBLIOTECA_ENDPOINT = "/api/seguimiento-v2/upload-media";
+  const MIME_FOTOS_BIBLIOTECA = [
+    "image/jpeg",
+    "image/jpg",
+    "image/png",
+    "image/webp",
+  ];
+
+  let subidaFotoBibliotecaActiva = false;
+
   const DESCRIPCIONES_IA_BIBLIOTECA = {
     muestras:
       "Contiene ejemplos reales y trabajos terminados. Usa esta biblioteca cuando el lead pida fotos, muestras, ejemplos o quiera ver cómo se ve el producto final.",
@@ -316,11 +327,63 @@ window.MacBotOpenAIAgent = (function () {
     return cfg.mediaLibrary;
   }
 
+  function mostrarToastBiblioteca(mensaje, tipo) {
+    if (typeof showBuilderFlowToast === "function") {
+      showBuilderFlowToast(mensaje, tipo || "warn");
+      return;
+    }
+    alert(mensaje);
+  }
+
+  function formatoTamanoArchivo(bytes) {
+    const n = Math.max(0, parseInt(bytes, 10) || 0);
+    if (!n) return "";
+    if (n < 1024) return n + " B";
+    if (n < 1024 * 1024) return (n / 1024).toFixed(1) + " KB";
+    return (n / (1024 * 1024)).toFixed(1) + " MB";
+  }
+
+  function nombreArchivoDesdeItem(item) {
+    const guardado = String(item?.filename || "").trim();
+    if (guardado) return guardado;
+    const url = String(item?.url || "").trim();
+    if (!url) return "imagen";
+    try {
+      const parte = url.split("/").pop() || "";
+      return decodeURIComponent(parte.split("?")[0]) || "imagen";
+    } catch (e) {
+      return "imagen";
+    }
+  }
+
+  function esImagenBibliotecaPermitida(file) {
+    if (!file) return false;
+    const mime = String(file.type || "").toLowerCase();
+    if (MIME_FOTOS_BIBLIOTECA.includes(mime)) return true;
+    const ext = String(file.name || "")
+      .split(".")
+      .pop()
+      .toLowerCase();
+    return ["jpg", "jpeg", "png", "webp"].includes(ext);
+  }
+
+  function obtenerConexionWhatsappIdBiblioteca() {
+    if (typeof window.leerConexionWhatsappIdBuilder === "function") {
+      return window.leerConexionWhatsappIdBuilder();
+    }
+    const raw = new URLSearchParams(window.location.search).get(
+      "conexion_whatsapp_id"
+    );
+    return raw ? String(raw).trim() : null;
+  }
+
   function normalizarItemBiblioteca(item) {
     return {
       id: String(item?.id || "").trim() || generarItemId(),
       url: String(item?.url || "").trim(),
       caption: String(item?.caption || "").trim(),
+      filename: String(item?.filename || "").trim(),
+      sizeBytes: Math.max(0, parseInt(item?.sizeBytes, 10) || 0),
     };
   }
 
@@ -833,6 +896,17 @@ window.MacBotOpenAIAgent = (function () {
           url: itemRow.querySelector(".oai-media-item-url")?.value.trim() || "",
           caption:
             itemRow.querySelector(".oai-media-item-caption")?.value.trim() || "",
+          filename:
+            itemRow.querySelector(".oai-media-item-filename")?.value.trim() ||
+            itemRow.dataset.filename ||
+            "",
+          sizeBytes:
+            parseInt(
+              itemRow.querySelector(".oai-media-item-sizebytes")?.value,
+              10
+            ) ||
+            parseInt(itemRow.dataset.sizeBytes, 10) ||
+            0,
         });
       });
 
@@ -998,13 +1072,20 @@ window.MacBotOpenAIAgent = (function () {
   function renderItemsBibliotecaEditor(lista) {
     const items = Array.isArray(lista?.items) ? lista.items : [];
     if (!items.length) {
-      return '<p class="oai-media-items-empty">Sin fotos. Agrega una por URL.</p>';
+      return '<p class="oai-media-items-empty">Sin fotos. Usa «Subir foto».</p>';
     }
     return items
       .map(function (item, idx) {
+        const nombre = nombreArchivoDesdeItem(item);
+        const tamano = formatoTamanoArchivo(item.sizeBytes);
+        const url = String(item.url || "").trim();
         return (
           '<div class="oai-media-item-row" data-item-id="' +
           esc(item.id) +
+          '" data-filename="' +
+          esc(nombre) +
+          '" data-size-bytes="' +
+          esc(String(item.sizeBytes || 0)) +
           '">' +
           '<div class="oai-media-item-head">' +
           '<span class="oai-media-item-badge">Foto ' +
@@ -1015,10 +1096,31 @@ window.MacBotOpenAIAgent = (function () {
           '" data-item-id="' +
           esc(item.id) +
           '">Eliminar</button></div>' +
-          '<div class="panel-campo oai-field"><label>URL imagen</label>' +
-          '<input class="oai-media-item-url oai-input" value="' +
-          esc(item.url || "") +
-          '" placeholder="https://..."></div>' +
+          '<div class="oai-media-item-preview">' +
+          (url
+            ? '<img class="oai-media-item-thumb" src="' +
+              esc(url) +
+              '" alt="' +
+              esc(nombre) +
+              '">'
+            : '<div class="oai-media-item-thumb oai-media-item-thumb--empty">Sin imagen</div>') +
+          '<div class="oai-media-item-meta">' +
+          '<span class="oai-media-item-filename-text">' +
+          esc(nombre) +
+          "</span>" +
+          (tamano
+            ? '<span class="oai-media-item-size-text">' + esc(tamano) + "</span>"
+            : "") +
+          "</div></div>" +
+          '<input type="hidden" class="oai-media-item-url" value="' +
+          esc(url) +
+          '">' +
+          '<input type="hidden" class="oai-media-item-filename" value="' +
+          esc(nombre) +
+          '">' +
+          '<input type="hidden" class="oai-media-item-sizebytes" value="' +
+          esc(String(item.sizeBytes || 0)) +
+          '">' +
           '<div class="panel-campo oai-field"><label>Caption</label>' +
           '<input class="oai-media-item-caption oai-input" value="' +
           esc(item.caption || "") +
@@ -1026,6 +1128,113 @@ window.MacBotOpenAIAgent = (function () {
         );
       })
       .join("");
+  }
+
+  function marcarSubidaFotoBiblioteca(listId, activa) {
+    const lid = String(listId || "").trim();
+    const btn = document.querySelector(
+      '.oai-media-list-upload-foto[data-list-id="' + lid + '"]'
+    );
+    if (!btn) return;
+    btn.disabled = !!activa;
+    btn.textContent = activa ? "Subiendo…" : "Subir foto";
+    btn.classList.toggle("oai-btn--uploading", !!activa);
+  }
+
+  function subirFotoBiblioteca(listId, file) {
+    const lid = String(listId || "").trim();
+    if (!lid || !file || subidaFotoBibliotecaActiva) return;
+
+    if (!esImagenBibliotecaPermitida(file)) {
+      mostrarToastBiblioteca(
+        "Formato no permitido. Usa JPG, JPEG, PNG o WEBP.",
+        "warn"
+      );
+      return;
+    }
+
+    if (file.size >= MAX_FOTO_BIBLIOTECA_BYTES) {
+      mostrarToastBiblioteca("La imagen supera el límite de 5 MB.", "warn");
+      return;
+    }
+
+    const conexionWhatsappId = obtenerConexionWhatsappIdBiblioteca();
+    if (!conexionWhatsappId) {
+      mostrarToastBiblioteca(
+        "Asigna una línea WhatsApp al flujo para subir fotos.",
+        "warn"
+      );
+      return;
+    }
+
+    syncCamposPanelDraft();
+    asegurarMediaLibrary(configActiva);
+    const lista = configActiva.mediaLibrary.lists.find(function (l) {
+      return l.id === lid;
+    });
+    if (!lista) return;
+
+    subidaFotoBibliotecaActiva = true;
+    marcarSubidaFotoBiblioteca(lid, true);
+
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("tipo", "imagen");
+    formData.append("conexion_whatsapp_id", conexionWhatsappId);
+
+    fetch(UPLOAD_BIBLIOTECA_ENDPOINT, {
+      method: "POST",
+      body: formData,
+      credentials: "same-origin",
+    })
+      .then(function (r) {
+        return r.json().then(function (data) {
+          if (!r.ok) {
+            throw new Error(data?.error || "Error al subir imagen");
+          }
+          return data;
+        });
+      })
+      .then(function (data) {
+        const publicUrl = String(data?.publicUrl || data?.url || "").trim();
+        if (!publicUrl) {
+          throw new Error("Respuesta sin URL pública");
+        }
+
+        if (!Array.isArray(lista.items)) lista.items = [];
+        lista.items.push({
+          id: generarItemId(),
+          url: publicUrl,
+          caption: "",
+          filename: data.filename || file.name || "",
+          sizeBytes: data.size || file.size || 0,
+        });
+
+        renderMediaLibraryEditor();
+        onFormChange();
+        mostrarToastBiblioteca("✅ Foto subida", "success");
+      })
+      .catch(function (err) {
+        mostrarToastBiblioteca(
+          err?.message || "❌ Error al subir imagen",
+          "error"
+        );
+      })
+      .finally(function () {
+        subidaFotoBibliotecaActiva = false;
+        marcarSubidaFotoBiblioteca(lid, false);
+      });
+  }
+
+  function iniciarSubidaFotoBiblioteca(listId) {
+    const lid = String(listId || "").trim();
+    if (!lid || subidaFotoBibliotecaActiva) return;
+    const input = document.querySelector(
+      '.oai-media-file-input[data-list-id="' + lid + '"]'
+    );
+    if (!input) return;
+    input.value = "";
+    input.click();
   }
 
   function bindMediaLibraryEditorEvents() {
@@ -1048,11 +1257,20 @@ window.MacBotOpenAIAgent = (function () {
       });
     });
 
-    wrap.querySelectorAll(".oai-media-list-add-foto").forEach(function (btn) {
+    wrap.querySelectorAll(".oai-media-list-upload-foto").forEach(function (btn) {
       btn.addEventListener("click", function (ev) {
         ev.preventDefault();
         ev.stopPropagation();
-        agregarFotoALista(btn.dataset.listId);
+        iniciarSubidaFotoBiblioteca(btn.dataset.listId);
+      });
+    });
+
+    wrap.querySelectorAll(".oai-media-file-input").forEach(function (input) {
+      input.addEventListener("change", function () {
+        const file = input.files?.[0];
+        if (!file) return;
+        subirFotoBiblioteca(input.dataset.listId, file);
+        input.value = "";
       });
     });
 
@@ -1178,9 +1396,12 @@ window.MacBotOpenAIAgent = (function () {
           '<div class="oai-media-items-wrap">' +
           renderItemsBibliotecaEditor(lista) +
           "</div>" +
-          '<button type="button" class="oai-media-list-add-foto oai-btn oai-btn--add oai-btn--sm" data-list-id="' +
+          '<input type="file" class="oai-media-file-input" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" style="display:none" data-list-id="' +
           esc(lista.id) +
-          '">+ Agregar foto (URL)</button></div></div>'
+          '">' +
+          '<button type="button" class="oai-media-list-upload-foto oai-btn oai-btn--add oai-btn--sm" data-list-id="' +
+          esc(lista.id) +
+          '">Subir foto</button></div></div>'
         );
       })
       .join("");
@@ -1216,26 +1437,6 @@ window.MacBotOpenAIAgent = (function () {
     if (!lista) return;
     lista.items = (lista.items || []).filter(function (it) {
       return it.id !== iid;
-    });
-    renderMediaLibraryEditor();
-    onFormChange();
-  }
-
-  function agregarFotoALista(listId) {
-    const lid = String(listId || "").trim();
-    if (!lid) return;
-
-    syncMediaLibraryDesdeDom();
-    asegurarMediaLibrary(configActiva);
-    const lista = configActiva.mediaLibrary.lists.find(function (l) {
-      return l.id === lid;
-    });
-    if (!lista) return;
-    if (!Array.isArray(lista.items)) lista.items = [];
-    lista.items.push({
-      id: generarItemId(),
-      url: "",
-      caption: "",
     });
     renderMediaLibraryEditor();
     onFormChange();
