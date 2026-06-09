@@ -693,38 +693,97 @@ function resolverNombreLeadValido(nombre, numero) {
   return n;
 }
 
-function nombreUsadoRecientementeEnChat(nombreLead, chatHistory, lastReplies) {
-  if (!nombreLead) return false;
-
-  const patron = new RegExp(
+function patronNombreLead(nombreLead) {
+  return new RegExp(
     `\\b${String(nombreLead).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`,
     "i"
   );
-  const fuentes = [
-    ...trimChatHistory(chatHistory)
-      .filter((t) => t.role === "assistant" || t.role === "bot")
-      .map((t) => t.text),
-    ...(Array.isArray(lastReplies) ? lastReplies : []),
-  ];
+}
 
-  return fuentes.some((t) => patron.test(String(t || "")));
+function esPrimeraRespuestaConversacion(chatHistory, lastReplies) {
+  const assistantMsgs = trimChatHistory(chatHistory).filter(
+    (t) => t.role === "assistant" || t.role === "bot"
+  );
+  const tieneLastReplies =
+    Array.isArray(lastReplies) && lastReplies.some((r) => String(r || "").trim());
+  return assistantMsgs.length === 0 && !tieneLastReplies;
+}
+
+function nombreUsadoEnUltimaRespuesta(nombreLead, chatHistory, lastReplies) {
+  if (!nombreLead) return false;
+
+  const patron = patronNombreLead(nombreLead);
+
+  if (Array.isArray(lastReplies) && lastReplies.length) {
+    const ultima = String(lastReplies[lastReplies.length - 1] || "");
+    if (patron.test(ultima)) return true;
+  }
+
+  const assistantMsgs = trimChatHistory(chatHistory).filter(
+    (t) => t.role === "assistant" || t.role === "bot"
+  );
+  const ultima = assistantMsgs[assistantMsgs.length - 1];
+  if (ultima && patron.test(String(ultima.text || ""))) return true;
+
+  return false;
+}
+
+function resolverUsoNombreLead(nombreLead, chatHistory, lastReplies) {
+  if (!nombreLead) {
+    return {
+      primeraRespuestaConversacion: false,
+      nombrePermitido: false,
+    };
+  }
+
+  const primeraRespuestaConversacion = esPrimeraRespuestaConversacion(
+    chatHistory,
+    lastReplies
+  );
+  const usadoEnUltima = nombreUsadoEnUltimaRespuesta(
+    nombreLead,
+    chatHistory,
+    lastReplies
+  );
+
+  return {
+    primeraRespuestaConversacion,
+    nombrePermitido: !usadoEnUltima,
+  };
 }
 
 function construirBloqueDatosLead(nombreLead, chatHistory, lastReplies) {
   if (!nombreLead) return "";
 
+  const { primeraRespuestaConversacion, nombrePermitido } = resolverUsoNombreLead(
+    nombreLead,
+    chatHistory,
+    lastReplies
+  );
+
+  console.log("[OPENAI_NAME_USAGE]", {
+    nombreLead,
+    primeraRespuestaConversacion,
+    nombrePermitido,
+  });
+
   let bloque = `Datos del lead:
 Nombre: ${nombreLead}
 
-Reglas:
-- Usa el nombre del lead de forma natural cuando ayude a sonar más humano.
+Reglas de uso del nombre:
+- No inventes nombres.
 - No uses el nombre en todos los mensajes.
-- No repitas el nombre si ya lo usaste recientemente.
-- No inventes nombres.`;
+- No lo repitas en mensajes consecutivos.`;
 
-  if (nombreUsadoRecientementeEnChat(nombreLead, chatHistory, lastReplies)) {
+  if (primeraRespuestaConversacion) {
     bloque +=
-      "\n- En las respuestas recientes ya se usó el nombre del lead; evita repetirlo en esta respuesta.";
+      "\n- En esta primera respuesta de la conversación, intenta usar el nombre del lead de forma natural y cercana.";
+  } else if (nombrePermitido) {
+    bloque +=
+      "\n- En respuestas siguientes, puedes usar el nombre del lead ocasionalmente cuando encaje de forma natural.";
+  } else {
+    bloque +=
+      "\n- No uses el nombre del lead en esta respuesta (apareció en tu mensaje anterior).";
   }
 
   return bloque;
