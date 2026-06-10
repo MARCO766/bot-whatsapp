@@ -39,6 +39,10 @@ const {
   logChatHistorySource,
 } = require("./iaFlowSession");
 const {
+  esNodoIAReentrable,
+  manejarReentradaIALoop,
+} = require("./iaLoopReentry");
+const {
   esComandoResetFlujo,
   resetearFlujoLead,
 } = require("./resetFlujoLeadService");
@@ -900,6 +904,21 @@ async function ejecutarFlujo(
     if (!nodoId) return;
 
     if (visitados.has(nodoId)) {
+      const nodoBucle = nodos.find((n) => n.id === nodoId);
+      if (nodoBucle && esNodoIAReentrable(nodoBucle)) {
+        manejarReentradaIALoop({
+          nodo: nodoBucle,
+          nodoId,
+          visitados,
+          flowContext,
+          usuarioId,
+          numero,
+          flujoId,
+          conexionWhatsappId:
+            flowContext.conexionWhatsappId ?? conexionLineaEntrante ?? null,
+        });
+        return;
+      }
       console.log("[FLUJO] ⚠ Bucle detectado en nodo:", nodoId);
       return;
     }
@@ -1352,6 +1371,18 @@ async function ejecutarFlujo(
         null;
 
       if (flowContext.iaProPausar && resumeIA && !routeHandle) {
+        guardarSesionIAPendiente({
+          usuarioId,
+          conexionWhatsappId: flowContext.conexionWhatsappId,
+          numero,
+          flujoId,
+          nodoId,
+          visitados: Array.from(visitados),
+          flowContext: {
+            ...flowContext,
+            ultimo_mensaje: "",
+          },
+        });
         console.log("⏸️ IA PRO sigue esperando");
         return;
       }
@@ -1441,6 +1472,18 @@ async function ejecutarFlujo(
       console.log("🤖 IA ROUTE DETECTADA:", routeHandle);
 
       if (esRouter && flowContext.iaPausar && resumeIA && !routeHandle) {
+        guardarSesionIAPendiente({
+          usuarioId,
+          conexionWhatsappId: flowContext.conexionWhatsappId,
+          numero,
+          flujoId,
+          nodoId,
+          visitados: Array.from(visitados),
+          flowContext: {
+            ...flowContext,
+            ultimo_mensaje: "",
+          },
+        });
         console.log("[FLUJO] IA sigue en espera (sin ruta detectada)");
         return;
       }
