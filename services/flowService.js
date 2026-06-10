@@ -40,6 +40,9 @@ const {
 } = require("./iaFlowSession");
 const {
   esNodoIAReentrable,
+  esEtiquetaRutaIA,
+  hayBucleIAActivo,
+  debePermitirRevisitaEnBucleIA,
   manejarReentradaIALoop,
 } = require("./iaLoopReentry");
 const {
@@ -908,7 +911,33 @@ async function ejecutarFlujo(
     );
 
     for (const siguiente of siguientes) {
-      await ejecutarNodo(siguiente.hasta, new Set(visitados));
+      const targetId = siguiente.hasta;
+      const visitadosSiguiente = new Set(visitados);
+      let repeatOk = false;
+
+      if (targetId && esEtiquetaRutaIA(etiqueta) && sourceHandle) {
+        if (visitadosSiguiente.has(targetId)) {
+          visitadosSiguiente.delete(targetId);
+          repeatOk = true;
+        }
+      } else if (
+        targetId &&
+        debePermitirRevisitaEnBucleIA(visitadosSiguiente, targetId, nodos)
+      ) {
+        visitadosSiguiente.delete(targetId);
+        repeatOk = true;
+      }
+
+      if (repeatOk) {
+        console.log("[IA_LOOP_REENTRY_REPEAT_OK]", {
+          nodoId: targetId,
+          desde: nodoId,
+          etiqueta: etiqueta || null,
+          sourceHandle: sourceHandle || null,
+        });
+      }
+
+      await ejecutarNodo(targetId, visitadosSiguiente);
     }
   }
 
@@ -970,9 +999,15 @@ async function ejecutarFlujo(
           flujoId,
           conexionWhatsappId:
             flowContext.conexionWhatsappId ?? conexionLineaEntrante ?? null,
+          conexiones,
         });
         return;
       }
+      console.log("[IA_LOOP_REENTRY_BLOCKED]", {
+        nodoId,
+        visitados: Array.from(visitados),
+        hayBucleIA: !!hayBucleIAActivo(visitados, nodos),
+      });
       console.log("[FLUJO] ⚠ Bucle detectado en nodo:", nodoId);
       return;
     }

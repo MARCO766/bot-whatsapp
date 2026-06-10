@@ -101,6 +101,11 @@ function limpiarSesionIAPendiente(usuarioId, conexionWhatsappId, numero) {
     for (const key of sesiones.keys()) {
       if (key.startsWith(prefix) && key.endsWith(suffix)) {
         sesiones.delete(key);
+        console.log("[IA_SESSION_CLEARED]", {
+          usuarioId,
+          numero,
+          key,
+        });
       }
     }
     return;
@@ -108,7 +113,16 @@ function limpiarSesionIAPendiente(usuarioId, conexionWhatsappId, numero) {
 
   const key = claveSesion(usuarioId, conexionWhatsappId, numero);
   logFlowKey(usuarioId, conexionWhatsappId, numero);
+  const teniaSesion = sesiones.has(key);
   sesiones.delete(key);
+  if (teniaSesion) {
+    console.log("[IA_SESSION_CLEARED]", {
+      usuarioId,
+      conexionWhatsappId,
+      numero,
+      key,
+    });
+  }
 }
 
 module.exports = {

@@ -8,6 +8,17 @@ const { detectarTipoNodo } = require("./seguimiento/detectarTipoNodo");
 const { parseIAFromNodo, esConfigRouterLocal } = require("./aiService");
 const { guardarSesionIAPendiente, logChatHistorySource } = require("./iaFlowSession");
 
+const ETIQUETAS_RUTA_IA = new Set(["openai_agent", "ia_pro", "ia"]);
+
+const TIPOS_NODO_BLOQUEADOS_REVISITA = new Set([
+  "inicio",
+  "conversion",
+  "remarketing_global",
+  "seguimiento",
+  "seguimiento_crm_v2",
+  "lector_pago",
+]);
+
 function esNodoIAReentrable(nodo) {
   if (!nodo) return false;
   const tipo = detectarTipoNodo(nodo);
@@ -16,6 +27,57 @@ function esNodoIAReentrable(nodo) {
     return esConfigRouterLocal(parseIAFromNodo(nodo));
   }
   return false;
+}
+
+function esEtiquetaRutaIA(etiqueta) {
+  return ETIQUETAS_RUTA_IA.has(etiqueta);
+}
+
+function idConexionDesde(c) {
+  return c?.desde || c?.from || c?.source || null;
+}
+
+function idConexionHasta(c) {
+  return c?.hasta || c?.to || c?.target || c?.targetNode || c?.target_node_id || null;
+}
+
+function hijosDirectosIANodo(nodoIAId, conexiones) {
+  const hijos = new Set();
+  for (const c of conexiones || []) {
+    if (idConexionDesde(c) === nodoIAId) {
+      const hasta = idConexionHasta(c);
+      if (hasta) hijos.add(hasta);
+    }
+  }
+  return hijos;
+}
+
+function sanitizarVisitadosSesionIALoop(visitados, nodoIAId, conexiones) {
+  const limpio = new Set(visitados || []);
+  limpio.delete(nodoIAId);
+  for (const hijo of hijosDirectosIANodo(nodoIAId, conexiones)) {
+    limpio.delete(hijo);
+  }
+  return Array.from(limpio);
+}
+
+function hayBucleIAActivo(visitados, nodos) {
+  for (const id of visitados || []) {
+    const n = (nodos || []).find((x) => x.id === id);
+    if (n && esNodoIAReentrable(n)) return id;
+  }
+  return null;
+}
+
+function debePermitirRevisitaEnBucleIA(visitados, nodoId, nodos) {
+  if (!visitados?.has?.(nodoId)) return false;
+  if (!hayBucleIAActivo(visitados, nodos)) return false;
+
+  const nodo = (nodos || []).find((n) => n.id === nodoId);
+  if (!nodo || esNodoIAReentrable(nodo)) return false;
+
+  const tipo = detectarTipoNodo(nodo);
+  return !TIPOS_NODO_BLOQUEADOS_REVISITA.has(tipo);
 }
 
 function prepararFlowContextReentrada(flowContext) {
@@ -38,9 +100,15 @@ function manejarReentradaIALoop(payload) {
     numero,
     flujoId,
     conexionWhatsappId,
+    conexiones,
   } = payload;
 
   const tipo = detectarTipoNodo(nodo);
+  const visitadosSanitizados = sanitizarVisitadosSesionIALoop(
+    visitados,
+    nodoId,
+    conexiones
+  );
 
   console.log("[IA_LOOP_REENTRY_START]", {
     nodoId,
@@ -49,6 +117,7 @@ function manejarReentradaIALoop(payload) {
     usuarioId,
     flujoId,
     visitados: Array.from(visitados || []),
+    visitadosSanitizados,
   });
 
   const flowContextGuardar = prepararFlowContextReentrada(flowContext);
@@ -64,7 +133,7 @@ function manejarReentradaIALoop(payload) {
     numero,
     flujoId,
     nodoId,
-    visitados: Array.from(visitados || []),
+    visitados: visitadosSanitizados,
     flowContext: flowContextGuardar,
     iaLoopReentry: true,
   });
@@ -82,6 +151,7 @@ function manejarReentradaIALoop(payload) {
       tipo,
       numero,
       flujoId,
+      visitados: visitadosSanitizados,
     });
   }
 
@@ -90,6 +160,10 @@ function manejarReentradaIALoop(payload) {
 
 module.exports = {
   esNodoIAReentrable,
+  esEtiquetaRutaIA,
+  sanitizarVisitadosSesionIALoop,
+  hayBucleIAActivo,
+  debePermitirRevisitaEnBucleIA,
   prepararFlowContextReentrada,
   manejarReentradaIALoop,
 };
