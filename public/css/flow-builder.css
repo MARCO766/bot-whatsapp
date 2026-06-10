@@ -1172,8 +1172,8 @@ body:has(#builderArea) {
 #builderArea .node.ia-node .ia-circle {
   border-color: color-mix(in srgb, var(--node-accent) 70%, transparent) !important;
   box-shadow:
-    0 0 20px var(--node-glow),
-    0 0 36px rgba(0, 229, 255, 0.15) !important;
+    0 0 13px rgba(124, 77, 255, 0.36),
+    0 0 23px rgba(0, 229, 255, 0.1) !important;
 }
 
 #builderArea .node.ia-node .ia-title {

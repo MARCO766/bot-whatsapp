@@ -79,8 +79,8 @@
   border: 2px solid rgba(103, 232, 249, 0.55);
   box-shadow:
     0 0 0 1px rgba(167, 139, 250, 0.25),
-    0 0 32px rgba(34, 211, 238, 0.45),
-    0 0 48px rgba(99, 102, 241, 0.25),
+    0 0 21px rgba(34, 211, 238, 0.29),
+    0 0 31px rgba(99, 102, 241, 0.16),
     inset 0 1px 0 rgba(255, 255, 255, 0.12);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
