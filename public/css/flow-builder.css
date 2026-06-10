@@ -433,10 +433,10 @@ body:has(#builderArea) {
   cursor: pointer;
 }
 
-/* ── Edge premium: 4 capas (base → halo → dash → pulso) ── */
+/* ── Edge: guiones fuertes (base/halo ocultos → dash → pulso) ── */
 #builderArea .flow-connection-svg,
 #canvasFlujo .flow-connection-svg {
-  transition: filter 0.22s ease, opacity 0.22s ease;
+  transition: stroke-width 0.22s ease, opacity 0.22s ease;
 }
 
 #builderArea .flow-edge-base,
@@ -446,9 +446,9 @@ body:has(#builderArea) {
   stroke-width: 5;
   stroke-linecap: round;
   stroke-linejoin: round;
-  filter: blur(2px);
+  filter: none;
   pointer-events: none;
-  opacity: 0.45;
+  opacity: 0;
 }
 
 #builderArea .flow-edge-halo,
@@ -462,9 +462,9 @@ body:has(#builderArea) {
   stroke-width: 5;
   stroke-linecap: round;
   stroke-linejoin: round;
-  filter: blur(2px);
+  filter: none;
   pointer-events: none;
-  opacity: 0.22;
+  opacity: 0;
 }
 
 #builderArea .flow-edge-dash,
@@ -473,14 +473,14 @@ body:has(#builderArea) {
 #canvasFlujo .flow-connection-path,
 #builderArea .flow-edge.flow-connection-path {
   fill: none;
-  stroke: rgba(52, 211, 153, 0.78);
+  stroke: #22C55E;
   stroke-width: 3;
   stroke-linecap: round;
   stroke-linejoin: round;
-  stroke-dasharray: 0.1 18;
-  filter: drop-shadow(0 0 1px rgba(34, 211, 238, 0.25));
+  stroke-dasharray: 10 8;
+  filter: none;
   pointer-events: none;
-  opacity: 0.88;
+  opacity: 1;
 }
 
 #builderArea .flow-edge-pulse-glow,
@@ -510,7 +510,7 @@ body:has(#builderArea) {
 #builderArea .flow-conn--ia .flow-edge-dash,
 #builderArea .flow-conn--ia .flow-connection-path,
 #builderArea .flow-edge--ia .flow-edge-dash {
-  stroke: rgba(56, 189, 248, 0.82);
+  stroke: #38BDF8;
 }
 
 #builderArea .flow-conn--ia .flow-edge-halo,
@@ -533,7 +533,7 @@ body:has(#builderArea) {
 #builderArea .flow-conn--payment-reader .flow-edge-dash,
 #builderArea .flow-conn--payment-reader .flow-connection-path,
 #builderArea .flow-edge--payment-reader .flow-edge-dash {
-  stroke: rgba(74, 222, 128, 0.88);
+  stroke: #22C55E;
 }
 
 #builderArea .flow-conn--payment-reader .flow-edge-halo,
@@ -551,7 +551,7 @@ body:has(#builderArea) {
 #builderArea .flow-conn--conversion .flow-edge-dash,
 #builderArea .flow-conn--conversion .flow-connection-path,
 #builderArea .flow-edge--conversion .flow-edge-dash {
-  stroke: rgba(251, 146, 60, 0.82);
+  stroke: #F97316;
 }
 
 #builderArea .flow-conn--conversion .flow-edge-halo,
@@ -568,7 +568,7 @@ body:has(#builderArea) {
 #builderArea .flow-conn--error .flow-edge-dash,
 #builderArea .flow-conn--error .flow-connection-path,
 #builderArea .flow-edge--error .flow-edge-dash {
-  stroke: rgba(248, 113, 113, 0.85);
+  stroke: #EF4444;
 }
 
 #builderArea .flow-conn--error .flow-edge-pulse,
@@ -577,32 +577,31 @@ body:has(#builderArea) {
   filter: drop-shadow(0 0 4px rgba(248, 113, 113, 0.85));
 }
 
-/* Hover premium — 220ms */
+/* Hover — solo grosor, sin glow */
 #builderArea .flow-connection-svg.flow-connection--hover,
 #builderArea .flow-connection-svg.flow-edge--hover,
 #canvasFlujo .flow-connection-svg.flow-connection--hover {
-  filter: brightness(1.08);
+  filter: none;
 }
 
 #builderArea .flow-connection-svg.flow-connection--hover .flow-edge-base,
 #builderArea .flow-connection-svg.flow-edge--hover .flow-edge-base {
-  opacity: 0.58;
+  opacity: 0;
+  filter: none;
 }
 
 #builderArea .flow-connection-svg.flow-connection--hover .flow-edge-halo,
 #builderArea .flow-connection-svg.flow-edge--hover .flow-edge-halo {
-  opacity: 0.48;
-  stroke-width: 8;
+  opacity: 0;
+  filter: none;
 }
 
 #builderArea .flow-connection-svg.flow-connection--hover .flow-edge-dash,
 #builderArea .flow-connection-svg.flow-connection--hover .flow-connection-path,
 #builderArea .flow-connection-svg.flow-edge--hover .flow-edge-dash {
-  stroke: rgba(74, 222, 128, 0.95);
-  stroke-width: 3.2;
-  opacity: 1;
-  filter: drop-shadow(0 0 3px rgba(52, 211, 153, 0.4));
-  transition: stroke 0.22s ease, stroke-width 0.22s ease, filter 0.22s ease, opacity 0.22s ease;
+  stroke-width: 4;
+  filter: none;
+  transition: stroke-width 0.22s ease;
 }
 
 #builderArea .flow-connection-svg.flow-connection--hover .flow-edge-pulse,
@@ -615,25 +614,24 @@ body:has(#builderArea) {
   opacity: 0.75;
 }
 
-/* Selected */
+/* Selected — solo grosor, sin glow */
 #builderArea .flow-connection-svg.flow-connection--selected,
 #builderArea .flow-connection-svg.flow-edge-selected,
 #builderArea .flow-connection-svg.flow-edge--selected {
-  filter: brightness(1.12);
+  filter: none;
 }
 
 #builderArea .flow-connection-svg.flow-edge-selected .flow-edge-dash,
 #builderArea .flow-connection-svg.flow-edge-selected .flow-connection-path,
 #builderArea .flow-connection-svg.flow-edge--selected .flow-edge-dash {
-  stroke: rgba(110, 231, 183, 1);
-  stroke-width: 3.4;
-  opacity: 1;
-  filter: drop-shadow(0 0 4px rgba(52, 211, 153, 0.5));
+  stroke-width: 4;
+  filter: none;
 }
 
 #builderArea .flow-connection-svg.flow-edge-selected .flow-edge-halo,
 #builderArea .flow-connection-svg.flow-edge--selected .flow-edge-halo {
-  opacity: 0.55;
+  opacity: 0;
+  filter: none;
 }
 
 #builderArea .flow-connection-svg.flow-edge-selected .flow-edge-pulse,
@@ -645,17 +643,17 @@ body:has(#builderArea) {
 
 #builderArea .flow-conn--ia.flow-edge-selected .flow-edge-dash,
 #builderArea .flow-conn--ia.flow-edge--selected .flow-edge-dash {
-  stroke: rgba(125, 211, 252, 1);
+  stroke-width: 4;
 }
 
 #builderArea .flow-conn--payment-reader.flow-edge-selected .flow-edge-dash,
 #builderArea .flow-conn--payment-reader.flow-edge--selected .flow-edge-dash {
-  stroke: rgba(134, 239, 172, 1);
+  stroke-width: 4;
 }
 
 #builderArea .flow-conn--conversion.flow-edge-selected .flow-edge-dash,
 #builderArea .flow-conn--conversion.flow-edge--selected .flow-edge-dash {
-  stroke: rgba(253, 186, 116, 1);
+  stroke-width: 4;
 }
 
 /* Línea temporal al arrastrar conexión (curva premium, sin punteado) */
@@ -694,13 +692,14 @@ body:has(#builderArea) {
 
 #builderArea.builder-theme-light .flow-connection-path,
 #builderArea.builder-theme-light .temp-connection-path {
-  stroke: rgba(109, 93, 252, 0.55);
+  stroke: #22C55E;
   filter: none;
 }
 
 #builderArea.builder-theme-light .flow-connection-glow,
 #builderArea.builder-theme-light .temp-connection-glow {
-  stroke: rgba(109, 93, 252, 0.1);
+  opacity: 0;
+  filter: none;
 }
 
 /* ── Conexiones legacy (div) — compatibilidad ── */
