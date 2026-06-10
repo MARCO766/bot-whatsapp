@@ -42,6 +42,30 @@ const MSG_IA_NO_DISPONIBLE = "⚠️ OPENAI FALLÓ";
 const MSG_COMPROBANTE_INVALIDO =
   "No pude validar el comprobante. Por favor envía una captura clara donde se vea el monto, moneda y nombre.";
 
+function rutasPaymentReaderActivas(config) {
+  return (config?.caminos || []).filter(
+    (r) => r.enabled !== false && esCaminoPaymentReader(r)
+  );
+}
+
+function limpiarMediaEntranteContexto(ctx) {
+  const out = { ...(ctx || {}) };
+  delete out.messageType;
+  delete out.imageUrl;
+  delete out.imageMetaId;
+  delete out.metaToken;
+  return out;
+}
+
+function limpiarRutasContexto(ctx) {
+  return {
+    ...limpiarMediaEntranteContexto(ctx),
+    openaiAgentRouteId: null,
+    iaRouteId: null,
+    route: null,
+  };
+}
+
 const PROMPT_SISTEMA_FIJO =
   "Eres un asesor humano de WhatsApp. Responde corto, natural, con máximo 1 emoji de carita. No uses puntos suspensivos. No inventes datos.";
 
@@ -1319,9 +1343,7 @@ async function enviarOpenAIConPipelineManual(
 async function resolverPaymentReaderOpenAI(config, mediaEntrante, opts = {}) {
   if (opts.messageType !== "image" || !opts.imageUrl) return null;
 
-  const rutasPaymentReader = (config.caminos || []).filter(
-    (r) => r.enabled !== false && esCaminoPaymentReader(r)
-  );
+  const rutasPaymentReader = rutasPaymentReaderActivas(config);
   if (!rutasPaymentReader.length) return null;
 
   const route = rutasPaymentReader[0];
@@ -1386,6 +1408,7 @@ async function resolverPaymentReaderOpenAI(config, mediaEntrante, opts = {}) {
     routeId: null,
     reply: MSG_COMPROBANTE_INVALIDO,
     source: "openai-payment-reader",
+    paymentReaderEsperando: true,
     paymentReaderMotivo: validacion.motivo || null,
     paymentReaderLectura: validacion.lectura || null,
   };
@@ -1549,13 +1572,15 @@ async function ejecutarNodoOpenAIAgent(nodo, contexto, opts = {}) {
     }
 
     if (!opts.resume) {
-      return {
+      const esperandoPaymentReader = rutasPaymentReaderActivas(config).length > 0;
+      return limpiarMediaEntranteContexto({
         ...contexto,
         openaiAgentPausar: true,
         iaPausar: true,
         openaiAgentEjecutada: false,
+        openaiPaymentReaderEsperando: esperandoPaymentReader,
         chat_history: trimChatHistory(contexto.chat_history),
-      };
+      });
     }
 
     console.log("💬 OPENAI pregunta:", mensajeLead);
@@ -1617,10 +1642,11 @@ async function ejecutarNodoOpenAIAgent(nodo, contexto, opts = {}) {
         "| source:",
         resultado.source || "?"
       );
-      return {
+      return limpiarMediaEntranteContexto({
         ...contexto,
         openaiAgentPausar: false,
         iaPausar: false,
+        openaiPaymentReaderEsperando: false,
         openaiAgentRouteId: resultado.routeId,
         iaRouteId: resultado.routeId,
         route: resultado.routeId,
@@ -1629,7 +1655,7 @@ async function ejecutarNodoOpenAIAgent(nodo, contexto, opts = {}) {
         chat_history: chatHistory,
         intent: resultado.intent,
         score: resultado.score,
-      };
+      });
     }
 
     if (resultado.action === "media_library" && resultado.listId) {
@@ -1698,6 +1724,46 @@ async function ejecutarNodoOpenAIAgent(nodo, contexto, opts = {}) {
     let reply = limpiarReply(String(resultado.reply || "").trim());
     if (reply) {
       reply = aplicarNombreForzadoEnRespuesta(reply, nombreLead, nombrePermitido);
+    }
+
+    if (
+      resultado.source === "openai-payment-reader" &&
+      resultado.action === "reply"
+    ) {
+      if (reply && numero) {
+        logEmojiDebug("antes enviar payment_reader invalido", reply);
+        const uidEnvio =
+          contexto?.usuarioId ?? opts?.usuarioId ?? usuarioId ?? null;
+        await enviarOpenAIConPipelineManual(
+          numero,
+          reply,
+          uidEnvio,
+          conexionWhatsappId
+        );
+        contexto.ultimaRespuestaIA = reply;
+        chatHistory = appendChatHistory(chatHistory, "assistant", reply);
+        pushLastReply(usuarioId, conexionWhatsappId, numero, reply);
+      }
+
+      console.log(
+        "[OPENAI_PAYMENT_READER_WAITING]",
+        JSON.stringify({
+          routeId: rutasPaymentReaderActivas(config)[0]?.id || null,
+          motivo: resultado.paymentReaderMotivo || null,
+        })
+      );
+
+      return limpiarRutasContexto({
+        ...contexto,
+        openaiAgentPausar: true,
+        iaPausar: true,
+        openaiPaymentReaderEsperando: true,
+        openaiAgentReply: true,
+        openaiAgentEjecutada: true,
+        chat_history: chatHistory,
+        intent: resultado.intent || "payment_reader_invalido",
+        score: resultado.score,
+      });
     }
 
     console.log("[IA DEBUG] mensaje lead:", mensajeLead);

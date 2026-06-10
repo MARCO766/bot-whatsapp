@@ -93,10 +93,39 @@ function extraerMediaEntrante(opts = {}) {
   return { messageType, imageUrl, imageMetaId, metaToken };
 }
 
-function optsMediaParaOpenAI(opts = {}, flowContext = {}) {
-  const media = extraerMediaEntrante(opts) || extraerMediaEntrante(flowContext);
+function optsMediaParaOpenAI(opts = {}) {
+  const media = extraerMediaEntrante(opts);
   if (!media) return {};
   return media;
+}
+
+function prepararFlowContextSesionIA(flowContext) {
+  const ctx = { ...(flowContext || {}) };
+  delete ctx.messageType;
+  delete ctx.imageUrl;
+  delete ctx.imageMetaId;
+  delete ctx.metaToken;
+  ctx.ultimo_mensaje = "";
+  ctx.ultimoMensaje = "";
+  return ctx;
+}
+
+function guardarSesionOpenAIPendiente(payload) {
+  const flowContext = prepararFlowContextSesionIA(payload.flowContext);
+  if (flowContext.openaiPaymentReaderEsperando) {
+    console.log(
+      "[OPENAI_PAYMENT_READER_WAITING]",
+      JSON.stringify({
+        nodoId: payload.nodoId,
+        numero: payload.numero,
+        flujoId: payload.flujoId,
+      })
+    );
+  }
+  return guardarSesionIAPendiente({
+    ...payload,
+    flowContext,
+  });
 }
 
 async function agregarEtiquetaCliente(
@@ -1234,7 +1263,7 @@ async function ejecutarFlujo(
       logChatHistorySource("flowService_antes_openai_agent", flowContext.chat_history);
 
       try {
-        const mediaOpenAI = optsMediaParaOpenAI(opts, flowContext);
+        const mediaOpenAI = optsMediaParaOpenAI(opts);
         flowContext = await ejecutarNodoOpenAIAgent(
           nodo,
           {
@@ -1292,17 +1321,14 @@ async function ejecutarFlujo(
           "openai_agent_primera_pausa_antes_guardar",
           flowContextGuardar.chat_history
         );
-        guardarSesionIAPendiente({
+        guardarSesionOpenAIPendiente({
           usuarioId,
           conexionWhatsappId: flowContext.conexionWhatsappId,
           numero,
           flujoId,
           nodoId,
           visitados: Array.from(visitados),
-          flowContext: {
-            ...flowContextGuardar,
-            ultimo_mensaje: "",
-          },
+          flowContext: flowContextGuardar,
         });
         console.log("[FLUJO] Agente OpenAI en espera — nodo:", nodoId);
         return;
@@ -1314,22 +1340,22 @@ async function ejecutarFlujo(
         flowContext.route ||
         null;
 
-      if (flowContext.openaiAgentPausar && resumeIA && !routeHandle) {
+      const debeSeguirEsperandoOpenAI =
+        flowContext.openaiAgentPausar || flowContext.openaiPaymentReaderEsperando;
+
+      if (resumeIA && !routeHandle && debeSeguirEsperandoOpenAI) {
         logChatHistorySource(
           "openai_agent_respuesta_pausa_antes_guardar",
           flowContext.chat_history
         );
-        guardarSesionIAPendiente({
+        guardarSesionOpenAIPendiente({
           usuarioId,
           conexionWhatsappId: flowContext.conexionWhatsappId,
           numero,
           flujoId,
           nodoId,
           visitados: Array.from(visitados),
-          flowContext: {
-            ...flowContext,
-            ultimo_mensaje: "",
-          },
+          flowContext,
         });
         console.log("⏸️ Agente OpenAI sigue esperando");
         return;
@@ -1342,7 +1368,7 @@ async function ejecutarFlujo(
         return;
       }
 
-      if (resumeIA) {
+      if (resumeIA && !debeSeguirEsperandoOpenAI) {
         limpiarSesionIAPendiente(usuarioId, flowContext.conexionWhatsappId, numero);
       }
       return;
