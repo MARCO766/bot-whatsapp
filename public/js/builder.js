@@ -1942,7 +1942,6 @@ function esNodoDuplicable(nodo){
     tipo === "inicio" ||
     tipo === "seguimiento" ||
     tipo === "remarketing_global" ||
-    tipo === "lector_pago" ||
     tipo === "conectar"
   ){
     return false;
@@ -1962,8 +1961,7 @@ function esNodoDuplicable(nodo){
 
   if(
     nodo.classList.contains("remarketing-global-node") ||
-    nodo.classList.contains("rm24-node") ||
-    nodo.classList.contains("lector-pago-node")
+    nodo.classList.contains("rm24-node")
   ){
     return false;
   }
@@ -1977,6 +1975,7 @@ function esNodoDuplicable(nodo){
     "etiqueta",
     "conversion",
     "seguimiento_crm_v2",
+    "lector_pago",
   ];
 
   if(tiposSoportados.includes(tipo)){
@@ -1991,7 +1990,8 @@ function esNodoDuplicable(nodo){
     nodo.classList.contains("node-espera") ||
     nodo.classList.contains("node-etiqueta") ||
     nodo.classList.contains("conversion-node") ||
-    nodo.classList.contains("seguimiento-v2-node")
+    nodo.classList.contains("seguimiento-v2-node") ||
+    nodo.classList.contains("lector-pago-node")
   );
 }
 
@@ -2007,7 +2007,8 @@ function sincronizarPanelSiEsNodoActivo(nodo){
     (window.MacBotContenido && window.MacBotContenido.getNodoActivo && window.MacBotContenido.getNodoActivo()?.id === id) ||
     (window.MacBotIA && window.MacBotIA.getNodoActivo && window.MacBotIA.getNodoActivo()?.id === id) ||
     (window.MacBotIAPro && window.MacBotIAPro.getNodoActivo && window.MacBotIAPro.getNodoActivo()?.id === id) ||
-    (window.MacBotOpenAIAgent && window.MacBotOpenAIAgent.getNodoActivo && window.MacBotOpenAIAgent.getNodoActivo()?.id === id);
+    (window.MacBotOpenAIAgent && window.MacBotOpenAIAgent.getNodoActivo && window.MacBotOpenAIAgent.getNodoActivo()?.id === id) ||
+    (window.MacBotLectorPago && window.MacBotLectorPago.getNodoActivo && window.MacBotLectorPago.getNodoActivo()?.id === id);
 
   if(esActivo){
     sincronizarPanelAntesDeSnapshot();
@@ -2087,6 +2088,14 @@ function inicializarNodoTrasDuplicar(nodo){
 
     if(tipo === "etiqueta" || className.includes("node-etiqueta")){
       refrescarSelectsEtiquetaNodos();
+      return;
+    }
+
+    if(tipo === "lector_pago" || className.includes("lector-pago-node")){
+      if(window.MacBotLectorPago && window.MacBotLectorPago.refrescarNodoCargado){
+        window.MacBotLectorPago.refrescarNodoCargado(nodo);
+      }
+      return;
     }
   } catch (err) {
     console.warn("Duplicar: error al inicializar nodo", err.message);
@@ -2202,6 +2211,19 @@ function duplicarNodo(id){
   ){
     sincronizarPanelSiEsNodoActivo(nodo);
     const dup = window.MacBotSeguimientoV2.duplicarNodo(nodo);
+    if(dup){
+      console.log("[DUPLICAR_NODO_OK]", dup.id);
+    }
+    return;
+  }
+
+  if(
+    window.MacBotLectorPago &&
+    window.MacBotLectorPago.esNodoLectorPago(nodo) &&
+    window.MacBotLectorPago.duplicarNodo
+  ){
+    sincronizarPanelSiEsNodoActivo(nodo);
+    const dup = window.MacBotLectorPago.duplicarNodo(nodo);
     if(dup){
       console.log("[DUPLICAR_NODO_OK]", dup.id);
     }

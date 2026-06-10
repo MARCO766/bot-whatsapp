@@ -132,12 +132,9 @@
 
     return `
       <div class="node-actions">
-        <button type="button" class="edit-node lector-pago-action-btn lector-pago-action-btn-edit" onclick="event.stopPropagation(); editarNodo('${nodoId}')" aria-label="Editar nodo">
-          <span>✦</span>
-        </button>
-        <button type="button" class="delete-node lector-pago-action-btn lector-pago-action-btn-delete" onclick="event.stopPropagation(); borrarNodo('${nodoId}')" aria-label="Eliminar nodo">
-          <span>✕</span>
-        </button>
+        <button type="button" class="edit-node" onclick="event.stopPropagation(); editarNodo('${nodoId}')" aria-label="Editar">✎</button>
+        <button type="button" class="duplicate-node" onclick="event.stopPropagation(); duplicarNodo('${nodoId}')" title="Duplicar" aria-label="Duplicar">⧉</button>
+        <button type="button" class="delete-node" onclick="event.stopPropagation(); borrarNodo('${nodoId}')" aria-label="Eliminar">×</button>
       </div>
       <div class="lector-pago-header">
         <div class="lector-pago-header-main">
@@ -397,6 +394,57 @@
     }
   }
 
+  function getNodoActivo() {
+    return panelNodoActivo;
+  }
+
+  function duplicarNodo(origen) {
+    if (!origen || !esNodoLectorPago(origen)) return null;
+
+    const canvas = document.getElementById("canvasFlujo");
+    if (!canvas) return null;
+
+    if (panelNodoActivo && panelNodoActivo.id === origen.id) {
+      flushPanelToNode();
+    }
+
+    if (typeof registrarHistorialBuilder === "function") {
+      registrarHistorialBuilder();
+    }
+
+    if (typeof nodoCount !== "number") {
+      window.nodoCount = 0;
+    }
+    nodoCount += 1;
+
+    const cfg = JSON.parse(JSON.stringify(leerDataDesdeNodo(origen)));
+
+    const left = parseFloat(origen.style.left);
+    const top = parseFloat(origen.style.top);
+    const baseX = Number.isFinite(left) ? left : origen.offsetLeft;
+    const baseY = Number.isFinite(top) ? top : origen.offsetTop;
+
+    const nodo = document.createElement("div");
+    nodo.className = "node lector-pago-node node-lector-pago";
+    nodo.id = "nodo_" + nodoCount;
+    nodo.dataset.tipo = "lector_pago";
+    nodo.style.left = baseX + 40 + "px";
+    nodo.style.top = baseY + 30 + "px";
+
+    renderNodoVisual(nodo, cfg);
+    canvas.appendChild(nodo);
+
+    if (typeof hacerMovible === "function") {
+      hacerMovible(nodo);
+    }
+
+    if (typeof marcarNodoSeleccionado === "function") {
+      marcarNodoSeleccionado(nodo);
+    }
+
+    return nodo;
+  }
+
   window.MacBotLectorPago = {
     DEFAULT_DATA,
     esNodoLectorPago,
@@ -410,6 +458,8 @@
     guardarPanelLectorPago,
     flushPanelToNode,
     clearPanelActivo,
+    getNodoActivo,
+    duplicarNodo,
     leerDataDesdeNodo,
   };
 })();

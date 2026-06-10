@@ -1913,66 +1913,14 @@ body:has(#builderArea) {
   box-shadow: none;
 }
 
-/* RM24h: excluido de node-actions-premium.css — estilos propios */
+/* RM24h: layout acciones; visual → node-actions-premium.css */
 #builderArea .rm24-node-actions {
   position: absolute;
   top: 5px;
   right: 5px;
   z-index: 25;
   display: flex;
-  gap: 3px;
-  opacity: 0;
-  transition: opacity 0.18s ease;
-}
-
-#builderArea .rm24-node:hover .rm24-node-actions,
-#builderArea .rm24-node.selected .rm24-node-actions {
-  opacity: 1;
-}
-
-#builderArea .rm24-node-actions .edit-node,
-#builderArea .rm24-node-actions .delete-node {
-  position: static;
-  top: auto;
-  right: auto;
-  width: 20px;
-  height: 20px;
-  border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  font-size: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition:
-    background 0.15s ease,
-    border-color 0.15s ease,
-    opacity 0.15s ease;
-}
-
-#builderArea .rm24-node-actions .edit-node {
-  background: rgba(255, 255, 255, 0.06);
-  color: #d1d5db;
-  border-color: rgba(255, 255, 255, 0.14);
-}
-
-#builderArea .rm24-node-actions .delete-node {
-  background: rgba(255, 77, 77, 0.12);
-  color: #fca5a5;
-  border-color: rgba(255, 77, 77, 0.22);
-}
-
-#builderArea .rm24-node-actions .edit-node:hover {
-  transform: none;
-  background: rgba(255, 122, 24, 0.18);
-  border-color: rgba(255, 122, 24, 0.35);
-  box-shadow: none;
-}
-
-#builderArea .rm24-node-actions .delete-node:hover {
-  transform: none;
-  background: rgba(255, 77, 77, 0.22);
-  border-color: rgba(255, 77, 77, 0.38);
-  box-shadow: none;
+  gap: 4px;
 }
 
 #builderArea .rm24-node-body,

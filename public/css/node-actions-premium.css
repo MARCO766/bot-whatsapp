@@ -1,9 +1,10 @@
 /* MacBot — Acciones premium globales (capa visual final del builder)
-   Fuente de verdad para editar / duplicar / eliminar en nodos estándar.
+   Fuente de verdad para editar / duplicar / eliminar en nodos del builder.
    Cargar al final en adminView.js (después de CSS por nodo).
-   Excluye: Lector Pago, Remarketing 24h, seguimiento legacy, inicio, conectar. */
+   Excluye: seguimiento legacy, inicio, conectar.
+   Remarketing 24h: solo editar + eliminar (sin duplicar). */
 
-/* Visibilidad: oculto hasta hover o selected (como Seguimiento CRM V2) */
+/* Visibilidad: oculto hasta hover o selected */
 #builderArea .node.content-node .node-actions,
 #builderArea .node.ia-node .node-actions,
 #builderArea .node.ia-pro-node .node-actions,
@@ -11,7 +12,10 @@
 #builderArea .node.node-espera .node-actions,
 #builderArea .node.node-etiqueta .node-actions,
 #builderArea .node.conversion-node .node-actions,
-#builderArea .node.seguimiento-v2-node .node-actions {
+#builderArea .node.seguimiento-v2-node .node-actions,
+#builderArea .node.lector-pago-node .node-actions,
+#builderArea .node.rm24-node .rm24-node-actions,
+#builderArea .node.remarketing-global-node .rm24-node-actions {
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.2s ease;
@@ -33,7 +37,13 @@
 #builderArea .node.conversion-node:hover .node-actions,
 #builderArea .node.conversion-node.selected .node-actions,
 #builderArea .node.seguimiento-v2-node:hover .node-actions,
-#builderArea .node.seguimiento-v2-node.selected .node-actions {
+#builderArea .node.seguimiento-v2-node.selected .node-actions,
+#builderArea .node.lector-pago-node:hover .node-actions,
+#builderArea .node.lector-pago-node.selected .node-actions,
+#builderArea .node.rm24-node:hover .rm24-node-actions,
+#builderArea .node.rm24-node.selected .rm24-node-actions,
+#builderArea .node.remarketing-global-node:hover .rm24-node-actions,
+#builderArea .node.remarketing-global-node.selected .rm24-node-actions {
   opacity: 1;
   pointer-events: auto;
 }
@@ -43,6 +53,7 @@
   opacity: 1;
 }
 
+/* Base botones premium */
 #builderArea .node.content-node .node-actions .edit-node,
 #builderArea .node.content-node .node-actions .duplicate-node,
 #builderArea .node.content-node .node-actions .delete-node,
@@ -66,7 +77,14 @@
 #builderArea .node.conversion-node .node-actions .delete-node,
 #builderArea .node.seguimiento-v2-node .node-actions .edit-node,
 #builderArea .node.seguimiento-v2-node .node-actions .duplicate-node,
-#builderArea .node.seguimiento-v2-node .node-actions .delete-node {
+#builderArea .node.seguimiento-v2-node .node-actions .delete-node,
+#builderArea .node.lector-pago-node .node-actions .edit-node,
+#builderArea .node.lector-pago-node .node-actions .duplicate-node,
+#builderArea .node.lector-pago-node .node-actions .delete-node,
+#builderArea .node.rm24-node .rm24-node-actions .edit-node,
+#builderArea .node.rm24-node .rm24-node-actions .delete-node,
+#builderArea .node.remarketing-global-node .rm24-node-actions .edit-node,
+#builderArea .node.remarketing-global-node .rm24-node-actions .delete-node {
   position: static;
   top: auto;
   right: auto;
@@ -96,7 +114,10 @@
 #builderArea .node.node-espera .node-actions .edit-node,
 #builderArea .node.node-etiqueta .node-actions .edit-node,
 #builderArea .node.conversion-node .node-actions .edit-node,
-#builderArea .node.seguimiento-v2-node .node-actions .edit-node {
+#builderArea .node.seguimiento-v2-node .node-actions .edit-node,
+#builderArea .node.lector-pago-node .node-actions .edit-node,
+#builderArea .node.rm24-node .rm24-node-actions .edit-node,
+#builderArea .node.remarketing-global-node .rm24-node-actions .edit-node {
   background: #2563ff;
   border: 1px solid #3b82f6;
   color: #fff;
@@ -110,13 +131,16 @@
 #builderArea .node.node-espera .node-actions .edit-node:hover,
 #builderArea .node.node-etiqueta .node-actions .edit-node:hover,
 #builderArea .node.conversion-node .node-actions .edit-node:hover,
-#builderArea .node.seguimiento-v2-node .node-actions .edit-node:hover {
+#builderArea .node.seguimiento-v2-node .node-actions .edit-node:hover,
+#builderArea .node.lector-pago-node .node-actions .edit-node:hover,
+#builderArea .node.rm24-node .rm24-node-actions .edit-node:hover,
+#builderArea .node.remarketing-global-node .rm24-node-actions .edit-node:hover {
   transform: scale(1.06);
   background: #3b82f6;
   box-shadow: 0 0 18px rgba(37, 99, 255, 0.85);
 }
 
-/* Duplicar — cian fuerte */
+/* Duplicar — cian fuerte (sin RM24h) */
 #builderArea .node.content-node .node-actions .duplicate-node,
 #builderArea .node.ia-node .node-actions .duplicate-node,
 #builderArea .node.ia-pro-node .node-actions .duplicate-node,
@@ -124,7 +148,8 @@
 #builderArea .node.node-espera .node-actions .duplicate-node,
 #builderArea .node.node-etiqueta .node-actions .duplicate-node,
 #builderArea .node.conversion-node .node-actions .duplicate-node,
-#builderArea .node.seguimiento-v2-node .node-actions .duplicate-node {
+#builderArea .node.seguimiento-v2-node .node-actions .duplicate-node,
+#builderArea .node.lector-pago-node .node-actions .duplicate-node {
   background: #00d4ff;
   border: 1px solid #00e5ff;
   color: #fff;
@@ -138,7 +163,8 @@
 #builderArea .node.node-espera .node-actions .duplicate-node:hover,
 #builderArea .node.node-etiqueta .node-actions .duplicate-node:hover,
 #builderArea .node.conversion-node .node-actions .duplicate-node:hover,
-#builderArea .node.seguimiento-v2-node .node-actions .duplicate-node:hover {
+#builderArea .node.seguimiento-v2-node .node-actions .duplicate-node:hover,
+#builderArea .node.lector-pago-node .node-actions .duplicate-node:hover {
   transform: scale(1.06);
   background: #00e5ff;
   box-shadow: 0 0 18px rgba(0, 212, 255, 0.85);
@@ -152,7 +178,10 @@
 #builderArea .node.node-espera .node-actions .delete-node,
 #builderArea .node.node-etiqueta .node-actions .delete-node,
 #builderArea .node.conversion-node .node-actions .delete-node,
-#builderArea .node.seguimiento-v2-node .node-actions .delete-node {
+#builderArea .node.seguimiento-v2-node .node-actions .delete-node,
+#builderArea .node.lector-pago-node .node-actions .delete-node,
+#builderArea .node.rm24-node .rm24-node-actions .delete-node,
+#builderArea .node.remarketing-global-node .rm24-node-actions .delete-node {
   background: #ff3b3b;
   border: 1px solid #ff5a5a;
   color: #fff;
@@ -166,7 +195,10 @@
 #builderArea .node.node-espera .node-actions .delete-node:hover,
 #builderArea .node.node-etiqueta .node-actions .delete-node:hover,
 #builderArea .node.conversion-node .node-actions .delete-node:hover,
-#builderArea .node.seguimiento-v2-node .node-actions .delete-node:hover {
+#builderArea .node.seguimiento-v2-node .node-actions .delete-node:hover,
+#builderArea .node.lector-pago-node .node-actions .delete-node:hover,
+#builderArea .node.rm24-node .rm24-node-actions .delete-node:hover,
+#builderArea .node.remarketing-global-node .rm24-node-actions .delete-node:hover {
   transform: scale(1.06);
   background: #ff5555;
   box-shadow: 0 0 18px rgba(255, 59, 59, 0.85);

@@ -5697,10 +5697,10 @@ window.MacBotRemarketingGlobal = (function () {
       '<div class="rm24-node-actions node-actions">' +
       '<button type="button" class="edit-node" onclick="event.stopPropagation(); abrirEditorRemarketingGlobal(\'' +
       id +
-      '\')">✎</button>' +
+      '\')" aria-label="Editar">✎</button>' +
       '<button type="button" class="delete-node" onclick="event.stopPropagation(); borrarNodo(\'' +
       id +
-      '\')">×</button></div>' +
+      '\')" aria-label="Eliminar">×</button></div>' +
       '<div class="rm24-global-badges" aria-label="Tipo de nodo global">' +
       '<span class="rm24-global-badge">GLOBAL</span>' +
       '<span class="rm24-global-badge rm24-global-badge--watchdog">WATCHDOG</span>' +
