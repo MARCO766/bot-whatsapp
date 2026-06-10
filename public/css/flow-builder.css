@@ -245,15 +245,13 @@ body:has(#builderArea) {
   position: relative;
   overflow: hidden;
   cursor: grab;
-  background-color: #060b12;
+  background-color: #0b1020;
   background-image:
-    radial-gradient(circle at 18% 12%, rgba(57, 255, 20, 0.1), transparent 38%),
-    radial-gradient(circle at 88% 78%, rgba(56, 189, 248, 0.08), transparent 38%),
-    linear-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.045) 1px, transparent 1px);
-  background-size: auto, auto, 28px 28px, 28px 28px;
-  background-position: 0 0, 0 0, 0 0, 0 0;
-  background-repeat: no-repeat, no-repeat, repeat, repeat;
+    linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+  background-size: 30px 30px;
+  background-position: 0 0;
+  background-repeat: repeat;
 }
 
 .flow-canvas-wrap.panning {
@@ -5176,12 +5174,13 @@ body:has(#builderArea.builder-theme-dark) {
 
 #builderArea.builder-theme-dark .flow-canvas-wrap,
 #builderArea.builder-theme-dark #canvasWrapper {
-  background-color: #07111f;
+  background-color: #0b1020;
   background-image:
-    radial-gradient(circle, rgba(59, 130, 246, 0.22) 1px, transparent 1px),
-    radial-gradient(circle at 70% 80%, rgba(124, 58, 237, 0.18), transparent 35%);
-  background-size: 18px 18px, 100% 100%;
-  background-repeat: repeat, no-repeat;
+    linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+  background-size: 30px 30px;
+  background-position: 0 0;
+  background-repeat: repeat;
 }
 
 #builderArea.builder-theme-dark .flow-canvas-hint {
@@ -5311,12 +5310,13 @@ body:has(#builderArea.builder-theme-light) {
 
 #builderArea.builder-theme-light .flow-canvas-wrap,
 #builderArea.builder-theme-light #canvasWrapper {
-  background-color: #f8fafc;
+  background-color: #f5f7fa;
   background-image:
-    radial-gradient(circle, rgba(99, 102, 241, 0.3) 1px, transparent 1px),
-    radial-gradient(circle at 80% 80%, rgba(124, 58, 237, 0.1), transparent 35%);
-  background-size: 18px 18px, 100% 100%;
-  background-repeat: repeat, no-repeat;
+    linear-gradient(rgba(0, 0, 0, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.05) 1px, transparent 1px);
+  background-size: 30px 30px;
+  background-position: 0 0;
+  background-repeat: repeat;
 }
 
 #builderArea.builder-theme-light .flow-canvas-hint {
