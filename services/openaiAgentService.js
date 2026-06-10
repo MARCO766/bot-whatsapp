@@ -9,7 +9,9 @@ const { enviarTextoWhatsApp, enviarMediaWhatsApp } = require("./whatsappService"
 const {
   analizarCaminosOpenAI,
   normalizarCaminosOpenAI,
+  esCaminoPaymentReader,
 } = require("./openaiCaminoMatcher");
+const { validarComprobanteOpenAI } = require("./openaiPaymentReaderService");
 const {
   sanitizarUnicodeRoto,
   logEmojiDebug,
@@ -37,6 +39,8 @@ const OPENAI_TIMEOUT_MS = 20000;
 const FALLBACK_SALUDO_GENERAL_ACTIVO = false;
 
 const MSG_IA_NO_DISPONIBLE = "⚠️ OPENAI FALLÓ";
+const MSG_COMPROBANTE_INVALIDO =
+  "No pude validar el comprobante. Por favor envía una captura clara donde se vea el monto, moneda y nombre.";
 
 const PROMPT_SISTEMA_FIJO =
   "Eres un asesor humano de WhatsApp. Responde corto, natural, con máximo 1 emoji de carita. No uses puntos suspensivos. No inventes datos.";
@@ -1312,6 +1316,81 @@ async function enviarOpenAIConPipelineManual(
   return row?.whatsapp_message_id || null;
 }
 
+async function resolverPaymentReaderOpenAI(config, mediaEntrante, opts = {}) {
+  if (opts.messageType !== "image" || !opts.imageUrl) return null;
+
+  const rutasPaymentReader = (config.caminos || []).filter(
+    (r) => r.enabled !== false && esCaminoPaymentReader(r)
+  );
+  if (!rutasPaymentReader.length) return null;
+
+  const route = rutasPaymentReader[0];
+
+  console.log(
+    "[OPENAI_PAYMENT_READER_START]",
+    JSON.stringify({
+      routeId: route.id,
+      routeNombre: route.nombre,
+      imageUrl: String(opts.imageUrl).slice(0, 120),
+    })
+  );
+
+  const validacion = await validarComprobanteOpenAI({
+    imageUrl: opts.imageUrl,
+    imageMetaId: opts.imageMetaId || mediaEntrante?.imageMetaId || null,
+    metaToken: opts.metaToken || mediaEntrante?.metaToken || null,
+    payment: route.payment,
+  });
+
+  if (validacion.valido) {
+    console.log(
+      "[OPENAI_PAYMENT_READER_VALID]",
+      JSON.stringify({
+        routeId: route.id,
+        lectura: validacion.lectura,
+      })
+    );
+    console.log(
+      "[OPENAI_PAYMENT_READER_ROUTE]",
+      JSON.stringify({
+        routeId: route.id,
+        source: "openai-payment-reader",
+      })
+    );
+    return {
+      ok: true,
+      action: "route",
+      intent: route.nombre || "payment_reader",
+      score: 100,
+      routeId: route.id,
+      reply: "",
+      source: "openai-payment-reader",
+      paymentReaderLectura: validacion.lectura,
+    };
+  }
+
+  console.log(
+    "[OPENAI_PAYMENT_READER_INVALID]",
+    JSON.stringify({
+      routeId: route.id,
+      motivo: validacion.motivo || null,
+      lectura: validacion.lectura || null,
+    })
+  );
+
+  return {
+    ok: true,
+    action: "reply",
+    intent: "payment_reader_invalido",
+    score: 0,
+    routeId: null,
+    reply: MSG_COMPROBANTE_INVALIDO,
+    source: "openai-payment-reader",
+    paymentReaderMotivo: validacion.motivo || null,
+    paymentReaderLectura: validacion.lectura || null,
+  };
+}
+
 async function resolverAnalisisOpenAI(
   config,
   mensajeLead,
@@ -1401,11 +1480,37 @@ async function resolverAnalisisOpenAI(
   };
 }
 
+function resolverMediaEntranteOpenAI(contexto = {}, opts = {}) {
+  const messageType = opts.messageType || contexto.messageType || null;
+  const imageUrl = opts.imageUrl || contexto.imageUrl || null;
+  const imageMetaId = opts.imageMetaId || contexto.imageMetaId || null;
+  const metaToken = opts.metaToken || contexto.metaToken || null;
+  const tieneMedia =
+    messageType === "image" ||
+    messageType === "document" ||
+    !!imageUrl ||
+    !!imageMetaId;
+  if (!tieneMedia) return null;
+  return { messageType, imageUrl, imageMetaId, metaToken };
+}
+
 async function ejecutarNodoOpenAIAgent(nodo, contexto, opts = {}) {
   const nodoId = opts?.nodoId || nodo?.id || null;
   const numero = contexto?.numero || contexto?.from || contexto?.telefono;
   const usuarioId = contexto?.usuarioId || opts?.usuarioId || null;
   const conexionWhatsappId = contexto?.conexionWhatsappId || null;
+  const mediaEntrante = resolverMediaEntranteOpenAI(contexto, opts);
+
+  if (opts.resume && opts.messageType === "image" && opts.imageUrl) {
+    console.log(
+      "[OPENAI_MEDIA_INPUT]",
+      JSON.stringify({
+        messageType: opts.messageType,
+        imageUrl: opts.imageUrl,
+        imageMetaId: opts.imageMetaId || null,
+      })
+    );
+  }
 
   const mensajeLead = String(
     contexto?.mensaje ||
@@ -1488,15 +1593,18 @@ async function ejecutarNodoOpenAIAgent(nodo, contexto, opts = {}) {
     const chatScope = { usuarioId, conexionWhatsappId, numero };
     const { nombrePermitido } = resolverUsoNombreLead(nombreLead, chatScope);
 
-    const resultado = await resolverAnalisisOpenAI(
-      config,
-      mensajeLead,
-      chatHistory,
-      memoria,
-      lastReplies,
-      nombreLead,
-      chatScope
-    );
+    let resultado = await resolverPaymentReaderOpenAI(config, mediaEntrante, opts);
+    if (!resultado) {
+      resultado = await resolverAnalisisOpenAI(
+        config,
+        mensajeLead,
+        chatHistory,
+        memoria,
+        lastReplies,
+        nombreLead,
+        chatScope
+      );
+    }
 
     contexto.intent = resultado.intent || "";
     contexto.score = resultado.score ?? "";
@@ -1505,7 +1613,9 @@ async function ejecutarNodoOpenAIAgent(nodo, contexto, opts = {}) {
       console.log(
         "[OPENAI PATH DEBUG] activando camino — handle:",
         resultado.routeId,
-        "| sin respuesta GPT"
+        "| sin respuesta GPT",
+        "| source:",
+        resultado.source || "?"
       );
       return {
         ...contexto,

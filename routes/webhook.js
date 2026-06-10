@@ -611,7 +611,7 @@ const activadorEjecutado = await procesarMensajeEntrante(
   message.id,
   {
     messageType: message.type,
-    imageMetaId: message.image?.id || null,
+    imageMetaId: message.image?.id || message.document?.id || null,
     metaToken: conexionWebhook?.token || null,
     imageUrl: mediaUrlFinal || null,
     conexionWhatsappId: conexionWhatsappId || null,

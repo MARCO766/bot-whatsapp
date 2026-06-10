@@ -70,6 +70,46 @@ function keywordsDeCamino(route) {
   return out;
 }
 
+const ROUTE_TYPE_TEXTO = "texto";
+const ROUTE_TYPE_PAYMENT_READER = "payment_reader";
+
+function normalizarTipoCamino(raw) {
+  const t = String(raw || ROUTE_TYPE_TEXTO).trim();
+  return t === ROUTE_TYPE_PAYMENT_READER ? ROUTE_TYPE_PAYMENT_READER : ROUTE_TYPE_TEXTO;
+}
+
+function normalizarPaymentCamino(raw) {
+  const p = raw && typeof raw.payment === "object" ? raw.payment : raw || {};
+  return {
+    montoEsperado: parseFloat(p.montoEsperado ?? p.monto_esperado) || 0,
+    monedaEsperada: String(p.monedaEsperada ?? p.moneda_esperada ?? "").trim(),
+    nombreEsperado: String(p.nombreEsperado ?? p.nombre_esperado ?? "").trim(),
+  };
+}
+
+function esCaminoPaymentReader(route) {
+  return normalizarTipoCamino(route?.type) === ROUTE_TYPE_PAYMENT_READER;
+}
+
+function logPaymentReaderRoutes(caminos) {
+  const paymentReaders = (caminos || []).filter(esCaminoPaymentReader);
+  if (!paymentReaders.length) return;
+
+  console.log(
+    "[OPENAI_PAYMENT_READER_ROUTES]",
+    JSON.stringify({
+      totalPaymentReaders: paymentReaders.length,
+      routes: paymentReaders.map((r) => ({
+        id: r.id,
+        nombre: r.nombre,
+        type: r.type,
+        payment: r.payment,
+        enabled: r.enabled !== false,
+      })),
+    })
+  );
+}
+
 function puntuarCamino(textoNorm, keywords) {
   let mejorFraseExacta = 0;
   let keywordsEncontradas = 0;
@@ -115,17 +155,25 @@ function normalizarCaminosOpenAI(cfg) {
   return {
     scoreMinimo: Math.min(100, Math.max(0, parseInt(base.scoreMinimo, 10) || 40)),
     caminos: caminos
-      .map((r) => ({
-        id: String(r.id || "").trim(),
-        nombre: String(r.nombre || r.text || r.name || "").trim(),
-        synonyms: splitListaKeywords(r.synonyms),
-        keywords: splitListaKeywords(r.keywords),
-        palabras: splitListaKeywords(r.palabras),
-        etiquetas: splitListaKeywords(r.etiquetas),
-        priority: parseInt(r.priority, 10) || 50,
-        mediaId: String(r.mediaId || "").trim(),
-        enabled: r.enabled !== false,
-      }))
+      .map((r) => {
+        const type = normalizarTipoCamino(r.type);
+        const camino = {
+          id: String(r.id || "").trim(),
+          nombre: String(r.nombre || r.text || r.name || "").trim(),
+          type,
+          synonyms: splitListaKeywords(r.synonyms),
+          keywords: splitListaKeywords(r.keywords),
+          palabras: splitListaKeywords(r.palabras),
+          etiquetas: splitListaKeywords(r.etiquetas),
+          priority: parseInt(r.priority, 10) || 50,
+          mediaId: String(r.mediaId || "").trim(),
+          enabled: r.enabled !== false,
+        };
+        if (type === ROUTE_TYPE_PAYMENT_READER) {
+          camino.payment = normalizarPaymentCamino(r);
+        }
+        return camino;
+      })
       .filter((r) => r.id && (r.nombre || r.synonyms.length > 0)),
   };
 }
@@ -135,10 +183,14 @@ function normalizarCaminosOpenAI(cfg) {
  */
 function analizarCaminosOpenAI(config, mensaje) {
   const cfg = normalizarCaminosOpenAI(config);
+  logPaymentReaderRoutes(cfg.caminos);
+
   const raw = String(mensaje || "");
   const textoNormalizado = normalizarTextoMensaje(raw);
 
-  const caminosActivos = cfg.caminos.filter((c) => c.enabled !== false);
+  const caminosActivos = cfg.caminos.filter(
+    (c) => c.enabled !== false && !esCaminoPaymentReader(c)
+  );
 
   const detalleCaminos = caminosActivos.map((route) => {
     const keywords = keywordsDeCamino(route);
@@ -255,4 +307,7 @@ module.exports = {
   normalizarCaminosOpenAI,
   keywordsDeCamino,
   analizarCaminosOpenAI,
+  esCaminoPaymentReader,
+  normalizarPaymentCamino,
+  normalizarTipoCamino,
 };

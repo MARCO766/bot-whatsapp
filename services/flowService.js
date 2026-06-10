@@ -79,6 +79,26 @@ const {
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
 
+function extraerMediaEntrante(opts = {}) {
+  const messageType = opts.messageType ? String(opts.messageType).trim() : null;
+  const imageUrl = opts.imageUrl || null;
+  const imageMetaId = opts.imageMetaId || null;
+  const metaToken = opts.metaToken || null;
+  const esMedia =
+    messageType === "image" ||
+    messageType === "document" ||
+    !!imageUrl ||
+    !!imageMetaId;
+  if (!esMedia) return null;
+  return { messageType, imageUrl, imageMetaId, metaToken };
+}
+
+function optsMediaParaOpenAI(opts = {}, flowContext = {}) {
+  const media = extraerMediaEntrante(opts) || extraerMediaEntrante(flowContext);
+  if (!media) return {};
+  return media;
+}
+
 async function agregarEtiquetaCliente(
   numero,
   etiqueta,
@@ -707,6 +727,11 @@ async function ejecutarFlujo(
     flowContext.ultimoMensaje = opts.mensajeResume;
   }
 
+  const mediaEntrante = extraerMediaEntrante(opts);
+  if (mediaEntrante) {
+    Object.assign(flowContext, mediaEntrante);
+  }
+
   flowContext.usuarioId = usuarioId;
   flowContext.numero = flowContext.numero || numero;
 
@@ -1209,10 +1234,12 @@ async function ejecutarFlujo(
       logChatHistorySource("flowService_antes_openai_agent", flowContext.chat_history);
 
       try {
+        const mediaOpenAI = optsMediaParaOpenAI(opts, flowContext);
         flowContext = await ejecutarNodoOpenAIAgent(
           nodo,
           {
             ...flowContext,
+            ...mediaOpenAI,
             numero,
             from: numero,
             telefono: numero,
@@ -1222,7 +1249,15 @@ async function ejecutarFlujo(
             texto: mensajeLeadOpenAI,
             body: mensajeLeadOpenAI,
           },
-          { resume: resumeIA, usuarioId, nodoId }
+          {
+            resume: resumeIA,
+            usuarioId,
+            nodoId,
+            messageType: opts.messageType || null,
+            imageUrl: opts.imageUrl || null,
+            imageMetaId: opts.imageMetaId || null,
+            metaToken: opts.metaToken || null,
+          }
         );
         logChatHistorySource("flowService_despues_openai_agent", flowContext.chat_history);
       } catch (error) {
@@ -1712,7 +1747,13 @@ async function continuarFlujoDesdeLectorPago(numero, usuarioId, resultado) {
   return true;
 }
 
-async function reanudarFlujoIAPendiente(numero, mensaje, usuarioId, conexionWhatsappId) {
+async function reanudarFlujoIAPendiente(
+  numero,
+  mensaje,
+  usuarioId,
+  conexionWhatsappId,
+  resumeOpts = {}
+) {
   logFlowKey(usuarioId, conexionWhatsappId, numero);
 
   if (!conexionWhatsappId) {
@@ -1754,6 +1795,7 @@ async function reanudarFlujoIAPendiente(numero, mensaje, usuarioId, conexionWhat
     sesion.flowContext?.conexionWhatsappId ||
     null;
 
+  const mediaResume = extraerMediaEntrante(resumeOpts) || {};
   await ejecutarFlujo(numero, flujoDatos, usuarioId, sesion.flujoId, {
     iaResume: true,
     nodoResumeId: sesion.nodoId,
@@ -1763,9 +1805,11 @@ async function reanudarFlujoIAPendiente(numero, mensaje, usuarioId, conexionWhat
       conexionWhatsappId: sesionConexion,
       ultimo_mensaje: mensaje,
       ultimoMensaje: mensaje,
+      ...mediaResume,
     },
     mensajeResume: mensaje,
     conexionWhatsappId: sesionConexion,
+    ...mediaResume,
   });
 
   return true;
@@ -1872,7 +1916,13 @@ async function procesarMensajeEntrante(
     numero,
     texto,
     usuarioId,
-    opts.conexionWhatsappId || null
+    opts.conexionWhatsappId || null,
+    {
+      messageType: opts.messageType || null,
+      imageUrl: opts.imageUrl || null,
+      imageMetaId: opts.imageMetaId || null,
+      metaToken: opts.metaToken || null,
+    }
   );
   if (reanudado) {
     console.log("[FLUJO] reanudado IA/OpenAI pendiente OK");

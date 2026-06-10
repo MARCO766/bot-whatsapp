@@ -459,6 +459,43 @@
   border-color: rgba(167, 139, 250, 0.35);
 }
 
+.node.openai-agent-node .openai-agent-route-pill--payment-reader,
+.node.openai-agent-node .openai-agent-route-pill--payment_reader {
+  background: linear-gradient(
+    145deg,
+    rgba(6, 44, 28, 0.92) 0%,
+    rgba(12, 74, 46, 0.88) 55%,
+    rgba(21, 94, 58, 0.82) 100%
+  );
+  border-color: rgba(74, 222, 128, 0.42);
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.35),
+    0 0 14px rgba(34, 197, 94, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.node.openai-agent-node .openai-agent-route-pill--payment-reader::before,
+.node.openai-agent-node .openai-agent-route-pill--payment_reader::before {
+  background: linear-gradient(90deg, #22c55e, #4ade80);
+}
+
+.node.openai-agent-node .openai-agent-route-pill--payment-reader:hover,
+.node.openai-agent-node .openai-agent-route-pill--payment_reader:hover {
+  border-color: rgba(134, 239, 172, 0.65);
+  box-shadow:
+    0 6px 22px rgba(34, 197, 94, 0.32),
+    0 0 18px rgba(74, 222, 128, 0.2);
+}
+
+.node.openai-agent-node .openai-agent-route-pill--payment-reader .openai-agent-route-icon,
+.node.openai-agent-node .openai-agent-route-pill--payment_reader .openai-agent-route-icon,
+.node.openai-agent-node .openai-agent-route-icon--payment-reader,
+.node.openai-agent-node .openai-agent-route-icon--payment_reader {
+  color: #86efac;
+  background: rgba(34, 197, 94, 0.18);
+  border-color: rgba(74, 222, 128, 0.4);
+}
+
 .node.openai-agent-node .openai-agent-route-icon-svg {
   width: 14px;
   height: 14px;
@@ -548,6 +585,14 @@
   box-shadow:
     0 0 12px rgba(167, 139, 250, 0.8),
     0 0 22px rgba(99, 102, 241, 0.45) !important;
+}
+
+#builderArea .node.openai-agent-node .openai-agent-port-route--payment-reader.port.out {
+  background: linear-gradient(135deg, #4ade80, #16a34a) !important;
+  border: 2px solid rgba(255, 255, 255, 0.42) !important;
+  box-shadow:
+    0 0 12px rgba(74, 222, 128, 0.85),
+    0 0 22px rgba(34, 197, 94, 0.5) !important;
 }
 
 #builderArea .node.openai-agent-node .port.in:hover,
@@ -1025,6 +1070,47 @@
 
 .oai-route-card__body {
   padding: 12px;
+}
+
+.oai-route-card--payment-reader {
+  border-color: rgba(74, 222, 128, 0.35);
+  box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.12);
+}
+
+.oai-route-badge--payment {
+  background: rgba(34, 197, 94, 0.2);
+  border: 1px solid rgba(74, 222, 128, 0.4);
+  color: #86efac;
+}
+
+.oai-route-payment-block {
+  margin: 10px 0 4px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(6, 44, 28, 0.55);
+  border: 1px solid rgba(74, 222, 128, 0.28);
+}
+
+.oai-route-payment-label {
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #86efac;
+  letter-spacing: 0.02em;
+}
+
+.oai-route-payment-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.oai-route-payment-grid .oai-field--full {
+  grid-column: 1 / -1;
+}
+
+.openai-agent-panel .oai-select {
+  cursor: pointer;
 }
 
 .oai-handle-hint,

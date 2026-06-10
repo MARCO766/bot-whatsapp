@@ -921,11 +921,24 @@ function esNodoConversionDestino(node){
   );
 }
 
+function getRouteTypeFromConnection(connection){
+  if(!connection?.sourceHandle || !connection?.desde) return null;
+  const ports = connection.desde.querySelectorAll(".port.out[data-handle]");
+  let port = null;
+  ports.forEach(function(p){
+    if(String(p.dataset.handle || "") === String(connection.sourceHandle || "")){
+      port = p;
+    }
+  });
+  return port?.dataset?.routeType || null;
+}
+
 function getConnectionVisualType(sourceNode, targetNode, connection){
   if(connection?.isError || connection?.linea?.classList?.contains("linea-error")){
     return "error";
   }
   if(esNodoConversionDestino(targetNode)) return "conversion";
+  if(getRouteTypeFromConnection(connection) === "payment_reader") return "payment-reader";
   if(esNodoIaOrigen(sourceNode)) return "ia";
   return "default";
 }
@@ -936,10 +949,12 @@ function aplicarEstiloConexion(svg, visualType){
   svg.classList.remove(
     "flow-conn--default",
     "flow-conn--ia",
+    "flow-conn--payment-reader",
     "flow-conn--conversion",
     "flow-conn--error",
     "flow-edge--default",
     "flow-edge--ia",
+    "flow-edge--payment-reader",
     "flow-edge--conversion",
     "flow-edge--error"
   );

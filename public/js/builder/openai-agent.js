@@ -66,7 +66,31 @@ window.MacBotOpenAIAgent = (function () {
     default:
       '<svg class="openai-agent-route-icon-svg" viewBox="0 0 16 16" aria-hidden="true">' +
       '<circle cx="8" cy="8" r="3" fill="currentColor"/></svg>',
+    payment_reader:
+      '<svg class="openai-agent-route-icon-svg" viewBox="0 0 16 16" aria-hidden="true">' +
+      '<path fill="currentColor" d="M3 2h10a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zm2 4h6v1.2H5V6zm0 2.5h4v1.2H5V8.5zm5.5 3.5a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"/></svg>',
   };
+
+  const ROUTE_TYPE_TEXTO = "texto";
+  const ROUTE_TYPE_PAYMENT_READER = "payment_reader";
+
+  function normalizarTipoCamino(raw) {
+    const t = String(raw || ROUTE_TYPE_TEXTO).trim();
+    return t === ROUTE_TYPE_PAYMENT_READER ? ROUTE_TYPE_PAYMENT_READER : ROUTE_TYPE_TEXTO;
+  }
+
+  function normalizarPaymentCamino(raw) {
+    const p = raw && typeof raw.payment === "object" ? raw.payment : raw || {};
+    return {
+      montoEsperado: parseFloat(p.montoEsperado ?? p.monto_esperado) || 0,
+      monedaEsperada: String(p.monedaEsperada ?? p.moneda_esperada ?? "").trim(),
+      nombreEsperado: String(p.nombreEsperado ?? p.nombre_esperado ?? "").trim(),
+    };
+  }
+
+  function esCaminoPaymentReader(route) {
+    return normalizarTipoCamino(route?.type) === ROUTE_TYPE_PAYMENT_READER;
+  }
 
   function esc(str) {
     return String(str || "")
@@ -619,16 +643,21 @@ window.MacBotOpenAIAgent = (function () {
               })
               .filter(Boolean);
         const text = textoCamino(r);
-        return {
+        const type = normalizarTipoCamino(r.type);
+        const camino = {
           id: obtenerRouteId(r) || generarRouteId(),
           text: text,
           nombre: text,
-          type: String(r.type || "texto").trim() || "texto",
+          type: type,
           synonyms: syns,
           priority: parseInt(r.priority, 10) || 50,
           mediaId: r.mediaId ? String(r.mediaId).trim() : null,
           enabled: r.enabled !== false,
         };
+        if (type === ROUTE_TYPE_PAYMENT_READER) {
+          camino.payment = normalizarPaymentCamino(r);
+        }
+        return camino;
       })
       .filter(function (r) {
         if (!r.id) return false;
@@ -693,6 +722,7 @@ window.MacBotOpenAIAgent = (function () {
   }
 
   function tipoIconoCamino(route) {
+    if (esCaminoPaymentReader(route)) return ROUTE_TYPE_PAYMENT_READER;
     const t = textoCamino(route).toLowerCase();
     if (/\bqr\b|codigo\s*qr|pago\s*qr/.test(t) || t.includes("qr")) return "qr";
     if (/deposito|depósito|banco|transferencia/.test(t)) return "deposito";
@@ -832,9 +862,13 @@ window.MacBotOpenAIAgent = (function () {
     activos.forEach(function (route) {
       const label = labelCaminoVisual(route);
       const iconTipo = tipoIconoCamino(route);
+      const esPayment = esCaminoPaymentReader(route);
       const li = document.createElement("li");
       li.className =
         "openai-agent-route-pill openai-agent-route-pill--" + iconTipo;
+      if (esPayment) {
+        li.classList.add("openai-agent-route-pill--payment-reader");
+      }
       li.dataset.routeId = route.id;
 
       const iconWrap = document.createElement("span");
@@ -850,8 +884,12 @@ window.MacBotOpenAIAgent = (function () {
 
       const port = document.createElement(TAG_DIV);
       port.className = "port out openai-agent-port-route";
+      if (esPayment) {
+        port.classList.add("openai-agent-port-route--payment-reader");
+      }
       port.dataset.nodo = nodo.id;
       port.dataset.handle = route.id;
+      port.dataset.routeType = esPayment ? ROUTE_TYPE_PAYMENT_READER : iconTipo;
       port.title = label;
       li.appendChild(port);
 
@@ -910,17 +948,30 @@ window.MacBotOpenAIAgent = (function () {
         .filter(Boolean);
       const prev = prevPorId.get(id);
       const mediaIdLegado = prev?.mediaId ? String(prev.mediaId).trim() : "";
+      const type = normalizarTipoCamino(
+        row.querySelector(".openai-agent-ruta-tipo")?.value
+      );
       const camino = {
         id: id,
         text: text,
         name: text,
         nombre: text,
-        type: "texto",
+        type: type,
         synonyms: syns,
         priority: parseInt(row.querySelector(".openai-agent-ruta-prioridad")?.value, 10) || 50,
         enabled: row.querySelector(".openai-agent-ruta-enabled")?.checked !== false,
       };
       if (mediaIdLegado) camino.mediaId = mediaIdLegado;
+      if (type === ROUTE_TYPE_PAYMENT_READER) {
+        camino.payment = {
+          montoEsperado:
+            parseFloat(row.querySelector(".openai-agent-ruta-monto")?.value) || 0,
+          monedaEsperada:
+            row.querySelector(".openai-agent-ruta-moneda")?.value.trim() || "",
+          nombreEsperado:
+            row.querySelector(".openai-agent-ruta-nombre")?.value.trim() || "",
+        };
+      }
       caminos.push(camino);
     });
     configActiva.caminos = caminos;
@@ -1079,6 +1130,47 @@ window.MacBotOpenAIAgent = (function () {
     return configActiva;
   }
 
+  function actualizarVisibilidadPaymentRow(row) {
+    if (!row) return;
+    const tipo = normalizarTipoCamino(
+      row.querySelector(".openai-agent-ruta-tipo")?.value
+    );
+    const block = row.querySelector(".openai-agent-ruta-payment-block");
+    if (block) {
+      block.style.display =
+        tipo === ROUTE_TYPE_PAYMENT_READER ? "" : "none";
+    }
+    row.classList.toggle(
+      "oai-route-card--payment-reader",
+      tipo === ROUTE_TYPE_PAYMENT_READER
+    );
+  }
+
+  function renderCamposPaymentEditor(route) {
+    const payment = normalizarPaymentCamino(route);
+    const esPayment = esCaminoPaymentReader(route);
+    return (
+      '<div class="openai-agent-ruta-payment-block oai-route-payment-block"' +
+      (esPayment ? "" : ' style="display:none"') +
+      ">" +
+      '<p class="oai-route-payment-label">Lector de pago interno</p>' +
+      '<div class="oai-route-payment-grid">' +
+      '<div class="panel-campo oai-field"><label>Monto esperado</label>' +
+      '<input type="number" class="openai-agent-ruta-monto oai-input" min="0" step="0.01" value="' +
+      esc(payment.montoEsperado) +
+      '"></div>' +
+      '<div class="panel-campo oai-field"><label>Moneda esperada</label>' +
+      '<input class="openai-agent-ruta-moneda oai-input" placeholder="Bs, USD..." value="' +
+      esc(payment.monedaEsperada) +
+      '"></div>' +
+      '<div class="panel-campo oai-field oai-field--full"><label>Nombre esperado (opcional)</label>' +
+      '<input class="openai-agent-ruta-nombre oai-input" placeholder="Titular del pago" value="' +
+      esc(payment.nombreEsperado) +
+      '"></div>' +
+      "</div></div>"
+    );
+  }
+
   function renderCaminosEditor() {
     const wrap = document.getElementById("openaiAgentCaminosLista");
     if (!wrap) return;
@@ -1095,8 +1187,17 @@ window.MacBotOpenAIAgent = (function () {
           ? route.synonyms.join(", ")
           : "";
         const label = textoCamino(route) || "Sin nombre";
+        const tipo = normalizarTipoCamino(route.type);
+        const badgePayment =
+          tipo === ROUTE_TYPE_PAYMENT_READER
+            ? '<span class="oai-route-badge oai-route-badge--payment">Lector pago</span>'
+            : "";
         return (
-          '<div class="openai-agent-ruta-row oai-route-card" data-route-id="' +
+          '<div class="openai-agent-ruta-row oai-route-card' +
+          (tipo === ROUTE_TYPE_PAYMENT_READER
+            ? " oai-route-card--payment-reader"
+            : "") +
+          '" data-route-id="' +
           esc(route.id) +
           '">' +
           '<div class="openai-agent-ruta-head oai-route-card__head">' +
@@ -1104,6 +1205,7 @@ window.MacBotOpenAIAgent = (function () {
           '<span class="oai-route-badge">Ruta ' +
           (index + 1) +
           "</span>" +
+          badgePayment +
           '<span class="oai-route-name-preview">' +
           esc(label) +
           "</span></div>" +
@@ -1116,9 +1218,19 @@ window.MacBotOpenAIAgent = (function () {
           '">Eliminar</button>' +
           "</div></div>" +
           '<div class="oai-route-card__body">' +
+          '<div class="panel-campo oai-field"><label>Tipo de camino</label>' +
+          '<select class="openai-agent-ruta-tipo oai-input oai-select">' +
+          '<option value="texto"' +
+          (tipo === ROUTE_TYPE_TEXTO ? " selected" : "") +
+          ">Normal</option>" +
+          '<option value="payment_reader"' +
+          (tipo === ROUTE_TYPE_PAYMENT_READER ? " selected" : "") +
+          ">Lector de pago interno</option>" +
+          "</select></div>" +
           '<div class="panel-campo oai-field"><label>Texto del camino</label><input class="openai-agent-ruta-texto oai-input" value="' +
           esc(textoCamino(route)) +
           '"></div>' +
+          renderCamposPaymentEditor(route) +
           '<div class="panel-campo oai-field"><label>Sinónimos (coma)</label><textarea class="openai-agent-ruta-sinonimos ia-textarea oai-input oai-textarea" rows="2">' +
           esc(syns) +
           "</textarea></div>" +
@@ -1142,7 +1254,13 @@ window.MacBotOpenAIAgent = (function () {
         eliminarRutaPorId(rid);
       });
     });
-    wrap.querySelectorAll("input, textarea").forEach(function (el) {
+    wrap.querySelectorAll(".openai-agent-ruta-tipo").forEach(function (sel) {
+      sel.addEventListener("change", function () {
+        actualizarVisibilidadPaymentRow(sel.closest(".openai-agent-ruta-row"));
+        onFormChange();
+      });
+    });
+    wrap.querySelectorAll("input, textarea, select").forEach(function (el) {
       el.addEventListener("input", onFormChange);
       el.addEventListener("change", onFormChange);
     });
@@ -1155,6 +1273,7 @@ window.MacBotOpenAIAgent = (function () {
       text: "",
       name: "",
       nombre: "",
+      type: ROUTE_TYPE_TEXTO,
       synonyms: [],
       priority: 50,
       enabled: true,
