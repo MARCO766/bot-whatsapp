@@ -810,22 +810,24 @@ function obtenerPuertoSalida(nodo, handle){
 }
 
 const FLOW_ROUTE_PAD = 40;
-const FLOW_ROUTE_EXIT = 32;
-const FLOW_ROUTE_ENTRY = 32;
+const FLOW_ROUTE_EXIT = 40;
+const FLOW_ROUTE_ENTRY = 40;
 const FLOW_ROUTE_CORNER = 20;
 const FLOW_LANE_SPACING = 22;
 const FLOW_ROUTE_SAFE_GAP = 80;
 
-function getConnectionExitStubX(x1, x2){
-  return x1 + (x2 >= x1 ? FLOW_ROUTE_EXIT : -FLOW_ROUTE_EXIT);
+/** Puerto naranja (out): siempre sale hacia la derecha, fuera del nodo. */
+function getConnectionExitStubX(x1){
+  return x1 + FLOW_ROUTE_EXIT;
 }
 
-function getConnectionEntryStubX(x2, approachAnchorX){
-  return x2 - (x2 >= approachAnchorX ? FLOW_ROUTE_ENTRY : -FLOW_ROUTE_ENTRY);
+/** Puerto verde (in): siempre entra desde la izquierda, fuera del nodo. */
+function getConnectionEntryStubX(x2){
+  return x2 - FLOW_ROUTE_ENTRY;
 }
 
-function appendRouteEntryStubPoints(pts, x2, y2, approachAnchorX, approachY){
-  const entryStubX = getConnectionEntryStubX(x2, approachAnchorX);
+function appendRouteEntryStubPoints(pts, x2, y2, approachY){
+  const entryStubX = getConnectionEntryStubX(x2);
   const yApproach = approachY !== undefined ? approachY : y2;
 
   pts.push({ x: entryStubX, y: yApproach });
@@ -1253,15 +1255,15 @@ function buildProfessionalSmoothPath(points, cornerR){
 }
 
 function buildRoutePointsFromPorts(x1, y1, x2, y2, midX, exitY, entryY, laneY, kind){
-  const exitStub = getConnectionExitStubX(x1, x2);
+  const exitStub = getConnectionExitStubX(x1);
+  const entryStubX = getConnectionEntryStubX(x2);
 
   if(kind === "detour" || kind === "bus"){
     const detourX = midX;
-    const entryStubX = getConnectionEntryStubX(x2, detourX);
     const pts = [
       { x: x1, y: y1 },
       { x: exitStub, y: y1 },
-      { x: detourX, y: exitY },
+      { x: detourX, y: y1 },
       { x: detourX, y: laneY },
       { x: entryStubX, y: laneY },
     ];
@@ -1274,16 +1276,17 @@ function buildRoutePointsFromPorts(x1, y1, x2, y2, midX, exitY, entryY, laneY, k
     return pts;
   }
 
-  const entryStubX = getConnectionEntryStubX(x2, midX);
+  const busY = laneY != null ? laneY : (exitY + entryY) / 2;
+  const routeX = Math.max(exitStub, midX);
   const pts = [
     { x: x1, y: y1 },
     { x: exitStub, y: y1 },
-    { x: midX, y: exitY },
-    { x: midX, y: entryY },
-    { x: entryStubX, y: entryY },
+    { x: routeX, y: y1 },
+    { x: routeX, y: busY },
+    { x: entryStubX, y: busY },
   ];
 
-  if(Math.abs(entryY - y2) > 0.5){
+  if(Math.abs(busY - y2) > 0.5){
     pts.push({ x: entryStubX, y: y2 });
   }
 
@@ -1437,8 +1440,8 @@ function buildPolylineRoundedCorners(points, cornerR){
 }
 
 function buildDetourRoundedPath(x1, y1, detourX, laneY, x2, y2, cornerR){
-  const exitStub = getConnectionExitStubX(x1, x2);
-  const entryStubX = getConnectionEntryStubX(x2, detourX);
+  const exitStub = getConnectionExitStubX(x1);
+  const entryStubX = getConnectionEntryStubX(x2);
   const pts = [
     { x: x1, y: y1 },
     { x: exitStub, y: y1 },
@@ -1461,47 +1464,47 @@ function getStableConnectionPath(x1, y1, x2, y2, opts){
   const laneMidOffset = opts.laneMidOffset || 0;
   const dx = x2 - x1;
   const dist = Math.hypot(dx, y2 - y1) || 1;
-  const exitStubX = getConnectionExitStubX(x1, x2);
+  const exitStubX = getConnectionExitStubX(x1);
+  const entryStubX = getConnectionEntryStubX(x2);
+  const busY = (y1 + y2) / 2 + laneOffset;
 
   if(dist < 96){
-    const midX = (x1 + x2) / 2 + laneMidOffset * 0.25;
-    const busY = (y1 + y2) / 2 + laneOffset;
     const pts = [
       { x: x1, y: y1 },
       { x: exitStubX, y: y1 },
-      { x: midX, y: busY },
+      { x: exitStubX, y: busY },
     ];
-    appendRouteEntryStubPoints(pts, x2, y2, midX, busY);
+    appendRouteEntryStubPoints(pts, x2, y2, busY);
 
     return {
       d: buildProfessionalSmoothPath(pts, FLOW_ROUTE_CORNER),
-      labelPoint: { x: midX, y: busY },
+      labelPoint: { x: (exitStubX + entryStubX) / 2, y: busY },
     };
   }
 
-  const direction = x2 >= x1 ? 1 : -1;
-  let midX;
+  let routeX;
 
-  if(direction === 1){
-    midX =
-      x1 + Math.max(FLOW_ROUTE_SAFE_GAP, Math.abs(x2 - x1) * 0.5) + laneMidOffset;
+  if(x2 >= exitStubX){
+    routeX =
+      Math.max(
+        exitStubX,
+        x1 + Math.max(FLOW_ROUTE_SAFE_GAP, Math.abs(x2 - x1) * 0.5)
+      ) + laneMidOffset;
   } else {
-    midX = Math.max(x1, x2) + FLOW_ROUTE_SAFE_GAP + laneMidOffset;
+    routeX = Math.max(exitStubX, x1, x2) + FLOW_ROUTE_SAFE_GAP + laneMidOffset;
   }
-
-  const busY = (y1 + y2) / 2 + laneOffset;
 
   const pts = [
     { x: x1, y: y1 },
     { x: exitStubX, y: y1 },
-    { x: midX, y: y1 },
-    { x: midX, y: busY },
+    { x: routeX, y: y1 },
+    { x: routeX, y: busY },
   ];
-  appendRouteEntryStubPoints(pts, x2, y2, midX, busY);
+  appendRouteEntryStubPoints(pts, x2, y2, busY);
 
   return {
     d: buildProfessionalSmoothPath(pts, FLOW_ROUTE_CORNER),
-    labelPoint: { x: midX, y: busY },
+    labelPoint: { x: routeX, y: busY },
   };
 }
 
@@ -1699,7 +1702,8 @@ function crearConexionSvg(canvas){
 }
 
 function actualizarLineaTemporalCurva(pathEl, glowEl, motionEl, x1, y1, x2, y2){
-  const d = buildSmoothBezierPath(x1, y1, x2, y2);
+  const route = getStableConnectionPath(x1, y1, x2, y2, {});
+  const d = route.d || buildSmoothBezierPath(x1, y1, x2, y2);
   if(pathEl) pathEl.setAttribute("d", d);
   if(glowEl) glowEl.setAttribute("d", d);
   if(motionEl) motionEl.setAttribute("path", d);
