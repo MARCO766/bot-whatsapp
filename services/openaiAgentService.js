@@ -12,6 +12,7 @@ const {
   esCaminoPaymentReader,
 } = require("./openaiCaminoMatcher");
 const { validarComprobanteOpenAI } = require("./openaiPaymentReaderService");
+const { resolverShortConfirmation } = require("./openaiShortConfirmation");
 const {
   sanitizarUnicodeRoto,
   logEmojiDebug,
@@ -1441,6 +1442,11 @@ async function resolverAnalisisOpenAI(
   nombreLead = null,
   chatScope = null
 ) {
+  const confirmacionCorta = resolverShortConfirmation(config, mensajeLead, chatHistory);
+  if (confirmacionCorta) {
+    return confirmacionCorta;
+  }
+
   const analisis = analizarCaminosOpenAI(config, mensajeLead);
 
   if (analisis.matched && analisis.routeId) {
