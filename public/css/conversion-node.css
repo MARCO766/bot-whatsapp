@@ -125,7 +125,7 @@
   font-size: 28px;
   line-height: 1;
   margin-top: 6px;
-  filter: drop-shadow(0 2px 8px rgba(250, 204, 21, 0.35));
+  filter: drop-shadow(0 0 8px rgba(250, 204, 21, 0.35));
 }
 
 #builderArea .node.conversion-node .conversion-title,
@@ -201,6 +201,14 @@
 /* edit-node / delete-node visual → node-actions-premium.css */
 
 /* Puerto entrada — dentro del círculo */
+#builderArea .node.conversion-node .port {
+  filter: none;
+}
+
+#builderArea .node.conversion-node .port:hover {
+  filter: brightness(1.12);
+}
+
 #builderArea .node.conversion-node .conversion-circle .port.in {
   width: 20px !important;
   height: 20px !important;
