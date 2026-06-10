@@ -1168,6 +1168,45 @@ body:has(#builderArea) {
   color: var(--node-accent);
 }
 
+/* IA circulares — reset wrapper externo (anula glass .node global de admin.css) */
+#builderArea .node.ia-node,
+#builderArea .node.ia-pro-node,
+#builderArea .node.openai-agent-node {
+  width: auto;
+  min-width: auto;
+  max-width: none;
+  min-height: auto;
+  max-height: none;
+  padding: 0;
+  overflow: visible;
+  background: transparent !important;
+  border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+#builderArea .node.ia-node::before,
+#builderArea .node.ia-pro-node::before,
+#builderArea .node.openai-agent-node::before,
+#builderArea .node.ia-node::after,
+#builderArea .node.ia-pro-node::after,
+#builderArea .node.openai-agent-node::after {
+  display: none !important;
+}
+
+#builderArea .node.ia-node:hover,
+#builderArea .node.ia-pro-node:hover,
+#builderArea .node.openai-agent-node:hover {
+  transform: none;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
 /* IA — acento en círculo y título (sin caja sólida) */
 #builderArea .node.ia-node .ia-circle {
   border-color: color-mix(in srgb, var(--node-accent) 70%, transparent) !important;
