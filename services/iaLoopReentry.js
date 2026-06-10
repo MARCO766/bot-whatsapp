@@ -7,6 +7,7 @@
 const { detectarTipoNodo } = require("./seguimiento/detectarTipoNodo");
 const { parseIAFromNodo, esConfigRouterLocal } = require("./aiService");
 const { guardarSesionIAPendiente, logChatHistorySource } = require("./iaFlowSession");
+const { limpiarRutasContexto } = require("./openaiAgentService");
 
 const ETIQUETAS_RUTA_IA = new Set(["openai_agent", "ia_pro", "ia"]);
 
@@ -81,7 +82,7 @@ function debePermitirRevisitaEnBucleIA(visitados, nodoId, nodos) {
 }
 
 function prepararFlowContextReentrada(flowContext) {
-  const ctx = { ...(flowContext || {}) };
+  const ctx = limpiarRutasContexto({ ...(flowContext || {}) });
   ctx.ultimo_mensaje = "";
   ctx.ultimoMensaje = "";
   ctx.mensaje = "";

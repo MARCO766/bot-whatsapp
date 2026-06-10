@@ -30,6 +30,7 @@ const {
   ejecutarNodoOpenAIAgent,
   trimChatHistory,
   appendChatHistory,
+  limpiarRutasContexto,
 } = require("./openaiAgentService");
 const {
   guardarSesionIAPendiente,
@@ -103,7 +104,7 @@ function optsMediaParaOpenAI(opts = {}) {
 }
 
 function prepararFlowContextSesionIA(flowContext) {
-  const ctx = { ...(flowContext || {}) };
+  const ctx = limpiarRutasContexto({ ...(flowContext || {}) });
   delete ctx.messageType;
   delete ctx.imageUrl;
   delete ctx.imageMetaId;
@@ -1369,20 +1370,60 @@ async function ejecutarFlujo(
         return;
       }
 
+      const accionOpenAI = flowContext.openaiAgentAction || null;
+
+      if (resumeIA && accionOpenAI !== "route") {
+        const teniaRutasViejas =
+          flowContext.openaiAgentRouteId ||
+          flowContext.iaRouteId ||
+          flowContext.route ||
+          flowContext.route_id ||
+          flowContext.sourceHandle;
+        if (teniaRutasViejas) {
+          flowContext = limpiarRutasContexto(flowContext);
+          flowContext.openaiAgentAction = accionOpenAI;
+        }
+      }
+
       const routeHandle =
-        flowContext.openaiAgentRouteId ||
-        flowContext.iaRouteId ||
-        flowContext.route ||
-        null;
+        accionOpenAI === "route"
+          ? flowContext.openaiAgentRouteId ||
+            flowContext.iaRouteId ||
+            flowContext.route ||
+            null
+          : null;
 
       const debeSeguirEsperandoOpenAI =
         flowContext.openaiAgentPausar || flowContext.openaiPaymentReaderEsperando;
 
-      if (resumeIA && !routeHandle && debeSeguirEsperandoOpenAI) {
+      const debeContinuar =
+        resumeIA && accionOpenAI === "route" && !!routeHandle;
+
+      console.log("[OPENAI_ROUTE_DECISION]", {
+        action: accionOpenAI || "none",
+        routeId: routeHandle,
+        debeContinuar,
+        debeSeguirEsperando: debeSeguirEsperandoOpenAI,
+        nodoId,
+        numero,
+      });
+
+      if (resumeIA && !debeContinuar && debeSeguirEsperandoOpenAI) {
         logChatHistorySource(
           "openai_agent_respuesta_pausa_antes_guardar",
           flowContext.chat_history
         );
+        if (
+          accionOpenAI === "reply" ||
+          accionOpenAI === "media_library" ||
+          !accionOpenAI
+        ) {
+          console.log("[OPENAI_REPLY_WAIT_ONLY]", {
+            action: accionOpenAI || "reply",
+            nodoId,
+            numero,
+          });
+        }
         guardarSesionOpenAIPendiente({
           usuarioId,
           conexionWhatsappId: flowContext.conexionWhatsappId,
@@ -1396,7 +1437,7 @@ async function ejecutarFlujo(
         return;
       }
 
-      if (resumeIA && routeHandle) {
+      if (debeContinuar) {
         limpiarSesionIAPendiente(usuarioId, flowContext.conexionWhatsappId, numero);
         logConexionesSalientes(nodoId, "OpenAI");
         await continuarASiguientes(nodoId, visitados, "openai_agent", routeHandle);

@@ -58,11 +58,29 @@ function limpiarMediaEntranteContexto(ctx) {
 }
 
 function limpiarRutasContexto(ctx) {
+  const teniaRutas =
+    ctx?.openaiAgentRouteId ||
+    ctx?.iaRouteId ||
+    ctx?.route ||
+    ctx?.route_id ||
+    ctx?.sourceHandle;
+  if (teniaRutas) {
+    console.log("[OPENAI_STALE_ROUTE_CLEARED]", {
+      openaiAgentRouteId: ctx?.openaiAgentRouteId || null,
+      iaRouteId: ctx?.iaRouteId || null,
+      route: ctx?.route || null,
+      route_id: ctx?.route_id || null,
+      sourceHandle: ctx?.sourceHandle || null,
+    });
+  }
   return {
     ...limpiarMediaEntranteContexto(ctx),
     openaiAgentRouteId: null,
     iaRouteId: null,
     route: null,
+    route_id: null,
+    sourceHandle: null,
+    openaiAgentAction: null,
   };
 }
 
@@ -1643,10 +1661,11 @@ async function ejecutarNodoOpenAIAgent(nodo, contexto, opts = {}) {
         resultado.source || "?"
       );
       return limpiarMediaEntranteContexto({
-        ...contexto,
+        ...limpiarRutasContexto(contexto),
         openaiAgentPausar: false,
         iaPausar: false,
         openaiPaymentReaderEsperando: false,
+        openaiAgentAction: "route",
         openaiAgentRouteId: resultado.routeId,
         iaRouteId: resultado.routeId,
         route: resultado.routeId,
@@ -1705,10 +1724,11 @@ async function ejecutarNodoOpenAIAgent(nodo, contexto, opts = {}) {
         fotosEnviadas = envioFotos.enviadas || 0;
       }
 
-      return {
+      return limpiarRutasContexto({
         ...contexto,
         openaiAgentPausar: true,
         iaPausar: true,
+        openaiAgentAction: "media_library",
         openaiAgentReply: !!(textoBibliotecaEnvio || fotosEnviadas),
         openaiAgentEjecutada: true,
         openaiAgentMediaLibrary: true,
@@ -1718,7 +1738,7 @@ async function ejecutarNodoOpenAIAgent(nodo, contexto, opts = {}) {
         chat_history: chatHistory,
         intent: resultado.intent || "media_library",
         score: resultado.score,
-      };
+      });
     }
 
     let reply = limpiarReply(String(resultado.reply || "").trim());
@@ -1757,6 +1777,7 @@ async function ejecutarNodoOpenAIAgent(nodo, contexto, opts = {}) {
         ...contexto,
         openaiAgentPausar: true,
         iaPausar: true,
+        openaiAgentAction: "reply",
         openaiPaymentReaderEsperando: true,
         openaiAgentReply: true,
         openaiAgentEjecutada: true,
@@ -1791,16 +1812,17 @@ async function ejecutarNodoOpenAIAgent(nodo, contexto, opts = {}) {
       pushLastReply(usuarioId, conexionWhatsappId, numero, reply);
     }
 
-    return {
+    return limpiarRutasContexto({
       ...contexto,
       openaiAgentPausar: true,
       iaPausar: true,
+      openaiAgentAction: "reply",
       openaiAgentReply: true,
       openaiAgentEjecutada: true,
       chat_history: chatHistory,
       intent: resultado.intent || "consulta",
       score: resultado.score,
-    };
+    });
   } catch (error) {
     console.error("❌ OPENAI_AGENT ERROR", error.message || error);
     logEstadoOpenAI({
@@ -1821,13 +1843,14 @@ async function ejecutarNodoOpenAIAgent(nodo, contexto, opts = {}) {
       );
     }
 
-    return {
+    return limpiarRutasContexto({
       ...contexto,
       openaiAgentPausar: true,
       iaPausar: true,
+      openaiAgentAction: "reply",
       openaiAgentEjecutada: true,
       chat_history: contexto.chat_history || [],
-    };
+    });
   }
 }
 
@@ -1839,4 +1862,5 @@ module.exports = {
   trimChatHistory,
   appendChatHistory,
   limpiarLastReplies,
+  limpiarRutasContexto,
 };
