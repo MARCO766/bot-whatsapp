@@ -493,6 +493,9 @@ window.MacBotContenido = (function () {
       '<button type="button" class="edit-node" onclick="event.stopPropagation(); editarNodo(\'' +
       id +
       '\')">✎</button>' +
+      '<button type="button" class="duplicate-node" onclick="event.stopPropagation(); duplicarNodo(\'' +
+      id +
+      '\')" title="Duplicar" aria-label="Duplicar">⧉</button>' +
       '<button type="button" class="delete-node" onclick="event.stopPropagation(); borrarNodo(\'' +
       id +
       '\')">×</button></div>' +
@@ -1526,6 +1529,9 @@ window.MacBotContenido = (function () {
       '<button type="button" class="edit-node" onclick="event.stopPropagation(); editarNodo(\'' +
       nodo.id +
       '\')">✎</button>' +
+      '<button type="button" class="duplicate-node" onclick="event.stopPropagation(); duplicarNodo(\'' +
+      nodo.id +
+      '\')" title="Duplicar" aria-label="Duplicar">⧉</button>' +
       '<button type="button" class="delete-node" onclick="event.stopPropagation(); borrarNodo(\'' +
       nodo.id +
       '\')">×</button></div>' +

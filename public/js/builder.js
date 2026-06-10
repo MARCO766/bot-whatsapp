@@ -473,6 +473,7 @@ function cargarFlujoGuardado(){
   actualizarLineas();
   resizeWorldSurface();
   refrescarSelectsEtiquetaNodos();
+  ensureDuplicateButtonsEnCanvas();
 }
 
 /* =========================
@@ -575,6 +576,7 @@ function agregarNodo(tipo){
     contenido = `
       <div class="node-actions">
         <button type="button" class="edit-node" onclick="event.stopPropagation(); editarNodo('${nodo.id}')">✎</button>
+        <button type="button" class="duplicate-node" onclick="event.stopPropagation(); duplicarNodo('${nodo.id}')" title="Duplicar" aria-label="Duplicar">⧉</button>
         <button type="button" class="delete-node" onclick="event.stopPropagation(); borrarNodo('${nodo.id}')">×</button>
       </div>
       <h3 class="node-title">⏳ Espera</h3>
@@ -588,6 +590,7 @@ function agregarNodo(tipo){
     contenido = `
       <div class="node-actions">
         <button type="button" class="edit-node" onclick="event.stopPropagation(); editarNodo('${nodo.id}')">✎</button>
+        <button type="button" class="duplicate-node" onclick="event.stopPropagation(); duplicarNodo('${nodo.id}')" title="Duplicar" aria-label="Duplicar">⧉</button>
         <button type="button" class="delete-node" onclick="event.stopPropagation(); borrarNodo('${nodo.id}')">×</button>
       </div>
       <div class="conversion-node-shell">
@@ -629,6 +632,7 @@ function agregarNodo(tipo){
     contenido = `
       <div class="node-actions">
         <button type="button" class="edit-node" onclick="event.stopPropagation(); editarNodo('${nodo.id}')">✎</button>
+        <button type="button" class="duplicate-node" onclick="event.stopPropagation(); duplicarNodo('${nodo.id}')" title="Duplicar" aria-label="Duplicar">⧉</button>
         <button type="button" class="delete-node" onclick="event.stopPropagation(); borrarNodo('${nodo.id}')">×</button>
       </div>
       <h3 class="node-title">🏷️ Etiqueta</h3>
@@ -663,6 +667,7 @@ function agregarNodo(tipo){
     contenido = `
       <div class="node-actions">
         <button type="button" class="edit-node" onclick="event.stopPropagation(); editarNodo('${nodo.id}')">✎</button>
+        <button type="button" class="duplicate-node" onclick="event.stopPropagation(); duplicarNodo('${nodo.id}')" title="Duplicar" aria-label="Duplicar">⧉</button>
         <button type="button" class="delete-node" onclick="event.stopPropagation(); borrarNodo('${nodo.id}')">×</button>
       </div>
       <div class="ia-header"><h3 class="ia-title">🤖 IA</h3></div>
@@ -1913,8 +1918,261 @@ function cerrarSeguimiento(){
 }
 
 /* =========================
-   EDITAR / BORRAR
+   EDITAR / BORRAR / DUPLICAR
 ========================= */
+
+function buildDuplicateNodeButtonHtml(nodoId, extraClass){
+  const cls = extraClass ? "duplicate-node " + extraClass : "duplicate-node";
+
+  return (
+    '<button type="button" class="' + cls + '" onclick="event.stopPropagation(); duplicarNodo(\'' +
+    nodoId +
+    '\')" title="Duplicar" aria-label="Duplicar">⧉</button>'
+  );
+}
+
+function esNodoDuplicable(nodo){
+  if(!nodo || nodo.id === "nodo_inicio"){
+    return false;
+  }
+
+  const tipo = nodo.dataset.tipo || "";
+
+  if(
+    tipo === "inicio" ||
+    tipo === "seguimiento" ||
+    tipo === "remarketing_global" ||
+    tipo === "lector_pago" ||
+    tipo === "conectar"
+  ){
+    return false;
+  }
+
+  if(nodo.classList.contains("node-start")){
+    return false;
+  }
+
+  if(
+    nodo.classList.contains("follow-node") &&
+    !nodo.classList.contains("seguimiento-v2-node") &&
+    !nodo.classList.contains("follow-node-v2")
+  ){
+    return false;
+  }
+
+  if(
+    nodo.classList.contains("remarketing-global-node") ||
+    nodo.classList.contains("rm24-node") ||
+    nodo.classList.contains("lector-pago-node")
+  ){
+    return false;
+  }
+
+  const tiposSoportados = [
+    "contenido",
+    "ia",
+    "ia_pro",
+    "openai_agent",
+    "espera",
+    "etiqueta",
+    "conversion",
+    "seguimiento_crm_v2",
+  ];
+
+  if(tiposSoportados.includes(tipo)){
+    return true;
+  }
+
+  return (
+    nodo.classList.contains("content-node") ||
+    (nodo.classList.contains("ia-node") && !nodo.classList.contains("ia-pro-node")) ||
+    nodo.classList.contains("ia-pro-node") ||
+    nodo.classList.contains("openai-agent-node") ||
+    nodo.classList.contains("node-espera") ||
+    nodo.classList.contains("node-etiqueta") ||
+    nodo.classList.contains("conversion-node") ||
+    nodo.classList.contains("seguimiento-v2-node")
+  );
+}
+
+function sincronizarPanelSiEsNodoActivo(nodo){
+  if(!nodo){
+    return;
+  }
+
+  const id = nodo.id;
+  const esActivo =
+    (nodoSeleccionadoPanel && nodoSeleccionadoPanel.id === id) ||
+    (window.MacBotSeguimientoV2 && window.MacBotSeguimientoV2.getNodoActivo && window.MacBotSeguimientoV2.getNodoActivo()?.id === id) ||
+    (window.MacBotContenido && window.MacBotContenido.getNodoActivo && window.MacBotContenido.getNodoActivo()?.id === id) ||
+    (window.MacBotIA && window.MacBotIA.getNodoActivo && window.MacBotIA.getNodoActivo()?.id === id) ||
+    (window.MacBotIAPro && window.MacBotIAPro.getNodoActivo && window.MacBotIAPro.getNodoActivo()?.id === id) ||
+    (window.MacBotOpenAIAgent && window.MacBotOpenAIAgent.getNodoActivo && window.MacBotOpenAIAgent.getNodoActivo()?.id === id);
+
+  if(esActivo){
+    sincronizarPanelAntesDeSnapshot();
+  }
+}
+
+function reemplazarReferenciasNodoId(html, oldId, newId){
+  if(!html || !oldId || !newId || oldId === newId){
+    return html;
+  }
+
+  const escaped = oldId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+  return html
+    .replace(new RegExp('data-nodo="' + escaped + '"', "g"), 'data-nodo="' + newId + '"')
+    .replace(new RegExp("editarNodo\\('" + escaped + "'\\)", "g"), "editarNodo('" + newId + "')")
+    .replace(new RegExp("duplicarNodo\\('" + escaped + "'\\)", "g"), "duplicarNodo('" + newId + "')")
+    .replace(new RegExp("borrarNodo\\('" + escaped + "'\\)", "g"), "borrarNodo('" + newId + "')")
+    .replace(new RegExp("iniciarConexion\\(event, '" + escaped + "'", "g"), "iniciarConexion(event, '" + newId + "'");
+}
+
+function inicializarNodoTrasDuplicar(nodo){
+  if(!nodo){
+    return;
+  }
+
+  const tipo = nodo.dataset.tipo || "";
+  const className = nodo.className || "";
+
+  try{
+    if(tipo === "conversion" || className.includes("conversion-node")){
+      initConversionNodeUI(nodo);
+      return;
+    }
+
+    if(
+      tipo === "seguimiento_crm_v2" ||
+      className.includes("seguimiento-v2-node") ||
+      className.includes("follow-node-v2")
+    ){
+      if(window.MacBotSeguimientoV2 && window.MacBotSeguimientoV2.refrescarNodoCargado){
+        window.MacBotSeguimientoV2.refrescarNodoCargado(nodo);
+      }
+      return;
+    }
+
+    if(tipo === "contenido" || className.includes("content-node")){
+      if(window.MacBotContenido && window.MacBotContenido.refrescarNodoCargado){
+        window.MacBotContenido.refrescarNodoCargado(nodo);
+      }
+      return;
+    }
+
+    if(tipo === "openai_agent" || className.includes("openai-agent-node")){
+      if(window.MacBotOpenAIAgent && window.MacBotOpenAIAgent.refrescarNodoCargado){
+        window.MacBotOpenAIAgent.refrescarNodoCargado(nodo);
+      }
+      return;
+    }
+
+    if(tipo === "ia_pro" || className.includes("ia-pro-node")){
+      if(window.MacBotIAPro && window.MacBotIAPro.refrescarNodoCargado){
+        window.MacBotIAPro.refrescarNodoCargado(nodo);
+      }
+      return;
+    }
+
+    if(
+      tipo === "ia" ||
+      (className.includes("ia-node") && !className.includes("ia-pro-node"))
+    ){
+      if(window.MacBotIA && window.MacBotIA.refrescarNodoCargado){
+        window.MacBotIA.refrescarNodoCargado(nodo);
+      }
+      return;
+    }
+
+    if(tipo === "etiqueta" || className.includes("node-etiqueta")){
+      refrescarSelectsEtiquetaNodos();
+    }
+  } catch (err) {
+    console.warn("Duplicar: error al inicializar nodo", err.message);
+  }
+}
+
+function ensureDuplicateButtonEnNodo(nodo){
+  if(!esNodoDuplicable(nodo)){
+    return;
+  }
+
+  const actions = nodo.querySelector(".node-actions");
+  if(!actions || actions.querySelector(".duplicate-node")){
+    return;
+  }
+
+  const edit = actions.querySelector(".edit-node");
+  const del = actions.querySelector(".delete-node");
+  const btn = document.createElement("button");
+
+  btn.type = "button";
+  btn.className = nodo.classList.contains("seguimiento-v2-node") ? "duplicate-node segv2-action-btn" : "duplicate-node";
+  btn.title = "Duplicar";
+  btn.setAttribute("aria-label", "Duplicar");
+  btn.textContent = "⧉";
+  btn.addEventListener("click", function(e){
+    e.stopPropagation();
+    duplicarNodo(nodo.id);
+  });
+
+  if(edit && del){
+    actions.insertBefore(btn, del);
+  } else if(edit){
+    edit.insertAdjacentElement("afterend", btn);
+  } else {
+    actions.appendChild(btn);
+  }
+}
+
+function ensureDuplicateButtonsEnCanvas(){
+  document.querySelectorAll("#canvasFlujo .node").forEach(ensureDuplicateButtonEnNodo);
+}
+
+function duplicarNodoGenerico(origen){
+  const canvas = document.getElementById("canvasFlujo");
+  if(!canvas || !origen){
+    return null;
+  }
+
+  sincronizarPanelSiEsNodoActivo(origen);
+
+  if(typeof nodoCount !== "number"){
+    window.nodoCount = 0;
+  }
+  nodoCount += 1;
+
+  const nuevoId = "nodo_" + nodoCount;
+  const left = parseFloat(origen.style.left);
+  const top = parseFloat(origen.style.top);
+  const baseX = Number.isFinite(left) ? left : origen.offsetLeft;
+  const baseY = Number.isFinite(top) ? top : origen.offsetTop;
+
+  const nuevo = document.createElement("div");
+  nuevo.className = origen.className;
+  nuevo.id = nuevoId;
+
+  if(origen.dataset.tipo){
+    nuevo.dataset.tipo = origen.dataset.tipo;
+  }
+
+  nuevo.innerHTML = reemplazarReferenciasNodoId(origen.innerHTML, origen.id, nuevoId);
+  nuevo.style.left = baseX + 40 + "px";
+  nuevo.style.top = baseY + 30 + "px";
+
+  canvas.appendChild(nuevo);
+  hacerMovible(nuevo);
+  ensureDuplicateButtonEnNodo(nuevo);
+  inicializarNodoTrasDuplicar(nuevo);
+  actualizarHandlersPuertosCanvas();
+
+  if(typeof marcarNodoSeleccionado === "function"){
+    marcarNodoSeleccionado(nuevo);
+  }
+
+  return nuevo;
+}
 
 function editarNodo(id){
   const nodo = document.getElementById(id);
@@ -1926,14 +2184,37 @@ function editarNodo(id){
 
 function duplicarNodo(id){
   const nodo = document.getElementById(id);
-  if(!nodo) return;
+  if(!nodo){
+    return;
+  }
+
+  console.log("[DUPLICAR_NODO_START]", id, nodo.dataset.tipo || "");
+
+  if(!esNodoDuplicable(nodo)){
+    console.log("[DUPLICAR_NODO_UNSUPPORTED]", id, nodo.dataset.tipo || "");
+    return;
+  }
 
   if(
     window.MacBotSeguimientoV2 &&
     window.MacBotSeguimientoV2.esNodoSeguimientoV2(nodo) &&
     window.MacBotSeguimientoV2.duplicarNodo
   ){
-    window.MacBotSeguimientoV2.duplicarNodo(nodo);
+    sincronizarPanelSiEsNodoActivo(nodo);
+    const dup = window.MacBotSeguimientoV2.duplicarNodo(nodo);
+    if(dup){
+      console.log("[DUPLICAR_NODO_OK]", dup.id);
+    }
+    return;
+  }
+
+  registrarHistorialBuilder();
+  const duplicado = duplicarNodoGenerico(nodo);
+
+  if(duplicado){
+    console.log("[DUPLICAR_NODO_OK]", duplicado.id);
+  } else {
+    console.log("[DUPLICAR_NODO_UNSUPPORTED]", id);
   }
 }
 
@@ -3607,6 +3888,7 @@ function restaurarSnapshotBuilder(snapshot){
   actualizarLineas();
   resizeWorldSurface();
   refrescarSelectsEtiquetaNodos();
+  ensureDuplicateButtonsEnCanvas();
   builderHistorial.restaurando = false;
   actualizarBotonesHistorialBuilder();
 }

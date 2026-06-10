@@ -1913,6 +1913,7 @@ body:has(#builderArea) {
   box-shadow: none;
 }
 
+/* RM24h: excluido de node-actions-premium.css — estilos propios */
 #builderArea .rm24-node-actions {
   position: absolute;
   top: 5px;

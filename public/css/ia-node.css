@@ -267,35 +267,7 @@
   opacity: 1;
 }
 
-.node.ia-node .node-actions button {
-  font-size: 11px;
-  padding: 0;
-  min-width: 26px;
-  height: 26px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  cursor: pointer;
-  transition:
-    transform 0.15s ease,
-    box-shadow 0.2s ease;
-}
-
-.node.ia-node .node-actions .edit-node {
-  background: linear-gradient(145deg, rgba(15, 23, 42, 0.92), rgba(30, 41, 59, 0.88));
-  color: #a7f3d0;
-  border-color: rgba(52, 211, 153, 0.35);
-}
-
-.node.ia-node .node-actions .delete-node {
-  background: linear-gradient(145deg, rgba(69, 10, 10, 0.75), rgba(127, 29, 29, 0.55));
-  color: #fecaca;
-  border-color: rgba(248, 113, 113, 0.35);
-}
-
-.node.ia-node .node-actions button:hover {
-  transform: scale(1.06);
-  box-shadow: 0 0 12px rgba(52, 211, 153, 0.35);
-}
+/* edit-node / delete-node visual → node-actions-premium.css */
 
 /* Rama de caminos (estilo referencia: píldoras + handle naranja) */
 .node.ia-node.ia-node--with-routes .ia-node-shell {

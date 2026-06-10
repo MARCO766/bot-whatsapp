@@ -60,66 +60,7 @@
   gap: 4px;
 }
 
-.seguimiento-v2-node .node-actions .edit-node,
-.seguimiento-v2-node .node-actions .duplicate-node,
-.seguimiento-v2-node .node-actions .delete-node {
-  position: static;
-  top: auto;
-  right: auto;
-  width: 26px;
-  height: 26px;
-  padding: 0;
-  border-radius: 8px;
-  font-size: 11px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition:
-    transform 0.15s ease,
-    box-shadow 0.2s ease,
-    background 0.15s ease,
-    border-color 0.15s ease;
-}
-
-.seguimiento-v2-node .node-actions .edit-node {
-  background: #2563FF;
-  border: 1px solid #3B82F6;
-  color: white;
-  box-shadow: 0 0 12px rgba(37, 99, 255, 0.65);
-}
-
-.seguimiento-v2-node .node-actions .duplicate-node {
-  background: #00D4FF;
-  border: 1px solid #00E5FF;
-  color: white;
-  box-shadow: 0 0 12px rgba(0, 212, 255, 0.65);
-}
-
-.seguimiento-v2-node .node-actions .delete-node {
-  background: #FF3B3B;
-  border: 1px solid #FF5A5A;
-  color: white;
-  box-shadow: 0 0 12px rgba(255, 59, 59, 0.65);
-}
-
-.seguimiento-v2-node .node-actions .edit-node:hover {
-  transform: scale(1.06);
-  background: #3B82F6;
-  box-shadow: 0 0 18px rgba(37, 99, 255, 0.85);
-}
-
-.seguimiento-v2-node .node-actions .duplicate-node:hover {
-  transform: scale(1.06);
-  background: #00E5FF;
-  box-shadow: 0 0 18px rgba(0, 212, 255, 0.85);
-}
-
-.seguimiento-v2-node .node-actions .delete-node:hover {
-  transform: scale(1.06);
-  background: #FF5555;
-  box-shadow: 0 0 18px rgba(255, 59, 59, 0.85);
-}
+/* edit / delete / duplicate visual → node-actions-premium.css */
 
 .segv2-shell {
   padding: 12px 14px 14px;

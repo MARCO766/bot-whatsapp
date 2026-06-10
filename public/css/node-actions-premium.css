@@ -1,0 +1,133 @@
+/* MacBot — Acciones premium globales (capa visual final del builder)
+   Fuente de verdad para editar / duplicar / eliminar en nodos estándar.
+   Cargar al final en adminView.js (después de CSS por nodo).
+   Excluye: Lector Pago, Remarketing 24h, seguimiento legacy, inicio, conectar. */
+
+#builderArea .node.content-node .node-actions .edit-node,
+#builderArea .node.content-node .node-actions .duplicate-node,
+#builderArea .node.content-node .node-actions .delete-node,
+#builderArea .node.ia-node .node-actions .edit-node,
+#builderArea .node.ia-node .node-actions .duplicate-node,
+#builderArea .node.ia-node .node-actions .delete-node,
+#builderArea .node.ia-pro-node .node-actions .edit-node,
+#builderArea .node.ia-pro-node .node-actions .duplicate-node,
+#builderArea .node.ia-pro-node .node-actions .delete-node,
+#builderArea .node.openai-agent-node .node-actions .edit-node,
+#builderArea .node.openai-agent-node .node-actions .duplicate-node,
+#builderArea .node.openai-agent-node .node-actions .delete-node,
+#builderArea .node.node-espera .node-actions .edit-node,
+#builderArea .node.node-espera .node-actions .duplicate-node,
+#builderArea .node.node-espera .node-actions .delete-node,
+#builderArea .node.node-etiqueta .node-actions .edit-node,
+#builderArea .node.node-etiqueta .node-actions .duplicate-node,
+#builderArea .node.node-etiqueta .node-actions .delete-node,
+#builderArea .node.conversion-node .node-actions .edit-node,
+#builderArea .node.conversion-node .node-actions .duplicate-node,
+#builderArea .node.conversion-node .node-actions .delete-node,
+#builderArea .node.seguimiento-v2-node .node-actions .edit-node,
+#builderArea .node.seguimiento-v2-node .node-actions .duplicate-node,
+#builderArea .node.seguimiento-v2-node .node-actions .delete-node {
+  position: static;
+  top: auto;
+  right: auto;
+  width: 26px;
+  height: 26px;
+  min-width: 26px;
+  padding: 0;
+  border-radius: 8px;
+  font-size: 11px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.2s ease,
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+
+/* Editar — azul fuerte */
+#builderArea .node.content-node .node-actions .edit-node,
+#builderArea .node.ia-node .node-actions .edit-node,
+#builderArea .node.ia-pro-node .node-actions .edit-node,
+#builderArea .node.openai-agent-node .node-actions .edit-node,
+#builderArea .node.node-espera .node-actions .edit-node,
+#builderArea .node.node-etiqueta .node-actions .edit-node,
+#builderArea .node.conversion-node .node-actions .edit-node,
+#builderArea .node.seguimiento-v2-node .node-actions .edit-node {
+  background: #2563ff;
+  border: 1px solid #3b82f6;
+  color: #fff;
+  box-shadow: 0 0 12px rgba(37, 99, 255, 0.65);
+}
+
+#builderArea .node.content-node .node-actions .edit-node:hover,
+#builderArea .node.ia-node .node-actions .edit-node:hover,
+#builderArea .node.ia-pro-node .node-actions .edit-node:hover,
+#builderArea .node.openai-agent-node .node-actions .edit-node:hover,
+#builderArea .node.node-espera .node-actions .edit-node:hover,
+#builderArea .node.node-etiqueta .node-actions .edit-node:hover,
+#builderArea .node.conversion-node .node-actions .edit-node:hover,
+#builderArea .node.seguimiento-v2-node .node-actions .edit-node:hover {
+  transform: scale(1.06);
+  background: #3b82f6;
+  box-shadow: 0 0 18px rgba(37, 99, 255, 0.85);
+}
+
+/* Duplicar — cian fuerte */
+#builderArea .node.content-node .node-actions .duplicate-node,
+#builderArea .node.ia-node .node-actions .duplicate-node,
+#builderArea .node.ia-pro-node .node-actions .duplicate-node,
+#builderArea .node.openai-agent-node .node-actions .duplicate-node,
+#builderArea .node.node-espera .node-actions .duplicate-node,
+#builderArea .node.node-etiqueta .node-actions .duplicate-node,
+#builderArea .node.conversion-node .node-actions .duplicate-node,
+#builderArea .node.seguimiento-v2-node .node-actions .duplicate-node {
+  background: #00d4ff;
+  border: 1px solid #00e5ff;
+  color: #fff;
+  box-shadow: 0 0 12px rgba(0, 212, 255, 0.65);
+}
+
+#builderArea .node.content-node .node-actions .duplicate-node:hover,
+#builderArea .node.ia-node .node-actions .duplicate-node:hover,
+#builderArea .node.ia-pro-node .node-actions .duplicate-node:hover,
+#builderArea .node.openai-agent-node .node-actions .duplicate-node:hover,
+#builderArea .node.node-espera .node-actions .duplicate-node:hover,
+#builderArea .node.node-etiqueta .node-actions .duplicate-node:hover,
+#builderArea .node.conversion-node .node-actions .duplicate-node:hover,
+#builderArea .node.seguimiento-v2-node .node-actions .duplicate-node:hover {
+  transform: scale(1.06);
+  background: #00e5ff;
+  box-shadow: 0 0 18px rgba(0, 212, 255, 0.85);
+}
+
+/* Eliminar — rojo fuerte */
+#builderArea .node.content-node .node-actions .delete-node,
+#builderArea .node.ia-node .node-actions .delete-node,
+#builderArea .node.ia-pro-node .node-actions .delete-node,
+#builderArea .node.openai-agent-node .node-actions .delete-node,
+#builderArea .node.node-espera .node-actions .delete-node,
+#builderArea .node.node-etiqueta .node-actions .delete-node,
+#builderArea .node.conversion-node .node-actions .delete-node,
+#builderArea .node.seguimiento-v2-node .node-actions .delete-node {
+  background: #ff3b3b;
+  border: 1px solid #ff5a5a;
+  color: #fff;
+  box-shadow: 0 0 12px rgba(255, 59, 59, 0.65);
+}
+
+#builderArea .node.content-node .node-actions .delete-node:hover,
+#builderArea .node.ia-node .node-actions .delete-node:hover,
+#builderArea .node.ia-pro-node .node-actions .delete-node:hover,
+#builderArea .node.openai-agent-node .node-actions .delete-node:hover,
+#builderArea .node.node-espera .node-actions .delete-node:hover,
+#builderArea .node.node-etiqueta .node-actions .delete-node:hover,
+#builderArea .node.conversion-node .node-actions .delete-node:hover,
+#builderArea .node.seguimiento-v2-node .node-actions .delete-node:hover {
+  transform: scale(1.06);
+  background: #ff5555;
+  box-shadow: 0 0 18px rgba(255, 59, 59, 0.85);
+}

@@ -201,39 +201,7 @@
   opacity: 1;
 }
 
-#builderArea .node.conversion-node .node-actions button,
-.conversion-node .node-actions button {
-  font-size: 11px;
-  padding: 0;
-  min-width: 26px;
-  height: 26px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  cursor: pointer;
-  transition:
-    transform 0.15s ease,
-    box-shadow 0.2s ease;
-}
-
-#builderArea .node.conversion-node .node-actions .edit-node,
-.conversion-node .node-actions .edit-node {
-  background: linear-gradient(145deg, rgba(28, 22, 8, 0.95), rgba(30, 41, 59, 0.9));
-  color: #fde047;
-  border-color: rgba(250, 204, 21, 0.4);
-}
-
-#builderArea .node.conversion-node .node-actions .delete-node,
-.conversion-node .node-actions .delete-node {
-  background: linear-gradient(145deg, rgba(69, 10, 10, 0.75), rgba(127, 29, 29, 0.55));
-  color: #fecaca;
-  border-color: rgba(248, 113, 113, 0.35);
-}
-
-#builderArea .node.conversion-node .node-actions button:hover,
-.conversion-node .node-actions button:hover {
-  transform: scale(1.06);
-  box-shadow: 0 0 12px rgba(250, 204, 21, 0.35);
-}
+/* edit-node / delete-node visual → node-actions-premium.css */
 
 /* Puerto entrada — dentro del círculo */
 #builderArea .node.conversion-node .conversion-circle .port.in {

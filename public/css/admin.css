@@ -123,6 +123,7 @@ overflow:hidden;
     0 0 24px rgba(251,113,133,0.18);
 }
 
+/* Legacy: botones sueltos sin .node-actions (seguimiento legacy, conectar) */
 .delete-node{
   position:absolute;
   top:8px;
@@ -449,6 +450,8 @@ overflow:hidden;
 
 /* =========================
    BOTONES
+   Layout .node-actions: fallback global.
+   Colores/tamaño premium en nodos estándar → node-actions-premium.css (última capa).
 ========================= */
 
 .node-actions{
@@ -461,8 +464,9 @@ overflow:hidden;
   gap:6px;
 }
 
-.edit-node,
-.delete-node{
+/* Fallback visual solo dentro de .node-actions (lector, rm24, etc.) */
+.node-actions .edit-node,
+.node-actions .delete-node{
 
   width:30px;
   height:30px;
@@ -479,22 +483,22 @@ overflow:hidden;
   font-size:13px;
 }
 
-.edit-node{
+.node-actions .edit-node{
   background:#2563eb;
 }
 
-.edit-node:hover{
+.node-actions .edit-node:hover{
   transform:scale(1.08);
 
   box-shadow:
     0 0 14px rgba(37,99,235,.55);
 }
 
-.delete-node{
+.node-actions .delete-node{
   background:#dc2626;
 }
 
-.delete-node:hover{
+.node-actions .delete-node:hover{
   transform:scale(1.08);
 
   box-shadow:

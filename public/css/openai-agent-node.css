@@ -285,50 +285,7 @@
   opacity: 1;
 }
 
-.node.openai-agent-node .node-actions button {
-  width: 24px;
-  height: 24px;
-  min-width: 24px;
-  padding: 0;
-  border-radius: 8px;
-  font-size: 12px;
-  line-height: 1;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  cursor: pointer;
-  transition:
-    transform 0.15s ease,
-    box-shadow 0.2s ease,
-    border-color 0.2s ease;
-}
-
-.node.openai-agent-node .node-actions .edit-node {
-  background: linear-gradient(
-    145deg,
-    rgba(34, 211, 238, 0.35),
-    rgba(99, 102, 241, 0.45)
-  );
-  color: #e0f2fe;
-  border-color: rgba(103, 232, 249, 0.45);
-}
-
-.node.openai-agent-node .node-actions .delete-node {
-  background: linear-gradient(
-    145deg,
-    rgba(127, 29, 29, 0.75),
-    rgba(69, 10, 10, 0.85)
-  );
-  color: #fecaca;
-  border-color: rgba(248, 113, 113, 0.4);
-}
-
-.node.openai-agent-node .node-actions button:hover {
-  transform: scale(1.08);
-  box-shadow: 0 0 12px rgba(34, 211, 238, 0.35);
-}
-
-.node.openai-agent-node .node-actions .delete-node:hover {
-  box-shadow: 0 0 12px rgba(239, 68, 68, 0.4);
-}
+/* edit-node / delete-node visual → node-actions-premium.css */
 
 .node.openai-agent-node.openai-agent-node--with-routes .openai-agent-node-shell {
   min-width: 300px;

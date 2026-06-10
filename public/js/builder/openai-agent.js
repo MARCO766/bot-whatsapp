@@ -1910,6 +1910,9 @@ window.MacBotOpenAIAgent = (function () {
       '<button type="button" class="edit-node" onclick="event.stopPropagation(); editarNodo(\'' +
       id +
       '\')">✎</button>' +
+      '<button type="button" class="duplicate-node" onclick="event.stopPropagation(); duplicarNodo(\'' +
+      id +
+      '\')" title="Duplicar" aria-label="Duplicar">⧉</button>' +
       '<button type="button" class="delete-node" onclick="event.stopPropagation(); borrarNodo(\'' +
       id +
       '\')">×</button></div>' +

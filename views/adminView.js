@@ -22,7 +22,7 @@ function renderAdminPage({
 
 <link rel="stylesheet" href="/css/admin.css">
 <link rel="stylesheet" href="/css/flow-builder.css">
-${builder ? '<link rel="stylesheet" href="/css/seguimiento.css"><link rel="stylesheet" href="/css/seguimiento-v2.css"><link rel="stylesheet" href="/css/contenido.css"><link rel="stylesheet" href="/css/conversion-node.css"><link rel="stylesheet" href="/css/lector-pago-node.css"><link rel="stylesheet" href="/css/ia-node.css"><link rel="stylesheet" href="/css/ia-pro-node.css"><link rel="stylesheet" href="/css/openai-agent-node.css">' : ""}
+${builder ? '<link rel="stylesheet" href="/css/seguimiento.css"><link rel="stylesheet" href="/css/seguimiento-v2.css"><link rel="stylesheet" href="/css/contenido.css"><link rel="stylesheet" href="/css/conversion-node.css"><link rel="stylesheet" href="/css/lector-pago-node.css"><link rel="stylesheet" href="/css/ia-node.css"><link rel="stylesheet" href="/css/ia-pro-node.css"><link rel="stylesheet" href="/css/openai-agent-node.css"><link rel="stylesheet" href="/css/node-actions-premium.css">' : ""}
 </head>
 
 <body>
