@@ -1924,6 +1924,19 @@ function editarNodo(id){
   abrirPanelNodo(nodo);
 }
 
+function duplicarNodo(id){
+  const nodo = document.getElementById(id);
+  if(!nodo) return;
+
+  if(
+    window.MacBotSeguimientoV2 &&
+    window.MacBotSeguimientoV2.esNodoSeguimientoV2(nodo) &&
+    window.MacBotSeguimientoV2.duplicarNodo
+  ){
+    window.MacBotSeguimientoV2.duplicarNodo(nodo);
+  }
+}
+
 function borrarNodo(id){
   if(id === "nodo_inicio") return;
 
@@ -2851,7 +2864,8 @@ document.addEventListener("click", function(e){
   if(
     e.target.classList.contains("port") ||
     e.target.classList.contains("delete-node") ||
-    e.target.classList.contains("edit-node")
+    e.target.classList.contains("edit-node") ||
+    e.target.classList.contains("duplicate-node")
   ){
     return;
   }

@@ -841,6 +841,9 @@ window.MacBotSeguimientoV2 = (function () {
       '<button type="button" class="edit-node segv2-action-btn" onclick="event.stopPropagation(); editarNodo(\'' +
       nodoId +
       '\')" aria-label="Editar">✎</button>' +
+      '<button type="button" class="duplicate-node segv2-action-btn" onclick="event.stopPropagation(); duplicarNodo(\'' +
+      nodoId +
+      '\')" title="Duplicar" aria-label="Duplicar">⧉</button>' +
       '<button type="button" class="delete-node segv2-action-btn" onclick="event.stopPropagation(); borrarNodo(\'' +
       nodoId +
       '\')" aria-label="Eliminar">×</button>' +
@@ -1011,6 +1014,54 @@ window.MacBotSeguimientoV2 = (function () {
 
     if (typeof hacerMovible === "function") {
       hacerMovible(nodo);
+    }
+
+    return nodo;
+  }
+
+  function duplicarNodo(origen) {
+    if (!origen || !esNodoSeguimientoV2(origen)) return null;
+
+    const canvas = document.getElementById("canvasFlujo");
+    if (!canvas) return null;
+
+    const activo = getNodoActivo();
+    if (activo && activo.id === origen.id) {
+      flushPanelToNode();
+    }
+
+    if (typeof registrarHistorialBuilder === "function") {
+      registrarHistorialBuilder();
+    }
+
+    if (typeof nodoCount !== "number") {
+      window.nodoCount = 0;
+    }
+    nodoCount += 1;
+
+    const cfg = JSON.parse(JSON.stringify(leerConfigDeNodo(origen)));
+
+    const left = parseFloat(origen.style.left);
+    const top = parseFloat(origen.style.top);
+    const baseX = Number.isFinite(left) ? left : origen.offsetLeft;
+    const baseY = Number.isFinite(top) ? top : origen.offsetTop;
+
+    const nodo = document.createElement("div");
+    nodo.className = "node seguimiento-v2-node follow-node-v2 node-seguimiento-v2";
+    nodo.id = "nodo_" + nodoCount;
+    nodo.dataset.tipo = "seguimiento_crm_v2";
+    nodo.style.left = baseX + 40 + "px";
+    nodo.style.top = baseY + 30 + "px";
+
+    renderNodoVisual(nodo, cfg);
+    canvas.appendChild(nodo);
+
+    if (typeof hacerMovible === "function") {
+      hacerMovible(nodo);
+    }
+
+    if (typeof marcarNodoSeleccionado === "function") {
+      marcarNodoSeleccionado(nodo);
     }
 
     return nodo;
@@ -2105,6 +2156,7 @@ window.MacBotSeguimientoV2 = (function () {
     renderPanel,
     esNodoSeguimientoV2,
     crearNodoEnCanvas,
+    duplicarNodo,
     refrescarNodoCargado,
     flushPanelToNode,
     clearPanelActivo,

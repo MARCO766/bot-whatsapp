@@ -51,6 +51,67 @@
   opacity: 1;
 }
 
+.seguimiento-v2-node .node-actions {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 6;
+  display: flex;
+  gap: 4px;
+}
+
+.seguimiento-v2-node .node-actions .edit-node,
+.seguimiento-v2-node .node-actions .duplicate-node,
+.seguimiento-v2-node .node-actions .delete-node {
+  position: static;
+  top: auto;
+  right: auto;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.2s ease,
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.seguimiento-v2-node .node-actions .edit-node {
+  background: linear-gradient(145deg, rgba(15, 23, 42, 0.92), rgba(30, 41, 59, 0.88));
+  color: #7dd3fc;
+  border-color: rgba(56, 189, 248, 0.35);
+}
+
+.seguimiento-v2-node .node-actions .duplicate-node {
+  background: linear-gradient(145deg, rgba(15, 23, 42, 0.92), rgba(30, 41, 59, 0.88));
+  color: #67e8f9;
+  border-color: rgba(34, 211, 238, 0.35);
+}
+
+.seguimiento-v2-node .node-actions .delete-node {
+  background: linear-gradient(145deg, rgba(69, 10, 10, 0.75), rgba(127, 29, 29, 0.55));
+  color: #fecaca;
+  border-color: rgba(248, 113, 113, 0.35);
+}
+
+.seguimiento-v2-node .node-actions .edit-node:hover,
+.seguimiento-v2-node .node-actions .duplicate-node:hover {
+  transform: scale(1.06);
+  box-shadow: 0 0 12px rgba(34, 211, 238, 0.35);
+}
+
+.seguimiento-v2-node .node-actions .delete-node:hover {
+  transform: scale(1.06);
+  box-shadow: 0 0 12px rgba(248, 113, 113, 0.35);
+}
+
 .segv2-shell {
   padding: 12px 14px 14px;
 }
@@ -69,6 +130,7 @@
   align-items: flex-start;
   gap: 10px;
   margin-bottom: 6px;
+  padding-right: 80px;
 }
 
 .segv2-lock {
