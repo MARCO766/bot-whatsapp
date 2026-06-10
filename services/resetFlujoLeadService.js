@@ -8,6 +8,7 @@ const { limpiarSesionIAPendiente } = require("./iaFlowSession");
 const { limpiarLastReplies: limpiarLastRepliesPro } = require("./iaProService");
 const {
   limpiarLastReplies: limpiarLastRepliesOpenAI,
+  limpiarPaymentReaderStatus,
 } = require("./openaiAgentService");
 const { enviarTextoWhatsApp } = require("./whatsappService");
 const repoRm24h = require("./remarketing24h/remarketing24hRepository");
@@ -160,6 +161,7 @@ async function resetearFlujoLead(numero, usuarioId, conexionWhatsappId = null) {
     limpiarSesionIAPendiente(uid, conexionId, num);
     limpiarLastRepliesPro(uid, conexionId, num);
     limpiarLastRepliesOpenAI(uid, conexionId, num);
+    limpiarPaymentReaderStatus(uid, conexionId, num);
   } else {
     console.log(
       "[RM24H_MULTI] resetbot omitido sesión IA — sin conexion_whatsapp_id",

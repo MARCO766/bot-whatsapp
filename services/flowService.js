@@ -31,6 +31,7 @@ const {
   trimChatHistory,
   appendChatHistory,
   limpiarRutasContexto,
+  absorberMensajePaymentReaderValidating,
 } = require("./openaiAgentService");
 const {
   guardarSesionIAPendiente,
@@ -2012,6 +2013,18 @@ async function procesarMensajeEntrante(
       }
       return true;
     }
+  }
+
+  if (
+    absorberMensajePaymentReaderValidating({
+      usuarioId,
+      conexionWhatsappId: opts.conexionWhatsappId || null,
+      numero,
+      messageType: opts.messageType || null,
+      texto,
+    })
+  ) {
+    return true;
   }
 
   const reanudado = await reanudarFlujoIAPendiente(

@@ -4,7 +4,7 @@
  */
 
 const axios = require("axios");
-const { logChatHistorySource } = require("./iaFlowSession");
+const { logChatHistorySource, claveSesion } = require("./iaFlowSession");
 const { enviarTextoWhatsApp, enviarMediaWhatsApp } = require("./whatsappService");
 const {
   analizarCaminosOpenAI,
@@ -92,6 +92,60 @@ const CARITAS_PERMITIDOS = ["🙂", "😊", "😌", "🤔", "😅", "😍", "�
 
 const lastRepliesPorChat = new Map();
 const respuestasBotContadorPorChat = new Map();
+
+/** validating | waiting | null — OCR payment_reader por chatKey */
+const paymentReaderStatusPorChat = new Map();
+
+function getPaymentReaderStatus(usuarioId, conexionWhatsappId, numero) {
+  if (!conexionWhatsappId) return null;
+  return paymentReaderStatusPorChat.get(claveSesion(usuarioId, conexionWhatsappId, numero)) ?? null;
+}
+
+function setPaymentReaderStatus(usuarioId, conexionWhatsappId, numero, status) {
+  if (!conexionWhatsappId) return;
+  const key = claveSesion(usuarioId, conexionWhatsappId, numero);
+  if (status == null) {
+    paymentReaderStatusPorChat.delete(key);
+  } else {
+    paymentReaderStatusPorChat.set(key, status);
+  }
+}
+
+function limpiarPaymentReaderStatus(usuarioId, conexionWhatsappId, numero) {
+  setPaymentReaderStatus(usuarioId, conexionWhatsappId, numero, null);
+}
+
+function absorberMensajePaymentReaderValidating({
+  usuarioId,
+  conexionWhatsappId,
+  numero,
+  messageType = null,
+  texto = "",
+} = {}) {
+  if (!conexionWhatsappId) return false;
+  if (getPaymentReaderStatus(usuarioId, conexionWhatsappId, numero) !== "validating") {
+    return false;
+  }
+
+  console.log(
+    "[OPENAI_PAYMENT_READER_MESSAGE_ABSORBED]",
+    JSON.stringify({
+      numero,
+      messageType: messageType || null,
+      texto: String(texto || "").slice(0, 300),
+    })
+  );
+  return true;
+}
+
+function esImagenPaymentReaderEntrante(config, opts = {}) {
+  return (
+    !!opts.resume &&
+    opts.messageType === "image" &&
+    !!opts.imageUrl &&
+    rutasPaymentReaderActivas(config).length > 0
+  );
+}
 
 let openaiClient = null;
 
@@ -1359,13 +1413,19 @@ async function enviarOpenAIConPipelineManual(
   return row?.whatsapp_message_id || null;
 }
 
-async function resolverPaymentReaderOpenAI(config, mediaEntrante, opts = {}) {
+async function resolverPaymentReaderOpenAI(
+  config,
+  mediaEntrante,
+  opts = {},
+  chatScope = {}
+) {
   if (opts.messageType !== "image" || !opts.imageUrl) return null;
 
   const rutasPaymentReader = rutasPaymentReaderActivas(config);
   if (!rutasPaymentReader.length) return null;
 
   const route = rutasPaymentReader[0];
+  const { usuarioId, conexionWhatsappId, numero } = chatScope;
 
   console.log(
     "[OPENAI_PAYMENT_READER_START]",
@@ -1376,14 +1436,21 @@ async function resolverPaymentReaderOpenAI(config, mediaEntrante, opts = {}) {
     })
   );
 
-  const validacion = await validarComprobanteOpenAI({
-    imageUrl: opts.imageUrl,
-    imageMetaId: opts.imageMetaId || mediaEntrante?.imageMetaId || null,
-    metaToken: opts.metaToken || mediaEntrante?.metaToken || null,
-    payment: route.payment,
-  });
+  let validacion;
+  try {
+    validacion = await validarComprobanteOpenAI({
+      imageUrl: opts.imageUrl,
+      imageMetaId: opts.imageMetaId || mediaEntrante?.imageMetaId || null,
+      metaToken: opts.metaToken || mediaEntrante?.metaToken || null,
+      payment: route.payment,
+    });
+  } catch (error) {
+    setPaymentReaderStatus(usuarioId, conexionWhatsappId, numero, "waiting");
+    throw error;
+  }
 
   if (validacion.valido) {
+    setPaymentReaderStatus(usuarioId, conexionWhatsappId, numero, null);
     console.log(
       "[OPENAI_PAYMENT_READER_VALID]",
       JSON.stringify({
@@ -1418,6 +1485,8 @@ async function resolverPaymentReaderOpenAI(config, mediaEntrante, opts = {}) {
       lectura: validacion.lectura || null,
     })
   );
+
+  setPaymentReaderStatus(usuarioId, conexionWhatsappId, numero, "waiting");
 
   return {
     ok: true,
@@ -1607,6 +1676,32 @@ async function ejecutarNodoOpenAIAgent(nodo, contexto, opts = {}) {
       });
     }
 
+    const chatScope = { usuarioId, conexionWhatsappId, numero };
+    const imagenPaymentReader = esImagenPaymentReaderEntrante(config, opts);
+
+    if (
+      absorberMensajePaymentReaderValidating({
+        usuarioId,
+        conexionWhatsappId,
+        numero,
+        messageType: opts.messageType || null,
+        texto: mensajeLead,
+      })
+    ) {
+      return limpiarMediaEntranteContexto({
+        ...contexto,
+        openaiAgentPausar: true,
+        iaPausar: true,
+        openaiPaymentReaderEsperando: true,
+        openaiAgentEjecutada: false,
+        chat_history: trimChatHistory(contexto.chat_history),
+      });
+    }
+
+    if (imagenPaymentReader) {
+      setPaymentReaderStatus(usuarioId, conexionWhatsappId, numero, "validating");
+    }
+
     console.log("💬 OPENAI pregunta:", mensajeLead);
 
     const chatHistoryCrudo = trimChatHistory(contexto.chat_history);
@@ -1639,10 +1734,14 @@ async function ejecutarNodoOpenAIAgent(nodo, contexto, opts = {}) {
     const lastReplies = getLastReplies(usuarioId, conexionWhatsappId, numero);
     const memoria = contexto.memoriaIA || {};
 
-    const chatScope = { usuarioId, conexionWhatsappId, numero };
     const { nombrePermitido } = resolverUsoNombreLead(nombreLead, chatScope);
 
-    let resultado = await resolverPaymentReaderOpenAI(config, mediaEntrante, opts);
+    let resultado = await resolverPaymentReaderOpenAI(
+      config,
+      mediaEntrante,
+      opts,
+      chatScope
+    );
     if (!resultado) {
       resultado = await resolverAnalisisOpenAI(
         config,
@@ -1831,6 +1930,9 @@ async function ejecutarNodoOpenAIAgent(nodo, contexto, opts = {}) {
     });
   } catch (error) {
     console.error("❌ OPENAI_AGENT ERROR", error.message || error);
+    if (getPaymentReaderStatus(usuarioId, conexionWhatsappId, numero) === "validating") {
+      setPaymentReaderStatus(usuarioId, conexionWhatsappId, numero, "waiting");
+    }
     logEstadoOpenAI({
       tieneKey: tieneOpenAIKey(),
       errorExacto: formatoErrorOpenAI(error),
@@ -1869,4 +1971,8 @@ module.exports = {
   appendChatHistory,
   limpiarLastReplies,
   limpiarRutasContexto,
+  getPaymentReaderStatus,
+  setPaymentReaderStatus,
+  limpiarPaymentReaderStatus,
+  absorberMensajePaymentReaderValidating,
 };
