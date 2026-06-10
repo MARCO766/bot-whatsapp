@@ -150,7 +150,7 @@ function opcionesSelectConversionMoneda(monedaActual, monedaPorDefecto) {
 const CANVAS_ZOOM_MIN = 0.25;
 const CANVAS_ZOOM_MAX = 2;
 const CANVAS_ZOOM_STEP = 0.1;
-const WORLD_GRID_SIZE = 30;
+const WORLD_GRID_SIZE = 28;
 const WORLD_SURFACE_PADDING = 6000;
 const WORLD_MIN_SURFACE = 24000;
 

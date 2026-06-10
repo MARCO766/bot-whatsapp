@@ -247,7 +247,7 @@ body:has(#builderArea) {
   cursor: grab;
 }
 
-/* Capa dedicada: fondo + cuadrícula fija al viewport (sincronizada por JS) */
+/* Capa dedicada: fondo + puntos fijos al viewport (sincronizados por JS) */
 #flowCanvasGrid.flow-canvas-grid,
 .flow-canvas-grid {
   position: absolute;
@@ -256,9 +256,8 @@ body:has(#builderArea) {
   pointer-events: none;
   background-color: #0b1020;
   background-image:
-    linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
-  background-size: 30px 30px;
+    radial-gradient(circle, rgba(255, 255, 255, 0.08) 1.5px, transparent 1.5px);
+  background-size: 28px 28px;
   background-position: 0 0;
   background-repeat: repeat;
 }
@@ -5186,8 +5185,7 @@ body:has(#builderArea.builder-theme-dark) {
 #builderArea.builder-theme-dark .flow-canvas-grid {
   background-color: #0b1020;
   background-image:
-    linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+    radial-gradient(circle, rgba(255, 255, 255, 0.08) 1.5px, transparent 1.5px);
 }
 
 #builderArea.builder-theme-dark .flow-canvas-hint {
@@ -5319,8 +5317,7 @@ body:has(#builderArea.builder-theme-light) {
 #builderArea.builder-theme-light .flow-canvas-grid {
   background-color: #f5f7fa;
   background-image:
-    linear-gradient(rgba(0, 0, 0, 0.06) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0, 0, 0, 0.06) 1px, transparent 1px);
+    radial-gradient(circle, rgba(0, 0, 0, 0.1) 1.5px, transparent 1.5px);
 }
 
 #builderArea.builder-theme-light .flow-canvas-hint {
