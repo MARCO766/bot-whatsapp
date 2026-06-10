@@ -82,8 +82,8 @@
     0 0 21px rgba(34, 211, 238, 0.29),
     0 0 31px rgba(99, 102, 241, 0.16),
     inset 0 1px 0 rgba(255, 255, 255, 0.12);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -98,14 +98,7 @@
 }
 
 .node.openai-agent-node .openai-agent-circle::after {
-  content: "";
-  position: absolute;
-  inset: -4px;
-  border-radius: 50%;
-  border: 1px solid rgba(167, 139, 250, 0.35);
-  opacity: 0.65;
-  pointer-events: none;
-  animation: oaiNodeRing 3.5s ease-in-out infinite;
+  display: none;
 }
 
 @keyframes oaiNodeRing {
