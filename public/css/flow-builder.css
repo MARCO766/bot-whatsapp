@@ -234,7 +234,7 @@ body:has(#builderArea) {
   background: #060b12;
 }
 
-/* Viewport: ocupa todo el espacio, grid fijo a pantalla */
+/* Viewport: ocupa todo el espacio; la cuadrícula vive en .flow-canvas-grid */
 #builderArea .flow-canvas-wrap,
 .flow-canvas-wrap {
   flex: 1;
@@ -245,10 +245,19 @@ body:has(#builderArea) {
   position: relative;
   overflow: hidden;
   cursor: grab;
+}
+
+/* Capa dedicada: fondo + cuadrícula fija al viewport (sincronizada por JS) */
+#flowCanvasGrid.flow-canvas-grid,
+.flow-canvas-grid {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
   background-color: #0b1020;
   background-image:
-    linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+    linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
   background-size: 30px 30px;
   background-position: 0 0;
   background-repeat: repeat;
@@ -320,6 +329,7 @@ body:has(#builderArea) {
   position: absolute;
   top: 0;
   left: 0;
+  z-index: 1;
   transform-origin: 0 0;
   will-change: transform;
 }
@@ -5172,15 +5182,12 @@ body:has(#builderArea.builder-theme-dark) {
   background: rgba(255, 255, 255, 0.06);
 }
 
-#builderArea.builder-theme-dark .flow-canvas-wrap,
-#builderArea.builder-theme-dark #canvasWrapper {
+#builderArea.builder-theme-dark #flowCanvasGrid.flow-canvas-grid,
+#builderArea.builder-theme-dark .flow-canvas-grid {
   background-color: #0b1020;
   background-image:
-    linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
-  background-size: 30px 30px;
-  background-position: 0 0;
-  background-repeat: repeat;
+    linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
 }
 
 #builderArea.builder-theme-dark .flow-canvas-hint {
@@ -5308,15 +5315,12 @@ body:has(#builderArea.builder-theme-light) {
   box-shadow: 0 0 12px rgba(109, 93, 252, 0.18);
 }
 
-#builderArea.builder-theme-light .flow-canvas-wrap,
-#builderArea.builder-theme-light #canvasWrapper {
+#builderArea.builder-theme-light #flowCanvasGrid.flow-canvas-grid,
+#builderArea.builder-theme-light .flow-canvas-grid {
   background-color: #f5f7fa;
   background-image:
-    linear-gradient(rgba(0, 0, 0, 0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0, 0, 0, 0.05) 1px, transparent 1px);
-  background-size: 30px 30px;
-  background-position: 0 0;
-  background-repeat: repeat;
+    linear-gradient(rgba(0, 0, 0, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.06) 1px, transparent 1px);
 }
 
 #builderArea.builder-theme-light .flow-canvas-hint {

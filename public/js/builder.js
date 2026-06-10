@@ -150,7 +150,7 @@ function opcionesSelectConversionMoneda(monedaActual, monedaPorDefecto) {
 const CANVAS_ZOOM_MIN = 0.25;
 const CANVAS_ZOOM_MAX = 2;
 const CANVAS_ZOOM_STEP = 0.1;
-const WORLD_GRID_SIZE = 28;
+const WORLD_GRID_SIZE = 30;
 const WORLD_SURFACE_PADDING = 6000;
 const WORLD_MIN_SURFACE = 24000;
 
@@ -2385,6 +2385,27 @@ function getCanvasViewport(){
   return document.getElementById("canvasWrapper");
 }
 
+function ensureCanvasGridLayer(wrap){
+  if(!wrap){
+    return null;
+  }
+
+  let grid = document.getElementById("flowCanvasGrid");
+  if(!grid){
+    grid = document.createElement("div");
+    grid.id = "flowCanvasGrid";
+    grid.className = "flow-canvas-grid";
+    grid.setAttribute("aria-hidden", "true");
+    wrap.insertBefore(grid, wrap.firstChild);
+  }else if(grid.parentElement !== wrap){
+    wrap.insertBefore(grid, wrap.firstChild);
+  }else if(wrap.firstChild !== grid){
+    wrap.insertBefore(grid, wrap.firstChild);
+  }
+
+  return grid;
+}
+
 function ensureInfiniteViewport(){
   const wrap = getCanvasViewport();
   let canvasEl = document.getElementById("canvasFlujo");
@@ -2440,6 +2461,7 @@ function ensureInfiniteViewport(){
     migrateEdgesToLayer(canvasEl);
   }
 
+  ensureCanvasGridLayer(wrap);
   wrap.style.overflow = "hidden";
   wrap.scrollLeft = 0;
   wrap.scrollTop = 0;
@@ -2552,19 +2574,11 @@ function aplicarViewportTransform(){
     world.style.transformOrigin = "0 0";
   }
 
-  if(wrap){
-    wrap.style.backgroundSize =
-      "auto, auto, " + gridStep + "px " + gridStep + "px, " + gridStep + "px " + gridStep + "px";
-    wrap.style.backgroundPosition =
-      "0 0, 0 0, " +
-      viewportState.panX +
-      "px " +
-      viewportState.panY +
-      "px, " +
-      viewportState.panX +
-      "px " +
-      viewportState.panY +
-      "px";
+  const grid = document.getElementById("flowCanvasGrid");
+  if(grid){
+    grid.style.backgroundSize = gridStep + "px " + gridStep + "px";
+    grid.style.backgroundPosition =
+      viewportState.panX + "px " + viewportState.panY + "px";
   }
 
   actualizarZoomLabel();
