@@ -16,14 +16,12 @@
   border: 1px solid rgba(56, 189, 248, 0.45) !important;
   background: linear-gradient(160deg, rgba(10, 22, 38, 0.98), rgba(6, 12, 22, 0.98)) !important;
   box-shadow:
-    0 16px 40px rgba(0, 0, 0, 0.45),
     0 0 24px rgba(56, 189, 248, 0.14) !important;
 }
 
 #builderArea .node.content-node:hover,
 .content-node.node:hover {
   box-shadow:
-    0 20px 48px rgba(0, 0, 0, 0.5),
     0 0 32px rgba(56, 189, 248, 0.22) !important;
 }
 
