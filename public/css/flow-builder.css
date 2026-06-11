@@ -641,6 +641,16 @@ body:has(#builderArea) {
     drop-shadow(0 0 10px rgba(34, 211, 238, 0.65));
 }
 
+/* FASE 2 rendimiento: ocultar pulses animados (animateMotion sigue en DOM) */
+#builderArea .flow-edge-pulse,
+#builderArea .flow-edge-pulse-glow,
+#builderArea .flow-connection-packet,
+#canvasFlujo .flow-edge-pulse,
+#canvasFlujo .flow-edge-pulse-glow,
+#canvasFlujo .flow-connection-packet {
+  display: none !important;
+}
+
 #builderArea .flow-conn--ia.flow-edge-selected .flow-edge-dash,
 #builderArea .flow-conn--ia.flow-edge--selected .flow-edge-dash {
   stroke-width: 4;
