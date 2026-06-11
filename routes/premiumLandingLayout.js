@@ -1,5 +1,6 @@
 const { escapeHtml } = require("./authPageLayout");
 const { PREMIUM_HERO_STYLES, renderHeroSection } = require("./premiumHeroLayout");
+const { renderFaviconLink, renderMacBotLogoNavbar, renderMacBotLogoFull } = require("./brandLogo");
 
 const PREMIUM_STYLES = `
 *,*::before,*::after{box-sizing:border-box}
@@ -133,7 +134,7 @@ body.mb-premium{
 
 /* Logo */
 .mb-premium__logo{display:flex;align-items:center;gap:10px;text-decoration:none;color:inherit}
-.mb-premium__logo-icon{flex-shrink:0;width:40px;height:40px}
+.mb-premium__logo-icon{flex-shrink:0;width:32px;height:32px;display:block}
 .mb-premium__logo-text{display:flex;flex-direction:column;line-height:1.1}
 .mb-premium__logo-name{font-size:1.125rem;font-weight:700;letter-spacing:-.02em;color:#f8fafc}
 .mb-premium__logo-sub{font-size:.625rem;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:#22d3ee}
@@ -334,6 +335,8 @@ body.mb-premium{
   box-shadow:0 20px 50px rgba(0,0,0,.4);
 }
 .mb-premium__auth-title{margin:0 0 6px;font-size:1.5rem;font-weight:700}
+.mb-premium__auth-logo{display:flex;justify-content:center;margin:0 0 18px}
+.mb-premium__auth-logo-img{width:min(200px,88%);height:auto;display:block}
 .mb-premium__auth-sub{margin:0 0 24px;font-size:.9375rem;color:#94a3b8}
 .mb-premium__form{display:flex;flex-direction:column;gap:16px}
 .mb-premium__field{display:flex;flex-direction:column;gap:6px}
@@ -401,35 +404,10 @@ body.mb-premium{
 }
 `;
 
-function renderMacBotLogo() {
-  return `
-<a href="/login" class="mb-premium__logo" aria-label="MacBot CRM inicio">
-  <svg class="mb-premium__logo-icon" viewBox="0 0 40 40" aria-hidden="true">
-    <defs>
-      <linearGradient id="mbLogoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-        <stop offset="0%" stop-color="#39ff14"/>
-        <stop offset="50%" stop-color="#22d3ee"/>
-        <stop offset="100%" stop-color="#1e3a5f"/>
-      </linearGradient>
-    </defs>
-    <circle cx="20" cy="20" r="18" fill="url(#mbLogoGrad)" opacity=".95"/>
-    <circle cx="20" cy="20" r="18" fill="none" stroke="rgba(57,255,20,.4)" stroke-width="1"/>
-    <path d="M14 26c0-4 2.5-10 6-10s6 6 6 10" fill="none" stroke="#060a10" stroke-width="2.2" stroke-linecap="round"/>
-    <text x="20" y="21" text-anchor="middle" font-size="13" font-weight="700" fill="#060a10" font-family="Inter,sans-serif">M</text>
-    <path d="M28 12c3 0 5 2 5 4.5 0 2-1.5 3.5-3 4" fill="none" stroke="#22d3ee" stroke-width="1.5" stroke-linecap="round" opacity=".9"/>
-    <circle cx="30" cy="11" r="2.5" fill="#39ff14" opacity=".85"/>
-  </svg>
-  <span class="mb-premium__logo-text">
-    <span class="mb-premium__logo-name">MacBot</span>
-    <span class="mb-premium__logo-sub">CRM</span>
-  </span>
-</a>`;
-}
-
 function renderNavbar({ active = "landing" } = {}) {
   return `
 <header class="mb-premium__nav" id="mbNav">
-  ${renderMacBotLogo()}
+  ${renderMacBotLogoNavbar()}
   <button type="button" class="mb-premium__menu-btn" aria-label="Menú" data-nav-toggle>
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
   </button>
@@ -626,6 +604,9 @@ function renderLoginForm({ resetBanner = "", errorMsg = "" } = {}) {
 
   return `
 <div class="mb-premium__auth" id="login">
+  <div class="mb-premium__auth-logo">
+    ${renderMacBotLogoFull({ className: "mb-premium__auth-logo-img", width: 200 })}
+  </div>
   <h2 class="mb-premium__auth-title">Iniciar sesión</h2>
   <p class="mb-premium__auth-sub">Accede a tu panel MacBot</p>
   ${banner}${err}
@@ -1038,6 +1019,7 @@ function renderPremiumLandingPage({
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(documentTitle)}</title>
+${renderFaviconLink()}
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">

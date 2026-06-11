@@ -19,6 +19,7 @@ function renderAdminPage({
 <head>
 <meta charset="UTF-8">
 <title>MacBot CRM</title>
+<link rel="icon" type="image/svg+xml" href="/assets/brand/favicon.svg">
 
 <link rel="stylesheet" href="/css/admin.css">
 <link rel="stylesheet" href="/css/flow-builder.css">
@@ -28,7 +29,10 @@ ${builder ? '<link rel="stylesheet" href="/css/seguimiento.css"><link rel="style
 <body>
 
 <div class="sidebar">
-  <div class="logo">⚡ MacBot</div>
+  <div class="logo">
+    <img src="/assets/brand/logo-macbot-crm-icon.svg" width="32" height="32" alt="" aria-hidden="true" style="vertical-align:middle;margin-right:8px">
+    MacBot <span style="color:#22d3ee;font-size:.55em;letter-spacing:.12em;text-transform:uppercase">CRM</span>
+  </div>
 
   <div class="menu" id="menuPrincipal" style="${builder ? "display:none;" : "display:flex;"}">
     <a href="/admin?tab=inicio" class="${tab === "inicio" ? "active" : ""}">🏠 Inicio</a>

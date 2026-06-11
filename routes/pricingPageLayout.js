@@ -1,5 +1,6 @@
 const { escapeHtml } = require("./authPageLayout");
 const { renderPremiumLandingPage } = require("./premiumLandingLayout");
+const { renderMacBotLogoNavbar } = require("./brandLogo");
 
 const PRICING_EXTRA_STYLES = `
 .mb-pricing__hero{
@@ -262,27 +263,7 @@ const COMPARE_ROWS = [
 function renderPricingNavbar() {
   return `
 <header class="mb-premium__nav mb-pricing__nav-pricing" id="mbNav">
-  <a href="/login" class="mb-premium__logo" aria-label="MacBot CRM inicio">
-    <svg class="mb-premium__logo-icon" viewBox="0 0 40 40" aria-hidden="true">
-      <defs>
-        <linearGradient id="mbLogoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stop-color="#39ff14"/>
-          <stop offset="50%" stop-color="#22d3ee"/>
-          <stop offset="100%" stop-color="#1e3a5f"/>
-        </linearGradient>
-      </defs>
-      <circle cx="20" cy="20" r="18" fill="url(#mbLogoGrad)" opacity=".95"/>
-      <circle cx="20" cy="20" r="18" fill="none" stroke="rgba(57,255,20,.4)" stroke-width="1"/>
-      <path d="M14 26c0-4 2.5-10 6-10s6 6 6 10" fill="none" stroke="#060a10" stroke-width="2.2" stroke-linecap="round"/>
-      <text x="20" y="21" text-anchor="middle" font-size="13" font-weight="700" fill="#060a10" font-family="Inter,sans-serif">M</text>
-      <path d="M28 12c3 0 5 2 5 4.5 0 2-1.5 3.5-3 4" fill="none" stroke="#22d3ee" stroke-width="1.5" stroke-linecap="round" opacity=".9"/>
-      <circle cx="30" cy="11" r="2.5" fill="#39ff14" opacity=".85"/>
-    </svg>
-    <span class="mb-premium__logo-text">
-      <span class="mb-premium__logo-name">MacBot</span>
-      <span class="mb-premium__logo-sub">CRM</span>
-    </span>
-  </a>
+  ${renderMacBotLogoNavbar()}
   <button type="button" class="mb-premium__menu-btn" aria-label="Menú" data-nav-toggle>
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
   </button>

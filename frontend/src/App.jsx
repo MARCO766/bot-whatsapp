@@ -217,14 +217,20 @@ export default function App() {
       <aside className={`sidebar ${sidebarOpen ? "open" : "closed"}`}>
         <div className="brand">
           <div className="logoWrap">
-            <div className="logoGlow" />
-            <div className="logo">M</div>
+            <img
+              className="logoIcon"
+              src="/assets/brand/logo-macbot-crm-icon.svg"
+              width="32"
+              height="32"
+              alt=""
+              aria-hidden="true"
+            />
           </div>
 
           {sidebarOpen && (
             <div className="brandText">
               <h2>MacBot</h2>
-              <p>Vivid CRM</p>
+              <p>CRM</p>
             </div>
           )}
         </div>
@@ -503,37 +509,20 @@ input {
 }
 
 .logoWrap {
-  width: 56px;
-  height: 56px;
-  min-width: 56px;
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
   position: relative;
-}
-
-.logoGlow {
-  position: absolute;
-  inset: -6px;
-  border-radius: 20px;
-  background: linear-gradient(135deg, #22c55e, #06b6d4, #a855f7, #f97316);
-  filter: blur(9px);
-  opacity: .55;
-  animation: logoBreath 2.8s ease-in-out infinite;
-}
-
-.logo {
-  position: relative;
-  width: 56px;
-  height: 56px;
-  border-radius: 20px;
-  background:
-    linear-gradient(135deg, rgba(255,255,255,.22), transparent),
-    linear-gradient(135deg, #22c55e, #06b6d4, #a855f7);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 26px;
-  font-weight: 1000;
-  color: white;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.25);
+}
+
+.logoIcon {
+  display: block;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
 }
 
 .brandText h2 {

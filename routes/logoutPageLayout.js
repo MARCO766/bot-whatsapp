@@ -1,4 +1,5 @@
 const { escapeHtml } = require("./authPageLayout");
+const { renderFaviconLink, BRAND_ICON } = require("./brandLogo");
 
 const LOGOUT_STYLES = `
 *,*::before,*::after{box-sizing:border-box}
@@ -63,7 +64,7 @@ body.mb-logout{
   filter:blur(12px);opacity:.45;
   animation:mb-logout-glow 2.8s ease-in-out infinite;
 }
-.mb-logout__logo span{position:relative;z-index:1}
+.mb-logout__logo img{position:relative;z-index:1;width:40px;height:40px;display:block}
 .mb-logout__brand{
   margin:0 0 28px;font-size:1.35rem;font-weight:700;letter-spacing:-.03em;
 }
@@ -182,6 +183,7 @@ function renderLogoutPage() {
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Sesión cerrada · MacBot CRM</title>
+${renderFaviconLink()}
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -197,7 +199,7 @@ function renderLogoutPage() {
   <div class="mb-logout__card" role="status" aria-live="polite">
     <div class="mb-logout__logo" aria-hidden="true">
       <div class="mb-logout__logo-glow"></div>
-      <span>M</span>
+      <img src="${BRAND_ICON}" width="40" height="40" alt="">
     </div>
     <p class="mb-logout__brand"><span class="mb-logout__brand-accent">Mac</span>Bot CRM</p>
 

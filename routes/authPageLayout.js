@@ -6,6 +6,8 @@ function escapeHtml(str) {
     .replace(/"/g, "&quot;");
 }
 
+const { renderFaviconLink, renderMacBotLogoFull } = require("./brandLogo");
+
 const AUTH_STYLES = `
 *,*::before,*::after{box-sizing:border-box}
 html,body{height:100%;margin:0}
@@ -104,6 +106,12 @@ body.mb-login{
   color:#f8fafc;
 }
 .mb-login__logo-accent{color:#39ff14;text-shadow:0 0 24px rgba(57,255,20,.35)}
+.mb-login__logo-img{
+  display:block;
+  width:min(220px,92%);
+  height:auto;
+  margin:0 0 14px;
+}
 .mb-login__tagline{
   margin:0 0 28px;
   font-size:.875rem;
@@ -386,7 +394,7 @@ const AUTH_BRAND = `
 <aside class="mb-login__brand">
   <div class="mb-login__brand-panel">
     <div class="mb-login__brand-inner">
-      <h1 class="mb-login__logo"><span class="mb-login__logo-accent">⚡</span> MacBot</h1>
+      ${renderMacBotLogoFull({ className: "mb-login__logo-img", width: 220 })}
       <p class="mb-login__tagline">Automatización inteligente para WhatsApp</p>
       <ul class="mb-login__benefits">
         <li class="mb-login__benefit"><span class="mb-login__benefit-icon">✔</span> Flujos inteligentes</li>
@@ -408,6 +416,7 @@ function renderAuthPage({ documentTitle, cardTitle, cardSubtitle, cardBody, scri
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(documentTitle)}</title>
+${renderFaviconLink()}
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
