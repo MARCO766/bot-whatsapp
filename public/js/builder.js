@@ -7,6 +7,8 @@ let puertoOrigenConexion = null;
 let puertoHandleOrigen = null;
 let canvasPanningActive = false;
 
+const EDGE_PULSE_ENABLED = false;
+
 const MACBOT_BUILDER = window.MACBOT_BUILDER || {};
 const SEGUIMIENTO_LEGACY_ENABLED = MACBOT_BUILDER.seguimientoLegacyEnabled !== false;
 const SEGUIMIENTO_LEGACY_OBSOLETO_MSG = "Este nodo está obsoleto. Utiliza Seguimiento CRM V2.";
@@ -1682,7 +1684,18 @@ function crearConexionSvg(canvas){
   svg.appendChild(base);
   svg.appendChild(micro);
   svg.appendChild(dash);
-  const pulseParts = appendEdgePulse(svg, NS, { dur: "2.2s" });
+  if (EDGE_PULSE_ENABLED) {
+    const pulseRefs = appendEdgePulse(svg, NS, { dur: "2.2s" });
+    svg._connPulse = pulseRefs.pulse;
+    svg._connPulseGlow = pulseRefs.pulseGlow;
+    svg._connMotion = pulseRefs.motion;
+    svg._connMotionGlow = pulseRefs.motionGlow;
+  } else {
+    svg._connPulse = null;
+    svg._connPulseGlow = null;
+    svg._connMotion = null;
+    svg._connMotionGlow = null;
+  }
   svg.appendChild(hitbox);
 
   svg._connBase = base;
@@ -1691,10 +1704,6 @@ function crearConexionSvg(canvas){
   svg._connPath = dash;
   svg._connGlow = micro;
   svg._connHitbox = hitbox;
-  svg._connPulse = pulseParts.pulse;
-  svg._connPulseGlow = pulseParts.pulseGlow;
-  svg._connMotion = pulseParts.motion;
-  svg._connMotionGlow = pulseParts.motionGlow;
 
   const layer = ensureFlowEdgesLayer(canvas) || canvas;
   layer.appendChild(svg);
