@@ -151,6 +151,7 @@ const CANVAS_ZOOM_MIN = 0.25;
 const CANVAS_ZOOM_MAX = 2;
 const CANVAS_ZOOM_STEP = 0.1;
 const WORLD_GRID_SIZE = 28;
+const GRID_SYNC_ENABLED = false;
 const WORLD_SURFACE_PADDING = 6000;
 const WORLD_MIN_SURFACE = 24000;
 
@@ -2926,7 +2927,6 @@ function aplicarViewportTransform(opts){
   const world = document.getElementById("flowWorld");
   const wrap = getCanvasViewport();
   const zoom = getCanvasZoom();
-  const gridStep = WORLD_GRID_SIZE * zoom;
 
   if(world){
     world.style.transform =
@@ -2941,7 +2941,8 @@ function aplicarViewportTransform(opts){
   }
 
   const grid = document.getElementById("flowCanvasGrid");
-  if(grid){
+  if(GRID_SYNC_ENABLED && grid){
+    const gridStep = WORLD_GRID_SIZE * zoom;
     grid.style.backgroundSize = gridStep + "px " + gridStep + "px";
     grid.style.backgroundPosition =
       viewportState.panX + "px " + viewportState.panY + "px";
