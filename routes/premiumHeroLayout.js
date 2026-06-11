@@ -4,17 +4,25 @@ const PREMIUM_HERO_STYLES = `
 /* ── Hero split layout ── */
 .mb-premium__hero--split{
   display:grid;
-  grid-template-columns:minmax(280px,.95fr) minmax(340px,1.05fr);
-  gap:28px 36px;
+  grid-template-columns:42% 58%;
+  gap:20px 28px;
   align-items:center;
-  max-width:1380px;margin:0 auto;
-  padding:52px 24px 28px;
+  width:100%;
+  max-width:1560px;
+  margin:0 auto;
+  padding:44px 28px 32px;
   text-align:left;
+  box-sizing:border-box;
 }
-.mb-premium__hero-copy{max-width:540px}
+.mb-premium__hero-copy{
+  width:100%;
+  min-width:0;
+  max-width:none;
+}
 .mb-premium__hero-visual{
-  min-width:0;width:100%;
-  opacity:0;transform:translateX(16px);
+  width:100%;
+  min-width:0;
+  opacity:0;transform:translateX(12px);
   animation:mb-hero-visual-in .8s cubic-bezier(.22,1,.36,1) .12s both;
 }
 .mb-premium__hero-badge{
@@ -27,9 +35,13 @@ const PREMIUM_HERO_STYLES = `
   box-shadow:0 0 20px rgba(57,255,20,.08);
 }
 .mb-premium__hero-title{
-  margin:0 0 16px;font-size:clamp(1.75rem,3.2vw,2.65rem);
-  font-weight:700;letter-spacing:-.03em;line-height:1.14;color:#f8fafc;
+  margin:0 0 16px;
+  font-size:clamp(1.55rem,1.55vw + 1rem,2.15rem);
+  font-weight:700;letter-spacing:-.03em;line-height:1.2;color:#f8fafc;
+  display:flex;flex-direction:column;gap:.06em;
 }
+.mb-premium__hero-title-line{display:block}
+.mb-premium__hero-title-line--group{white-space:nowrap}
 .mb-premium__hero-title .txt-wa{color:#39ff14}
 .mb-premium__hero-title .txt-ai{color:#a78bfa}
 .mb-premium__hero-title .txt-crm{color:#22d3ee}
@@ -76,15 +88,17 @@ const PREMIUM_HERO_STYLES = `
 
 /* ── Builder demo shell ── */
 .mb-hero-builder{
-  --hb-scale:1;--hb-w:1320px;--hb-h:360px;
+  --hb-w:920;--hb-h:340;
   width:100%;
+  container-type:inline-size;
+  container-name:hero-builder;
 }
 .mb-hero-builder__shell{
-  border-radius:16px;
-  border:1px solid rgba(57,255,20,.12);
+  border-radius:14px;
+  border:1px solid rgba(57,255,20,.14);
   background:linear-gradient(180deg,rgba(10,14,22,.97),rgba(6,10,16,.95));
-  box-shadow:0 24px 64px rgba(0,0,0,.5),0 0 0 1px rgba(255,255,255,.04) inset,0 0 40px rgba(57,255,20,.05);
-  overflow:hidden;
+  box-shadow:0 20px 56px rgba(0,0,0,.48),0 0 0 1px rgba(255,255,255,.04) inset,0 0 36px rgba(57,255,20,.06);
+  overflow:visible;
   animation:mb-hero-shell-glow 2.4s ease-out 1 both;
 }
 .mb-hero-builder__toolbar{
@@ -107,21 +121,30 @@ const PREMIUM_HERO_STYLES = `
 }
 .mb-hero-builder__stage{
   position:relative;
-  height:calc(var(--hb-h) * var(--hb-scale));
-  overflow:hidden;
+  overflow:visible;
+  padding:4px 2px 0;
 }
 .mb-hero-builder__scroll{
-  overflow-x:auto;-webkit-overflow-scrolling:touch;
-  padding:8px 10px 0;display:flex;
+  overflow:visible;
+  -webkit-overflow-scrolling:touch;
+  width:100%;
 }
 .mb-hero-builder__scale{
-  width:calc(var(--hb-w) * var(--hb-scale));
-  height:calc(var(--hb-h) * var(--hb-scale));
-  flex-shrink:0;
+  position:relative;
+  width:100%;
+  height:calc(var(--hb-h) * 1px * min(1, 100cqw / var(--hb-w)));
+  min-height:230px;
+  max-height:380px;
 }
 .mb-hero-builder__canvas-wrap{
-  position:relative;width:var(--hb-w);height:var(--hb-h);
-  transform:scale(var(--hb-scale));transform-origin:top left;
+  position:absolute;left:0;top:0;
+  width:calc(var(--hb-w) * 1px);height:calc(var(--hb-h) * 1px);
+  transform-origin:top left;
+  transform:scale(min(1, calc(100cqw / (var(--hb-w) * 1px))));
+}
+@supports not (width: 1cqw){
+  .mb-hero-builder__scale{aspect-ratio:920/340;height:auto;min-height:250px}
+  .mb-hero-builder__canvas-wrap{inset:0;width:100%;height:100%;transform:none}
 }
 .mb-hero-builder__grid{
   position:absolute;inset:0;pointer-events:none;
@@ -144,9 +167,9 @@ const PREMIUM_HERO_STYLES = `
   position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:1;
 }
 .mb-hero-builder__edge{
-  fill:none;stroke-width:2;stroke-linecap:round;
-  stroke-dasharray:6 9;
-  animation:mb-hero-edge-pulse 1.6s linear infinite;
+  fill:none;stroke-width:2.4;stroke-linecap:round;
+  stroke-dasharray:7 10;
+  animation:mb-hero-edge-pulse 1.8s linear infinite;
 }
 .mb-hero-builder__edge--green{stroke:rgba(49,255,146,.72);filter:drop-shadow(0 0 3px rgba(49,255,146,.25))}
 .mb-hero-builder__edge--orange{stroke:rgba(255,152,0,.68);filter:drop-shadow(0 0 3px rgba(255,152,0,.22))}
@@ -189,7 +212,7 @@ const PREMIUM_HERO_STYLES = `
 
 /* Nodos — réplica visual MacBot */
 .mb-hero-builder .node-start{
-  width:200px;min-height:88px;padding:12px 14px;border-radius:14px;
+  width:178px;min-height:84px;padding:11px 13px;border-radius:14px;
   background:linear-gradient(135deg,#39ff14,#16c60c);
   border:1px solid rgba(156,255,46,.9);
   box-shadow:0 0 18px rgba(57,255,20,.45),0 0 36px rgba(57,255,20,.18);
@@ -197,7 +220,7 @@ const PREMIUM_HERO_STYLES = `
 .mb-hero-builder .node-title-start{margin:0 0 4px;font-size:.76rem;font-weight:800;color:#061018}
 .mb-hero-builder .node-desc-start{margin:0;font-size:.66rem;font-weight:600;color:#061018;opacity:.88;line-height:1.35}
 .mb-hero-builder .content-node{
-  width:228px;border-radius:14px;overflow:visible;
+  width:200px;border-radius:14px;overflow:visible;
   border:1px solid rgba(56,189,248,.42);
   background:linear-gradient(160deg,rgba(10,22,38,.98),rgba(6,12,22,.98));
   box-shadow:0 0 18px rgba(56,189,248,.12);
@@ -229,7 +252,7 @@ const PREMIUM_HERO_STYLES = `
 .mb-hero-builder .openai-agent-node{background:transparent;border:none;box-shadow:none;padding:0}
 .mb-hero-builder .openai-agent-node-shell{display:flex;flex-direction:row;align-items:center}
 .mb-hero-builder .openai-agent-circle{
-  position:relative;width:96px;height:96px;border-radius:50%;flex-shrink:0;
+  position:relative;width:104px;height:104px;border-radius:50%;flex-shrink:0;
   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;
   background:linear-gradient(145deg,#0f0a1f,#1e1b4b 38%,#312e81 62%,#4338ca);
   border:2px solid rgba(103,232,249,.5);
@@ -274,7 +297,7 @@ const PREMIUM_HERO_STYLES = `
 }
 .mb-hero-builder .openai-agent-route-name{font-size:.58rem;font-weight:700;color:#e2e8f0}
 .mb-hero-builder .seguimiento-v2-node{
-  width:200px;padding:0;border-radius:14px;
+  width:178px;padding:0;border-radius:14px;
   border:2px solid rgba(34,211,238,.5);
   background:linear-gradient(160deg,#0c1929,#0f2744 48%,#0a1628);
   box-shadow:0 0 20px rgba(34,211,238,.12);
@@ -296,7 +319,7 @@ const PREMIUM_HERO_STYLES = `
   background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06);
 }
 .mb-hero-builder .rm24-global-node{
-  width:196px;padding:10px 11px;border-radius:12px;
+  width:172px;padding:9px 10px;border-radius:12px;
   border:1px solid rgba(180,83,9,.5);
   background:linear-gradient(155deg,rgba(255,122,24,.06),rgba(12,18,32,.94) 36%,rgba(10,15,28,.97));
   box-shadow:0 0 16px rgba(255,122,24,.08);
@@ -311,7 +334,7 @@ const PREMIUM_HERO_STYLES = `
   color:#1a1408;background:linear-gradient(135deg,#fde047,#f59e0b);
 }
 .mb-hero-builder .lector-pago-node{
-  width:210px;padding:9px 10px 10px;border-radius:14px;
+  width:188px;padding:9px 10px 10px;border-radius:14px;
   border:1px solid rgba(129,246,236,.2);
   background:linear-gradient(145deg,rgba(9,14,28,.93),rgba(8,14,22,.9));
   box-shadow:0 0 18px rgba(45,212,191,.07);
@@ -337,7 +360,7 @@ const PREMIUM_HERO_STYLES = `
 .mb-hero-builder .lector-pago-card-title{font-size:.48rem;font-weight:700;color:#64748b;margin-bottom:1px}
 .mb-hero-builder .lector-pago-card-value{font-size:.6rem;font-weight:700;color:#e2e8f0}
 .mb-hero-builder .node-etiqueta{
-  width:168px;padding:10px 12px;border-radius:12px;
+  width:148px;padding:9px 11px;border-radius:12px;
   background:linear-gradient(160deg,rgba(12,18,28,.98),rgba(8,12,20,.98));
   border:1px solid rgba(41,182,246,.5);
   box-shadow:0 0 14px rgba(41,182,246,.18);
@@ -354,7 +377,7 @@ const PREMIUM_HERO_STYLES = `
 }
 .mb-hero-builder .conversion-node{background:transparent;border:none;padding:0;box-shadow:none}
 .mb-hero-builder .conversion-circle{
-  position:relative;width:104px;height:104px;border-radius:50%;
+  position:relative;width:96px;height:96px;border-radius:50%;
   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;
   background:linear-gradient(145deg,rgba(28,22,8,.92),rgba(12,16,28,.94) 55%,rgba(8,12,22,.98));
   border:2px solid rgba(250,204,21,.58);
@@ -394,23 +417,31 @@ const PREMIUM_HERO_STYLES = `
 .mb-hero-stats__label{font-size:.58rem;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#64748b}
 
 /* Responsive */
-@media(max-width:1024px){
-  .mb-premium__hero--split{grid-template-columns:1fr;gap:32px;text-align:center}
+@media(max-width:1100px){
+  .mb-premium__hero--split{
+    grid-template-columns:1fr;
+    gap:28px;
+    max-width:920px;
+    padding:40px 20px 28px;
+    text-align:center;
+  }
   .mb-premium__hero-copy{max-width:640px;margin:0 auto}
-  .mb-premium__hero-sub,.mb-premium__hero-chips,.mb-premium__hero-cta{justify-content:center;margin-left:auto;margin-right:auto}
-  .mb-premium__hero-chips{justify-content:center}
-  .mb-hero-builder{--hb-scale:.82}
+  .mb-premium__hero-sub{margin-left:auto;margin-right:auto}
+  .mb-premium__hero-chips,.mb-premium__hero-cta{justify-content:center}
+  .mb-premium__hero-title{align-items:center}
+  .mb-premium__hero-title-line--group{white-space:normal}
 }
 @media(max-width:768px){
-  .mb-premium__hero--split{padding:40px 16px 24px}
-  .mb-hero-builder{--hb-scale:.62}
+  .mb-premium__hero--split{padding:36px 16px 24px}
   .mb-hero-builder__toolbar-hint{display:none}
+  .mb-hero-builder__scroll{overflow-x:auto}
+  .mb-hero-builder__scale{min-height:200px}
   .mb-hero-stats{justify-content:flex-start;overflow-x:auto;flex-wrap:nowrap;padding-bottom:10px}
   .mb-hero-stats__item{flex:0 0 auto;min-width:110px}
 }
 @media(max-width:520px){
-  .mb-hero-builder{--hb-scale:.48}
   .mb-hero-builder__toolbar-back{display:none}
+  .mb-premium__hero-title{font-size:clamp(1.35rem,6vw,1.65rem)}
 }
 
 @keyframes mb-hero-visual-in{
@@ -463,16 +494,16 @@ const HERO_STATS = [
 
 const HERO_OPENAI_ICON = `<svg class="openai-agent-icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M22.282 9.821a5.985 5.985 0 0 0-.516-4.938 6.046 6.046 0 0 0-6.51-2.9A6.065 6.065 0 0 0 4.981 4.18a5.985 5.985 0 0 0-3.998 2.9 6.046 6.046 0 0 0 .742 7.097 5.98 5.98 0 0 0 .511 4.936 6.051 6.051 0 0 0 6.514 2.9 5.985 5.985 0 0 0 4.997-2.9 6.056 6.056 0 0 0 3.997-2.9 5.995 5.995 0 0 0 .336-6.394zm-9.282 8.179a4.475 4.475 0 0 1-2.876-1.04l.141-.081 4.779-2.758a.795.795 0 0 0 .392-.681v-6.737l2.02 1.168a.071.071 0 0 1 .038.052v5.583a4.504 4.504 0 0 1-4.494 4.494zM3.806 18.329a4.472 4.472 0 0 1-.535-3.014l.142.085 4.783 2.759a.771.771 0 0 0 .78 0l5.843-3.369v2.332a.08.08 0 0 1-.033.062L9.74 19.95a4.5 4.5 0 0 1-5.934-1.621zM2.34 7.895a4.485 4.485 0 0 1 2.366-1.973V11.6a.766.766 0 0 0 .388.676l5.815 3.355-2.02 1.168a.076.076 0 0 1-.071 0l-4.83-2.786A4.504 4.504 0 0 1 2.34 7.872zm16.597 3.855-5.833-3.387L15.119 7.2a.076.076 0 0 1 .071 0l4.83 2.791a4.494 4.494 0 0 1-.676 8.105v-5.678a.79.79 0 0 0-.407-.667zm2.01-3.023-.141-.085-4.774-2.782a.776.776 0 0 0-.785 0L9.409 9.23V6.897a.066.066 0 0 1 .028-.061l4.83-2.787a4.5 4.5 0 0 1 6.68 4.66zm-12.64 4.135-2.02-1.168a.08.08 0 0 1-.038-.057V6.075a4.5 4.5 0 0 1 7.375-3.453l-.142.08-4.778 2.758a.795.795 0 0 0-.393.681zm1.097-2.365 2.602-1.5 2.607 1.5v2.999l-2.597 1.5-2.607-1.5z"/></svg>`;
 
-/** Curvas Bézier horizontales — coordenadas en viewBox 1320×360 */
+/** Curvas Bézier horizontales — viewBox 920×340 */
 const HERO_BUILDER_EDGES = [
-  { d: "M 210 158 C 218 158, 222 158, 228 158", tone: "green", dot: "M 210 158 C 218 158, 222 158, 228 158", delay: "0s", dur: "2.4s" },
-  { d: "M 456 158 C 468 158, 472 132, 478 132", tone: "green", dot: "M 456 158 C 468 158, 472 132, 478 132", delay: ".3s", dur: "2.4s" },
-  { d: "M 648 88 C 710 68, 760 78, 792 92", tone: "orange", dot: "M 648 88 C 710 68, 760 78, 792 92", delay: ".5s", dur: "2.6s" },
-  { d: "M 648 118 C 710 108, 760 98, 792 98", tone: "orange", dot: "M 648 118 C 710 108, 760 98, 792 98", delay: ".8s", dur: "2.6s" },
-  { d: "M 648 148 C 658 190, 662 258, 668 268", tone: "purple", dot: "M 648 148 C 658 190, 662 258, 668 268", delay: "1s", dur: "3s" },
-  { d: "M 868 268 C 876 268, 880 268, 884 268", tone: "cyan", dot: "M 868 268 C 876 268, 880 268, 884 268", delay: "1.2s", dur: "2.2s" },
-  { d: "M 1002 92 C 1010 92, 1000 118, 1004 118", tone: "cyan", dot: "M 1002 92 C 1010 92, 1000 118, 1004 118", delay: "1.4s", dur: "2.4s" },
-  { d: "M 1172 118 C 1178 124, 1166 132, 1168 132", tone: "orange", dot: "M 1172 118 C 1178 124, 1166 132, 1168 132", delay: "1.6s", dur: "2.2s" },
+  { d: "M 178 160 C 164 160, 152 160, 142 160", tone: "green", dot: "M 178 160 C 164 160, 152 160, 142 160", delay: "0s", dur: "2.4s" },
+  { d: "M 342 160 C 328 160, 318 100, 308 100", tone: "green", dot: "M 342 160 C 328 160, 318 100, 308 100", delay: ".3s", dur: "2.4s" },
+  { d: "M 450 74 C 478 58, 498 66, 512 78", tone: "orange", dot: "M 450 74 C 478 58, 498 66, 512 78", delay: ".5s", dur: "2.6s" },
+  { d: "M 450 96 C 478 86, 498 80, 512 84", tone: "orange", dot: "M 450 96 C 478 86, 498 80, 512 84", delay: ".8s", dur: "2.6s" },
+  { d: "M 450 118 C 456 168, 458 210, 462 232", tone: "purple", dot: "M 450 118 C 456 168, 458 210, 462 232", delay: "1s", dur: "3s" },
+  { d: "M 640 238 C 642 238, 643 238, 644 238", tone: "cyan", dot: "M 640 238 C 642 238, 643 238, 644 238", delay: "1.2s", dur: "2.2s" },
+  { d: "M 700 78 C 694 78, 690 94, 688 94", tone: "cyan", dot: "M 700 78 C 694 78, 690 94, 688 94", delay: "1.4s", dur: "2.4s" },
+  { d: "M 836 94 C 828 94, 824 104, 820 104", tone: "orange", dot: "M 836 94 C 828 94, 824 104, 820 104", delay: "1.6s", dur: "2.2s" },
 ];
 
 function renderHeroBuilderEdgesSvg() {
@@ -484,12 +515,12 @@ function renderHeroBuilderEdgesSvg() {
     (edge) =>
       `<circle class="mb-hero-builder__travel-dot mb-hero-builder__travel-dot--${edge.tone === "green" ? "" : edge.tone}" style="offset-path:path('${edge.dot}');--delay:${edge.delay};--dur:${edge.dur}" cx="0" cy="0" r="3"/>`
   ).join("");
-  return `<svg class="mb-hero-builder__edges" viewBox="0 0 1320 360" preserveAspectRatio="xMidYMid meet" aria-hidden="true">${paths}${dots}</svg>`;
+  return `<svg class="mb-hero-builder__edges" viewBox="0 0 920 340" preserveAspectRatio="xMidYMid meet" aria-hidden="true">${paths}${dots}</svg>`;
 }
 
 function renderHeroBuilderStartNode(delay) {
   return `
-  <div class="mb-hero-builder__node-item mb-hero-builder__node-item--glow" style="left:10px;top:118px;--delay:${delay}">
+  <div class="mb-hero-builder__node-item mb-hero-builder__node-item--glow" style="left:0;top:118px;--delay:${delay}">
     <div class="node node-start">
       <h3 class="node-title node-title-start">▶ Inicio del Flujo</h3>
       <p class="node-desc node-desc-start">Aquí comienza tu flujo.</p>
@@ -500,7 +531,7 @@ function renderHeroBuilderStartNode(delay) {
 
 function renderHeroBuilderContentNode(delay) {
   return `
-  <div class="mb-hero-builder__node-item" style="left:228px;top:98px;--delay:${delay}">
+  <div class="mb-hero-builder__node-item" style="left:142px;top:98px;--delay:${delay}">
     <div class="node content-node">
       <div class="port in"></div>
       <div class="content-header">
@@ -521,7 +552,7 @@ function renderHeroBuilderContentNode(delay) {
 
 function renderHeroBuilderOpenAINode(delay) {
   return `
-  <div class="mb-hero-builder__node-item mb-hero-builder__node-item--glow" style="left:478px;top:72px;--delay:${delay}">
+  <div class="mb-hero-builder__node-item mb-hero-builder__node-item--glow" style="left:308px;top:48px;--delay:${delay}">
     <div class="node openai-agent-node openai-agent-node--with-routes">
       <div class="openai-agent-node-shell">
         <div class="openai-agent-core-column">
@@ -556,7 +587,7 @@ function renderHeroBuilderOpenAINode(delay) {
 
 function renderHeroBuilderSeguimientoNode(delay) {
   return `
-  <div class="mb-hero-builder__node-item" style="left:668px;top:228px;--delay:${delay}">
+  <div class="mb-hero-builder__node-item" style="left:462px;top:218px;--delay:${delay}">
     <div class="node seguimiento-v2-node">
       <div class="port in"></div>
       <div class="segv2-shell">
@@ -579,7 +610,7 @@ function renderHeroBuilderSeguimientoNode(delay) {
 
 function renderHeroBuilderRemarketingNode(delay) {
   return `
-  <div class="mb-hero-builder__node-item" style="left:884px;top:228px;--delay:${delay}">
+  <div class="mb-hero-builder__node-item" style="left:644px;top:218px;--delay:${delay}">
     <div class="node rm24-global-node">
       <div class="port in"></div>
       <h3 class="rm24-title">🎯 Remarketing 24h</h3>
@@ -592,7 +623,7 @@ function renderHeroBuilderRemarketingNode(delay) {
 
 function renderHeroBuilderLectorNode(delay) {
   return `
-  <div class="mb-hero-builder__node-item" style="left:792px;top:24px;--delay:${delay}">
+  <div class="mb-hero-builder__node-item" style="left:512px;top:0;--delay:${delay}">
     <div class="node lector-pago-node">
       <div class="port in"></div>
       <div class="lector-pago-header">
@@ -627,7 +658,7 @@ function renderHeroBuilderLectorNode(delay) {
 
 function renderHeroBuilderEtiquetaNode(delay) {
   return `
-  <div class="mb-hero-builder__node-item" style="left:1004px;top:64px;--delay:${delay}">
+  <div class="mb-hero-builder__node-item" style="left:688px;top:38px;--delay:${delay}">
     <div class="node node-etiqueta">
       <div class="port in"></div>
       <h3 class="node-title">🏷️ Etiqueta</h3>
@@ -639,7 +670,7 @@ function renderHeroBuilderEtiquetaNode(delay) {
 
 function renderHeroBuilderConversionNode(delay) {
   return `
-  <div class="mb-hero-builder__node-item mb-hero-builder__node-item--glow" style="left:1168px;top:82px;--delay:${delay}">
+  <div class="mb-hero-builder__node-item mb-hero-builder__node-item--glow" style="left:820px;top:56px;--delay:${delay}">
     <div class="node conversion-node">
       <div class="conversion-circle">
         <span class="conversion-badge-event">Evento</span>
@@ -719,7 +750,9 @@ function renderHeroSection() {
       <span>🚀</span> Constructor visual #1 para WhatsApp
     </div>
     <h1 class="mb-premium__hero-title">
-      Automatiza ventas por <span class="txt-wa">WhatsApp</span> con <span class="txt-ai">IA</span>, <span class="txt-crm">CRM</span> y Flujos Visuales
+      <span class="mb-premium__hero-title-line">Automatiza ventas por</span>
+      <span class="mb-premium__hero-title-line mb-premium__hero-title-line--group"><span class="txt-wa">WhatsApp</span>&nbsp;con&nbsp;<span class="txt-ai">IA</span>,&nbsp;<span class="txt-crm">CRM</span></span>
+      <span class="mb-premium__hero-title-line">y Flujos Visuales</span>
     </h1>
     <p class="mb-premium__hero-sub">
       Crea automatizaciones avanzadas arrastrando nodos, conecta IA, pagos, CRM y mucho más.
