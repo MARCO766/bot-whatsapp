@@ -11,8 +11,18 @@ const PREMIUM_HERO_STYLES = `
   box-sizing:border-box;
 }
 .mb-premium__hero-copy{
-  width:100%;max-width:950px;margin:0 auto;
+  width:100%;max-width:980px;margin:0 auto;
   display:flex;flex-direction:column;align-items:center;
+}
+.mb-premium__hero-title-glow{
+  position:relative;display:inline-block;width:100%;max-width:980px;
+}
+.mb-premium__hero-title-glow::before{
+  content:"";position:absolute;left:50%;top:50%;
+  transform:translate(-50%,-50%);
+  width:88%;height:130%;
+  background:radial-gradient(ellipse at center,rgba(255,255,255,.06) 0%,rgba(34,211,238,.025) 42%,transparent 72%);
+  filter:blur(36px);pointer-events:none;z-index:0;
 }
 .mb-premium__hero-showcase{
   width:100%;max-width:1400px;margin:36px auto 0;
@@ -29,38 +39,47 @@ const PREMIUM_HERO_STYLES = `
   box-shadow:0 0 20px rgba(57,255,20,.08);
 }
 .mb-premium__hero-title{
-  margin:0 0 16px;
-  font-size:clamp(1.65rem,2.2vw + .85rem,2.45rem);
-  font-weight:700;letter-spacing:-.03em;line-height:1.18;color:#f8fafc;
-  display:flex;flex-direction:column;align-items:center;gap:.08em;
-  max-width:950px;
+  position:relative;z-index:1;
+  margin:0 0 20px;
+  font-size:clamp(2.35rem,4.6vw + .95rem,4.15rem);
+  font-weight:900;letter-spacing:-.042em;line-height:1.02;color:#ffffff;
+  display:flex;flex-direction:column;align-items:center;gap:.06em;
+  max-width:980px;
+  text-wrap:balance;
+}
+.mb-premium__hero--centered .mb-premium__hero-title > span,
+.mb-premium__hero--centered .mb-premium__hero-title .mb-premium__hero-title-line{
+  background:none;-webkit-text-fill-color:inherit;color:inherit;margin-top:0;
 }
 .mb-premium__hero-title-line{display:block}
 .mb-premium__hero-title-line--l1,
 .mb-premium__hero-title-line--l2{white-space:nowrap}
-.mb-premium__hero-title .txt-wa{color:#39ff14}
-.mb-premium__hero-title .txt-ai{color:#a78bfa}
-.mb-premium__hero-title .txt-crm{color:#22d3ee}
+.mb-premium__hero-title .txt-wa{color:#25D366;-webkit-text-fill-color:#25D366;display:inline}
+.mb-premium__hero-title .txt-ai{color:#22d3ee;-webkit-text-fill-color:#22d3ee;display:inline}
 .mb-premium__hero-sub{
-  margin:0 auto 22px;font-size:1.02rem;line-height:1.65;color:#94a3b8;max-width:640px;
+  margin:0 auto 26px;font-size:1.0625rem;line-height:1.72;color:#8b9cb3;max-width:680px;font-weight:400;
 }
 .mb-premium__hero-chips{
-  display:flex;flex-wrap:wrap;gap:8px;justify-content:center;
-  margin:0 auto 26px;max-width:820px;
+  display:flex;flex-wrap:wrap;gap:7px;justify-content:center;
+  margin:0 auto 28px;max-width:820px;
 }
 .mb-premium__chip{
-  padding:7px 12px;border-radius:999px;
-  border:1px solid rgba(255,255,255,.08);
-  background:rgba(15,23,42,.62);
-  font-size:.74rem;font-weight:500;color:#cbd5e1;
-  transition:border-color .2s,box-shadow .2s,transform .2s;
+  padding:6px 13px;border-radius:999px;
+  border:1px solid rgba(255,255,255,.06);
+  background:rgba(255,255,255,.025);
+  font-size:.72rem;font-weight:500;color:#8899ad;
+  transition:border-color .22s,background .22s,color .22s,box-shadow .22s,transform .22s;
+}
+.mb-premium__chip::before{
+  content:"✓";margin-right:6px;font-size:.65rem;color:rgba(255,255,255,.28);font-weight:600;
 }
 .mb-premium__chip:hover{
-  border-color:rgba(57,255,20,.28);
-  box-shadow:0 0 14px rgba(57,255,20,.08);
+  border-color:rgba(255,255,255,.14);
+  background:rgba(255,255,255,.055);
+  color:#cbd5e1;
+  box-shadow:0 6px 22px rgba(0,0,0,.18);
   transform:translateY(-1px);
 }
-.mb-premium__chip-icon{margin-right:5px;opacity:.85}
 .mb-premium__hero-cta{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-bottom:14px}
 .mb-premium__btn-lg{
   padding:13px 22px;border-radius:12px;font-size:.9375rem;font-weight:600;
@@ -69,16 +88,25 @@ const PREMIUM_HERO_STYLES = `
 }
 .mb-premium__btn-lg--neon{
   border:none;
-  background:linear-gradient(135deg,#39ff14,#2dd40f);
-  color:#060a10;
-  box-shadow:0 0 28px rgba(57,255,20,.22);
+  background:#25D366;
+  color:#ffffff;
+  font-weight:700;
+  box-shadow:0 4px 20px rgba(37,211,102,.28),0 1px 2px rgba(0,0,0,.24);
 }
-.mb-premium__btn-lg--neon:hover{transform:translateY(-2px);box-shadow:0 0 36px rgba(57,255,20,.32)}
+.mb-premium__btn-lg--neon:hover{
+  transform:translateY(-2px);
+  background:#22c55e;
+  box-shadow:0 8px 28px rgba(37,211,102,.32),0 2px 4px rgba(0,0,0,.2);
+}
 .mb-premium__btn-lg--outline{
-  border:1px solid rgba(34,211,238,.42);
-  background:rgba(34,211,238,.06);color:#67e8f9;
+  border:1px solid rgba(255,255,255,.14);
+  background:rgba(255,255,255,.035);color:#e2e8f0;font-weight:600;
 }
-.mb-premium__btn-lg--outline:hover{background:rgba(34,211,238,.12);border-color:rgba(34,211,238,.55)}
+.mb-premium__btn-lg--outline:hover{
+  background:rgba(255,255,255,.07);
+  border-color:rgba(255,255,255,.22);
+  color:#f8fafc;
+}
 .mb-premium__hero-trust{
   margin:0;font-size:.75rem;color:#64748b;
 }
@@ -420,7 +448,7 @@ const PREMIUM_HERO_STYLES = `
 @media(max-width:768px){
   .mb-premium__hero--centered{padding:36px 16px 28px}
   .mb-premium__hero-showcase{margin-top:28px}
-  .mb-premium__hero-title{font-size:clamp(1.35rem,5.2vw,1.85rem)}
+  .mb-premium__hero-title{font-size:clamp(1.85rem,6.8vw,2.55rem);line-height:1.04;letter-spacing:-.038em}
   .mb-premium__hero-title-line--l1,
   .mb-premium__hero-title-line--l2{white-space:normal}
   .mb-hero-builder__toolbar-hint{display:none}
@@ -482,12 +510,12 @@ const PREMIUM_HERO_STYLES = `
 `;
 
 const HERO_CHIPS = [
-  { icon: "🤖", label: "IA integrada" },
-  { icon: "💬", label: "CRM WhatsApp" },
-  { icon: "🎯", label: "Remarketing 24h" },
-  { icon: "🔄", label: "Seguimientos" },
-  { icon: "💰", label: "Lector de pagos" },
-  { icon: "📱", label: "Multi WhatsApp" },
+  "IA integrada",
+  "CRM WhatsApp",
+  "Seguimientos",
+  "Lector de pagos",
+  "Remarketing 24h",
+  "Multi WhatsApp",
 ];
 
 const HERO_STATS = [
@@ -745,8 +773,7 @@ function renderHeroBuilderDemo() {
 
 function renderHeroSection() {
   const chips = HERO_CHIPS.map(
-    (c) =>
-      `<span class="mb-premium__chip"><span class="mb-premium__chip-icon">${c.icon}</span>${escapeHtml(c.label)}</span>`
+    (label) => `<span class="mb-premium__chip">${escapeHtml(label)}</span>`
   ).join("");
 
   return `
@@ -755,17 +782,19 @@ function renderHeroSection() {
     <div class="mb-premium__hero-badge">
       <span>🚀</span> Constructor visual #1 para WhatsApp
     </div>
-    <h1 class="mb-premium__hero-title">
-      <span class="mb-premium__hero-title-line mb-premium__hero-title-line--l1">Automatiza ventas por <span class="txt-wa">WhatsApp</span> con <span class="txt-ai">IA</span>,</span>
-      <span class="mb-premium__hero-title-line mb-premium__hero-title-line--l2"><span class="txt-crm">CRM</span> y Flujos Visuales</span>
-    </h1>
+    <div class="mb-premium__hero-title-glow">
+      <h1 class="mb-premium__hero-title">
+        <span class="mb-premium__hero-title-line mb-premium__hero-title-line--l1">Automatiza ventas por <span class="txt-wa">WhatsApp</span> con <span class="txt-ai">IA</span></span>
+        <span class="mb-premium__hero-title-line mb-premium__hero-title-line--l2">y convierte conversaciones en clientes</span>
+      </h1>
+    </div>
     <p class="mb-premium__hero-sub">
-      Crea automatizaciones avanzadas arrastrando nodos, conecta IA, pagos, CRM y mucho más.
+      Diseña flujos visuales, responde con IA, realiza seguimientos, valida pagos y registra ventas automáticamente desde un solo lugar.
     </p>
     <div class="mb-premium__hero-chips">${chips}</div>
     <div class="mb-premium__hero-cta">
       <a href="/register" class="mb-premium__btn-lg mb-premium__btn-lg--neon">Crear cuenta gratis →</a>
-      <a href="/pricing" class="mb-premium__btn-lg mb-premium__btn-lg--outline">Ver planes ✦</a>
+      <a href="/pricing" class="mb-premium__btn-lg mb-premium__btn-lg--outline">Ver planes</a>
     </div>
     <p class="mb-premium__hero-trust">🛡️ No se requiere tarjeta · Cancela cuando quieras</p>
   </div>
