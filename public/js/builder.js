@@ -2919,7 +2919,10 @@ function actualizarZoomLabel(){
   }
 }
 
-function aplicarViewportTransform(){
+let perfLogViewportSinLineas = false;
+
+function aplicarViewportTransform(opts){
+  opts = opts || {};
   const world = document.getElementById("flowWorld");
   const wrap = getCanvasViewport();
   const zoom = getCanvasZoom();
@@ -2945,7 +2948,12 @@ function aplicarViewportTransform(){
   }
 
   actualizarZoomLabel();
-  actualizarLineas();
+  if(opts.recalcularLineas === true){
+    actualizarLineas();
+  }else if(!perfLogViewportSinLineas){
+    perfLogViewportSinLineas = true;
+    console.log("[PERF] aplicarViewportTransform sin actualizarLineas en pan/zoom");
+  }
 }
 
 function centerViewportOnContent(){
@@ -3159,7 +3167,7 @@ function initCanvasViewport(){
     }
 
     resizeWorldSurface();
-    aplicarViewportTransform();
+    aplicarViewportTransform({ recalcularLineas: true });
   });
 }
 
