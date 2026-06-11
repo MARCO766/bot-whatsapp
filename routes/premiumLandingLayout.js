@@ -71,7 +71,8 @@ body.mb-premium{
 .mb-premium__reveal.is-visible{opacity:1;transform:none}
 @media(prefers-reduced-motion:reduce){
   .mb-premium__reveal{opacity:1;transform:none;transition:none}
-  .mb-premium__particle,.mb-premium__flow-spark,.mb-premium__metric-value,.mb-builder__canvas-inner,.mb-builder__node,.mb-builder__edge-spark{animation:none!important}
+  .mb-hero-builder__node-item,.mb-premium__hero-builder-wrap{opacity:1;transform:none}
+  .mb-premium__particle,.mb-premium__metric-value,.mb-hero-builder__shell,.mb-hero-builder__node-item,.mb-premium__hero-builder-wrap{animation:none!important}
 }
 
 /* Navbar */
@@ -138,6 +139,15 @@ body.mb-premium{
   display:flex;flex-direction:column;align-items:center;text-align:center;
   max-width:920px;margin:0 auto;padding:72px 24px 40px;
 }
+.mb-premium__hero--with-builder{
+  max-width:1240px;padding-bottom:56px;
+}
+.mb-premium__hero-copy{width:100%;max-width:920px}
+.mb-premium__hero-builder-wrap{
+  width:100%;margin-top:40px;
+  opacity:0;transform:translateY(20px);
+  animation:mb-hero-builder-in .75s cubic-bezier(.22,1,.36,1) .15s both;
+}
 .mb-premium__hero-badge{
   display:inline-flex;align-items:center;gap:8px;
   padding:6px 14px;border-radius:999px;
@@ -196,172 +206,275 @@ body.mb-premium{
 }
 .mb-premium__btn-lg--outline:hover{background:rgba(34,211,238,.12)}
 
-/* Builder mockup */
-.mb-premium__flow-section{padding-top:16px;padding-bottom:72px}
-.mb-builder{
-  max-width:1140px;margin:0 auto;padding:0 24px;
+/* Hero builder demo — réplica visual del Builder real */
+.mb-hero-builder{
+  --hb-scale:1;--hb-h:720px;
+  width:100%;max-width:1180px;margin:0 auto;
 }
-.mb-builder__shell{
-  border-radius:20px;
-  border:1px solid rgba(57,255,20,.12);
-  background:rgba(8,12,18,.92);
-  box-shadow:0 28px 72px rgba(0,0,0,.5),0 0 48px rgba(57,255,20,.05);
+.mb-hero-builder__shell{
+  border-radius:18px;
+  border:1px solid rgba(57,255,20,.14);
+  background:linear-gradient(180deg,rgba(10,14,22,.98),rgba(6,10,16,.96));
+  box-shadow:
+    0 32px 80px rgba(0,0,0,.55),
+    0 0 0 1px rgba(255,255,255,.04) inset,
+    0 0 48px rgba(57,255,20,.06);
+  overflow:hidden;
+  animation:mb-hero-shell-glow 2.4s ease-out 1 both;
+}
+.mb-hero-builder__toolbar{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:12px 16px;border-bottom:1px solid rgba(255,255,255,.07);
+  background:rgba(12,18,28,.96);
+}
+.mb-hero-builder__toolbar-left{display:flex;align-items:center;gap:12px;min-width:0}
+.mb-hero-builder__toolbar-back{
+  padding:8px 12px;border-radius:10px;border:none;
+  background:#1c212c;color:#e2e8f0;font-size:.75rem;font-weight:700;font-family:inherit;
+  white-space:nowrap;
+}
+.mb-hero-builder__toolbar-title{margin:0;font-size:1rem;font-weight:700;color:#39ff14;line-height:1.2}
+.mb-hero-builder__toolbar-hint{margin:3px 0 0;font-size:.68rem;color:#64748b;line-height:1.35}
+.mb-hero-builder__toolbar-right{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.mb-hero-builder__toolbar-pill{
+  padding:7px 11px;border-radius:10px;
+  border:1px solid rgba(57,255,20,.35);
+  background:linear-gradient(135deg,rgba(57,255,20,.16),rgba(34,211,238,.08));
+  color:#86efac;font-size:.68rem;font-weight:700;white-space:nowrap;
+}
+.mb-hero-builder__stage{
+  position:relative;height:calc(var(--hb-h) * var(--hb-scale));
   overflow:hidden;
 }
-.mb-builder__stats{
-  display:grid;grid-template-columns:repeat(4,1fr);gap:1px;
-  background:rgba(255,255,255,.06);
-  border-bottom:1px solid rgba(255,255,255,.06);
-}
-@media(max-width:640px){
-  .mb-builder__stats{grid-template-columns:repeat(2,1fr)}
-}
-.mb-builder__stat{
-  padding:12px 16px;background:rgba(10,15,22,.95);
-  display:flex;flex-direction:column;gap:4px;
-}
-.mb-builder__stat span{font-size:.65rem;text-transform:uppercase;letter-spacing:.06em;color:#64748b}
-.mb-builder__stat strong{font-size:1rem;font-weight:700;color:#f1f5f9;font-variant-numeric:tabular-nums}
-.mb-builder__stat strong em{font-style:normal;color:#39ff14}
-.mb-builder__workspace{
-  display:grid;grid-template-columns:1fr minmax(200px,248px);gap:0;
-  min-height:380px;
-}
-@media(max-width:900px){
-  .mb-builder__workspace{grid-template-columns:1fr}
-}
-.mb-builder__canvas-zone{
-  position:relative;border-right:1px solid rgba(255,255,255,.06);
-  overflow:hidden;
-}
-@media(max-width:900px){
-  .mb-builder__canvas-zone{border-right:none;border-bottom:1px solid rgba(255,255,255,.06)}
-}
-.mb-builder__canvas-scroll{
+.mb-hero-builder__scroll{
   overflow-x:auto;-webkit-overflow-scrolling:touch;
-  padding:12px;
+  padding:10px 12px 14px;display:flex;justify-content:center;
 }
-.mb-builder__canvas-inner{
-  position:relative;min-width:min(100%,520px);max-width:720px;margin:0 auto;
-  aspect-ratio:16/10;min-height:300px;
-  animation:mb-builder-pan 18s ease-in-out infinite alternate;
-  transform-origin:center center;
+.mb-hero-builder__scale{
+  width:calc(900px * var(--hb-scale));height:calc(var(--hb-h) * var(--hb-scale));flex-shrink:0;
 }
-@media(max-width:640px){
-  .mb-builder__canvas-inner{min-width:480px;min-height:340px}
+.mb-hero-builder__canvas-wrap{
+  position:relative;width:900px;height:var(--hb-h);
+  transform:scale(var(--hb-scale));transform-origin:top left;border-radius:12px;overflow:visible;
 }
-.mb-builder__canvas{
-  position:absolute;inset:0;border-radius:14px;
-  background:radial-gradient(ellipse 80% 60% at 50% 40%,rgba(57,255,20,.04),transparent 55%),#070b12;
-  border:1px solid rgba(255,255,255,.07);
-  overflow:hidden;
-}
-.mb-builder__canvas-grid{
+.mb-hero-builder__grid{
   position:absolute;inset:0;pointer-events:none;
-  background-image:
-    linear-gradient(rgba(255,255,255,.025) 1px,transparent 1px),
-    linear-gradient(90deg,rgba(255,255,255,.025) 1px,transparent 1px);
-  background-size:22px 22px;
-  mask-image:radial-gradient(ellipse 95% 85% at 50% 45%,#000 20%,transparent 78%);
+  background-color:#0b1020;
+  background-image:radial-gradient(circle,rgba(255,255,255,.08) 1.5px,transparent 1.5px);
+  background-size:28px 28px;
 }
-.mb-builder__edges{
+.mb-hero-builder__hint{
+  position:absolute;top:10px;left:10px;z-index:4;
+  padding:6px 11px;border-radius:999px;
+  font-size:.65rem;font-weight:700;color:#8f9ba8;
+  background:rgba(15,23,42,.9);border:1px solid rgba(255,255,255,.08);
+  pointer-events:none;
+}
+.mb-hero-builder__zoom{
+  position:absolute;top:10px;right:10px;z-index:4;
+  display:flex;align-items:center;gap:4px;padding:4px;border-radius:11px;
+  background:rgba(15,23,42,.92);border:1px solid rgba(255,255,255,.1);
+  box-shadow:0 8px 24px rgba(0,0,0,.35);
+}
+.mb-hero-builder__zoom span{
+  min-width:36px;height:32px;display:flex;align-items:center;justify-content:center;
+  border-radius:8px;background:rgba(255,255,255,.07);color:#e2e8f0;
+  font-size:.82rem;font-weight:800;
+}
+.mb-hero-builder__zoom em{
+  min-width:46px;font-style:normal;font-size:.68rem;font-weight:900;color:#39ff14;
+}
+.mb-hero-builder__edges{
   position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:1;
 }
-.mb-builder__edge{
-  fill:none;stroke:url(#mbBuilderEdgeGrad);stroke-width:.55;
+.mb-hero-builder__edge{
+  fill:none;stroke:rgba(255,152,0,.72);stroke-width:2.2;
   stroke-linecap:round;stroke-linejoin:round;
-  filter:url(#mbBuilderGlow);opacity:.75;
+  filter:drop-shadow(0 0 4px rgba(255,152,0,.35));
 }
-.mb-builder__edge-spark{
-  fill:none;stroke:#39ff14;stroke-width:.65;stroke-linecap:round;
-  stroke-dasharray:2.5 36;opacity:.95;
-  filter:drop-shadow(0 0 3px rgba(57,255,20,.8));
-  animation:mb-builder-edge-flow 2s linear infinite;
+.mb-hero-builder__edge--active{stroke:rgba(49,255,146,.78);filter:drop-shadow(0 0 4px rgba(49,255,146,.3))}
+.mb-hero-builder__nodes{position:absolute;inset:0;z-index:2}
+.mb-hero-builder__node-item{
+  position:absolute;opacity:0;transform:translateY(10px);
+  animation:mb-hero-node-in .55s cubic-bezier(.22,1,.36,1) forwards;
+  animation-delay:calc(.22s + var(--delay,0) * 70ms);
 }
-.mb-builder__edge-spark--d1{animation-delay:-.35s;stroke:#22d3ee}
-.mb-builder__edge-spark--d2{animation-delay:-.9s}
-.mb-builder__edge-spark--d3{animation-delay:-1.4s;stroke:#a78bfa}
-.mb-builder__edge-spark--d4{animation-delay:-.6s;stroke:#22d3ee}
-.mb-builder__edge-spark--d5{animation-delay:-1.1s}
-.mb-builder__edge-spark--d6{animation-delay:-1.65s;stroke:#a78bfa}
-.mb-builder__edge-spark--d7{animation-delay:-.2s}
-.mb-builder__nodes{position:absolute;inset:0;z-index:2}
-.mb-builder__node{
-  position:absolute;left:var(--x);top:var(--y);
-  transform:translate(-50%,-50%);
-  display:flex;align-items:center;gap:8px;
-  padding:9px 12px 9px 10px;border-radius:12px;
-  background:rgba(12,18,28,.78);
-  backdrop-filter:blur(12px);
-  border:1px solid var(--border);
-  box-shadow:0 8px 24px rgba(0,0,0,.35),0 0 20px var(--glow);
-  font-size:.72rem;font-weight:600;color:#f1f5f9;
-  white-space:nowrap;cursor:default;
-  animation:mb-builder-float 5s ease-in-out infinite;
-  animation-delay:calc(var(--float,0) * -.55s);
-  transition:border-color .25s,box-shadow .25s,transform .25s;
+.mb-hero-builder .node{
+  position:relative;box-sizing:border-box;font-family:inherit;
 }
-.mb-builder__node:hover{
-  z-index:3;
-  animation-play-state:paused;
-  box-shadow:0 12px 32px rgba(0,0,0,.45),0 0 32px var(--glow);
-  transform:translate(-50%,-50%) scale(1.04);
+.mb-hero-builder .port{
+  position:absolute;width:14px;height:14px;border-radius:50%;
+  border:2px solid rgba(255,255,255,.35);box-sizing:border-box;z-index:3;
 }
-.mb-builder__node--green{--border:rgba(57,255,20,.35);--glow:rgba(57,255,20,.12);--port:#39ff14}
-.mb-builder__node--cyan{--border:rgba(34,211,238,.35);--glow:rgba(34,211,238,.12);--port:#22d3ee}
-.mb-builder__node--purple{--border:rgba(167,139,250,.35);--glow:rgba(167,139,250,.12);--port:#a78bfa}
-.mb-builder__node--gold{--border:rgba(251,191,36,.35);--glow:rgba(251,191,36,.1);--port:#fbbf24}
-.mb-builder__node-icon{
-  width:28px;height:28px;border-radius:8px;flex-shrink:0;
-  display:flex;align-items:center;justify-content:center;font-size:.85rem;
-  background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);
+.mb-hero-builder .port.in{
+  left:-7px;top:50%;transform:translateY(-50%);
+  background:#31ff92;box-shadow:0 0 10px rgba(49,255,146,.75);
 }
-.mb-builder__port{
-  position:absolute;width:7px;height:7px;border-radius:50%;
-  background:var(--port,#39ff14);
-  border:2px solid #070b12;
-  box-shadow:0 0 8px var(--port,#39ff14);
-  z-index:1;
+.mb-hero-builder .port.out{
+  right:-7px;top:50%;transform:translateY(-50%);
+  background:#ff9800;box-shadow:0 0 10px rgba(255,152,0,.8);
 }
-.mb-builder__port--t{top:-5px;left:50%;transform:translateX(-50%)}
-.mb-builder__port--b{bottom:-5px;left:50%;transform:translateX(-50%)}
-.mb-builder__port--l{left:-5px;top:50%;transform:translateY(-50%)}
-.mb-builder__port--r{right:-5px;top:50%;transform:translateY(-50%)}
-.mb-builder__panel{
-  padding:16px 14px;background:rgba(10,14,22,.96);
-  display:flex;flex-direction:column;gap:12px;
+.mb-hero-builder .port.out--bottom{
+  right:auto;left:50%;top:auto;bottom:-7px;transform:translateX(-50%);
 }
-.mb-builder__panel-head{
-  display:flex;align-items:center;gap:8px;
-  font-size:.9rem;font-weight:700;color:#f8fafc;
-  padding-bottom:10px;border-bottom:1px solid rgba(255,255,255,.08);
+.mb-hero-builder .node-start{
+  width:280px;min-height:96px;padding:14px 16px;border-radius:16px;
+  background:linear-gradient(135deg,#39ff14,#16c60c);
+  border:1px solid rgba(156,255,46,.95);
+  box-shadow:0 0 20px rgba(57,255,20,.5),0 0 40px rgba(57,255,20,.22);
 }
-.mb-builder__panel-dot{
-  width:8px;height:8px;border-radius:50%;background:#39ff14;
-  box-shadow:0 0 10px rgba(57,255,20,.6);
-  animation:mb-prem-pulse 2s ease-in-out infinite;
+.mb-hero-builder .node-title-start{
+  margin:0 0 6px;font-size:.82rem;font-weight:800;color:#061018;
 }
-.mb-builder__panel-row{
-  padding:10px 11px;border-radius:10px;
-  background:rgba(15,23,42,.55);
-  border:1px solid rgba(255,255,255,.06);
+.mb-hero-builder .node-desc-start{
+  margin:0;font-size:.72rem;font-weight:700;color:#061018;opacity:.88;line-height:1.35;
 }
-.mb-builder__panel-row span{
-  display:block;font-size:.65rem;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;
+.mb-hero-builder .content-node{
+  width:300px;padding:0;border-radius:16px;overflow:visible;
+  border:1px solid rgba(56,189,248,.45);
+  background:linear-gradient(160deg,rgba(10,22,38,.98),rgba(6,12,22,.98));
+  box-shadow:0 0 22px rgba(56,189,248,.14);
 }
-.mb-builder__panel-row strong{font-size:.8rem;color:#e2e8f0;font-weight:600}
-.mb-builder__panel-routes{
-  display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;
+.mb-hero-builder .content-header{
+  display:flex;align-items:center;justify-content:space-between;gap:8px;
+  padding:10px 12px;border-bottom:1px solid rgba(255,255,255,.08);
+  border-radius:16px 16px 0 0;
 }
-.mb-builder__route-tag{
-  padding:4px 8px;border-radius:6px;font-size:.68rem;font-weight:600;
-  background:rgba(34,211,238,.1);color:#67e8f9;border:1px solid rgba(34,211,238,.25);
+.mb-hero-builder .content-header-title{color:#67e8f9;font-weight:800;font-size:.72rem}
+.mb-hero-builder .content-status--completo{
+  font-size:.58rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase;
+  padding:3px 7px;border-radius:999px;color:#39ff14;
+  background:rgba(57,255,20,.12);border:1px solid rgba(57,255,20,.35);
 }
-.mb-builder__panel-status{
-  display:inline-flex;align-items:center;gap:6px;
-  padding:5px 10px;border-radius:999px;
-  background:rgba(57,255,20,.1);color:#86efac;
-  font-size:.72rem;font-weight:600;border:1px solid rgba(57,255,20,.25);
+.mb-hero-builder .content-body{padding:9px 12px 12px}
+.mb-hero-builder .content-preview{
+  margin:0;padding:8px 10px;border-radius:10px;
+  background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06);
+  font-size:.68rem;line-height:1.45;color:#cbd5e1;
+}
+.mb-hero-builder .openai-agent-node{background:transparent;border:none;box-shadow:none;padding:0}
+.mb-hero-builder .openai-agent-node-shell{display:flex;flex-direction:row;align-items:center}
+.mb-hero-builder .openai-agent-circle{
+  position:relative;width:102px;height:102px;border-radius:50%;flex-shrink:0;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
+  background:linear-gradient(145deg,#0f0a1f 0%,#1e1b4b 38%,#312e81 62%,#4338ca 100%);
+  border:2px solid rgba(103,232,249,.55);
+  box-shadow:0 0 21px rgba(34,211,238,.28),0 0 31px rgba(99,102,241,.14),inset 0 1px 0 rgba(255,255,255,.12);
+}
+.mb-hero-builder .openai-agent-status-badge{
+  position:absolute;top:-5px;left:50%;transform:translateX(-50%);
+  padding:2px 7px;border-radius:999px;font-size:.52rem;font-weight:800;
+  letter-spacing:.08em;text-transform:uppercase;color:#a5f3fc;
+  background:linear-gradient(135deg,rgba(15,23,42,.92),rgba(30,27,75,.88));
+  border:1px solid rgba(34,211,238,.55);white-space:nowrap;
+}
+.mb-hero-builder .openai-agent-icon-svg{width:46px;height:46px;color:#f0fdfa;filter:drop-shadow(0 0 10px rgba(103,232,249,.45))}
+.mb-hero-builder .openai-agent-title{margin:0;font-size:.62rem;font-weight:800;color:#f8fafc;text-align:center;line-height:1.2}
+.mb-hero-builder .openai-agent-routes-branch{display:flex;align-items:stretch;margin-left:4px}
+.mb-hero-builder .openai-agent-routes-stem{position:relative;width:22px;flex-shrink:0}
+.mb-hero-builder .openai-agent-routes-stem::before{
+  content:"";position:absolute;left:0;top:50%;width:12px;height:2px;
+  background:linear-gradient(90deg,#22d3ee,#818cf8);transform:translateY(-50%);
+}
+.mb-hero-builder .openai-agent-routes-stem::after{
+  content:"";position:absolute;left:0;top:12px;bottom:12px;width:2px;
+  background:linear-gradient(180deg,#22d3ee,#6366f1,#a78bfa);border-radius:2px;
+}
+.mb-hero-builder .openai-agent-routes-list{
+  list-style:none;margin:0;padding:3px 0;display:flex;flex-direction:column;justify-content:center;gap:8px;
+}
+.mb-hero-builder .openai-agent-route-pill{
+  display:flex;align-items:center;gap:6px;min-height:30px;padding:4px 8px 4px 9px;
+  border-radius:10px;min-width:112px;position:relative;
+  background:linear-gradient(145deg,rgba(15,23,42,.88),rgba(30,27,75,.82) 55%,rgba(49,46,129,.75));
+  border:1px solid rgba(103,232,249,.28);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.06);
+}
+.mb-hero-builder .openai-agent-route-pill::before{
+  content:"";position:absolute;left:-12px;top:50%;width:12px;height:2px;
+  background:linear-gradient(90deg,#22d3ee,#818cf8);transform:translateY(-50%);
+}
+.mb-hero-builder .openai-agent-route-pill--deposito .openai-agent-route-icon{
+  color:#a5b4fc;background:rgba(99,102,241,.15);border-color:rgba(129,140,248,.35);
+}
+.mb-hero-builder .openai-agent-route-icon{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:18px;height:18px;border-radius:6px;font-size:.62rem;
+  color:#67e8f9;background:rgba(34,211,238,.1);border:1px solid rgba(103,232,249,.25);
+}
+.mb-hero-builder .openai-agent-route-name{font-size:.64rem;font-weight:700;color:#e2e8f0}
+.mb-hero-builder .lector-pago-node{
+  width:300px;padding:10px 12px 12px;border-radius:18px;
+  border:1px solid rgba(129,246,236,.22);
+  background:linear-gradient(145deg,rgba(9,14,28,.93),rgba(8,14,22,.9));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 0 22px rgba(45,212,191,.08);
+  color:#dbe5f5;
+}
+.mb-hero-builder .lector-pago-header{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px}
+.mb-hero-builder .lector-pago-header-main{display:flex;align-items:center;gap:7px}
+.mb-hero-builder .lector-pago-icon{
+  width:22px;height:22px;display:flex;align-items:center;justify-content:center;
+  border-radius:7px;background:rgba(34,211,238,.12);border:1px solid rgba(125,211,252,.2);font-size:.72rem;
+}
+.mb-hero-builder .lector-pago-node .node-title{
+  margin:0;font-size:.68rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#ecfeff;
+}
+.mb-hero-builder .lector-pago-status-badge{
+  font-size:.52rem;font-weight:700;letter-spacing:.06em;color:#5eead4;
+  padding:3px 7px;border-radius:999px;background:rgba(45,212,191,.12);border:1px solid rgba(45,212,191,.28);
+}
+.mb-hero-builder .lector-pago-cards-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.mb-hero-builder .lector-pago-card{
+  padding:6px 8px;border-radius:9px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06);
+}
+.mb-hero-builder .lector-pago-card-title{font-size:.52rem;font-weight:700;color:#64748b;margin-bottom:2px}
+.mb-hero-builder .lector-pago-card-value{font-size:.66rem;font-weight:700;color:#e2e8f0}
+.mb-hero-builder .node-etiqueta{
+  position:relative;width:220px;padding:12px 14px;border-radius:14px;
+  background:linear-gradient(160deg,rgba(12,18,28,.98),rgba(8,12,20,.98));
+  border:1px solid rgba(41,182,246,.55);
+  box-shadow:0 0 16px rgba(41,182,246,.22);
+}
+.mb-hero-builder .node-etiqueta::before{
+  content:"";position:absolute;left:0;top:0;bottom:0;width:4px;border-radius:14px 0 0 14px;
+  background:linear-gradient(to bottom,#29b6f6,#4fc3f7);box-shadow:0 0 10px rgba(41,182,246,.35);
+}
+.mb-hero-builder .node-etiqueta .node-title{margin:0 0 8px;font-size:.78rem;font-weight:700;color:#29b6f6}
+.mb-hero-builder .node-etiqueta-select{
+  width:100%;padding:8px 10px;border-radius:10px;
+  background:#0f1117;border:1px solid rgba(51,65,85,.8);color:#e2e8f0;
+  font-size:.68rem;font-family:inherit;
+}
+.mb-hero-builder .conversion-node{background:transparent;border:none;padding:0;box-shadow:none}
+.mb-hero-builder .conversion-circle{
+  position:relative;width:112px;height:112px;border-radius:50%;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;
+  background:linear-gradient(145deg,rgba(28,22,8,.92),rgba(12,16,28,.94) 55%,rgba(8,12,22,.98));
+  border:2px solid rgba(250,204,21,.62);
+  box-shadow:0 0 18px rgba(250,204,21,.18),0 0 28px rgba(247,181,0,.08),inset 0 1px 0 rgba(255,255,255,.1);
+}
+.mb-hero-builder .conversion-badge-event{
+  position:absolute;top:6px;left:50%;transform:translateX(-50%);
+  font-size:.5rem;font-weight:800;letter-spacing:.12em;text-transform:uppercase;
+  color:#1a1408;background:linear-gradient(135deg,#fde047,#f59e0b);
+  border:1px solid rgba(255,255,255,.35);border-radius:999px;padding:1px 6px;
+}
+.mb-hero-builder .conversion-icon{font-size:1.1rem;line-height:1}
+.mb-hero-builder .conversion-title{margin:0;font-size:.68rem;font-weight:800;color:#fde047}
+.mb-hero-builder .openai-agent-circle .port.in{left:-7px;top:50%;transform:translateY(-50%)}
+.mb-hero-builder .conversion-circle .port.in{left:-7px;top:50%;transform:translateY(-50%)}
+@media(max-width:1024px){
+  .mb-hero-builder{--hb-scale:.88;--hb-h:720px}
+}
+@media(max-width:768px){
+  .mb-hero-builder{--hb-scale:.72;--hb-h:720px}
+  .mb-hero-builder__toolbar-hint{display:none}
+  .mb-hero-builder__scroll{padding-bottom:8px}
+}
+@media(max-width:520px){
+  .mb-hero-builder{--hb-scale:.56;--hb-h:720px}
+  .mb-hero-builder__hint{display:none}
+  .mb-hero-builder__toolbar-back{display:none}
 }
 /* Metrics */
 .mb-premium__metrics-grid{
@@ -589,15 +702,18 @@ body.mb-premium{
   85%{opacity:1}
   100%{top:110%;opacity:0}
 }
-@keyframes mb-builder-pan{
-  0%{transform:scale(1) translate(0,0)}
-  100%{transform:scale(1.025) translate(-6px,4px)}
+@keyframes mb-hero-builder-in{
+  from{opacity:0;transform:translateY(20px)}
+  to{opacity:1;transform:none}
 }
-@keyframes mb-builder-float{
-  0%,100%{transform:translate(-50%,-50%) translateY(0)}
-  50%{transform:translate(-50%,-50%) translateY(-5px)}
+@keyframes mb-hero-node-in{
+  from{opacity:0;transform:translateY(10px)}
+  to{opacity:1;transform:none}
 }
-@keyframes mb-builder-edge-flow{to{stroke-dashoffset:-38.5}}
+@keyframes mb-hero-shell-glow{
+  from{box-shadow:0 24px 60px rgba(0,0,0,.45),0 0 0 1px rgba(255,255,255,.03) inset,0 0 24px rgba(57,255,20,.03)}
+  to{box-shadow:0 32px 80px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.04) inset,0 0 48px rgba(57,255,20,.06)}
+}
 `;
 
 function renderMacBotLogo() {
@@ -653,110 +769,185 @@ const HERO_CHIPS = [
   "Multi WhatsApp",
 ];
 
-const BUILDER_NODES = [
-  { id: "wa", type: "green", icon: "📱", label: "Activador WhatsApp", x: 50, y: 9, float: 0, ports: "b" },
-  { id: "ia", type: "cyan", icon: "🤖", label: "Agente IA", x: 50, y: 27, float: 1, ports: "tb" },
-  { id: "crm", type: "purple", icon: "🔄", label: "Seguimiento CRM", x: 20, y: 47, float: 2, ports: "trb" },
-  { id: "qr", type: "cyan", icon: "📲", label: "Enviar QR", x: 80, y: 47, float: 3, ports: "tlb" },
-  { id: "rm", type: "purple", icon: "🎯", label: "Remarketing 24h", x: 20, y: 67, float: 4, ports: "trb" },
-  { id: "pay", type: "gold", icon: "💰", label: "Lector de pagos", x: 80, y: 67, float: 5, ports: "tlb" },
-  { id: "conv", type: "green", icon: "📈", label: "Conversión", x: 50, y: 87, float: 6, ports: "t" },
+const HERO_OPENAI_ICON = `<svg class="openai-agent-icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M22.282 9.821a5.985 5.985 0 0 0-.516-4.938 6.046 6.046 0 0 0-6.51-2.9A6.065 6.065 0 0 0 4.981 4.18a5.985 5.985 0 0 0-3.998 2.9 6.046 6.046 0 0 0 .742 7.097 5.98 5.98 0 0 0 .511 4.936 6.051 6.051 0 0 0 6.514 2.9 5.985 5.985 0 0 0 4.997-2.9 6.056 6.056 0 0 0 3.997-2.9 5.995 5.995 0 0 0 .336-6.394zm-9.282 8.179a4.475 4.475 0 0 1-2.876-1.04l.141-.081 4.779-2.758a.795.795 0 0 0 .392-.681v-6.737l2.02 1.168a.071.071 0 0 1 .038.052v5.583a4.504 4.504 0 0 1-4.494 4.494zM3.806 18.329a4.472 4.472 0 0 1-.535-3.014l.142.085 4.783 2.759a.771.771 0 0 0 .78 0l5.843-3.369v2.332a.08.08 0 0 1-.033.062L9.74 19.95a4.5 4.5 0 0 1-5.934-1.621zM2.34 7.895a4.485 4.485 0 0 1 2.366-1.973V11.6a.766.766 0 0 0 .388.676l5.815 3.355-2.02 1.168a.076.076 0 0 1-.071 0l-4.83-2.786A4.504 4.504 0 0 1 2.34 7.872zm16.597 3.855-5.833-3.387L15.119 7.2a.076.076 0 0 1 .071 0l4.83 2.791a4.494 4.494 0 0 1-.676 8.105v-5.678a.79.79 0 0 0-.407-.667zm2.01-3.023-.141-.085-4.774-2.782a.776.776 0 0 0-.785 0L9.409 9.23V6.897a.066.066 0 0 1 .028-.061l4.83-2.787a4.5 4.5 0 0 1 6.68 4.66zm-12.64 4.135-2.02-1.168a.08.08 0 0 1-.038-.057V6.075a4.5 4.5 0 0 1 7.375-3.453l-.142.08-4.778 2.758a.795.795 0 0 0-.393.681zm1.097-2.365 2.602-1.5 2.607 1.5v2.999l-2.597 1.5-2.607-1.5z"/></svg>`;
+
+const HERO_BUILDER_EDGES = [
+  { d: "M450 104 L450 112", active: true },
+  { d: "M450 224 L450 248", active: true },
+  { d: "M450 352 L450 388", active: true },
+  { d: "M450 478 L450 508", active: true },
+  { d: "M450 572 L450 598", active: true },
+  { d: "M430 278 L500 278", active: false },
+  { d: "M430 318 L500 318 L500 388 L450 388", active: false },
 ];
 
-const BUILDER_EDGES = [
-  "M50 14 L50 21",
-  "M50 33 L50 37 L20 37 L20 43",
-  "M50 33 L50 37 L80 37 L80 43",
-  "M20 51 L20 59",
-  "M80 51 L80 59",
-  "M20 63 L20 73 L50 73 L50 81",
-  "M80 63 L80 73 L50 73",
-];
-
-function renderBuilderEdgesSvg() {
-  const base = BUILDER_EDGES.map((d) => `<path class="mb-builder__edge" d="${d}"/>`).join("");
-  const sparks = BUILDER_EDGES.map(
-    (d, i) => `<path class="mb-builder__edge-spark mb-builder__edge-spark--d${(i % 7) + 1}" d="${d}"/>`
+function renderHeroBuilderEdgesSvg() {
+  const paths = HERO_BUILDER_EDGES.map(
+    (edge) =>
+      `<path class="mb-hero-builder__edge${edge.active ? " mb-hero-builder__edge--active" : ""}" d="${edge.d}"/>`
   ).join("");
+  return `<svg class="mb-hero-builder__edges" viewBox="0 0 900 720" preserveAspectRatio="xMidYMid meet" aria-hidden="true">${paths}</svg>`;
+}
+
+function renderHeroBuilderStartNode(delay) {
   return `
-<svg class="mb-builder__edges" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-  <defs>
-    <linearGradient id="mbBuilderEdgeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#39ff14" stop-opacity=".9"/>
-      <stop offset="50%" stop-color="#22d3ee" stop-opacity=".85"/>
-      <stop offset="100%" stop-color="#a78bfa" stop-opacity=".8"/>
-    </linearGradient>
-    <filter id="mbBuilderGlow" x="-20%" y="-20%" width="140%" height="140%">
-      <feGaussianBlur stdDeviation=".6" result="blur"/>
-      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-    </filter>
-  </defs>
-  ${base}${sparks}
-</svg>`;
-}
-
-function renderBuilderPort(port) {
-  if (port === "t") return '<span class="mb-builder__port mb-builder__port--t"></span>';
-  if (port === "b") return '<span class="mb-builder__port mb-builder__port--b"></span>';
-  if (port === "l") return '<span class="mb-builder__port mb-builder__port--l"></span>';
-  if (port === "r") return '<span class="mb-builder__port mb-builder__port--r"></span>';
-  if (port === "tb") {
-    return '<span class="mb-builder__port mb-builder__port--t"></span><span class="mb-builder__port mb-builder__port--b"></span>';
-  }
-  if (port === "trb") {
-    return '<span class="mb-builder__port mb-builder__port--t"></span><span class="mb-builder__port mb-builder__port--r"></span><span class="mb-builder__port mb-builder__port--b"></span>';
-  }
-  if (port === "tlb") {
-    return '<span class="mb-builder__port mb-builder__port--t"></span><span class="mb-builder__port mb-builder__port--l"></span><span class="mb-builder__port mb-builder__port--b"></span>';
-  }
-  return "";
-}
-
-function renderBuilderPorts(portsStr) {
-  return String(portsStr || "")
-    .split("")
-    .map((p) => renderBuilderPort(p))
-    .join("");
-}
-
-function renderBuilderNode(node) {
-  const ports = renderBuilderPorts(node.ports);
-  return `
-  <div class="mb-builder__node mb-builder__node--${node.type}" style="--x:${node.x}%;--y:${node.y}%;--float:${node.float}" title="${escapeHtml(node.label)}">
-    ${ports}
-    <span class="mb-builder__node-icon">${node.icon}</span>
-    <span>${escapeHtml(node.label)}</span>
+  <div class="mb-hero-builder__node-item" style="left:310px;top:8px;--delay:${delay}">
+    <div class="node node-start">
+      <h3 class="node-title node-title-start">▶ Inicio del Flujo</h3>
+      <p class="node-desc node-desc-start">Aquí comienza tu flujo de conversación.</p>
+      <div class="port out out--bottom"></div>
+    </div>
   </div>`;
 }
 
-function renderBuilderPanel() {
+function renderHeroBuilderContentNode(delay) {
   return `
-<aside class="mb-builder__panel" aria-label="Panel de configuración del nodo">
-  <div class="mb-builder__panel-head">
-    <span class="mb-builder__panel-dot" aria-hidden="true"></span>
-    Agente IA
-  </div>
-  <div class="mb-builder__panel-row">
-    <span>Intención</span>
-    <strong>Comprar</strong>
-  </div>
-  <div class="mb-builder__panel-row">
-    <span>Respuesta automática</span>
-    <strong>Activa · tono ventas</strong>
-  </div>
-  <div class="mb-builder__panel-row">
-    <span>Rutas</span>
-    <div class="mb-builder__panel-routes">
-      <span class="mb-builder__route-tag">QR</span>
-      <span class="mb-builder__route-tag">Depósito</span>
-      <span class="mb-builder__route-tag">Dudas</span>
+  <div class="mb-hero-builder__node-item" style="left:300px;top:112px;--delay:${delay}">
+    <div class="node content-node node-contenido">
+      <div class="port in"></div>
+      <div class="content-header">
+        <span class="content-header-title">💬 Contenido</span>
+        <span class="content-status content-status--completo">Completo</span>
+      </div>
+      <div class="content-body">
+        <p class="content-preview">¡Hola! 👋 Te comparto la info del producto y los medios de pago disponibles.</p>
+      </div>
+      <div class="port out"></div>
+    </div>
+  </div>`;
+}
+
+function renderHeroBuilderOpenAINode(delay) {
+  return `
+  <div class="mb-hero-builder__node-item" style="left:328px;top:248px;--delay:${delay}">
+    <div class="node openai-agent-node openai-agent-node--with-routes">
+      <div class="openai-agent-node-shell">
+        <div class="openai-agent-core-column">
+          <div class="openai-agent-circle">
+            <span class="openai-agent-status-badge">IA Activa</span>
+            <div class="openai-agent-icon-wrap">${HERO_OPENAI_ICON}</div>
+            <h3 class="openai-agent-title">Agente OpenAI</h3>
+            <div class="port in"></div>
+          </div>
+        </div>
+        <div class="openai-agent-routes-branch">
+          <div class="openai-agent-routes-stem" aria-hidden="true"></div>
+          <ul class="openai-agent-routes-list">
+            <li class="openai-agent-route-pill">
+              <span class="openai-agent-route-icon">📲</span>
+              <span class="openai-agent-route-name">QR</span>
+            </li>
+            <li class="openai-agent-route-pill openai-agent-route-pill--deposito">
+              <span class="openai-agent-route-icon">🏦</span>
+              <span class="openai-agent-route-name">Depósito</span>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderHeroBuilderLectorNode(delay) {
+  return `
+  <div class="mb-hero-builder__node-item" style="left:300px;top:388px;--delay:${delay}">
+    <div class="node lector-pago-node">
+      <div class="port in"></div>
+      <div class="lector-pago-header">
+        <div class="lector-pago-header-main">
+          <span class="lector-pago-icon">📄</span>
+          <h3 class="node-title">Lector Pago</h3>
+        </div>
+        <span class="lector-pago-status-badge">Esperando</span>
+      </div>
+      <div class="lector-pago-cards-grid">
+        <div class="lector-pago-card">
+          <div class="lector-pago-card-title">💵 MONTO</div>
+          <div class="lector-pago-card-value">49 USD</div>
+        </div>
+        <div class="lector-pago-card">
+          <div class="lector-pago-card-title">🌍 MONEDA</div>
+          <div class="lector-pago-card-value">USD</div>
+        </div>
+      </div>
+      <div class="port out"></div>
+    </div>
+  </div>`;
+}
+
+function renderHeroBuilderEtiquetaNode(delay) {
+  return `
+  <div class="mb-hero-builder__node-item" style="left:340px;top:508px;--delay:${delay}">
+    <div class="node node-etiqueta">
+      <div class="port in"></div>
+      <h3 class="node-title">🏷️ Etiqueta</h3>
+      <div class="node-etiqueta-select">Cliente · Pagó depósito</div>
+      <div class="port out"></div>
+    </div>
+  </div>`;
+}
+
+function renderHeroBuilderConversionNode(delay) {
+  return `
+  <div class="mb-hero-builder__node-item" style="left:394px;top:598px;--delay:${delay}">
+    <div class="node conversion-node conversion-node--circular node-conversion">
+      <div class="conversion-node-shell">
+        <div class="conversion-core-column">
+          <div class="conversion-circle">
+            <span class="conversion-badge-event">Evento</span>
+            <div class="conversion-icon" aria-hidden="true">💰</div>
+            <h3 class="conversion-title">Conversión</h3>
+            <p class="conversion-venta">Registra venta real</p>
+            <div class="port in"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderHeroBuilderDemo() {
+  const nodes = [
+    renderHeroBuilderStartNode(0),
+    renderHeroBuilderContentNode(1),
+    renderHeroBuilderOpenAINode(2),
+    renderHeroBuilderLectorNode(3),
+    renderHeroBuilderEtiquetaNode(4),
+    renderHeroBuilderConversionNode(5),
+  ].join("");
+
+  return `
+<div class="mb-hero-builder" aria-label="Vista previa del constructor visual de MacBot">
+  <div class="mb-hero-builder__shell">
+    <div class="mb-hero-builder__toolbar">
+      <div class="mb-hero-builder__toolbar-left">
+        <span class="mb-hero-builder__toolbar-back">← Flujos</span>
+        <div>
+          <p class="mb-hero-builder__toolbar-title">🔀 Ventas WhatsApp</p>
+          <p class="mb-hero-builder__toolbar-hint">Constructor visual · Arrastra nodos y conecta automatizaciones</p>
+        </div>
+      </div>
+      <div class="mb-hero-builder__toolbar-right">
+        <span class="mb-hero-builder__toolbar-pill">● Flujo activo</span>
+      </div>
+    </div>
+    <div class="mb-hero-builder__stage">
+      <div class="mb-hero-builder__scroll">
+        <div class="mb-hero-builder__scale">
+          <div class="mb-hero-builder__canvas-wrap">
+            <div class="mb-hero-builder__grid" aria-hidden="true"></div>
+            <span class="mb-hero-builder__hint">Vista del Builder MacBot</span>
+            <div class="mb-hero-builder__zoom" aria-hidden="true">
+              <span>−</span><em>100%</em><span>+</span>
+            </div>
+            ${renderHeroBuilderEdgesSvg()}
+            <div class="mb-hero-builder__nodes">${nodes}</div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
-  <div class="mb-builder__panel-row">
-    <span>Estado</span>
-    <span class="mb-builder__panel-status"><span class="mb-builder__panel-dot" aria-hidden="true"></span> Activo</span>
-  </div>
-</aside>`;
+</div>`;
 }
 
 function renderParticles() {
@@ -770,55 +961,26 @@ function renderHeroSection() {
   ).join("");
 
   return `
-<section class="mb-premium__hero mb-premium__reveal is-visible">
-  <div class="mb-premium__hero-badge">
-    <span>●</span> Plataforma SaaS para ventas por WhatsApp
-  </div>
-  <h1 class="mb-premium__hero-title">
-    Automatiza ventas por WhatsApp con IA,
-    <span>CRM y Flujos Visuales</span>
-  </h1>
-  <p class="mb-premium__hero-sub">
-    MacBot convierte conversaciones en ventas usando inteligencia artificial, seguimiento automático, remarketing, lector de pagos y automatizaciones visuales.
-  </p>
-  <div class="mb-premium__hero-chips">${chips}</div>
-  <div class="mb-premium__hero-cta">
-    <a href="/register" class="mb-premium__btn-lg mb-premium__btn-lg--neon">Crear cuenta gratis</a>
-    <a href="/pricing" class="mb-premium__btn-lg mb-premium__btn-lg--outline">Ver planes</a>
-  </div>
-</section>`;
-}
-
-function renderFlowSection() {
-  const nodes = BUILDER_NODES.map(renderBuilderNode).join("");
-
-  return `
-<section class="mb-premium__section mb-premium__flow-section mb-premium__reveal" id="como-funciona">
-  <h2 class="mb-premium__section-title">Construye embudos visuales para vender por WhatsApp</h2>
-  <p class="mb-premium__section-sub">Arrastra nodos, conecta automatizaciones y deja que MacBot responda, haga seguimiento, lea pagos y registre ventas.</p>
-  <div class="mb-builder">
-    <div class="mb-builder__shell">
-      <div class="mb-builder__stats" aria-label="Métricas del flujo">
-        <div class="mb-builder__stat"><span>Leads hoy</span><strong>128</strong></div>
-        <div class="mb-builder__stat"><span>Ventas</span><strong>24</strong></div>
-        <div class="mb-builder__stat"><span>Ingresos</span><strong><em>$</em>486</strong></div>
-        <div class="mb-builder__stat"><span>Conversión</span><strong>18.7%</strong></div>
-      </div>
-      <div class="mb-builder__workspace">
-        <div class="mb-builder__canvas-zone">
-          <div class="mb-builder__canvas-scroll">
-            <div class="mb-builder__canvas-inner">
-              <div class="mb-builder__canvas">
-                <div class="mb-builder__canvas-grid" aria-hidden="true"></div>
-                ${renderBuilderEdgesSvg()}
-                <div class="mb-builder__nodes">${nodes}</div>
-              </div>
-            </div>
-          </div>
-        </div>
-        ${renderBuilderPanel()}
-      </div>
+<section class="mb-premium__hero mb-premium__hero--with-builder mb-premium__reveal is-visible" id="como-funciona">
+  <div class="mb-premium__hero-copy">
+    <div class="mb-premium__hero-badge">
+      <span>●</span> Plataforma SaaS para ventas por WhatsApp
     </div>
+    <h1 class="mb-premium__hero-title">
+      Automatiza ventas por WhatsApp con IA,
+      <span>CRM y Flujos Visuales</span>
+    </h1>
+    <p class="mb-premium__hero-sub">
+      MacBot es un constructor visual avanzado de automatizaciones para WhatsApp: conecta IA, lector de pagos, etiquetas y conversiones en minutos.
+    </p>
+    <div class="mb-premium__hero-chips">${chips}</div>
+    <div class="mb-premium__hero-cta">
+      <a href="/register" class="mb-premium__btn-lg mb-premium__btn-lg--neon">Crear cuenta gratis</a>
+      <a href="/pricing" class="mb-premium__btn-lg mb-premium__btn-lg--outline">Ver planes</a>
+    </div>
+  </div>
+  <div class="mb-premium__hero-builder-wrap">
+    ${renderHeroBuilderDemo()}
   </div>
 </section>`;
 }
@@ -1441,7 +1603,6 @@ function renderLoginLandingPage(opts = {}) {
 
   const main = `
   ${renderHeroSection()}
-  ${renderFlowSection()}
   ${renderProductSection()}
   ${renderMetricsSection()}
   ${renderPlansSection()}
