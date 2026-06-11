@@ -14,6 +14,7 @@ const {
 } = require("./premiumLandingLayout");
 const { renderPricingPage } = require("./pricingPageLayout");
 const { renderLogoutPage } = require("./logoutPageLayout");
+const { pageTitle } = require("./pageTitles");
 const {
   generarTokenReset,
   validarTokenReset,
@@ -108,7 +109,7 @@ function renderForgotPage({ sent = false, emailValue = "" } = {}) {
   `;
 
   return renderAuthPage({
-    documentTitle: "Recuperar contraseña · MacBot",
+    documentTitle: pageTitle("Recuperar contraseña"),
     cardTitle: "Recuperar contraseña",
     cardSubtitle: "Te enviaremos un enlace para restablecer tu acceso",
     cardBody,
@@ -138,7 +139,7 @@ function renderResetInvalidPage() {
   `;
 
   return renderAuthPage({
-    documentTitle: "Enlace inválido · MacBot",
+    documentTitle: pageTitle("Enlace inválido"),
     cardTitle: "Enlace inválido",
     cardSubtitle: "No pudimos validar tu solicitud de restablecimiento",
     cardBody,
@@ -178,7 +179,7 @@ function renderResetFormPage({ token, errorMsg = "" }) {
   `;
 
   return renderAuthPage({
-    documentTitle: "Nueva contraseña · MacBot",
+    documentTitle: pageTitle("Nueva contraseña"),
     cardTitle: "Nueva contraseña",
     cardSubtitle: "Elige una contraseña segura para tu cuenta",
     cardBody,

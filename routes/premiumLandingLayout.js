@@ -1,6 +1,7 @@
 const { escapeHtml } = require("./authPageLayout");
 const { PREMIUM_HERO_STYLES, renderHeroSection } = require("./premiumHeroLayout");
 const { renderFaviconLink, renderMacBotLogoNavbar, renderMacBotLogoFull } = require("./brandLogo");
+const { BRAND, pageTitle } = require("./pageTitles");
 
 const PREMIUM_STYLES = `
 *,*::before,*::after{box-sizing:border-box}
@@ -1061,7 +1062,7 @@ function renderLoginLandingPage(opts = {}) {
   </section>`;
 
   return renderPremiumLandingPage({
-    documentTitle: "MacBot CRM · Automatiza ventas por WhatsApp",
+    documentTitle: BRAND,
     mainContent: main,
     extraStyles: PREMIUM_HERO_STYLES,
   });
@@ -1080,7 +1081,7 @@ function renderRegisterPage(opts = {}) {
   </section>`;
 
   return renderPremiumLandingPage({
-    documentTitle: "Crear cuenta · MacBot CRM",
+    documentTitle: pageTitle("Crear cuenta"),
     mainContent: main,
     extraStyles: REGISTER_EXTRA_STYLES,
     scripts: REGISTER_FLOW_SCRIPT,

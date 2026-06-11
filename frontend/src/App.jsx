@@ -15,6 +15,7 @@ import { fetchInbox } from "./services/chatService";
 import { useOnboardingEstado } from "./onboarding/useOnboardingEstado";
 import OnboardingWelcome from "./onboarding/OnboardingWelcome";
 import WelcomeModal from "./onboarding/WelcomeModal";
+import { titleForVista } from "./constants/pageTitle";
 
 const NAV_BLOCKED_SIN_WHATSAPP = new Set(["inbox", "flujos", "clientes"]);
 const VISTAS_SIN_ONBOARDING = new Set(["ajustes", "mi-plan"]);
@@ -98,6 +99,10 @@ export default function App() {
 
   useEffect(() => {
     localStorage.setItem("macbot_vista", vista);
+  }, [vista]);
+
+  useEffect(() => {
+    document.title = titleForVista(vista);
   }, [vista]);
 
   useEffect(() => {

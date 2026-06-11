@@ -1,5 +1,6 @@
 const { escapeHtml } = require("./authPageLayout");
 const { renderFaviconLink, BRAND_ICON } = require("./brandLogo");
+const { pageTitle } = require("./pageTitles");
 
 const LOGOUT_STYLES = `
 *,*::before,*::after{box-sizing:border-box}
@@ -182,7 +183,7 @@ function renderLogoutPage() {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Sesión cerrada · MacBot CRM</title>
+<title>${pageTitle("Sesión cerrada")}</title>
 ${renderFaviconLink()}
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

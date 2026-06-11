@@ -1,6 +1,7 @@
 const { escapeHtml } = require("./authPageLayout");
 const { renderPremiumLandingPage } = require("./premiumLandingLayout");
 const { renderMacBotLogoNavbar } = require("./brandLogo");
+const { pageTitle } = require("./pageTitles");
 
 const PRICING_EXTRA_STYLES = `
 .mb-pricing__hero{
@@ -372,7 +373,7 @@ function renderPricingPage() {
   </section>`;
 
   const html = renderPremiumLandingPage({
-    documentTitle: "Planes y precios · MacBot CRM",
+    documentTitle: pageTitle("Planes y precios"),
     mainContent: main,
     extraStyles: PRICING_EXTRA_STYLES,
     skipNavbar: true,
