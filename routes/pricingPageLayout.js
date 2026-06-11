@@ -289,7 +289,9 @@ function renderPricingNavbar() {
   <nav class="mb-premium__nav-links">
     <a href="/login#producto" class="mb-premium__nav-link">Producto</a>
     <a href="/pricing" class="mb-premium__nav-link mb-premium__nav-link--active">Planes</a>
-    <a href="/login#login" class="mb-premium__nav-link">Iniciar sesión</a>
+    <a href="/login#producto" class="mb-premium__nav-link">Recursos</a>
+    <a href="/login#metricas" class="mb-premium__nav-link">Casos de éxito</a>
+    <a href="/login#como-funciona" class="mb-premium__nav-link">Integraciones</a>
   </nav>
   <div class="mb-premium__nav-actions">
     <a href="/login#login" class="mb-premium__btn-ghost">Iniciar sesión</a>
