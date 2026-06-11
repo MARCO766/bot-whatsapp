@@ -113,7 +113,7 @@ const PREMIUM_HERO_STYLES = `
 
 /* ── Builder demo showcase ── */
 .mb-hero-builder{
-  --hb-w:920;--hb-h:340;
+  --hb-w:1280;--hb-h:360;
   width:100%;max-width:1400px;margin:0 auto;
   container-type:inline-size;
   container-name:hero-builder;
@@ -171,7 +171,7 @@ const PREMIUM_HERO_STYLES = `
   transform:translateX(-50%) scale(calc(100cqw / (var(--hb-w) * 1px)));
 }
 @supports not (width: 1cqw){
-  .mb-hero-builder__scale{aspect-ratio:920/340;height:auto;min-height:280px;max-height:420px}
+  .mb-hero-builder__scale{aspect-ratio:1280/360;height:auto;min-height:280px;max-height:420px}
   .mb-hero-builder__canvas-wrap{left:0;transform:none;position:relative;margin:0 auto}
 }
 .mb-hero-builder__grid{
@@ -195,34 +195,81 @@ const PREMIUM_HERO_STYLES = `
   position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:1;
 }
 .mb-hero-builder__edge{
-  fill:none;stroke-width:2.4;stroke-linecap:round;
-  stroke-dasharray:7 10;
-  animation:mb-hero-edge-pulse 1.8s linear infinite;
+  fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;
+  stroke-dasharray:5 9;
+  animation:mb-hero-edge-flow 3.2s linear infinite;
 }
-.mb-hero-builder__edge--green{stroke:rgba(49,255,146,.72);filter:drop-shadow(0 0 3px rgba(49,255,146,.25))}
-.mb-hero-builder__edge--orange{stroke:rgba(255,152,0,.68);filter:drop-shadow(0 0 3px rgba(255,152,0,.22))}
-.mb-hero-builder__edge--cyan{stroke:rgba(34,211,238,.62);filter:drop-shadow(0 0 3px rgba(34,211,238,.2))}
-.mb-hero-builder__edge--purple{stroke:rgba(167,139,250,.58);filter:drop-shadow(0 0 3px rgba(167,139,250,.18))}
-.mb-hero-builder__travel-dot{
-  fill:#39ff14;r:3;opacity:0;
-  will-change:offset-distance,opacity;
-  animation:mb-hero-dot-travel var(--dur,2.8s) linear infinite;
-  animation-delay:var(--delay,0s);
+.mb-hero-builder__edge--green{stroke:rgba(74,222,128,.62);filter:drop-shadow(0 0 2px rgba(74,222,128,.18))}
+.mb-hero-builder__edge--orange{stroke:rgba(251,191,36,.52);filter:drop-shadow(0 0 2px rgba(251,191,36,.14))}
+.mb-hero-builder__edge--cyan{stroke:rgba(34,211,238,.48);filter:drop-shadow(0 0 2px rgba(34,211,238,.12))}
+.mb-hero-builder__edge--purple{stroke:rgba(129,140,248,.42);filter:none}
+.mb-hero-builder__flow-layer{
+  position:absolute;inset:0;z-index:1;pointer-events:none;overflow:visible;
 }
-.mb-hero-builder__travel-dot--orange{fill:#ff9800}
-.mb-hero-builder__travel-dot--cyan{fill:#22d3ee}
+.mb-hero-builder__flow-particle{
+  position:absolute;left:0;top:0;width:5px;height:5px;border-radius:50%;
+  opacity:0;will-change:transform,opacity;
+  animation-timing-function:linear;animation-iteration-count:infinite;
+  box-shadow:0 0 6px currentColor;
+}
+.mb-hero-builder__flow-particle--green{color:#4ade80;background:#4ade80}
+.mb-hero-builder__flow-particle--cyan{color:#22d3ee;background:#22d3ee}
+.mb-hero-builder__flow-particle--orange{color:#fbbf24;background:#fbbf24}
+.mb-hero-builder__flow-particle--purple{color:#818cf8;background:#818cf8}
+.mb-hero-builder__flow-particle--gold{color:#fde047;background:#fde047}
 .mb-hero-builder__nodes{position:absolute;inset:0;z-index:2}
 .mb-hero-builder__node-item{
   position:absolute;opacity:0;transform:translateX(-12px);
   animation:mb-hero-node-in .55s cubic-bezier(.22,1,.36,1) forwards;
   animation-delay:calc(.18s + var(--delay,0) * 65ms);
-  transition:transform .25s ease,filter .25s ease;
+  transition:transform .28s ease,filter .28s ease;
 }
-.mb-hero-builder__node-item:hover{transform:translateY(-2px);filter:brightness(1.06)}
+.mb-hero-builder__node-item:hover{transform:translateY(-2px);filter:brightness(1.05)}
+.mb-hero-builder__node-item--hero{z-index:3}
+.mb-hero-builder__node-item--hero:hover{filter:brightness(1.07)}
+.mb-hero-builder__node-item--glow::before{
+  content:"";position:absolute;left:50%;top:50%;width:56px;height:56px;
+  transform:translate(-50%,-50%);border-radius:50%;pointer-events:none;z-index:-1;
+  animation:mb-hero-node-pulse 4.2s ease-out infinite;
+}
+.mb-hero-builder__node-item--glow-start::before{background:radial-gradient(circle,rgba(74,222,128,.22) 0%,transparent 72%)}
+.mb-hero-builder__node-item--glow-ai::before{
+  width:88px;height:88px;
+  background:radial-gradient(circle,rgba(34,211,238,.18) 0%,rgba(99,102,241,.08) 45%,transparent 72%);
+  animation-duration:3.6s;
+}
+.mb-hero-builder__node-item--glow-goal::before{
+  width:72px;height:72px;
+  background:radial-gradient(circle,rgba(251,191,36,.24) 0%,transparent 72%);
+  animation-duration:3.8s;animation-delay:.8s;
+}
 .mb-hero-builder__node-item--glow .node-start,
-.mb-hero-builder__node-item--glow .openai-agent-circle,
-.mb-hero-builder__node-item--glow .conversion-circle{
-  animation:mb-hero-glow-breathe 3.2s ease-in-out infinite;
+.mb-hero-builder__node-item--glow-ai .openai-agent-circle,
+.mb-hero-builder__node-item--glow-goal .conversion-circle{
+  animation:mb-hero-glow-breathe 3.6s ease-in-out infinite;
+}
+.mb-hero-builder__node-item--secondary .content-node,
+.mb-hero-builder__node-item--secondary .lector-pago-node,
+.mb-hero-builder__node-item--secondary .node-etiqueta,
+.mb-hero-builder__node-item--secondary .seguimiento-v2-node,
+.mb-hero-builder__node-item--secondary .rm24-global-node{
+  transition:box-shadow .28s ease,border-color .28s ease,transform .28s ease;
+}
+.mb-hero-builder__node-item--secondary:hover .content-node,
+.mb-hero-builder__node-item--secondary:hover .lector-pago-node,
+.mb-hero-builder__node-item--secondary:hover .node-etiqueta,
+.mb-hero-builder__node-item--secondary:hover .seguimiento-v2-node,
+.mb-hero-builder__node-item--secondary:hover .rm24-global-node{
+  box-shadow:0 8px 24px rgba(0,0,0,.22);
+}
+.mb-hero-builder__node-item--glow-start:hover .node-start{
+  box-shadow:0 0 24px rgba(74,222,128,.42),0 0 48px rgba(74,222,128,.16);
+}
+.mb-hero-builder__node-item--glow-ai:hover .openai-agent-circle{
+  box-shadow:0 0 32px rgba(34,211,238,.38),0 0 56px rgba(99,102,241,.16);
+}
+.mb-hero-builder__node-item--glow-goal:hover .conversion-circle{
+  box-shadow:0 0 28px rgba(251,191,36,.34),0 0 52px rgba(245,158,11,.14);
 }
 .mb-hero-builder .node{position:relative;box-sizing:border-box;font-family:inherit}
 .mb-hero-builder .port{
@@ -242,16 +289,17 @@ const PREMIUM_HERO_STYLES = `
 .mb-hero-builder .node-start{
   width:178px;min-height:84px;padding:11px 13px;border-radius:14px;
   background:linear-gradient(135deg,#39ff14,#16c60c);
-  border:1px solid rgba(156,255,46,.9);
-  box-shadow:0 0 18px rgba(57,255,20,.45),0 0 36px rgba(57,255,20,.18);
+  border:1px solid rgba(156,255,46,.85);
+  box-shadow:0 0 22px rgba(74,222,128,.38),0 0 44px rgba(74,222,128,.14);
+  transition:box-shadow .28s ease;
 }
 .mb-hero-builder .node-title-start{margin:0 0 4px;font-size:.76rem;font-weight:800;color:#061018}
 .mb-hero-builder .node-desc-start{margin:0;font-size:.66rem;font-weight:600;color:#061018;opacity:.88;line-height:1.35}
 .mb-hero-builder .content-node{
   width:200px;border-radius:14px;overflow:visible;
-  border:1px solid rgba(56,189,248,.42);
+  border:1px solid rgba(56,189,248,.28);
   background:linear-gradient(160deg,rgba(10,22,38,.98),rgba(6,12,22,.98));
-  box-shadow:0 0 18px rgba(56,189,248,.12);
+  box-shadow:0 4px 16px rgba(0,0,0,.18);
 }
 .mb-hero-builder .content-header{
   display:flex;align-items:center;justify-content:space-between;gap:6px;
@@ -278,13 +326,14 @@ const PREMIUM_HERO_STYLES = `
   border:1px solid rgba(255,255,255,.08);
 }
 .mb-hero-builder .openai-agent-node{background:transparent;border:none;box-shadow:none;padding:0}
-.mb-hero-builder .openai-agent-node-shell{display:flex;flex-direction:row;align-items:center}
+.mb-hero-builder .openai-agent-node-shell{display:flex;flex-direction:row;align-items:center;gap:4px}
 .mb-hero-builder .openai-agent-circle{
-  position:relative;width:104px;height:104px;border-radius:50%;flex-shrink:0;
+  position:relative;width:112px;height:112px;border-radius:50%;flex-shrink:0;
   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;
   background:linear-gradient(145deg,#0f0a1f,#1e1b4b 38%,#312e81 62%,#4338ca);
-  border:2px solid rgba(103,232,249,.5);
-  box-shadow:0 0 18px rgba(34,211,238,.24),0 0 28px rgba(99,102,241,.12);
+  border:2px solid rgba(103,232,249,.58);
+  box-shadow:0 0 28px rgba(34,211,238,.32),0 0 48px rgba(99,102,241,.14);
+  transition:box-shadow .28s ease;
 }
 .mb-hero-builder .openai-agent-status-badge{
   position:absolute;top:-4px;left:50%;transform:translateX(-50%);
@@ -292,10 +341,10 @@ const PREMIUM_HERO_STYLES = `
   letter-spacing:.07em;text-transform:uppercase;color:#a5f3fc;
   background:rgba(15,23,42,.92);border:1px solid rgba(34,211,238,.5);
 }
-.mb-hero-builder .openai-agent-icon-svg{width:40px;height:40px;color:#f0fdfa;filter:drop-shadow(0 0 8px rgba(103,232,249,.4))}
-.mb-hero-builder .openai-agent-title{margin:0;font-size:.58rem;font-weight:800;color:#f8fafc;text-align:center}
-.mb-hero-builder .openai-agent-routes-branch{display:flex;align-items:stretch;margin-left:2px}
-.mb-hero-builder .openai-agent-routes-stem{position:relative;width:18px;flex-shrink:0}
+.mb-hero-builder .openai-agent-icon-svg{width:42px;height:42px;color:#f0fdfa;filter:drop-shadow(0 0 10px rgba(103,232,249,.45))}
+.mb-hero-builder .openai-agent-title{margin:0;font-size:.6rem;font-weight:800;color:#f8fafc;text-align:center}
+.mb-hero-builder .openai-agent-routes-branch{display:flex;align-items:stretch;margin-left:16px;opacity:.88}
+.mb-hero-builder .openai-agent-routes-stem{position:relative;width:22px;flex-shrink:0}
 .mb-hero-builder .openai-agent-routes-stem::before{
   content:"";position:absolute;left:0;top:50%;width:10px;height:2px;
   background:linear-gradient(90deg,#22d3ee,#818cf8);transform:translateY(-50%);
@@ -305,13 +354,13 @@ const PREMIUM_HERO_STYLES = `
   background:linear-gradient(180deg,#22d3ee,#6366f1,#a78bfa);border-radius:2px;
 }
 .mb-hero-builder .openai-agent-routes-list{
-  list-style:none;margin:0;padding:2px 0;display:flex;flex-direction:column;justify-content:center;gap:5px;
+  list-style:none;margin:0;padding:2px 0;display:flex;flex-direction:column;justify-content:center;gap:7px;
 }
 .mb-hero-builder .openai-agent-route-pill{
   display:flex;align-items:center;gap:5px;min-height:26px;padding:3px 7px 3px 8px;
-  border-radius:9px;min-width:98px;position:relative;
-  background:linear-gradient(145deg,rgba(15,23,42,.88),rgba(30,27,75,.82));
-  border:1px solid rgba(103,232,249,.26);
+  border-radius:9px;min-width:92px;position:relative;
+  background:linear-gradient(145deg,rgba(15,23,42,.82),rgba(30,27,75,.72));
+  border:1px solid rgba(103,232,249,.18);
 }
 .mb-hero-builder .openai-agent-route-pill::before{
   content:"";position:absolute;left:-10px;top:50%;width:10px;height:2px;
@@ -326,9 +375,9 @@ const PREMIUM_HERO_STYLES = `
 .mb-hero-builder .openai-agent-route-name{font-size:.58rem;font-weight:700;color:#e2e8f0}
 .mb-hero-builder .seguimiento-v2-node{
   width:178px;padding:0;border-radius:14px;
-  border:2px solid rgba(34,211,238,.5);
+  border:1px solid rgba(34,211,238,.32);
   background:linear-gradient(160deg,#0c1929,#0f2744 48%,#0a1628);
-  box-shadow:0 0 20px rgba(34,211,238,.12);
+  box-shadow:0 4px 14px rgba(0,0,0,.16);
 }
 .mb-hero-builder .segv2-shell{padding:10px 11px 11px}
 .mb-hero-builder .segv2-header{display:flex;align-items:flex-start;gap:8px;margin-bottom:6px}
@@ -348,9 +397,9 @@ const PREMIUM_HERO_STYLES = `
 }
 .mb-hero-builder .rm24-global-node{
   width:172px;padding:9px 10px;border-radius:12px;
-  border:1px solid rgba(180,83,9,.5);
-  background:linear-gradient(155deg,rgba(255,122,24,.06),rgba(12,18,32,.94) 36%,rgba(10,15,28,.97));
-  box-shadow:0 0 16px rgba(255,122,24,.08);
+  border:1px solid rgba(180,83,9,.32);
+  background:linear-gradient(155deg,rgba(255,122,24,.05),rgba(12,18,32,.94) 36%,rgba(10,15,28,.97));
+  box-shadow:0 4px 14px rgba(0,0,0,.14);
 }
 .mb-hero-builder .rm24-title{
   margin:0 0 4px;font-size:.66rem;font-weight:800;color:#fdba74;
@@ -363,9 +412,9 @@ const PREMIUM_HERO_STYLES = `
 }
 .mb-hero-builder .lector-pago-node{
   width:188px;padding:9px 10px 10px;border-radius:14px;
-  border:1px solid rgba(129,246,236,.2);
+  border:1px solid rgba(129,246,236,.16);
   background:linear-gradient(145deg,rgba(9,14,28,.93),rgba(8,14,22,.9));
-  box-shadow:0 0 18px rgba(45,212,191,.07);
+  box-shadow:0 4px 14px rgba(0,0,0,.16);
   color:#dbe5f5;
 }
 .mb-hero-builder .lector-pago-header{display:flex;justify-content:space-between;align-items:center;gap:6px;margin-bottom:7px}
@@ -390,8 +439,8 @@ const PREMIUM_HERO_STYLES = `
 .mb-hero-builder .node-etiqueta{
   width:148px;padding:9px 11px;border-radius:12px;
   background:linear-gradient(160deg,rgba(12,18,28,.98),rgba(8,12,20,.98));
-  border:1px solid rgba(41,182,246,.5);
-  box-shadow:0 0 14px rgba(41,182,246,.18);
+  border:1px solid rgba(41,182,246,.32);
+  box-shadow:0 4px 12px rgba(0,0,0,.14);
 }
 .mb-hero-builder .node-etiqueta::before{
   content:"";position:absolute;left:0;top:0;bottom:0;width:3px;border-radius:12px 0 0 12px;
@@ -405,11 +454,12 @@ const PREMIUM_HERO_STYLES = `
 }
 .mb-hero-builder .conversion-node{background:transparent;border:none;padding:0;box-shadow:none}
 .mb-hero-builder .conversion-circle{
-  position:relative;width:96px;height:96px;border-radius:50%;
+  position:relative;width:102px;height:102px;border-radius:50%;
   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;
   background:linear-gradient(145deg,rgba(28,22,8,.92),rgba(12,16,28,.94) 55%,rgba(8,12,22,.98));
-  border:2px solid rgba(250,204,21,.58);
-  box-shadow:0 0 16px rgba(250,204,21,.16),0 0 26px rgba(247,181,0,.07);
+  border:2px solid rgba(250,204,21,.62);
+  box-shadow:0 0 24px rgba(251,191,36,.26),0 0 44px rgba(245,158,11,.12);
+  transition:box-shadow .28s ease;
 }
 .mb-hero-builder .conversion-badge-event{
   position:absolute;top:5px;left:50%;transform:translateX(-50%);
@@ -490,19 +540,73 @@ const PREMIUM_HERO_STYLES = `
   from{box-shadow:0 20px 50px rgba(0,0,0,.45),0 0 24px rgba(57,255,20,.03)}
   to{box-shadow:0 24px 64px rgba(0,0,0,.5),0 0 40px rgba(57,255,20,.05)}
 }
-@keyframes mb-hero-edge-pulse{to{stroke-dashoffset:-30}}
+@keyframes mb-hero-edge-flow{to{stroke-dashoffset:-28}}
 @keyframes mb-hero-glow-breathe{
   0%,100%{filter:brightness(1)}
-  50%{filter:brightness(1.08)}
+  50%{filter:brightness(1.06)}
 }
-@keyframes mb-hero-dot-travel{
-  0%{offset-distance:0%;opacity:0}
-  8%{opacity:1}
-  92%{opacity:1}
-  100%{offset-distance:100%;opacity:0}
+@keyframes mb-hero-node-pulse{
+  0%{transform:translate(-50%,-50%) scale(.92);opacity:.45}
+  70%{opacity:.08}
+  100%{transform:translate(-50%,-50%) scale(1.35);opacity:0}
+}
+@keyframes mb-hero-flow-start-content{
+  0%{transform:translate(198px,174px) scale(.7);opacity:0}
+  8%{opacity:.95}
+  45%{transform:translate(232px,168px) scale(1);opacity:1}
+  92%{opacity:.95}
+  100%{transform:translate(268px,162px) scale(.7);opacity:0}
+}
+@keyframes mb-hero-flow-content-openai{
+  0%{transform:translate(468px,162px) scale(.7);opacity:0}
+  8%{opacity:.95}
+  35%{transform:translate(498px,148px) scale(1);opacity:1}
+  65%{transform:translate(518px,122px) scale(1);opacity:1}
+  92%{opacity:.95}
+  100%{transform:translate(540px,108px) scale(.7);opacity:0}
+}
+@keyframes mb-hero-flow-openai-lector{
+  0%{transform:translate(662px,78px) scale(.7);opacity:0}
+  8%{opacity:.95}
+  50%{transform:translate(718px,62px) scale(1);opacity:1}
+  92%{opacity:.95}
+  100%{transform:translate(778px,55px) scale(.7);opacity:0}
+}
+@keyframes mb-hero-flow-openai-seg{
+  0%{transform:translate(662px,118px) scale(.7);opacity:0}
+  8%{opacity:.9}
+  45%{transform:translate(620px,168px) scale(1);opacity:1}
+  75%{transform:translate(580px,218px) scale(1);opacity:1}
+  92%{opacity:.9}
+  100%{transform:translate(548px,252px) scale(.7);opacity:0}
+}
+@keyframes mb-hero-flow-seg-rm{
+  0%{transform:translate(726px,260px) scale(.7);opacity:0}
+  10%{opacity:.9}
+  90%{opacity:.9}
+  100%{transform:translate(778px,260px) scale(.7);opacity:0}
+}
+@keyframes mb-hero-flow-lector-etiq{
+  0%{transform:translate(966px,55px) scale(.7);opacity:0}
+  8%{opacity:.95}
+  50%{transform:translate(988px,62px) scale(1);opacity:1}
+  92%{opacity:.95}
+  100%{transform:translate(1008px,72px) scale(.7);opacity:0}
+}
+@keyframes mb-hero-flow-etiq-conv{
+  0%{transform:translate(1156px,72px) scale(.7);opacity:0}
+  8%{opacity:.95}
+  50%{transform:translate(1174px,86px) scale(1);opacity:1}
+  92%{opacity:.95}
+  100%{transform:translate(1162px,102px) scale(.7);opacity:0}
+}
+@keyframes mb-hero-flow-conv-pulse{
+  0%{transform:translate(1213px,102px) scale(.5);opacity:0}
+  15%{opacity:.85}
+  100%{transform:translate(1213px,102px) scale(2.2);opacity:0}
 }
 @media(prefers-reduced-motion:reduce){
-  .mb-premium__hero-showcase,.mb-hero-builder__node-item,.mb-hero-builder__shell,.mb-hero-builder__edge,.mb-hero-builder__travel-dot{
+  .mb-premium__hero-showcase,.mb-hero-builder__node-item,.mb-hero-builder__shell,.mb-hero-builder__edge,.mb-hero-builder__flow-particle,.mb-hero-builder__node-item--glow::before{
     animation:none!important;
   }
   .mb-premium__hero-showcase,.mb-hero-builder__node-item{opacity:1;transform:none}
@@ -528,16 +632,26 @@ const HERO_STATS = [
 
 const HERO_OPENAI_ICON = `<svg class="openai-agent-icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M22.282 9.821a5.985 5.985 0 0 0-.516-4.938 6.046 6.046 0 0 0-6.51-2.9A6.065 6.065 0 0 0 4.981 4.18a5.985 5.985 0 0 0-3.998 2.9 6.046 6.046 0 0 0 .742 7.097 5.98 5.98 0 0 0 .511 4.936 6.051 6.051 0 0 0 6.514 2.9 5.985 5.985 0 0 0 4.997-2.9 6.056 6.056 0 0 0 3.997-2.9 5.995 5.995 0 0 0 .336-6.394zm-9.282 8.179a4.475 4.475 0 0 1-2.876-1.04l.141-.081 4.779-2.758a.795.795 0 0 0 .392-.681v-6.737l2.02 1.168a.071.071 0 0 1 .038.052v5.583a4.504 4.504 0 0 1-4.494 4.494zM3.806 18.329a4.472 4.472 0 0 1-.535-3.014l.142.085 4.783 2.759a.771.771 0 0 0 .78 0l5.843-3.369v2.332a.08.08 0 0 1-.033.062L9.74 19.95a4.5 4.5 0 0 1-5.934-1.621zM2.34 7.895a4.485 4.485 0 0 1 2.366-1.973V11.6a.766.766 0 0 0 .388.676l5.815 3.355-2.02 1.168a.076.076 0 0 1-.071 0l-4.83-2.786A4.504 4.504 0 0 1 2.34 7.872zm16.597 3.855-5.833-3.387L15.119 7.2a.076.076 0 0 1 .071 0l4.83 2.791a4.494 4.494 0 0 1-.676 8.105v-5.678a.79.79 0 0 0-.407-.667zm2.01-3.023-.141-.085-4.774-2.782a.776.776 0 0 0-.785 0L9.409 9.23V6.897a.066.066 0 0 1 .028-.061l4.83-2.787a4.5 4.5 0 0 1 6.68 4.66zm-12.64 4.135-2.02-1.168a.08.08 0 0 1-.038-.057V6.075a4.5 4.5 0 0 1 7.375-3.453l-.142.08-4.778 2.758a.795.795 0 0 0-.393.681zm1.097-2.365 2.602-1.5 2.607 1.5v2.999l-2.597 1.5-2.607-1.5z"/></svg>`;
 
-/** Curvas Bézier horizontales — viewBox 920×340 */
+/** Curvas Bézier — viewBox 1280×360, nodos con más aire horizontal */
 const HERO_BUILDER_EDGES = [
-  { d: "M 178 160 C 164 160, 152 160, 142 160", tone: "green", dot: "M 178 160 C 164 160, 152 160, 142 160", delay: "0s", dur: "2.4s" },
-  { d: "M 342 160 C 328 160, 318 100, 308 100", tone: "green", dot: "M 342 160 C 328 160, 318 100, 308 100", delay: ".3s", dur: "2.4s" },
-  { d: "M 450 74 C 478 58, 498 66, 512 78", tone: "orange", dot: "M 450 74 C 478 58, 498 66, 512 78", delay: ".5s", dur: "2.6s" },
-  { d: "M 450 96 C 478 86, 498 80, 512 84", tone: "orange", dot: "M 450 96 C 478 86, 498 80, 512 84", delay: ".8s", dur: "2.6s" },
-  { d: "M 450 118 C 456 168, 458 210, 462 232", tone: "purple", dot: "M 450 118 C 456 168, 458 210, 462 232", delay: "1s", dur: "3s" },
-  { d: "M 640 238 C 642 238, 643 238, 644 238", tone: "cyan", dot: "M 640 238 C 642 238, 643 238, 644 238", delay: "1.2s", dur: "2.2s" },
-  { d: "M 700 78 C 694 78, 690 94, 688 94", tone: "cyan", dot: "M 700 78 C 694 78, 690 94, 688 94", delay: "1.4s", dur: "2.4s" },
-  { d: "M 836 94 C 828 94, 824 104, 820 104", tone: "orange", dot: "M 836 94 C 828 94, 824 104, 820 104", delay: "1.6s", dur: "2.2s" },
+  { d: "M 198 174 C 222 174, 246 168, 268 162", tone: "green" },
+  { d: "M 468 162 C 498 152, 518 122, 540 108", tone: "green" },
+  { d: "M 662 78 C 710 62, 738 52, 778 55", tone: "orange" },
+  { d: "M 662 118 C 638 162, 598 212, 548 252", tone: "purple" },
+  { d: "M 726 260 C 748 260, 764 260, 778 260", tone: "cyan" },
+  { d: "M 966 55 C 988 60, 998 66, 1008 72", tone: "cyan" },
+  { d: "M 1156 72 C 1166 82, 1172 92, 1162 102", tone: "orange" },
+];
+
+const HERO_FLOW_PARTICLES = [
+  { cls: "green", anim: "mb-hero-flow-start-content", delay: "0s", dur: "3.2s" },
+  { cls: "green", anim: "mb-hero-flow-content-openai", delay: ".55s", dur: "3.4s" },
+  { cls: "orange", anim: "mb-hero-flow-openai-lector", delay: ".9s", dur: "3.1s" },
+  { cls: "purple", anim: "mb-hero-flow-openai-seg", delay: "1.2s", dur: "3.6s" },
+  { cls: "cyan", anim: "mb-hero-flow-seg-rm", delay: "1.5s", dur: "2.8s" },
+  { cls: "cyan", anim: "mb-hero-flow-lector-etiq", delay: "1.8s", dur: "2.9s" },
+  { cls: "gold", anim: "mb-hero-flow-etiq-conv", delay: "2.1s", dur: "3s" },
+  { cls: "gold", anim: "mb-hero-flow-conv-pulse", delay: "2.6s", dur: "3.8s" },
 ];
 
 function renderHeroBuilderEdgesSvg() {
@@ -545,16 +659,20 @@ function renderHeroBuilderEdgesSvg() {
     (edge) =>
       `<path class="mb-hero-builder__edge mb-hero-builder__edge--${edge.tone}" d="${edge.d}"/>`
   ).join("");
-  const dots = HERO_BUILDER_EDGES.map(
-    (edge) =>
-      `<circle class="mb-hero-builder__travel-dot mb-hero-builder__travel-dot--${edge.tone === "green" ? "" : edge.tone}" style="offset-path:path('${edge.dot}');--delay:${edge.delay};--dur:${edge.dur}" cx="0" cy="0" r="3"/>`
+  return `<svg class="mb-hero-builder__edges" viewBox="0 0 1280 360" preserveAspectRatio="xMidYMid meet" aria-hidden="true">${paths}</svg>`;
+}
+
+function renderHeroBuilderFlowParticles() {
+  const particles = HERO_FLOW_PARTICLES.map(
+    (p) =>
+      `<span class="mb-hero-builder__flow-particle mb-hero-builder__flow-particle--${p.cls}" style="animation-name:${p.anim};animation-duration:${p.dur};animation-delay:${p.delay}"></span>`
   ).join("");
-  return `<svg class="mb-hero-builder__edges" viewBox="0 0 920 340" preserveAspectRatio="xMidYMid meet" aria-hidden="true">${paths}${dots}</svg>`;
+  return `<div class="mb-hero-builder__flow-layer">${particles}</div>`;
 }
 
 function renderHeroBuilderStartNode(delay) {
   return `
-  <div class="mb-hero-builder__node-item mb-hero-builder__node-item--glow" style="left:0;top:118px;--delay:${delay}">
+  <div class="mb-hero-builder__node-item mb-hero-builder__node-item--glow mb-hero-builder__node-item--glow-start" style="left:20px;top:132px;--delay:${delay}">
     <div class="node node-start">
       <h3 class="node-title node-title-start">▶ Inicio del Flujo</h3>
       <p class="node-desc node-desc-start">Aquí comienza tu flujo.</p>
@@ -565,7 +683,7 @@ function renderHeroBuilderStartNode(delay) {
 
 function renderHeroBuilderContentNode(delay) {
   return `
-  <div class="mb-hero-builder__node-item" style="left:142px;top:98px;--delay:${delay}">
+  <div class="mb-hero-builder__node-item mb-hero-builder__node-item--secondary" style="left:268px;top:112px;--delay:${delay}">
     <div class="node content-node">
       <div class="port in"></div>
       <div class="content-header">
@@ -586,7 +704,7 @@ function renderHeroBuilderContentNode(delay) {
 
 function renderHeroBuilderOpenAINode(delay) {
   return `
-  <div class="mb-hero-builder__node-item mb-hero-builder__node-item--glow" style="left:308px;top:48px;--delay:${delay}">
+  <div class="mb-hero-builder__node-item mb-hero-builder__node-item--hero mb-hero-builder__node-item--glow mb-hero-builder__node-item--glow-ai" style="left:528px;top:48px;--delay:${delay}">
     <div class="node openai-agent-node openai-agent-node--with-routes">
       <div class="openai-agent-node-shell">
         <div class="openai-agent-core-column">
@@ -621,7 +739,7 @@ function renderHeroBuilderOpenAINode(delay) {
 
 function renderHeroBuilderSeguimientoNode(delay) {
   return `
-  <div class="mb-hero-builder__node-item" style="left:462px;top:218px;--delay:${delay}">
+  <div class="mb-hero-builder__node-item mb-hero-builder__node-item--secondary" style="left:548px;top:232px;--delay:${delay}">
     <div class="node seguimiento-v2-node">
       <div class="port in"></div>
       <div class="segv2-shell">
@@ -644,7 +762,7 @@ function renderHeroBuilderSeguimientoNode(delay) {
 
 function renderHeroBuilderRemarketingNode(delay) {
   return `
-  <div class="mb-hero-builder__node-item" style="left:644px;top:218px;--delay:${delay}">
+  <div class="mb-hero-builder__node-item mb-hero-builder__node-item--secondary" style="left:778px;top:232px;--delay:${delay}">
     <div class="node rm24-global-node">
       <div class="port in"></div>
       <h3 class="rm24-title">🎯 Remarketing 24h</h3>
@@ -657,7 +775,7 @@ function renderHeroBuilderRemarketingNode(delay) {
 
 function renderHeroBuilderLectorNode(delay) {
   return `
-  <div class="mb-hero-builder__node-item" style="left:512px;top:0;--delay:${delay}">
+  <div class="mb-hero-builder__node-item mb-hero-builder__node-item--secondary" style="left:778px;top:8px;--delay:${delay}">
     <div class="node lector-pago-node">
       <div class="port in"></div>
       <div class="lector-pago-header">
@@ -692,7 +810,7 @@ function renderHeroBuilderLectorNode(delay) {
 
 function renderHeroBuilderEtiquetaNode(delay) {
   return `
-  <div class="mb-hero-builder__node-item" style="left:688px;top:38px;--delay:${delay}">
+  <div class="mb-hero-builder__node-item mb-hero-builder__node-item--secondary" style="left:1008px;top:36px;--delay:${delay}">
     <div class="node node-etiqueta">
       <div class="port in"></div>
       <h3 class="node-title">🏷️ Etiqueta</h3>
@@ -704,7 +822,7 @@ function renderHeroBuilderEtiquetaNode(delay) {
 
 function renderHeroBuilderConversionNode(delay) {
   return `
-  <div class="mb-hero-builder__node-item mb-hero-builder__node-item--glow" style="left:820px;top:56px;--delay:${delay}">
+  <div class="mb-hero-builder__node-item mb-hero-builder__node-item--glow mb-hero-builder__node-item--glow-goal" style="left:1162px;top:54px;--delay:${delay}">
     <div class="node conversion-node">
       <div class="conversion-circle">
         <span class="conversion-badge-event">Evento</span>
@@ -761,6 +879,7 @@ function renderHeroBuilderDemo() {
             <div class="mb-hero-builder__grid" aria-hidden="true"></div>
             <div class="mb-hero-builder__zoom" aria-hidden="true"><span>−</span><em>100%</em><span>+</span></div>
             ${renderHeroBuilderEdgesSvg()}
+            ${renderHeroBuilderFlowParticles()}
             <div class="mb-hero-builder__nodes">${nodes}</div>
           </div>
         </div>
