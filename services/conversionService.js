@@ -2,6 +2,7 @@
  * Registro de conversiones/ventas — tabla crm_conversiones (no etiquetas).
  */
 const axios = require("axios");
+const { enviarPurchaseMetaDesdeConversion } = require("./metaService");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
@@ -185,6 +186,20 @@ async function registrarConversion({
       flujo_id: payload.flujo_id,
       nodo_id: payload.nodo_id,
     });
+
+    enviarPurchaseMetaDesdeConversion({
+      usuarioId,
+      clienteNumero: payload.cliente_numero,
+      conexionWhatsappId: payload.conexion_whatsapp_id,
+      valor: payload.valor,
+      moneda: payload.moneda,
+      flujoId: payload.flujo_id,
+      nodoId: payload.nodo_id,
+      origen: payload.origen,
+      metadata: payload.metadata,
+      conversionId: row?.id || null,
+    });
+
     return row;
   } catch (e) {
     console.error(

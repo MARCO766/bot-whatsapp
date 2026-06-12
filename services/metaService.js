@@ -1,12 +1,16 @@
 const axios = require("axios");
+const crypto = require("crypto");
+const { isSchemaMissingError, logSchemaFallback } = require("./supabaseSafe");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
+const GRAPH_VERSION = "v19.0";
 
-function supabaseHeaders() {
+function supabaseHeaders(extra = {}) {
   return {
     apikey: SUPABASE_KEY,
     Authorization: `Bearer ${SUPABASE_KEY}`,
+    ...extra,
   };
 }
 
@@ -32,6 +36,38 @@ function normalizeConexionWhatsappId(opciones = {}) {
   return s || null;
 }
 
+function normalizeClienteNumero(telefono) {
+  return String(telefono || "").replace(/\D/g, "");
+}
+
+function hashTelefonoMeta(telefono) {
+  const digits = normalizeClienteNumero(telefono);
+  if (!digits) return null;
+  return crypto.createHash("sha256").update(digits).digest("hex");
+}
+
+function buildMetaEventId(eventName, usuarioId, clienteNumero, conexionWhatsappId) {
+  const num = normalizeClienteNumero(clienteNumero) || "unknown";
+  const conn = conexionWhatsappId || "none";
+  const ts = Date.now();
+  const random = crypto.randomBytes(4).toString("hex");
+  return `meta_${eventName}_${usuarioId}_${num}_${conn}_${ts}_${random}`;
+}
+
+function normalizeTestEventCode(opciones = {}) {
+  const raw = opciones.testEventCode ?? opciones.test_event_code ?? "";
+  const code = String(raw).trim();
+  return code || null;
+}
+
+function metaErrorMessage(error) {
+  const data = error?.response?.data;
+  if (data?.error?.message) return String(data.error.message);
+  if (typeof data === "string") return data.slice(0, 200);
+  if (data?.message) return String(data.message);
+  return String(error?.message || "Error Meta CAPI").slice(0, 200);
+}
+
 async function fetchConexionMeta(usuarioId, conexionWhatsappId) {
   if (!usuarioId || !SUPABASE_URL || !SUPABASE_KEY) return null;
 
@@ -53,15 +89,188 @@ async function fetchConexionMeta(usuarioId, conexionWhatsappId) {
   return res.data?.[0] || null;
 }
 
-function normalizeTestEventCode(opciones = {}) {
-  const raw = opciones.testEventCode ?? opciones.test_event_code ?? "";
-  const code = String(raw).trim();
-  return code || null;
+function buildCapiEventData({ eventName, telefono, opciones = {} }) {
+  const telefonoHash = hashTelefonoMeta(telefono);
+  const usuarioId = opciones.usuarioId;
+  const clienteNumero = normalizeClienteNumero(telefono);
+  const conexionWhatsappId = normalizeConexionWhatsappId(opciones);
+  const eventId =
+    opciones.eventId ||
+    buildMetaEventId(eventName, usuarioId, clienteNumero, conexionWhatsappId);
+
+  const user_data = {};
+  if (telefonoHash) user_data.ph = [telefonoHash];
+
+  const custom_data = {
+    ...(opciones.custom_data && typeof opciones.custom_data === "object"
+      ? opciones.custom_data
+      : {}),
+  };
+
+  if (custom_data.currency == null) {
+    const defaultCurrency = eventName === "Lead" ? "BOB" : "USD";
+    custom_data.currency = opciones.currency || opciones.moneda || defaultCurrency;
+  }
+  if (custom_data.value == null) {
+    custom_data.value = opciones.value ?? 0;
+  }
+
+  return {
+    event_name: eventName,
+    event_time: Math.floor(Date.now() / 1000),
+    event_id: eventId,
+    action_source: "business_messaging",
+    user_data,
+    custom_data,
+  };
+}
+
+function logMetaOk(ctx, resData) {
+  console.log("[META] evento enviado", {
+    event_name: ctx.event_name,
+    event_id: ctx.event_id,
+    pixel_id_masked: ctx.pixel_id_masked,
+    conexion_whatsapp_id: ctx.conexion_whatsapp_id,
+    events_received: resData?.events_received ?? null,
+    fbtrace_id: resData?.fbtrace_id ?? null,
+  });
+}
+
+function logMetaError(ctx, error) {
+  console.log("[META] error", {
+    event_name: ctx.event_name,
+    event_id: ctx.event_id,
+    pixel_id_masked: ctx.pixel_id_masked,
+    conexion_whatsapp_id: ctx.conexion_whatsapp_id,
+    message: metaErrorMessage(error),
+    status: error?.response?.status ?? null,
+  });
+}
+
+async function postMetaCapiEvent(conexion, eventData, opciones = {}) {
+  const conexionIdLog = conexion?.id || normalizeConexionWhatsappId(opciones) || null;
+  const ctx = {
+    event_name: eventData.event_name,
+    event_id: eventData.event_id,
+    pixel_id_masked: maskPixelId(conexion.pixel_id),
+    conexion_whatsapp_id: conexionIdLog,
+  };
+
+  const body = { data: [eventData] };
+  const testEventCode = normalizeTestEventCode(opciones);
+  if (testEventCode) body.test_event_code = testEventCode;
+
+  if (opciones.esPrueba) {
+    console.log("[META TEST]", {
+      event_name: ctx.event_name,
+      event_id: ctx.event_id,
+      test_event_code: testEventCode,
+      pixel_id_masked: ctx.pixel_id_masked,
+      conexion_whatsapp_id: ctx.conexion_whatsapp_id,
+    });
+  }
+
+  const res = await axios.post(
+    `https://graph.facebook.com/${GRAPH_VERSION}/${encodeURIComponent(conexion.pixel_id)}/events?access_token=${encodeURIComponent(conexion.capi_token)}`,
+    body
+  );
+
+  logMetaOk(ctx, res.data);
+
+  if (opciones.esPrueba) {
+    return { ok: true, ...res.data };
+  }
+  return { ok: true, ...res.data };
+}
+
+/**
+ * INSERT atómico para dedup Lead. Devuelve { reserved, degraded }.
+ * degraded=true si la tabla no existe (modo sin dedup, no rompe webhook).
+ */
+async function reservarEnvioLeadMeta(
+  usuarioId,
+  clienteNumero,
+  conexionWhatsappId,
+  eventId
+) {
+  if (!SUPABASE_URL || !SUPABASE_KEY || !usuarioId) {
+    return { reserved: false, degraded: false };
+  }
+
+  const numero = normalizeClienteNumero(clienteNumero);
+  if (!numero) return { reserved: false, degraded: false };
+
+  const connId = normalizeConexionWhatsappId({ conexionWhatsappId });
+  const payload = {
+    usuario_id: usuarioId,
+    cliente_numero: numero,
+    conexion_whatsapp_id: connId,
+    event_id: eventId,
+  };
+
+  try {
+    const res = await axios.post(
+      `${SUPABASE_URL}/rest/v1/meta_capi_leads_enviados?on_conflict=usuario_id,cliente_numero,conexion_whatsapp_id`,
+      payload,
+      {
+        headers: supabaseHeaders({
+          "Content-Type": "application/json",
+          Prefer: "resolution=ignore-duplicates,return=representation",
+        }),
+      }
+    );
+    const row = Array.isArray(res.data) ? res.data[0] : res.data;
+    return { reserved: Boolean(row?.id), degraded: false };
+  } catch (error) {
+    if (isSchemaMissingError(error)) {
+      logSchemaFallback("meta_capi_leads_enviados", error);
+      console.log("[META] Lead sin dedup (tabla meta_capi_leads_enviados no disponible)", {
+        conexion_whatsapp_id: connId,
+      });
+      return { reserved: true, degraded: true };
+    }
+    console.log("[META] error reservando Lead dedup", {
+      conexion_whatsapp_id: connId,
+      message: metaErrorMessage(error),
+    });
+    return { reserved: false, degraded: false };
+  }
+}
+
+async function enviarEventoMetaInterno(usuarioId, nombreEvento, telefono, opciones = {}) {
+  const esPrueba = Boolean(opciones.esPrueba);
+  const conexionWhatsappId = normalizeConexionWhatsappId(opciones);
+  const conexion = await fetchConexionMeta(usuarioId, conexionWhatsappId);
+  const conexionIdLog = conexion?.id || conexionWhatsappId || null;
+
+  if (!conexion?.pixel_id?.trim() || !conexion?.capi_token?.trim()) {
+    console.log("[META] Pixel/CAPI no configurado para esta línea", {
+      event_name: nombreEvento,
+      conexion_whatsapp_id: conexionIdLog,
+    });
+    if (esPrueba) {
+      const err = new Error("Pixel ID y CAPI Token son obligatorios para la prueba");
+      err.status = 400;
+      throw err;
+    }
+    return null;
+  }
+
+  const eventData = buildCapiEventData({
+    eventName: nombreEvento,
+    telefono,
+    opciones: {
+      ...opciones,
+      usuarioId,
+      conexionWhatsappId: conexionIdLog,
+    },
+  });
+
+  return postMetaCapiEvent(conexion, eventData, opciones);
 }
 
 async function enviarEventoMeta(usuarioId, nombreEvento, telefono, opciones = {}) {
   const esPrueba = Boolean(opciones.esPrueba);
-  const testEventCode = normalizeTestEventCode(opciones);
 
   try {
     if (!usuarioId) {
@@ -73,93 +282,176 @@ async function enviarEventoMeta(usuarioId, nombreEvento, telefono, opciones = {}
       return;
     }
 
-    const conexionWhatsappId = normalizeConexionWhatsappId(opciones);
-    const conexion = await fetchConexionMeta(usuarioId, conexionWhatsappId);
-    const conexionIdLog = conexion?.id || conexionWhatsappId || null;
-
-    if (!conexion?.pixel_id?.trim() || !conexion?.capi_token?.trim()) {
-      console.log("[META] Pixel/CAPI no configurado para esta línea", {
-        conexion_whatsapp_id: conexionIdLog,
-      });
-      if (esPrueba) {
-        const err = new Error("Pixel ID y CAPI Token son obligatorios para la prueba");
-        err.status = 400;
-        throw err;
-      }
-      return;
-    }
-
-    const crypto = require("crypto");
-
-    const telefonoHash = crypto
-      .createHash("sha256")
-      .update(String(telefono).replace(/\D/g, ""))
-      .digest("hex");
-
-    const payload = {
-      data: [
-        {
-          event_name: nombreEvento,
-          event_time: Math.floor(Date.now() / 1000),
-          action_source: "system_generated",
-          user_data: {
-            ph: [telefonoHash],
-          },
-          custom_data: {
-            currency: opciones.currency || "BOB",
-            value: opciones.value || 0,
-          },
-        },
-      ],
-    };
-
-    if (testEventCode) {
-      payload.test_event_code = testEventCode;
-    }
-
-    if (esPrueba) {
-      console.log("[META TEST]", {
-        event_name: nombreEvento,
-        test_event_code: testEventCode,
-        pixel_id_masked: maskPixelId(conexion.pixel_id),
-        conexion_whatsapp_id: conexionIdLog,
-      });
-    }
-
-    const res = await axios.post(
-      `https://graph.facebook.com/v19.0/${conexion.pixel_id}/events?access_token=${conexion.capi_token}`,
-      payload
-    );
-
-    if (esPrueba) {
-      console.log("[META] respuesta", {
-        events_received: res.data?.events_received ?? null,
-        fbtrace_id: res.data?.fbtrace_id ?? null,
-        conexion_whatsapp_id: conexionIdLog,
-        pixel_id_masked: maskId(conexion.pixel_id),
-      });
-      return { ok: true, ...res.data };
-    }
-
-    console.log("[META] evento enviado", {
-      evento: nombreEvento,
-      pixel_id_masked: maskId(conexion.pixel_id),
-      conexion_whatsapp_id: conexionIdLog,
-    });
+    return await enviarEventoMetaInterno(usuarioId, nombreEvento, telefono, opciones);
   } catch (error) {
-    console.log("[META] error", error.response?.data || error.message);
+    logMetaError(
+      {
+        event_name: nombreEvento,
+        event_id: opciones.eventId || null,
+        pixel_id_masked: null,
+        conexion_whatsapp_id: normalizeConexionWhatsappId(opciones),
+      },
+      error
+    );
     if (esPrueba) {
-      const err = new Error(
-        error.response?.data?.error?.message ||
-          error.message ||
-          "No se pudo enviar el evento de prueba"
-      );
+      const err = new Error(metaErrorMessage(error) || "No se pudo enviar el evento de prueba");
       err.status = error.response?.status || error.status || 502;
       throw err;
     }
   }
 }
 
+/**
+ * Lead CAPI — una vez por usuario + cliente + línea. No lanza errores al caller.
+ */
+async function enviarLeadMetaSiCorresponde(usuarioId, telefono, opciones = {}) {
+  try {
+    if (!usuarioId) return;
+
+    const conexionWhatsappId = normalizeConexionWhatsappId(opciones);
+    const clienteNumero = normalizeClienteNumero(telefono);
+    if (!clienteNumero) return;
+
+    const eventId = buildMetaEventId(
+      "Lead",
+      usuarioId,
+      clienteNumero,
+      conexionWhatsappId
+    );
+
+    const { reserved, degraded } = await reservarEnvioLeadMeta(
+      usuarioId,
+      clienteNumero,
+      conexionWhatsappId,
+      eventId
+    );
+
+    if (!reserved) {
+      console.log("[META] Lead omitido (ya enviado)", {
+        event_id: eventId,
+        conexion_whatsapp_id: conexionWhatsappId,
+      });
+      return;
+    }
+
+    if (degraded) {
+      console.log("[META] Lead en modo degradado (sin tabla dedup)", {
+        event_id: eventId,
+        conexion_whatsapp_id: conexionWhatsappId,
+      });
+    }
+
+    await enviarEventoMetaInterno(usuarioId, "Lead", clienteNumero, {
+      ...opciones,
+      conexionWhatsappId,
+      eventId,
+    });
+  } catch (error) {
+    logMetaError(
+      {
+        event_name: "Lead",
+        event_id: null,
+        pixel_id_masked: null,
+        conexion_whatsapp_id: normalizeConexionWhatsappId(opciones),
+      },
+      error
+    );
+  }
+}
+
+function buildPurchaseCustomData(datos) {
+  const metadata =
+    datos.metadata && typeof datos.metadata === "object" && !Array.isArray(datos.metadata)
+      ? datos.metadata
+      : {};
+
+  const producto =
+    String(metadata.producto || metadata.nodeName || metadata.nombre || "").trim() || undefined;
+  const tipoVenta = metadata.tipo != null ? String(metadata.tipo) : undefined;
+
+  const custom = {
+    value: datos.valor ?? 0,
+    currency: datos.moneda || "USD",
+    flujo_id: datos.flujoId || undefined,
+    nodo_id: datos.nodoId || undefined,
+    conexion_whatsapp_id: datos.conexionWhatsappId || undefined,
+    origen: datos.origen || undefined,
+    tipo_venta: tipoVenta,
+  };
+
+  if (producto) custom.producto = producto;
+  if (datos.conversionId) custom.conversion_id = String(datos.conversionId);
+
+  Object.keys(custom).forEach((k) => {
+    if (custom[k] === undefined || custom[k] === null || custom[k] === "") {
+      delete custom[k];
+    }
+  });
+
+  return custom;
+}
+
+/**
+ * Purchase CAPI desde conversión CRM. Fire-and-forget: nunca lanza al caller.
+ */
+function enviarPurchaseMetaDesdeConversion(datos) {
+  setImmediate(() => {
+    enviarPurchaseMetaDesdeConversionAsync(datos).catch(() => {});
+  });
+}
+
+async function enviarPurchaseMetaDesdeConversionAsync(datos) {
+  try {
+    const usuarioId = datos?.usuarioId;
+    const clienteNumero = normalizeClienteNumero(datos?.clienteNumero);
+    if (!usuarioId || !clienteNumero) return;
+
+    const conexionWhatsappId = normalizeConexionWhatsappId({
+      conexionWhatsappId: datos.conexionWhatsappId,
+    });
+    const valor = Number(datos.valor) || 0;
+    const moneda = datos.moneda || "USD";
+    const eventId = buildMetaEventId(
+      "Purchase",
+      usuarioId,
+      clienteNumero,
+      conexionWhatsappId
+    );
+
+    const custom_data = buildPurchaseCustomData({
+      ...datos,
+      valor,
+      moneda,
+      conexionWhatsappId,
+    });
+
+    await enviarEventoMetaInterno(usuarioId, "Purchase", clienteNumero, {
+      conexionWhatsappId,
+      usuarioId,
+      eventId,
+      value: valor,
+      currency: moneda,
+      custom_data,
+    });
+  } catch (error) {
+    logMetaError(
+      {
+        event_name: "Purchase",
+        event_id: null,
+        pixel_id_masked: null,
+        conexion_whatsapp_id: normalizeConexionWhatsappId({
+          conexionWhatsappId: datos?.conexionWhatsappId,
+        }),
+      },
+      error
+    );
+  }
+}
+
 module.exports = {
   enviarEventoMeta,
+  enviarLeadMetaSiCorresponde,
+  enviarPurchaseMetaDesdeConversion,
+  buildMetaEventId,
+  hashTelefonoMeta,
 };

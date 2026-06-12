@@ -3,7 +3,7 @@ const router = express.Router();
 
 const axios = require("axios");
 
-const { enviarEventoMeta } = require("../services/metaService");
+const { enviarLeadMetaSiCorresponde } = require("../services/metaService");
 const {
   procesarMensajeEntrante,
   manejarGuardPausaBot,
@@ -590,7 +590,7 @@ if (guardPausa.reactivado) {
   });
 }
 
-await enviarEventoMeta(usuarioIdWebhook, "Lead", from, {
+await enviarLeadMetaSiCorresponde(usuarioIdWebhook, from, {
   conexionWhatsappId,
 });
 
