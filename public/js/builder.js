@@ -3003,6 +3003,19 @@ function initBuilderMinimapModule(){
       return document.getElementById("canvasFlujo");
     },
     getWrap: getCanvasViewport,
+    setViewportCenter: function(worldX, worldY){
+      const wrap = getCanvasViewport();
+      if(!wrap || !Number.isFinite(worldX) || !Number.isFinite(worldY)){
+        return;
+      }
+
+      const zoom = getCanvasZoom();
+      const rect = wrap.getBoundingClientRect();
+
+      viewportState.panX = -worldX * zoom + rect.width / 2;
+      viewportState.panY = -worldY * zoom + rect.height / 2;
+      aplicarViewportTransform();
+    },
   });
 }
 
@@ -3170,7 +3183,8 @@ function initCanvasViewport(){
       e.target.closest(".port") ||
       e.target.closest(".borrar-linea") ||
       e.target.closest(".flow-connection-hitbox") ||
-      e.target.closest(".flow-zoom-controls")
+      e.target.closest(".flow-zoom-controls") ||
+      e.target.closest(".builder-minimap")
     ){
       return;
     }

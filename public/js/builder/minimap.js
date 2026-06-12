@@ -1,6 +1,6 @@
 /**
- * MacBot — Minimapa del flow builder (solo lectura / visual).
- * Fase 1: refleja nodos, conexiones y viewport. Pan por click/drag en fase 2.
+ * MacBot — Minimapa del flow builder.
+ * Fase 2: click/drag en minimapa mueve el viewport del canvas.
  */
 (function () {
   "use strict";
@@ -38,8 +38,17 @@
     getConnections: null,
     getCanvas: null,
     getWrap: null,
+    setViewportCenter: null,
     lastViewBox: "",
     lastBounds: null,
+    panBound: false,
+  };
+
+  const panState = {
+    active: false,
+    pointerId: null,
+    panRafId: 0,
+    pendingCenter: null,
   };
 
   function readNodeBounds(nodo) {
@@ -272,32 +281,156 @@
     });
   }
 
+  function clientPointToWorld(clientX, clientY) {
+    const svg = state.svg;
+    if (!svg || typeof svg.createSVGPoint !== "function") return null;
+
+    const pt = svg.createSVGPoint();
+    pt.x = clientX;
+    pt.y = clientY;
+
+    const ctm = svg.getScreenCTM();
+    if (!ctm) return null;
+
+    const local = pt.matrixTransform(ctm.inverse());
+    return { x: local.x, y: local.y };
+  }
+
+  function flushPanToWorld() {
+    panState.panRafId = 0;
+    if (!panState.pendingCenter || !state.setViewportCenter) return;
+
+    const target = panState.pendingCenter;
+    panState.pendingCenter = null;
+    state.setViewportCenter(target.x, target.y);
+  }
+
+  function schedulePanToWorld(worldX, worldY) {
+    if (!Number.isFinite(worldX) || !Number.isFinite(worldY)) return;
+
+    panState.pendingCenter = { x: worldX, y: worldY };
+
+    if (!panState.panRafId) {
+      panState.panRafId = window.requestAnimationFrame(flushPanToWorld);
+    }
+  }
+
+  function onMinimapPointerDown(e) {
+    if (e.button !== 0) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    const world = clientPointToWorld(e.clientX, e.clientY);
+    if (!world) return;
+
+    panState.active = true;
+    panState.pointerId = e.pointerId;
+
+    if (state.root && state.root.setPointerCapture) {
+      state.root.setPointerCapture(e.pointerId);
+    }
+
+    state.root.classList.add("builder-minimap--dragging");
+    schedulePanToWorld(world.x, world.y);
+  }
+
+  function onMinimapPointerMove(e) {
+    if (!panState.active || e.pointerId !== panState.pointerId) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    const world = clientPointToWorld(e.clientX, e.clientY);
+    if (!world) return;
+
+    schedulePanToWorld(world.x, world.y);
+  }
+
+  function endMinimapPan(e) {
+    if (!panState.active || (e && e.pointerId !== panState.pointerId)) return;
+
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+
+    panState.active = false;
+    panState.pointerId = null;
+
+    if (state.root) {
+      if (e && state.root.releasePointerCapture) {
+        try {
+          state.root.releasePointerCapture(e.pointerId);
+        } catch (_err) {
+          /* pointer already released */
+        }
+      }
+      state.root.classList.remove("builder-minimap--dragging");
+    }
+
+    flushPanToWorld();
+    scheduleUpdateBuilderMinimap();
+  }
+
+  function onMinimapWheel(e) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
+
   function bindMinimapPan() {
-    /* Fase 2: click/drag en minimapa para mover viewport del canvas. */
+    if (state.panBound || !state.root) return;
+
+    state.root.addEventListener("pointerdown", onMinimapPointerDown);
+    state.root.addEventListener("pointermove", onMinimapPointerMove);
+    state.root.addEventListener("pointerup", endMinimapPan);
+    state.root.addEventListener("pointercancel", endMinimapPan);
+    state.root.addEventListener("wheel", onMinimapWheel, { passive: false });
+
+    state.panBound = true;
+  }
+
+  function assignMinimapOptions(options) {
+    state.getViewport = options.getViewport || null;
+    state.getConnections = options.getConnections || null;
+    state.getCanvas = options.getCanvas || null;
+    state.getWrap = options.getWrap || null;
+    state.setViewportCenter = options.setViewportCenter || null;
+  }
+
+  function cacheMinimapElements(wrap) {
+    const root = wrap.querySelector(".builder-minimap");
+    if (!root) return false;
+
+    state.root = root;
+    state.svg = root.querySelector(".builder-minimap-svg");
+    state.gridEl = root.querySelector(".builder-minimap-grid");
+    state.edgesGroup = state.svg && state.svg.querySelector(".builder-minimap-edges");
+    state.nodesGroup = state.svg && state.svg.querySelector(".builder-minimap-nodes");
+    state.viewportGlowEl = state.svg && state.svg.querySelector(".builder-minimap-viewport-glow");
+    state.viewportEl = state.svg && state.svg.querySelector(".builder-minimap-viewport");
+    return Boolean(state.svg);
   }
 
   function initBuilderMinimap(options) {
     options = options || {};
 
     const wrap = options.getWrap && options.getWrap();
-    if (!wrap || wrap.querySelector(".builder-minimap")) {
-      state.getViewport = options.getViewport || null;
-      state.getConnections = options.getConnections || null;
-      state.getCanvas = options.getCanvas || null;
-      state.getWrap = options.getWrap || null;
+    if (!wrap) return;
+
+    assignMinimapOptions(options);
+
+    if (wrap.querySelector(".builder-minimap")) {
+      cacheMinimapElements(wrap);
+      bindMinimapPan();
       scheduleUpdateBuilderMinimap();
       return;
     }
 
-    state.getViewport = options.getViewport || null;
-    state.getConnections = options.getConnections || null;
-    state.getCanvas = options.getCanvas || null;
-    state.getWrap = options.getWrap || null;
-
     const root = document.createElement("div");
     root.className = "builder-minimap";
-    root.setAttribute("role", "img");
-    root.setAttribute("aria-label", "Minimapa del flujo");
+    root.setAttribute("role", "application");
+    root.setAttribute("aria-label", "Minimapa del flujo — click o arrastra para navegar");
 
     const gridEl = document.createElement("div");
     gridEl.className = "builder-minimap-grid";

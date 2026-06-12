@@ -5409,11 +5409,17 @@ body:has(#builderArea.builder-theme-light) .menu-nodo-btn.active {
   padding: 4px;
   border-radius: 10px;
   overflow: hidden;
-  pointer-events: none;
+  pointer-events: auto;
+  touch-action: none;
+  cursor: crosshair;
   background: rgba(6, 10, 18, 0.88);
   border: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
   backdrop-filter: blur(6px);
+}
+
+.builder-minimap--dragging {
+  cursor: grabbing;
 }
 
 .builder-minimap-grid {
@@ -5421,13 +5427,13 @@ body:has(#builderArea.builder-theme-light) .menu-nodo-btn.active {
   inset: 4px;
   opacity: 0.22;
   border-radius: 6px;
+  pointer-events: none;
   background-color: transparent;
   background-image:
     linear-gradient(rgba(103, 232, 249, 0.14) 1px, transparent 1px),
     linear-gradient(90deg, rgba(103, 232, 249, 0.14) 1px, transparent 1px);
   background-size: 12px 12px;
   background-position: 0 0;
-  pointer-events: none;
 }
 
 .builder-minimap-svg {
@@ -5436,6 +5442,7 @@ body:has(#builderArea.builder-theme-light) .menu-nodo-btn.active {
   display: block;
   width: 100%;
   height: 100%;
+  pointer-events: none;
 }
 
 .builder-minimap-edge {
