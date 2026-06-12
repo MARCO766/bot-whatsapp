@@ -26,24 +26,11 @@ body:has(#builderArea) .main {
 
 .flow-toolbar-left {
   display: flex;
-  align-items: center;
-  gap: 14px;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 0;
   min-width: 0;
-}
-
-.flow-back {
-  border: none;
-  background: #1c212c;
-  color: #fff;
-  padding: 10px 16px;
-  border-radius: 12px;
-  font-weight: 700;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.flow-back:hover {
-  background: #263042;
 }
 
 .flow-title {
@@ -5178,15 +5165,6 @@ body:has(#builderArea.builder-theme-dark) {
   color: #94a3b8;
 }
 
-#builderArea.builder-theme-dark .flow-back {
-  background: rgba(255, 255, 255, 0.06);
-  color: #f8fafc;
-}
-
-#builderArea.builder-theme-dark .flow-back:hover {
-  background: rgba(124, 58, 237, 0.22);
-}
-
 #builderArea.builder-theme-dark .flow-history-controls {
   background: rgba(255, 255, 255, 0.04);
   border-color: rgba(255, 255, 255, 0.08);
@@ -5299,16 +5277,6 @@ body:has(#builderArea.builder-theme-light) {
 
 #builderArea.builder-theme-light .flow-hint {
   color: #64748b;
-}
-
-#builderArea.builder-theme-light .flow-back {
-  background: #f1f5f9;
-  color: #0f172a;
-  border: 1px solid rgba(15, 23, 42, 0.08);
-}
-
-#builderArea.builder-theme-light .flow-back:hover {
-  background: #e2e8f0;
 }
 
 #builderArea.builder-theme-light .flow-history-controls {

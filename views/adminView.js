@@ -53,7 +53,6 @@ ${builder ? '<link rel="stylesheet" href="/css/seguimiento.css"><link rel="style
     <button type="button" class="menu-nodo-btn menu-nodo-btn-ia" onclick="agregarNodoIA()">⚡ Agente Rápido</button>
     <button type="button" class="menu-nodo-btn menu-nodo-btn-ia-pro" onclick="agregarNodoIAPro()">🤖 Agente IA Pro</button>
     <button type="button" class="menu-nodo-btn menu-nodo-btn-openai-agent" onclick="agregarNodoOpenAIAgent()"><span class="menu-nodo-btn-openai-agent__icon" aria-hidden="true"></span> Agente OpenAI</button>
-    ${seguimientoLegacyEnabled ? `<button type="button" class="menu-nodo-btn menu-nodo-btn-seguimiento menu-nodo-btn-seguimiento--legacy" onclick="agregarNodo('seguimiento')">⏱️ Seguimiento CRM ⚠ Obsoleto</button>` : ""}
     <button type="button" class="menu-nodo-btn menu-nodo-btn-seguimiento-v2" onclick="agregarNodoSeguimientoV2()">🔒 Seguimiento CRM V2</button>
     <button type="button" class="menu-nodo-btn menu-nodo-btn-rm24h" onclick="agregarNodoRemarketingGlobal()">🔥 Remarketing 24h</button>
     <button type="button" class="menu-nodo-btn menu-nodo-btn-espera" onclick="agregarNodo('espera')">⏳ Espera</button>
@@ -616,11 +615,8 @@ ${tab === "flujos" && builder ? `
 <div id="builderArea" class="flow-builder builder-theme-dark">
   <header class="flow-toolbar">
     <div class="flow-toolbar-left">
-      <button type="button" class="flow-back" onclick="window.location.href='/admin?tab=flujos'">← Volver</button>
-      <div>
-        <h2 id="tituloFlujo" class="flow-title">🔀 ${nombreBuilder || "Flujo nuevo"}</h2>
-        <p class="flow-hint">Selecciona nodos desde el panel izquierdo. Arrastra el fondo para moverte por el canvas.</p>
-      </div>
+      <h2 id="tituloFlujo" class="flow-title">🔀 ${nombreBuilder || "Flujo nuevo"}</h2>
+      <p class="flow-hint">Selecciona nodos desde el panel izquierdo. Arrastra el fondo para moverte por el canvas.</p>
     </div>
     <div class="flow-toolbar-right">
       <button type="button" class="flow-theme-toggle" id="btnBuilderTheme" title="Modo claro" aria-label="Cambiar tema claro u oscuro" aria-pressed="true">☀️</button>
@@ -749,7 +745,7 @@ ${tab === "flujos" && builder ? `
   etiquetasData: etiquetas || [],
   supabaseUrl: supabaseUrl || "",
   supabaseAnonKey: supabaseAnonKey || "",
-  seguimientoLegacyEnabled: seguimientoLegacyEnabled !== false,
+  seguimientoLegacyEnabled: false,
 }).replace(/</g, "\\u003c")}</script>
 <script>
 (function () {
