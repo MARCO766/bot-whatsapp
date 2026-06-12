@@ -61,11 +61,31 @@ function normalizeTestEventCode(opciones = {}) {
 }
 
 function metaErrorMessage(error) {
+  const apiErr = error?.response?.data?.error;
+  if (apiErr && typeof apiErr === "object") {
+    return {
+      message: String(apiErr.message || error?.message || "Error Meta CAPI"),
+      code: apiErr.code ?? null,
+      error_subcode: apiErr.error_subcode ?? null,
+      error_user_title: apiErr.error_user_title ?? null,
+      error_user_msg: apiErr.error_user_msg ?? null,
+      fbtrace_id: apiErr.fbtrace_id ?? null,
+    };
+  }
+
   const data = error?.response?.data;
-  if (data?.error?.message) return String(data.error.message);
-  if (typeof data === "string") return data.slice(0, 200);
-  if (data?.message) return String(data.message);
-  return String(error?.message || "Error Meta CAPI").slice(0, 200);
+  let message = String(error?.message || "Error Meta CAPI").slice(0, 200);
+  if (typeof data === "string") message = data.slice(0, 200);
+  else if (data?.message) message = String(data.message);
+
+  return {
+    message,
+    code: null,
+    error_subcode: null,
+    error_user_title: null,
+    error_user_msg: null,
+    fbtrace_id: null,
+  };
 }
 
 async function fetchConexionMeta(usuarioId, conexionWhatsappId) {
@@ -119,7 +139,7 @@ function buildCapiEventData({ eventName, telefono, opciones = {} }) {
     event_name: eventName,
     event_time: Math.floor(Date.now() / 1000),
     event_id: eventId,
-    action_source: "business_messaging",
+    action_source: "system_generated",
     user_data,
     custom_data,
   };
@@ -137,12 +157,18 @@ function logMetaOk(ctx, resData) {
 }
 
 function logMetaError(ctx, error) {
+  const metaErr = metaErrorMessage(error);
   console.log("[META] error", {
     event_name: ctx.event_name,
     event_id: ctx.event_id,
     pixel_id_masked: ctx.pixel_id_masked,
     conexion_whatsapp_id: ctx.conexion_whatsapp_id,
-    message: metaErrorMessage(error),
+    message: metaErr.message,
+    code: metaErr.code,
+    error_subcode: metaErr.error_subcode,
+    error_user_title: metaErr.error_user_title,
+    error_user_msg: metaErr.error_user_msg,
+    fbtrace_id: metaErr.fbtrace_id,
     status: error?.response?.status ?? null,
   });
 }
@@ -231,7 +257,7 @@ async function reservarEnvioLeadMeta(
     }
     console.log("[META] error reservando Lead dedup", {
       conexion_whatsapp_id: connId,
-      message: metaErrorMessage(error),
+      message: metaErrorMessage(error).message,
     });
     return { reserved: false, degraded: false };
   }
@@ -271,6 +297,17 @@ async function enviarEventoMetaInterno(usuarioId, nombreEvento, telefono, opcion
 
 async function enviarEventoMeta(usuarioId, nombreEvento, telefono, opciones = {}) {
   const esPrueba = Boolean(opciones.esPrueba);
+  const conexionWhatsappId = normalizeConexionWhatsappId(opciones);
+  const eventId =
+    opciones.eventId ||
+    (usuarioId
+      ? buildMetaEventId(
+          nombreEvento,
+          usuarioId,
+          normalizeClienteNumero(telefono),
+          conexionWhatsappId
+        )
+      : null);
 
   try {
     if (!usuarioId) {
@@ -284,17 +321,26 @@ async function enviarEventoMeta(usuarioId, nombreEvento, telefono, opciones = {}
 
     return await enviarEventoMetaInterno(usuarioId, nombreEvento, telefono, opciones);
   } catch (error) {
+    let pixelIdMasked = null;
+    try {
+      const conexion = await fetchConexionMeta(usuarioId, conexionWhatsappId);
+      pixelIdMasked = maskPixelId(conexion?.pixel_id);
+    } catch {
+      /* logging best-effort */
+    }
     logMetaError(
       {
         event_name: nombreEvento,
-        event_id: opciones.eventId || null,
-        pixel_id_masked: null,
-        conexion_whatsapp_id: normalizeConexionWhatsappId(opciones),
+        event_id: eventId,
+        pixel_id_masked: pixelIdMasked,
+        conexion_whatsapp_id: conexionWhatsappId,
       },
       error
     );
     if (esPrueba) {
-      const err = new Error(metaErrorMessage(error) || "No se pudo enviar el evento de prueba");
+      const err = new Error(
+        metaErrorMessage(error).message || "No se pudo enviar el evento de prueba"
+      );
       err.status = error.response?.status || error.status || 502;
       throw err;
     }
@@ -305,14 +351,16 @@ async function enviarEventoMeta(usuarioId, nombreEvento, telefono, opciones = {}
  * Lead CAPI — una vez por usuario + cliente + línea. No lanza errores al caller.
  */
 async function enviarLeadMetaSiCorresponde(usuarioId, telefono, opciones = {}) {
+  const conexionWhatsappId = normalizeConexionWhatsappId(opciones);
+  const clienteNumero = normalizeClienteNumero(telefono);
+  let eventId = null;
+  let pixelIdMasked = null;
+
   try {
     if (!usuarioId) return;
-
-    const conexionWhatsappId = normalizeConexionWhatsappId(opciones);
-    const clienteNumero = normalizeClienteNumero(telefono);
     if (!clienteNumero) return;
 
-    const eventId = buildMetaEventId(
+    eventId = buildMetaEventId(
       "Lead",
       usuarioId,
       clienteNumero,
@@ -341,18 +389,29 @@ async function enviarLeadMetaSiCorresponde(usuarioId, telefono, opciones = {}) {
       });
     }
 
+    const conexion = await fetchConexionMeta(usuarioId, conexionWhatsappId);
+    pixelIdMasked = maskPixelId(conexion?.pixel_id);
+
     await enviarEventoMetaInterno(usuarioId, "Lead", clienteNumero, {
       ...opciones,
       conexionWhatsappId,
       eventId,
     });
   } catch (error) {
+    if (!pixelIdMasked && usuarioId) {
+      try {
+        const conexion = await fetchConexionMeta(usuarioId, conexionWhatsappId);
+        pixelIdMasked = maskPixelId(conexion?.pixel_id);
+      } catch {
+        /* logging best-effort */
+      }
+    }
     logMetaError(
       {
         event_name: "Lead",
-        event_id: null,
-        pixel_id_masked: null,
-        conexion_whatsapp_id: normalizeConexionWhatsappId(opciones),
+        event_id: eventId,
+        pixel_id_masked: pixelIdMasked,
+        conexion_whatsapp_id: conexionWhatsappId,
       },
       error
     );
@@ -401,22 +460,28 @@ function enviarPurchaseMetaDesdeConversion(datos) {
 }
 
 async function enviarPurchaseMetaDesdeConversionAsync(datos) {
+  const conexionWhatsappId = normalizeConexionWhatsappId({
+    conexionWhatsappId: datos?.conexionWhatsappId,
+  });
+  let eventId = null;
+  let pixelIdMasked = null;
+
   try {
     const usuarioId = datos?.usuarioId;
     const clienteNumero = normalizeClienteNumero(datos?.clienteNumero);
     if (!usuarioId || !clienteNumero) return;
 
-    const conexionWhatsappId = normalizeConexionWhatsappId({
-      conexionWhatsappId: datos.conexionWhatsappId,
-    });
     const valor = Number(datos.valor) || 0;
     const moneda = datos.moneda || "USD";
-    const eventId = buildMetaEventId(
+    eventId = buildMetaEventId(
       "Purchase",
       usuarioId,
       clienteNumero,
       conexionWhatsappId
     );
+
+    const conexion = await fetchConexionMeta(usuarioId, conexionWhatsappId);
+    pixelIdMasked = maskPixelId(conexion?.pixel_id);
 
     const custom_data = buildPurchaseCustomData({
       ...datos,
@@ -434,14 +499,20 @@ async function enviarPurchaseMetaDesdeConversionAsync(datos) {
       custom_data,
     });
   } catch (error) {
+    if (!pixelIdMasked && datos?.usuarioId) {
+      try {
+        const conexion = await fetchConexionMeta(datos.usuarioId, conexionWhatsappId);
+        pixelIdMasked = maskPixelId(conexion?.pixel_id);
+      } catch {
+        /* logging best-effort */
+      }
+    }
     logMetaError(
       {
         event_name: "Purchase",
-        event_id: null,
-        pixel_id_masked: null,
-        conexion_whatsapp_id: normalizeConexionWhatsappId({
-          conexionWhatsappId: datos?.conexionWhatsappId,
-        }),
+        event_id: eventId,
+        pixel_id_masked: pixelIdMasked,
+        conexion_whatsapp_id: conexionWhatsappId,
       },
       error
     );
