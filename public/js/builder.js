@@ -186,6 +186,7 @@ window.addEventListener("load", function(){
   crearNodoInicioAutomatico();
   resizeWorldSurface();
   initCanvasViewport();
+  initBuilderMinimapModule();
 
   const btnGuardarFlujo = document.getElementById("btnGuardarFlujo");
 
@@ -477,6 +478,7 @@ function cargarFlujoGuardado(){
   resizeWorldSurface();
   refrescarSelectsEtiquetaNodos();
   ensureDuplicateButtonsEnCanvas();
+  scheduleBuilderMinimapUpdate();
 }
 
 /* =========================
@@ -701,6 +703,7 @@ function agregarNodo(tipo){
   }
 
   hacerMovible(nodo);
+  scheduleBuilderMinimapUpdate();
 }
 
 /* =========================
@@ -769,6 +772,7 @@ function hacerMovible(nodo){
     actualizarLineas();
     actualizarPanelPosicion(nodo);
     resizeWorldSurface();
+    scheduleBuilderMinimapUpdate();
   });
 
   document.addEventListener("mouseup", function(){
@@ -1919,6 +1923,8 @@ function actualizarLineas(){
       }
     }
   });
+
+  scheduleBuilderMinimapUpdate();
 }
 
 function eliminarConexionesPorHandle(nodoId, sourceHandle) {
@@ -2358,6 +2364,8 @@ function borrarNodo(id){
     }
     cerrarPanelNodo();
   }
+
+  scheduleBuilderMinimapUpdate();
 }
 
 /* =========================
@@ -2865,6 +2873,7 @@ function resizeWorldSurface(){
 document.addEventListener("macbot:nodo-layout", function () {
   resizeWorldSurface();
   actualizarLineas();
+  scheduleBuilderMinimapUpdate();
 });
 
 function screenPointToCanvas(clientX, clientY){
@@ -2964,6 +2973,37 @@ function aplicarViewportTransform(opts){
     perfLogViewportSinLineas = true;
     console.log("[PERF] aplicarViewportTransform sin actualizarLineas en pan/zoom");
   }
+
+  scheduleBuilderMinimapUpdate();
+}
+
+function scheduleBuilderMinimapUpdate(){
+  if(window.MacBotBuilderMinimap && window.MacBotBuilderMinimap.scheduleUpdate){
+    window.MacBotBuilderMinimap.scheduleUpdate();
+  }
+}
+
+function initBuilderMinimapModule(){
+  if(!window.MacBotBuilderMinimap || !window.MacBotBuilderMinimap.init){
+    return;
+  }
+
+  window.MacBotBuilderMinimap.init({
+    getViewport: function(){
+      return {
+        panX: viewportState.panX,
+        panY: viewportState.panY,
+        zoom: viewportState.zoom,
+      };
+    },
+    getConnections: function(){
+      return conexiones;
+    },
+    getCanvas: function(){
+      return document.getElementById("canvasFlujo");
+    },
+    getWrap: getCanvasViewport,
+  });
 }
 
 function centerViewportOnContent(){

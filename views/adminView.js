@@ -764,6 +764,7 @@ ${builder ? `
 <script src="/js/builder/ia-pro.js"></script>
 <script src="/js/builder/openai-agent.js"></script>
 <script src="/js/builder/lector-pago.js"></script>
+<script src="/js/builder/minimap.js"></script>
 <script src="/js/builder.js"></script>
 ` : ""}
 
