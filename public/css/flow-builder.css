@@ -5406,26 +5406,26 @@ body:has(#builderArea.builder-theme-light) .menu-nodo-btn.active {
   z-index: 7;
   width: 220px;
   height: 140px;
-  border-radius: 12px;
+  padding: 4px;
+  border-radius: 10px;
   overflow: hidden;
   pointer-events: none;
-  background: rgba(8, 12, 20, 0.82);
-  border: 1px solid rgba(34, 211, 238, 0.28);
-  box-shadow:
-    0 10px 28px rgba(0, 0, 0, 0.38),
-    inset 0 0 0 1px rgba(57, 255, 20, 0.06);
-  backdrop-filter: blur(8px);
+  background: rgba(6, 10, 18, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(6px);
 }
 
 .builder-minimap-grid {
   position: absolute;
-  inset: 0;
-  opacity: 0.45;
+  inset: 4px;
+  opacity: 0.22;
+  border-radius: 6px;
   background-color: transparent;
   background-image:
-    linear-gradient(rgba(34, 211, 238, 0.07) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(34, 211, 238, 0.07) 1px, transparent 1px);
-  background-size: 14px 14px;
+    linear-gradient(rgba(103, 232, 249, 0.14) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(103, 232, 249, 0.14) 1px, transparent 1px);
+  background-size: 12px 12px;
   background-position: 0 0;
   pointer-events: none;
 }
@@ -5439,52 +5439,55 @@ body:has(#builderArea.builder-theme-light) .menu-nodo-btn.active {
 }
 
 .builder-minimap-edge {
-  stroke: rgba(75, 207, 250, 0.42);
-  stroke-width: 1.2;
-  vector-effect: non-scaling-stroke;
+  stroke: rgba(103, 232, 249, 0.92);
+  stroke-linecap: round;
   pointer-events: none;
 }
 
 .builder-minimap-node {
+  pointer-events: none;
+  filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.55));
+}
+
+.builder-minimap-node[data-tipo="inicio"] {
+  filter: drop-shadow(0 0 3px rgba(57, 255, 20, 0.65));
+}
+
+.builder-minimap-viewport-glow {
+  fill: none;
   stroke: rgba(57, 255, 20, 0.35);
-  stroke-width: 0.6;
-  vector-effect: non-scaling-stroke;
   pointer-events: none;
 }
 
 .builder-minimap-viewport {
-  fill: rgba(57, 255, 20, 0.06);
-  stroke: rgba(57, 255, 20, 0.72);
-  stroke-width: 1.4;
-  vector-effect: non-scaling-stroke;
+  fill: rgba(57, 255, 20, 0.14);
+  stroke: #39ff14;
   pointer-events: none;
 }
 
 #builderArea.builder-theme-light .builder-minimap {
-  background: rgba(248, 250, 252, 0.9);
-  border-color: rgba(34, 211, 238, 0.35);
-  box-shadow:
-    0 10px 28px rgba(15, 23, 42, 0.12),
-    inset 0 0 0 1px rgba(57, 255, 20, 0.08);
+  background: rgba(248, 250, 252, 0.94);
+  border-color: rgba(15, 23, 42, 0.1);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.1);
 }
 
 #builderArea.builder-theme-light .builder-minimap-grid {
   background-image:
-    linear-gradient(rgba(34, 211, 238, 0.12) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(34, 211, 238, 0.12) 1px, transparent 1px);
+    linear-gradient(rgba(14, 165, 233, 0.16) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(14, 165, 233, 0.16) 1px, transparent 1px);
 }
 
 #builderArea.builder-theme-light .builder-minimap-edge {
-  stroke: rgba(14, 165, 233, 0.45);
+  stroke: rgba(2, 132, 199, 0.88);
 }
 
-#builderArea.builder-theme-light .builder-minimap-node {
-  stroke: rgba(22, 163, 74, 0.4);
+#builderArea.builder-theme-light .builder-minimap-viewport-glow {
+  stroke: rgba(22, 163, 74, 0.28);
 }
 
 #builderArea.builder-theme-light .builder-minimap-viewport {
-  fill: rgba(34, 197, 94, 0.08);
-  stroke: rgba(22, 163, 74, 0.72);
+  fill: rgba(34, 197, 94, 0.16);
+  stroke: #16a34a;
 }
 
 @media (max-width: 1100px) {

@@ -5,9 +5,24 @@
 (function () {
   "use strict";
 
-  const MIN_NODE_W = 6;
-  const MIN_NODE_H = 4;
-  const WORLD_PAD = 56;
+  /** Contenido ocupa ~88% del área del minimapa (margen ~6% por lado). */
+  const CONTENT_FILL = 0.88;
+  const MIN_CONTENT_SPAN = 64;
+
+  const NODE_COLORS = {
+    inicio: { fill: "#39ff14", stroke: "#ecfccb" },
+    openai_agent: { fill: "#8b5cf6", stroke: "#ddd6fe" },
+    ia_pro: { fill: "#a78bfa", stroke: "#ede9fe" },
+    ia: { fill: "#38bdf8", stroke: "#e0f2fe" },
+    lector_pago: { fill: "#f59e0b", stroke: "#fef3c7" },
+    conversion: { fill: "#22c55e", stroke: "#bbf7d0" },
+    contenido: { fill: "#06b6d4", stroke: "#cffafe" },
+    seguimiento_crm_v2: { fill: "#22d3ee", stroke: "#cffafe" },
+    seguimiento: { fill: "#64748b", stroke: "#cbd5e1" },
+    remarketing_global: { fill: "#ff7a18", stroke: "#ffedd5" },
+    espera: { fill: "#475569", stroke: "#94a3b8" },
+    etiqueta: { fill: "#ec4899", stroke: "#fce7f3" },
+  };
 
   const state = {
     root: null,
@@ -15,6 +30,7 @@
     gridEl: null,
     edgesGroup: null,
     nodesGroup: null,
+    viewportGlowEl: null,
     viewportEl: null,
     rafId: 0,
     pending: false,
@@ -23,6 +39,7 @@
     getCanvas: null,
     getWrap: null,
     lastViewBox: "",
+    lastBounds: null,
   };
 
   function readNodeBounds(nodo) {
@@ -30,8 +47,8 @@
     const top = parseFloat(nodo.style.top);
     const x = Number.isFinite(left) ? left : nodo.offsetLeft;
     const y = Number.isFinite(top) ? top : nodo.offsetTop;
-    const w = Math.max(nodo.offsetWidth || MIN_NODE_W, MIN_NODE_W);
-    const h = Math.max(nodo.offsetHeight || MIN_NODE_H, MIN_NODE_H);
+    const w = Math.max(nodo.offsetWidth || 0, 1);
+    const h = Math.max(nodo.offsetHeight || 0, 1);
 
     return {
       x,
@@ -43,32 +60,55 @@
     };
   }
 
-  function computeWorldBounds(canvas, nodes) {
-    const canvasW = canvas.offsetWidth || 800;
-    const canvasH = canvas.offsetHeight || 600;
+  function expandBounds(acc, x, y, w, h) {
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+    const spanW = Math.max(w, 0);
+    const spanH = Math.max(h, 0);
 
-    let minX = 0;
-    let minY = 0;
-    let maxX = canvasW;
-    let maxY = canvasH;
+    acc.minX = Math.min(acc.minX, x);
+    acc.minY = Math.min(acc.minY, y);
+    acc.maxX = Math.max(acc.maxX, x + spanW);
+    acc.maxY = Math.max(acc.maxY, y + spanH);
+    acc.has = true;
+  }
+
+  /**
+   * Bounds del flujo (solo nodos), auto-fit ~88% y centrado.
+   * El viewport se dibuja en coords mundo; puede recortarse si está muy lejos.
+   */
+  function computeContentBounds(nodes) {
+    const acc = {
+      minX: Infinity,
+      minY: Infinity,
+      maxX: -Infinity,
+      maxY: -Infinity,
+      has: false,
+    };
 
     nodes.forEach(function (nodo) {
       const b = readNodeBounds(nodo);
-      minX = Math.min(minX, b.x);
-      minY = Math.min(minY, b.y);
-      maxX = Math.max(maxX, b.x + b.w);
-      maxY = Math.max(maxY, b.y + b.h);
+      expandBounds(acc, b.x, b.y, b.w, b.h);
     });
 
-    minX -= WORLD_PAD;
-    minY -= WORLD_PAD;
-    maxX += WORLD_PAD;
-    maxY += WORLD_PAD;
+    if (!acc.has) {
+      return { minX: 0, minY: 0, width: 320, height: 200, span: 320 };
+    }
 
-    const width = Math.max(maxX - minX, 120);
-    const height = Math.max(maxY - minY, 120);
+    const contentW = Math.max(acc.maxX - acc.minX, MIN_CONTENT_SPAN);
+    const contentH = Math.max(acc.maxY - acc.minY, MIN_CONTENT_SPAN);
+    const cx = (acc.minX + acc.maxX) / 2;
+    const cy = (acc.minY + acc.maxY) / 2;
 
-    return { minX, minY, width, height };
+    const viewW = contentW / CONTENT_FILL;
+    const viewH = contentH / CONTENT_FILL;
+
+    return {
+      minX: cx - viewW / 2,
+      minY: cy - viewH / 2,
+      width: viewW,
+      height: viewH,
+      span: Math.max(viewW, viewH),
+    };
   }
 
   function computeVisibleWorldRect(getViewport, getWrap) {
@@ -90,37 +130,52 @@
     };
   }
 
-  function nodeFillForTipo(tipo) {
-    if (tipo === "inicio") return "rgba(57, 255, 20, 0.85)";
-    if (tipo === "seguimiento_crm_v2") return "rgba(34, 211, 238, 0.72)";
-    if (tipo === "remarketing_global") return "rgba(255, 122, 24, 0.78)";
-    return "rgba(75, 207, 250, 0.62)";
+  function strokeForBounds(bounds, ratio, minPx) {
+    const span = bounds && bounds.span ? bounds.span : 400;
+    return Math.max(span * ratio, minPx);
   }
 
-  function renderMinimapNodes(nodesGroup, nodes) {
+  function nodeColorsForTipo(tipo) {
+    return NODE_COLORS[tipo] || { fill: "#4b9efa", stroke: "#bfdbfe" };
+  }
+
+  function renderMinimapNodes(nodesGroup, nodes, bounds) {
     if (!nodesGroup) return;
 
+    const minW = strokeForBounds(bounds, 0.032, 10);
+    const minH = strokeForBounds(bounds, 0.042, 7);
+    const nodeStroke = strokeForBounds(bounds, 0.004, 1.2);
     const frag = document.createDocumentFragment();
 
     nodes.forEach(function (nodo) {
       const b = readNodeBounds(nodo);
+      const w = Math.max(b.w, minW);
+      const h = Math.max(b.h, minH);
+      const x = b.x + (b.w - w) / 2;
+      const y = b.y + (b.h - h) / 2;
+      const colors = nodeColorsForTipo(nodo.dataset.tipo || "");
       const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+
       rect.setAttribute("class", "builder-minimap-node");
-      rect.setAttribute("x", String(b.x));
-      rect.setAttribute("y", String(b.y));
-      rect.setAttribute("width", String(Math.max(b.w, MIN_NODE_W)));
-      rect.setAttribute("height", String(Math.max(b.h, MIN_NODE_H)));
-      rect.setAttribute("rx", "2");
-      rect.setAttribute("fill", nodeFillForTipo(nodo.dataset.tipo || ""));
+      rect.setAttribute("data-tipo", nodo.dataset.tipo || "");
+      rect.setAttribute("x", String(x));
+      rect.setAttribute("y", String(y));
+      rect.setAttribute("width", String(w));
+      rect.setAttribute("height", String(h));
+      rect.setAttribute("rx", String(Math.min(w, h) * 0.22));
+      rect.setAttribute("fill", colors.fill);
+      rect.setAttribute("stroke", colors.stroke);
+      rect.setAttribute("stroke-width", String(nodeStroke));
       frag.appendChild(rect);
     });
 
     nodesGroup.replaceChildren(frag);
   }
 
-  function renderMinimapEdges(edgesGroup, connections, nodeById) {
+  function renderMinimapEdges(edgesGroup, connections, bounds) {
     if (!edgesGroup) return;
 
+    const edgeStroke = strokeForBounds(bounds, 0.0055, 2.2);
     const frag = document.createDocumentFragment();
 
     (connections || []).forEach(function (conn) {
@@ -138,31 +193,43 @@
       line.setAttribute("y1", String(a.cy));
       line.setAttribute("x2", String(b.cx));
       line.setAttribute("y2", String(b.cy));
+      line.setAttribute("stroke-width", String(edgeStroke));
       frag.appendChild(line);
-
-      if (nodeById) {
-        nodeById[desde.id] = true;
-        nodeById[hasta.id] = true;
-      }
     });
 
     edgesGroup.replaceChildren(frag);
   }
 
-  function renderMinimapViewport(viewportEl, visible) {
+  function renderMinimapViewport(glowEl, viewportEl, visible, bounds) {
     if (!viewportEl || !visible) return;
 
-    viewportEl.setAttribute("x", String(visible.x));
-    viewportEl.setAttribute("y", String(visible.y));
-    viewportEl.setAttribute("width", String(Math.max(visible.w, 8)));
-    viewportEl.setAttribute("height", String(Math.max(visible.h, 8)));
+    const x = visible.x;
+    const y = visible.y;
+    const w = Math.max(visible.w, strokeForBounds(bounds, 0.04, 12));
+    const h = Math.max(visible.h, strokeForBounds(bounds, 0.05, 10));
+    const strokeW = strokeForBounds(bounds, 0.011, 3.5);
+    const glowPad = strokeForBounds(bounds, 0.008, 2.5);
+
+    viewportEl.setAttribute("x", String(x));
+    viewportEl.setAttribute("y", String(y));
+    viewportEl.setAttribute("width", String(w));
+    viewportEl.setAttribute("height", String(h));
+    viewportEl.setAttribute("stroke-width", String(strokeW));
+    viewportEl.setAttribute("rx", String(strokeForBounds(bounds, 0.006, 2)));
+
+    if (glowEl) {
+      glowEl.setAttribute("x", String(x - glowPad));
+      glowEl.setAttribute("y", String(y - glowPad));
+      glowEl.setAttribute("width", String(w + glowPad * 2));
+      glowEl.setAttribute("height", String(h + glowPad * 2));
+      glowEl.setAttribute("stroke-width", String(strokeW + 1.5));
+      glowEl.setAttribute("rx", String(strokeForBounds(bounds, 0.008, 3)));
+    }
   }
 
-  function syncGridBackground(bounds) {
-    if (!state.gridEl || !bounds) return;
-
-    const step = Math.max(12, Math.round(Math.min(bounds.width, bounds.height) / 14));
-    state.gridEl.style.backgroundSize = step + "px " + step + "px";
+  function syncGridBackground() {
+    if (!state.gridEl) return;
+    state.gridEl.style.backgroundSize = "10px 10px";
   }
 
   function updateBuilderMinimap() {
@@ -172,20 +239,26 @@
     if (!canvas) return;
 
     const nodes = Array.from(canvas.querySelectorAll(".node"));
-    const bounds = computeWorldBounds(canvas, nodes);
-    const viewBox = bounds.minX + " " + bounds.minY + " " + bounds.width + " " + bounds.height;
+    const visibleRect = computeVisibleWorldRect(state.getViewport, state.getWrap);
+    const bounds = computeContentBounds(nodes);
+    const viewBox =
+      bounds.minX + " " + bounds.minY + " " + bounds.width + " " + bounds.height;
 
     if (state.lastViewBox !== viewBox) {
       state.svg.setAttribute("viewBox", viewBox);
       state.lastViewBox = viewBox;
-      syncGridBackground(bounds);
+      syncGridBackground();
     }
 
-    renderMinimapEdges(state.edgesGroup, state.getConnections && state.getConnections(), null);
-    renderMinimapNodes(state.nodesGroup, nodes);
+    state.lastBounds = bounds;
+
+    renderMinimapEdges(state.edgesGroup, state.getConnections && state.getConnections(), bounds);
+    renderMinimapNodes(state.nodesGroup, nodes, bounds);
     renderMinimapViewport(
+      state.viewportGlowEl,
       state.viewportEl,
-      computeVisibleWorldRect(state.getViewport, state.getWrap)
+      visibleRect,
+      bounds
     );
   }
 
@@ -240,11 +313,15 @@
     const nodesGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
     nodesGroup.setAttribute("class", "builder-minimap-nodes");
 
+    const viewportGlowEl = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    viewportGlowEl.setAttribute("class", "builder-minimap-viewport-glow");
+
     const viewportEl = document.createElementNS("http://www.w3.org/2000/svg", "rect");
     viewportEl.setAttribute("class", "builder-minimap-viewport");
 
     svg.appendChild(edgesGroup);
     svg.appendChild(nodesGroup);
+    svg.appendChild(viewportGlowEl);
     svg.appendChild(viewportEl);
 
     root.appendChild(gridEl);
@@ -256,6 +333,7 @@
     state.gridEl = gridEl;
     state.edgesGroup = edgesGroup;
     state.nodesGroup = nodesGroup;
+    state.viewportGlowEl = viewportGlowEl;
     state.viewportEl = viewportEl;
 
     bindMinimapPan();
