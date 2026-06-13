@@ -22,7 +22,7 @@ const SELECT_USUARIO_ADMIN =
 const LIMITES_POR_PLAN = {
   free: { max_whatsapp: 1, max_contactos: 100, max_flujos: 1 },
   starter: { max_whatsapp: 2, max_contactos: 2000, max_flujos: 10 },
-  pro: { max_whatsapp: 5, max_contactos: 10000, max_flujos: 20 },
+  pro: { max_whatsapp: 2, max_contactos: 10000, max_flujos: 20 },
   agency: { max_whatsapp: -1, max_contactos: -1, max_flujos: -1 },
 };
 

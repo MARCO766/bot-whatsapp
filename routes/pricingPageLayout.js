@@ -193,7 +193,7 @@ const PRICING_PLANS = [
     price: "$35",
     priceSub: "/mes",
     tagline: "Ideal para negocios que ya venden y quieren escalar.",
-    limits: ["1 WhatsApp", "2.000 contactos", "20 flujos"],
+    limits: ["2 WhatsApp", "2.000 contactos", "20 flujos"],
     popular: true,
     features: [
       "Todo Starter",
@@ -247,7 +247,7 @@ const PRICING_PLANS = [
 
 const COMPARE_ROWS = [
   { label: "Precio", free: "Gratis", starter: "$18/mes", pro: "$35/mes", agency: "Contactar ventas" },
-  { label: "WhatsApp", free: "1", starter: "1", pro: "1", agency: "Personalizado" },
+  { label: "WhatsApp", free: "1", starter: "1", pro: "2", agency: "Personalizado" },
   { label: "Contactos", free: "100", starter: "1.000", pro: "2.000", agency: "Personalizado" },
   { label: "Flujos", free: "1", starter: "10", pro: "20", agency: "Personalizado" },
   { label: "Agente Rápido", free: "yes", starter: "yes", pro: "yes", agency: "yes" },

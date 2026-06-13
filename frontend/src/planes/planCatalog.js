@@ -1,5 +1,12 @@
 /** Textos comerciales MacBot — solo UI (no altera límites en backend). */
 
+export const PLAN_LIMITS = {
+  free: ["1 WhatsApp", "100 contactos", "1 flujo"],
+  starter: ["1 WhatsApp", "1.000 contactos", "10 flujos"],
+  pro: ["2 WhatsApp", "2.000 contactos", "20 flujos"],
+  agency: ["WhatsApps personalizados", "Contactos personalizados", "Flujos personalizados"],
+};
+
 export const PLAN_BENEFITS = {
   free: [
     "Agente Rápido",
@@ -56,6 +63,11 @@ export const PLAN_TAGLINES = {
 export function getPlanBenefits(planKey) {
   const key = String(planKey || "free").toLowerCase();
   return PLAN_BENEFITS[key] || PLAN_BENEFITS.free;
+}
+
+export function getPlanLimits(planKey) {
+  const key = String(planKey || "free").toLowerCase();
+  return PLAN_LIMITS[key] || PLAN_LIMITS.free;
 }
 
 export function getUpgradeRecommendation(planKey) {
