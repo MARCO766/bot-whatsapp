@@ -29,7 +29,7 @@ where plan = 'starter';
 -- pro
 update public.crm_usuarios
 set
-  max_whatsapp = 1,
+  max_whatsapp = 2,
   max_contactos = 2000,
   max_flujos = 20,
   updated_plan_at = now()

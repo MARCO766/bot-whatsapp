@@ -521,7 +521,7 @@ const PLANS = [
     popular: true,
     price: "$35/mes",
     items: [
-      "1 WhatsApp · 2.000 contactos · 20 flujos",
+      "2 WhatsApp · 2.000 contactos · 20 flujos",
       "Todo Starter + IA avanzada",
       "Dashboard ventas · Versionado flujos",
       "Soporte prioritario",
