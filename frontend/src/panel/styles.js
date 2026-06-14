@@ -6,12 +6,6 @@ export const panelStyles = `
 
 .panelDash .panelOnboardingCheck {
   margin-bottom: 18px;
-  animation: panelObIn .4s ease both;
-}
-
-@keyframes panelObIn {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
 }
 
 .panelDash .eyebrow {
@@ -37,7 +31,6 @@ export const panelStyles = `
   align-items: center;
   justify-content: space-between;
   gap: 20px;
-  animation: panelFadeUp .35s ease both;
 }
 
 .panelDash .heroGlow {
@@ -47,9 +40,11 @@ export const panelStyles = `
   right: -120px;
   top: -180px;
   border-radius: 50%;
-  background: conic-gradient(from 200deg, #22c55e, #06b6d4, #8b5cf6, #22c55e);
-  filter: blur(52px);
-  opacity: .16;
+  background: radial-gradient(circle at 40% 35%, rgba(34, 197, 94, .26), rgba(6, 182, 212, .18) 42%, rgba(139, 92, 246, .12) 68%, transparent 72%);
+  filter: blur(16px);
+  opacity: .18;
+  pointer-events: none;
+  animation: none;
 }
 
 .panelDash .hero h1 {
@@ -117,7 +112,6 @@ export const panelStyles = `
   display: flex;
   align-items: center;
   gap: 10px;
-  animation: panelFadeUp .35s ease both;
 }
 
 .panelDash .statusChip.warn {
@@ -134,12 +128,12 @@ export const panelStyles = `
 
 .panelDash .statusDot.ok {
   background: #22c55e;
-  box-shadow: 0 0 12px rgba(34, 197, 94, .6);
+  box-shadow: 0 0 6px rgba(34, 197, 94, .45);
 }
 
 .panelDash .statusDot.bad {
   background: #f97316;
-  box-shadow: 0 0 12px rgba(249, 115, 22, .5);
+  box-shadow: 0 0 6px rgba(249, 115, 22, .4);
 }
 
 .panelDash .statusChip span {
@@ -170,18 +164,18 @@ export const panelStyles = `
   background: rgba(15, 23, 42, .68);
   position: relative;
   overflow: hidden;
-  animation: panelFadeUp .4s ease both;
 }
 
 .panelDash .kpiCard::after {
   content: "";
   position: absolute;
-  width: 120px;
-  height: 120px;
-  right: -50px;
-  top: -50px;
+  width: 100px;
+  height: 100px;
+  right: -44px;
+  top: -44px;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(34, 211, 238, .12), transparent 70%);
+  background: radial-gradient(circle, rgba(34, 211, 238, .08), transparent 70%);
+  pointer-events: none;
 }
 
 .panelDash .kpiCard span {
@@ -217,8 +211,7 @@ export const panelStyles = `
   padding: 20px;
   border: 1px solid rgba(148, 163, 184, .14);
   background: rgba(15, 23, 42, .74);
-  box-shadow: 0 22px 70px rgba(0,0,0,.16);
-  animation: panelFadeUp .42s ease both;
+  box-shadow: 0 10px 28px rgba(0,0,0,.14);
 }
 
 .panelDash .card h2 {
@@ -257,10 +250,10 @@ export const panelStyles = `
   flex-shrink: 0;
 }
 
-.panelDash .feedDot.green { background: #22c55e; box-shadow: 0 0 10px #22c55e; }
-.panelDash .feedDot.cyan { background: #06b6d4; box-shadow: 0 0 10px #06b6d4; }
-.panelDash .feedDot.purple { background: #a855f7; box-shadow: 0 0 10px #a855f7; }
-.panelDash .feedDot.orange { background: #f97316; box-shadow: 0 0 10px #f97316; }
+.panelDash .feedDot.green { background: #22c55e; box-shadow: 0 0 6px rgba(34, 197, 94, .5); }
+.panelDash .feedDot.cyan { background: #06b6d4; box-shadow: 0 0 6px rgba(6, 182, 212, .5); }
+.panelDash .feedDot.purple { background: #a855f7; box-shadow: 0 0 6px rgba(168, 85, 247, .5); }
+.panelDash .feedDot.orange { background: #f97316; box-shadow: 0 0 6px rgba(249, 115, 22, .5); }
 
 .panelDash .feedItem strong {
   display: block;
@@ -359,13 +352,12 @@ export const panelStyles = `
   padding: 16px 18px;
   font-weight: 900;
   transition: .2s ease;
-  animation: panelFadeUp .45s ease both;
 }
 
 .panelDash .actionBtn:hover {
   transform: translateY(-2px);
   border-color: rgba(34, 211, 238, .35);
-  box-shadow: 0 16px 40px rgba(6, 182, 212, .12);
+  box-shadow: 0 8px 24px rgba(6, 182, 212, .1);
 }
 
 .panelDash .actionBtn span {
@@ -419,25 +411,14 @@ export const panelStyles = `
 
 .panelDash .skel {
   border-radius: 12px;
-  background: linear-gradient(90deg, rgba(255,255,255,.06), rgba(255,255,255,.12), rgba(255,255,255,.06));
-  background-size: 200% 100%;
-  animation: panelShimmer 1.2s ease infinite;
+  background: rgba(255,255,255,.07);
+  animation: none;
 }
 
 .panelDash .skel.h40 { height: 40px; }
 .panelDash .skel.h80 { height: 80px; }
 .panelDash .skel.h120 { height: 120px; }
 .panelDash .skel.h200 { height: 200px; }
-
-@keyframes panelFadeUp {
-  from { opacity: 0; transform: translateY(12px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes panelShimmer {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
-}
 
 @media (max-width: 1100px) {
   .panelDash .statusRow,
