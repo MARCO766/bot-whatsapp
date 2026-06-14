@@ -1,5 +1,9 @@
 export const miPlanStyles = `
 .miPlanWrap { animation: miPlanFade .35s ease both; }
+.miPlanWrap .skel {
+  background: rgba(30, 41, 59, .85);
+  animation: none;
+}
 @keyframes miPlanFade {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
@@ -34,14 +38,11 @@ export const miPlanStyles = `
   right: -100px;
   top: -140px;
   border-radius: 50%;
-  background: conic-gradient(from 210deg, #22c55e, #06b6d4, #8b5cf6, #f59e0b, #22c55e);
-  filter: blur(48px);
-  opacity: .16;
+  background: radial-gradient(circle at 40% 35%, rgba(34, 197, 94, .28), rgba(6, 182, 212, .2) 42%, rgba(139, 92, 246, .14) 68%, transparent 72%);
+  filter: blur(16px);
+  opacity: .2;
   pointer-events: none;
-  animation: miPlanGlowSpin 12s linear infinite;
-}
-@keyframes miPlanGlowSpin {
-  to { transform: rotate(360deg); }
+  animation: none;
 }
 
 .miPlanHeroText { position: relative; z-index: 1; }
@@ -399,11 +400,12 @@ export const upgradeLimitModalStyles = `
   position: absolute;
   inset: -40px;
   border-radius: 50%;
-  background: conic-gradient(from 200deg, #22c55e, #06b6d4, #8b5cf6, #22c55e);
-  filter: blur(56px);
-  opacity: .12;
+  background: radial-gradient(circle at 50% 45%, rgba(34, 197, 94, .22), rgba(6, 182, 212, .16) 40%, rgba(139, 92, 246, .1) 65%, transparent 72%);
+  filter: blur(16px);
+  opacity: .14;
   pointer-events: none;
   z-index: -1;
+  animation: none;
 }
 
 .upgradeLimitEyebrow {

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { useMiPlan } from "./useMiPlan";
 import { miPlanStyles } from "./styles";
 import { goToPricing } from "./goToPricing";
@@ -51,29 +51,9 @@ function colorPorcentaje(pct) {
   return "ok";
 }
 
-function AnimatedCounter({ value, duration = 700 }) {
-  const target = Math.max(0, Number(value) || 0);
-  const [display, setDisplay] = useState(0);
-
-  useEffect(() => {
-    let raf = 0;
-    const start = performance.now();
-    const from = display;
-    const delta = target - from;
-
-    function tick(now) {
-      const t = Math.min(1, (now - start) / duration);
-      const eased = 1 - Math.pow(1 - t, 3);
-      setDisplay(Math.round(from + delta * eased));
-      if (t < 1) raf = requestAnimationFrame(tick);
-    }
-
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [target]);
-
-  return <>{display.toLocaleString("es-BO")}</>;
+function formatUsoCount(value) {
+  const n = Math.max(0, Number(value) || 0);
+  return n.toLocaleString("es-BO");
 }
 
 function PlanBadge({ nombre }) {
@@ -235,23 +215,17 @@ export default function MiPlanSection() {
       <div className="miPlanQuickGrid">
         <article className="miPlanQuickCard">
           <span className="miPlanQuickIcon">📱</span>
-          <strong>
-            <AnimatedCounter value={uso.whatsapp_usados} />
-          </strong>
+          <strong>{formatUsoCount(uso.whatsapp_usados)}</strong>
           <span className="label">WhatsApps conectados</span>
         </article>
         <article className="miPlanQuickCard">
           <span className="miPlanQuickIcon">👤</span>
-          <strong>
-            <AnimatedCounter value={uso.contactos_usados} />
-          </strong>
+          <strong>{formatUsoCount(uso.contactos_usados)}</strong>
           <span className="label">Contactos CRM</span>
         </article>
         <article className="miPlanQuickCard">
           <span className="miPlanQuickIcon">🔄</span>
-          <strong>
-            <AnimatedCounter value={uso.flujos_usados} />
-          </strong>
+          <strong>{formatUsoCount(uso.flujos_usados)}</strong>
           <span className="label">Flujos creados</span>
         </article>
       </div>
