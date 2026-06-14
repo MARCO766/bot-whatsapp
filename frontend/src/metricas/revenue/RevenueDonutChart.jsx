@@ -2,7 +2,6 @@ import React, { useId, useMemo } from "react";
 import { formatNum, formatRevenueMoney, formatRevenuePct } from "../format";
 
 const COLOR_FLUJO = "#5eead4";
-const COLOR_FLUJO_GLOW = "rgba(45, 212, 191, 0.28)";
 const COLOR_RM = "#a78bfa";
 const COLOR_RM_GLOW = "rgba(167, 139, 250, 0.26)";
 
@@ -194,9 +193,7 @@ export default function RevenueDonutChart({ kpis, moneda = "BOB", loading = fals
 
       <div className="revenueDonutChart__body">
         <div className="revenueDonutChart__chartCol">
-          <div className="revenueDonutChart__chartWrap">
-            <div className="revenueDonutChart__glow revenueDonutChart__glow--flujo" />
-            <div className="revenueDonutChart__glow revenueDonutChart__glow--rm" />
+            <div className="revenueDonutChart__chartWrap">
             <DonutSvg
               flujoArc={flujoArc}
               rmArc={rmArc}
@@ -238,8 +235,6 @@ export default function RevenueDonutChart({ kpis, moneda = "BOB", loading = fals
   );
 }
 
-const DONUT_DRAW_FROM = 2 * Math.PI * ((SIZE - STROKE) / 2);
-
 const donutStyles = `
 .revenueDonutChart {
   margin-bottom: 10px;
@@ -250,28 +245,12 @@ const donutStyles = `
   box-shadow:
     0 0 0 1px rgba(255,255,255,.02) inset,
     0 10px 28px rgba(0,0,0,.2);
-  animation: revenueDonutFadeUp .45s ease both;
-}
-@keyframes revenueDonutFadeUp {
-  from { opacity: 0; transform: translateY(5px); }
-  to { opacity: 1; transform: translateY(0); }
 }
 .revenueDonutChart__skel {
   min-height: 168px;
   max-width: 420px;
   border-radius: 12px;
-  background: linear-gradient(
-    90deg,
-    rgba(255,255,255,.04) 0%,
-    rgba(255,255,255,.08) 50%,
-    rgba(255,255,255,.04) 100%
-  );
-  background-size: 200% 100%;
-  animation: revenueDonutShimmer 1.2s ease-in-out infinite;
-}
-@keyframes revenueDonutShimmer {
-  0% { background-position: 100% 0; }
-  100% { background-position: -100% 0; }
+  background: rgba(255,255,255,.06);
 }
 .revenueDonutChart__head {
   display: flex;
@@ -327,25 +306,7 @@ const donutStyles = `
   justify-content: center;
 }
 .revenueDonutChart__glow {
-  position: absolute;
-  border-radius: 50%;
-  pointer-events: none;
-  opacity: 0.22;
-  filter: blur(22px);
-}
-.revenueDonutChart__glow--flujo {
-  width: 58%;
-  height: 58%;
-  left: 6%;
-  top: 16%;
-  background: ${COLOR_FLUJO_GLOW};
-}
-.revenueDonutChart__glow--rm {
-  width: 50%;
-  height: 50%;
-  right: 4%;
-  bottom: 10%;
-  background: ${COLOR_RM_GLOW};
+  display: none;
 }
 .revenueDonutChart__svg {
   display: block;
@@ -358,21 +319,11 @@ const donutStyles = `
   stroke: rgba(30, 41, 59, 0.9);
 }
 .revenueDonutChart__ring {
-  transition: stroke-dashoffset 0.95s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: none;
 }
-.revenueDonutChart--ready .revenueDonutChart__ring--flujo {
-  animation: revenueDonutDrawFlujo 0.95s cubic-bezier(0.22, 1, 0.36, 1) both;
-}
+.revenueDonutChart--ready .revenueDonutChart__ring--flujo,
 .revenueDonutChart--ready .revenueDonutChart__ring--rm {
-  animation: revenueDonutDrawRm 0.95s cubic-bezier(0.22, 1, 0.36, 1) 0.08s both;
-}
-@keyframes revenueDonutDrawFlujo {
-  from { stroke-dashoffset: ${DONUT_DRAW_FROM}; opacity: 0.45; }
-  to { stroke-dashoffset: 0; opacity: 1; }
-}
-@keyframes revenueDonutDrawRm {
-  from { opacity: 0.35; }
-  to { opacity: 1; }
+  animation: none;
 }
 .revenueDonutChart__center {
   position: absolute;

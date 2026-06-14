@@ -205,11 +205,6 @@ const chartStyles = `
   box-shadow:
     0 0 0 1px rgba(255,255,255,.02) inset,
     0 6px 20px rgba(0,0,0,.16);
-  animation: revTipoCmpFadeUp .38s ease both;
-}
-@keyframes revTipoCmpFadeUp {
-  from { opacity: 0; transform: translateY(3px); }
-  to { opacity: 1; transform: translateY(0); }
 }
 .revTipoCmp__head {
   margin-bottom: 7px;
@@ -235,7 +230,7 @@ const chartStyles = `
   gap: 7px;
 }
 .revTipoCmp--ready .revTipoCmp__card {
-  animation: revTipoCmpFadeUp .34s ease both;
+  animation: none;
 }
 .revTipoCmp__card {
   padding: 8px 9px 7px;
@@ -337,8 +332,7 @@ const chartStyles = `
 .revTipoCmp__barFill {
   height: 100%;
   border-radius: 8px;
-  width: 0;
-  transition: width 0.75s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: none;
 }
 .revTipoCmp__barFill--flujo {
   background: linear-gradient(90deg, #34d399, ${COLOR_FLUJO});
@@ -353,28 +347,12 @@ const chartStyles = `
   box-shadow: none;
 }
 .revTipoCmp__barFill--ready {
-  animation: revTipoCmpBarPop 0.75s cubic-bezier(0.22, 1, 0.36, 1) both;
-  animation-delay: var(--bar-delay, 0ms);
-}
-@keyframes revTipoCmpBarPop {
-  from { opacity: 0.45; transform: scaleX(0.92); transform-origin: left; }
-  to { opacity: 1; transform: scaleX(1); }
+  animation: none;
 }
 .revTipoCmp__grid--skel .revTipoCmp__skelCard {
   min-height: 78px;
   border-radius: 12px;
-  background: linear-gradient(
-    90deg,
-    rgba(255,255,255,.04) 0%,
-    rgba(255,255,255,.08) 50%,
-    rgba(255,255,255,.04) 100%
-  );
-  background-size: 200% 100%;
-  animation: revTipoCmpShimmer 1.15s ease-in-out infinite;
-}
-@keyframes revTipoCmpShimmer {
-  0% { background-position: 100% 0; }
-  100% { background-position: -100% 0; }
+  background: rgba(255,255,255,.06);
 }
 @media (max-width: 560px) {
   .revTipoCmp__grid {

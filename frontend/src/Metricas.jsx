@@ -121,7 +121,7 @@ export default function Metricas() {
     etiquetaTabConexion,
   } = useMetricasConexion();
   const { resumen, funnel, series, flujos, diagnostico, heatmap, flujosLista, loading, error, reload } =
-    useMetricas(periodo, flujoId, conexionSeleccionadaId, conexionesLoading);
+    useMetricas(periodo, flujoId, conexionSeleccionadaId, conexionesLoading, UI_OCULTAR_FASE1);
   const {
     status: metaAdsStatus,
     loading: metaAdsStatusLoading,
@@ -359,13 +359,11 @@ export default function Metricas() {
           ? Array.from({ length: 4 }).map((_, i) => (
               <div key={i} className="mainCard skelCard" />
             ))
-          : mainCards.map((card, i) => (
+          : mainCards.map((card) => (
               <div
                 className={`mainCard ${card.color}`}
                 key={card.titulo}
-                style={{ animationDelay: `${i * 0.05}s` }}
               >
-                <div className="shine" />
                 <div className="cardTop">
                   <div className="icon">{card.icono}</div>
                   <TrendBadge value={card.tendencia} />
@@ -660,14 +658,13 @@ const styles = `
 .controlActions { display: flex; gap: 10px; align-items: center; }
 .refreshBtn { height: 42px; border: 0; border-radius: 14px; padding: 0 16px; background: rgba(255,255,255,.1); color: white; font-weight: 900; cursor: pointer; }
 .liveBadge { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 14px; background: rgba(255,255,255,.06); }
-.liveDot { width: 10px; height: 10px; border-radius: 50%; background: #22c55e; box-shadow: 0 0 10px #22c55e; animation: pulse 1.5s infinite; }
+.liveDot { width: 10px; height: 10px; border-radius: 50%; background: #22c55e; box-shadow: 0 0 8px rgba(34,197,94,.55); }
 .mainGrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 14px; }
 .mainCard { min-height: 148px; border-radius: 24px; padding: 18px; position: relative; overflow: hidden; border: 1px solid rgba(148,163,184,.14); background: rgba(15,23,42,.72); animation: fadeUp .35s ease both; }
 .mainCard.green { background: linear-gradient(135deg, rgba(34,197,94,.24), rgba(15,23,42,.78)); }
 .mainCard.cyan { background: linear-gradient(135deg, rgba(6,182,212,.24), rgba(15,23,42,.78)); }
 .mainCard.purple { background: linear-gradient(135deg, rgba(168,85,247,.24), rgba(15,23,42,.78)); }
 .mainCard.orange { background: linear-gradient(135deg, rgba(249,115,22,.24), rgba(15,23,42,.78)); }
-.shine { position: absolute; inset: -80px; background: linear-gradient(120deg, transparent 35%, rgba(255,255,255,.08), transparent 65%); animation: shine 5s infinite; }
 .cardTop { display: flex; justify-content: space-between; align-items: center; position: relative; }
 .icon { width: 44px; height: 44px; border-radius: 14px; background: rgba(255,255,255,.09); display: flex; align-items: center; justify-content: center; font-size: 20px; }
 .trend { font-size: 11px; font-weight: 900; padding: 5px 8px; border-radius: 999px; }
@@ -820,9 +817,7 @@ const styles = `
 .emptyBlock span { font-size: 28px; display: block; margin-bottom: 8px; }
 .emptyBlock strong { color: #e2e8f0; display: block; margin-bottom: 6px; }
 .skel, .skelCard, .perfSkel, .funnelSkel, .chartSkel, .heatmapSkel, .metaSkel, .segSkel, .diagSkel, .recSkel, .flowSkel, .scoreSkel {
-  background: linear-gradient(90deg, rgba(255,255,255,.04) 25%, rgba(255,255,255,.1) 50%, rgba(255,255,255,.04) 75%);
-  background-size: 200% 100%;
-  animation: shimmer 1.2s infinite;
+  background: rgba(255,255,255,.06);
   border-radius: 16px;
 }
 .skelCard { min-height: 160px; }
@@ -837,10 +832,7 @@ const styles = `
 .errorPanel { margin: 40px auto; max-width: 480px; padding: 32px; text-align: center; border-radius: 24px; background: rgba(15,23,42,.9); border: 1px solid rgba(239,68,68,.3); }
 .errorPanel button { margin-top: 16px; height: 44px; padding: 0 20px; border: 0; border-radius: 14px; background: linear-gradient(135deg, #22c55e, #06b6d4); color: #031827; font-weight: 900; cursor: pointer; }
 @keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
-@keyframes shine { 0% { transform: translateX(-70%); } 45%,100% { transform: translateX(70%); } }
 @keyframes growBar { from { width: 0; } }
-@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
-@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .5; } }
 @media (max-width: 1200px) {
   .mainGrid { grid-template-columns: repeat(2, 1fr); }
   .dashBottom { grid-template-columns: 1fr; }

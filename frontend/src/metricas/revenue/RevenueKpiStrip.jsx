@@ -55,13 +55,11 @@ export default function RevenueKpiStrip({ kpis, moneda = "BOB", loading = false 
 
   return (
     <div className="revenueKpiGrid mainGrid">
-      {KPI_ITEMS.map((item, i) => (
+      {KPI_ITEMS.map((item) => (
         <div
           key={item.key}
           className={`mainCard ${item.color}`}
-          style={{ animationDelay: `${i * 0.05}s` }}
         >
-          <div className="shine" />
           <div className="cardTop">
             <div className="icon">{item.icono}</div>
             <strong className="revenueKpiTitle">{item.titulo}</strong>

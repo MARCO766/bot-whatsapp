@@ -19,7 +19,8 @@ export function useMetricas(
   periodoLabel = "7 días",
   flujoId = "",
   conexionWhatsappId = null,
-  conexionesLoading = false
+  conexionesLoading = false,
+  uiOcultar = {}
 ) {
   const [resumen, setResumen] = useState(null);
   const [funnel, setFunnel] = useState(null);
@@ -44,11 +45,11 @@ export function useMetricas(
     try {
       const [r, f, s, fl, d, h, lista] = await Promise.all([
         fetchMetricasResumen(params),
-        fetchMetricasFunnel(params),
+        uiOcultar.embudoReal ? Promise.resolve(null) : fetchMetricasFunnel(params),
         fetchMetricasSeries(params),
-        fetchMetricasFlujos(params),
+        uiOcultar.metricasPorFlujo ? Promise.resolve(null) : fetchMetricasFlujos(params),
         fetchMetricasDiagnostico(params),
-        fetchMetricasHeatmap(params),
+        uiOcultar.heatmapHorario ? Promise.resolve(null) : fetchMetricasHeatmap(params),
         fetchFlujosLista(),
       ]);
       setResumen(r);
@@ -71,7 +72,7 @@ export function useMetricas(
     } finally {
       setLoading(false);
     }
-  }, [periodoLabel, flujoId, conexionWhatsappId, conexionesLoading]);
+  }, [periodoLabel, flujoId, conexionWhatsappId, conexionesLoading, uiOcultar]);
 
   useEffect(() => {
     load();
