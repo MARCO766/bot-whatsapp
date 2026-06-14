@@ -446,10 +446,10 @@ input {
 .orb {
   position: fixed;
   border-radius: 999px;
-  filter: blur(70px);
-  opacity: .34;
+  filter: blur(18px);
+  opacity: .35;
   pointer-events: none;
-  animation: orbMove 12s ease-in-out infinite;
+  animation: none;
   z-index: 0;
 }
 
@@ -467,7 +467,6 @@ input {
   background: #a855f7;
   right: -120px;
   bottom: -120px;
-  animation-delay: 2s;
 }
 
 .orbThree {
@@ -477,7 +476,6 @@ input {
   bottom: 22%;
   left: 48%;
   opacity: .18;
-  animation-delay: 4s;
 }
 
 .sidebar {
@@ -1136,15 +1134,6 @@ nav {
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
-  }
-}
-
-@keyframes orbMove {
-  0%, 100% {
-    transform: translate(0,0) scale(1);
-  }
-  50% {
-    transform: translate(24px,-18px) scale(1.04);
   }
 }
 
