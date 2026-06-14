@@ -486,8 +486,9 @@ input {
   padding: 18px 14px;
   display: flex;
   flex-direction: column;
-  background: rgba(7, 12, 29, .78);
-  backdrop-filter: blur(22px);
+  background: rgba(15, 23, 42, 0.96);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   border-right: 1px solid rgba(148, 163, 184, .14);
   box-shadow: 24px 0 80px rgba(0,0,0,.28);
   transition: width .28s ease;
@@ -822,9 +823,10 @@ nav {
   min-height: 86px;
   border-radius: 30px;
   padding: 16px 18px;
-  background: rgba(15, 23, 42, .72);
+  background: rgba(15, 23, 42, 0.94);
   border: 1px solid rgba(148, 163, 184, .14);
-  backdrop-filter: blur(18px);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   display: grid;
   grid-template-columns: auto 1fr auto;
   align-items: center;
