@@ -1997,11 +1997,89 @@ async function procesarMensajeEntrante(
     return true;
   }
 
-  if (opts?.messageType === "image") {
+  const conexionWhatsappIdEntrante = opts.conexionWhatsappId || null;
+  const messageTypeEntrante = opts.messageType || null;
+  const esMediaComprobanteEntrante =
+    messageTypeEntrante === "image" || messageTypeEntrante === "document";
+  const resumeOptsEntrante = {
+    messageType: messageTypeEntrante,
+    imageUrl: opts.imageUrl || null,
+    imageMetaId: opts.imageMetaId || null,
+    documentMetaId: opts.documentMetaId || null,
+    metaToken: opts.metaToken || null,
+    mimeType: opts.mimeType || null,
+    filename: opts.filename || null,
+  };
+  const sesionIAPendiente = conexionWhatsappIdEntrante
+    ? obtenerSesionIAPendiente(usuarioId, conexionWhatsappIdEntrante, numero)
+    : null;
+  const tieneSesionOpenAIPendiente = !!(
+    sesionIAPendiente?.flujoId && sesionIAPendiente?.nodoId
+  );
+
+  if (esMediaComprobanteEntrante && tieneSesionOpenAIPendiente) {
+    console.log("[PAYMENT_READER_PRIORITY] media entrante, intentando OpenAI antes que V1", {
+      numero,
+      usuarioId,
+      conexionWhatsappId: conexionWhatsappIdEntrante,
+      messageType: messageTypeEntrante,
+      nodoId: sesionIAPendiente.nodoId,
+      flujoId: sesionIAPendiente.flujoId,
+    });
+
+    const reanudadoOpenAIPriority = await reanudarFlujoIAPendiente(
+      numero,
+      texto,
+      usuarioId,
+      conexionWhatsappIdEntrante,
+      resumeOptsEntrante
+    );
+    if (reanudadoOpenAIPriority) {
+      console.log("[PAYMENT_READER_PRIORITY] OpenAI reanudó, saltando V1");
+      console.log("[FLUJO] reanudado IA/OpenAI pendiente OK");
+      return true;
+    }
+  }
+
+  const mediaVaAOcrOpenAI = esMediaComprobanteEntrante && tieneSesionOpenAIPendiente;
+  if (
+    !mediaVaAOcrOpenAI &&
+    absorberMensajePaymentReaderValidating({
+      usuarioId,
+      conexionWhatsappId: conexionWhatsappIdEntrante,
+      numero,
+      messageType: messageTypeEntrante,
+      texto,
+    })
+  ) {
+    return true;
+  }
+
+  const reanudado = await reanudarFlujoIAPendiente(
+    numero,
+    texto,
+    usuarioId,
+    conexionWhatsappIdEntrante,
+    resumeOptsEntrante
+  );
+  if (reanudado) {
+    console.log("[FLUJO] reanudado IA/OpenAI pendiente OK");
+    return true;
+  }
+
+  if (messageTypeEntrante === "image") {
+    if (!tieneSesionOpenAIPendiente) {
+      console.log("[PAYMENT_READER_PRIORITY] sin sesión OpenAI, usando V1 legacy", {
+        numero,
+        usuarioId,
+        conexionWhatsappId: conexionWhatsappIdEntrante,
+      });
+    }
+
     const lecturaPago = await procesarImagenLectorPago({
       usuarioId,
       clienteNumero: numero,
-      conexionWhatsappId: opts.conexionWhatsappId || null,
+      conexionWhatsappId: conexionWhatsappIdEntrante,
       imageMetaId: opts.imageMetaId || null,
       metaToken: opts.metaToken || null,
       imagePublicUrl: opts.imageUrl || null,
@@ -2010,7 +2088,7 @@ async function procesarMensajeEntrante(
     if (lecturaPago?.handled) {
       if (!lecturaPago.enviadoPorServicio && lecturaPago.mensaje) {
         const conexionEnvio =
-          lecturaPago.conexionWhatsappId || opts.conexionWhatsappId || null;
+          lecturaPago.conexionWhatsappId || conexionWhatsappIdEntrante;
         const opEnvio = { usuarioId };
         if (conexionEnvio) {
           opEnvio.conexionWhatsappId = conexionEnvio;
@@ -2024,45 +2102,13 @@ async function procesarMensajeEntrante(
           usuarioId,
           clienteNumero: numero,
           conexionWhatsappId:
-            lecturaPago.conexionWhatsappId || opts.conexionWhatsappId || null,
+            lecturaPago.conexionWhatsappId || conexionWhatsappIdEntrante,
         });
       } else if (lecturaPago.valido && lecturaPago.continuarFlujo) {
         await continuarFlujoDesdeLectorPago(numero, usuarioId, lecturaPago);
       }
       return true;
     }
-  }
-
-  if (
-    absorberMensajePaymentReaderValidating({
-      usuarioId,
-      conexionWhatsappId: opts.conexionWhatsappId || null,
-      numero,
-      messageType: opts.messageType || null,
-      texto,
-    })
-  ) {
-    return true;
-  }
-
-  const reanudado = await reanudarFlujoIAPendiente(
-    numero,
-    texto,
-    usuarioId,
-    opts.conexionWhatsappId || null,
-    {
-      messageType: opts.messageType || null,
-      imageUrl: opts.imageUrl || null,
-      imageMetaId: opts.imageMetaId || null,
-      documentMetaId: opts.documentMetaId || null,
-      metaToken: opts.metaToken || null,
-      mimeType: opts.mimeType || null,
-      filename: opts.filename || null,
-    }
-  );
-  if (reanudado) {
-    console.log("[FLUJO] reanudado IA/OpenAI pendiente OK");
-    return true;
   }
 
   const conexionEntrante = opts.conexionWhatsappId || null;
