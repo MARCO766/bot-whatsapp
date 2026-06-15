@@ -11,7 +11,10 @@ const {
   normalizarCaminosOpenAI,
   esCaminoPaymentReader,
 } = require("./openaiCaminoMatcher");
-const { validarComprobanteOpenAI } = require("./openaiPaymentReaderService");
+const {
+  extraerLecturaComprobanteOpenAI,
+  evaluarRutasPaymentReaderContraLectura,
+} = require("./openaiPaymentReaderService");
 const { resolverShortConfirmation } = require("./openaiShortConfirmation");
 const {
   sanitizarUnicodeRoto,
@@ -1434,6 +1437,26 @@ async function enviarOpenAIConPipelineManual(
   return row?.whatsapp_message_id || null;
 }
 
+function respuestaPaymentReaderInvalido(validacion, lectura = null) {
+  const replyInvalido =
+    validacion.motivo === "formato_no_soportado"
+      ? MSG_ARCHIVO_NO_LEGIBLE
+      : MSG_COMPROBANTE_INVALIDO;
+
+  return {
+    ok: true,
+    action: "reply",
+    intent: "payment_reader_invalido",
+    score: 0,
+    routeId: null,
+    reply: replyInvalido,
+    source: "openai-payment-reader",
+    paymentReaderEsperando: true,
+    paymentReaderMotivo: validacion.motivo || null,
+    paymentReaderLectura: lectura,
+  };
+}
+
 async function resolverPaymentReaderOpenAI(
   config,
   mediaEntrante,
@@ -1445,45 +1468,74 @@ async function resolverPaymentReaderOpenAI(
   const rutasPaymentReader = rutasPaymentReaderActivas(config);
   if (!rutasPaymentReader.length) return null;
 
-  const route = rutasPaymentReader[0];
   const { usuarioId, conexionWhatsappId, numero } = chatScope;
 
   logPaymentReaderMedia(opts);
 
   console.log(
+    "[OPENAI_PAYMENT_READER_ROUTES]",
+    JSON.stringify({
+      total: rutasPaymentReader.length,
+      routes: rutasPaymentReader.map((r) => ({
+        id: r.id,
+        nombre: r.nombre || null,
+        payment: r.payment || null,
+      })),
+    })
+  );
+
+  console.log(
     "[OPENAI_PAYMENT_READER_START]",
     JSON.stringify({
-      routeId: route.id,
-      routeNombre: route.nombre,
+      totalRutas: rutasPaymentReader.length,
       messageType: opts.messageType || null,
       imageUrl: String(opts.imageUrl).slice(0, 120),
     })
   );
 
-  let validacion;
+  let ocrResult;
   try {
-    validacion = await validarComprobanteOpenAI({
+    ocrResult = await extraerLecturaComprobanteOpenAI({
       imageUrl: opts.imageUrl,
-      imageMetaId: opts.imageMetaId || mediaEntrante?.imageMetaId || null,
-      documentMetaId: opts.documentMetaId || mediaEntrante?.documentMetaId || null,
-      metaToken: opts.metaToken || mediaEntrante?.metaToken || null,
       mimeType: opts.mimeType || mediaEntrante?.mimeType || null,
       filename: opts.filename || mediaEntrante?.filename || null,
       messageType: opts.messageType || mediaEntrante?.messageType || null,
-      payment: route.payment,
     });
   } catch (error) {
     setPaymentReaderStatus(usuarioId, conexionWhatsappId, numero, "waiting");
     throw error;
   }
 
-  if (validacion.valido) {
+  if (!ocrResult.valido || !ocrResult.lectura) {
+    console.log(
+      "[OPENAI_PAYMENT_READER_NO_MATCH]",
+      JSON.stringify({
+        motivo: ocrResult.motivo || "ocr_invalido",
+        lectura: ocrResult.lectura || null,
+        rutasEvaluadas: 0,
+      })
+    );
+    setPaymentReaderStatus(usuarioId, conexionWhatsappId, numero, "waiting");
+    return respuestaPaymentReaderInvalido(ocrResult, ocrResult.lectura || null);
+  }
+
+  const ganadora = evaluarRutasPaymentReaderContraLectura(
+    rutasPaymentReader,
+    ocrResult.lectura
+  );
+
+  if (ganadora) {
+    const route = ganadora.route;
     setPaymentReaderStatus(usuarioId, conexionWhatsappId, numero, null);
     console.log(
-      "[OPENAI_PAYMENT_READER_VALID]",
+      "[OPENAI_PAYMENT_READER_MATCH]",
       JSON.stringify({
         routeId: route.id,
-        lectura: validacion.lectura,
+        routeNombre: route.nombre || null,
+        orden: ganadora.orden,
+        especificidad: ganadora.especificidad,
+        lectura: ocrResult.lectura,
+        candidatos: rutasPaymentReader.length,
       })
     );
     console.log(
@@ -1501,38 +1553,25 @@ async function resolverPaymentReaderOpenAI(
       routeId: route.id,
       reply: "",
       source: "openai-payment-reader",
-      paymentReaderLectura: validacion.lectura,
+      paymentReaderLectura: ocrResult.lectura,
     };
   }
 
   console.log(
-    "[OPENAI_PAYMENT_READER_INVALID]",
+    "[OPENAI_PAYMENT_READER_NO_MATCH]",
     JSON.stringify({
-      routeId: route.id,
-      motivo: validacion.motivo || null,
-      lectura: validacion.lectura || null,
+      lectura: ocrResult.lectura,
+      rutasEvaluadas: rutasPaymentReader.length,
+      motivo: "ninguna_ruta_coincide",
     })
   );
 
   setPaymentReaderStatus(usuarioId, conexionWhatsappId, numero, "waiting");
 
-  const replyInvalido =
-    validacion.motivo === "formato_no_soportado"
-      ? MSG_ARCHIVO_NO_LEGIBLE
-      : MSG_COMPROBANTE_INVALIDO;
-
-  return {
-    ok: true,
-    action: "reply",
-    intent: "payment_reader_invalido",
-    score: 0,
-    routeId: null,
-    reply: replyInvalido,
-    source: "openai-payment-reader",
-    paymentReaderEsperando: true,
-    paymentReaderMotivo: validacion.motivo || null,
-    paymentReaderLectura: validacion.lectura || null,
-  };
+  return respuestaPaymentReaderInvalido(
+    { motivo: "ninguna_ruta_coincide" },
+    ocrResult.lectura
+  );
 }
 
 async function resolverAnalisisOpenAI(
@@ -1922,7 +1961,7 @@ async function ejecutarNodoOpenAIAgent(nodo, contexto, opts = {}) {
       console.log(
         "[OPENAI_PAYMENT_READER_WAITING]",
         JSON.stringify({
-          routeId: rutasPaymentReaderActivas(config)[0]?.id || null,
+          rutasEvaluadas: rutasPaymentReaderActivas(config).length,
           motivo: resultado.paymentReaderMotivo || null,
         })
       );

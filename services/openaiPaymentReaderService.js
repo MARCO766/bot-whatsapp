@@ -248,6 +248,29 @@ async function analizarComprobanteConVision({ imageDataUrl, imagePublicUrl }) {
   };
 }
 
+function calcularEspecificidadRuta(esperado, comparacion) {
+  if (!comparacion?.valido) return 0;
+
+  const tieneNombre = !!String(esperado?.nombreEsperado || "").trim();
+  const tieneMoneda = !!String(esperado?.monedaEsperada || "").trim();
+
+  if (
+    tieneNombre &&
+    comparacion.montoOk &&
+    comparacion.monedaOk &&
+    comparacion.nombreOk
+  ) {
+    return 3;
+  }
+  if (tieneMoneda && comparacion.montoOk && comparacion.monedaOk) {
+    return 2;
+  }
+  if (comparacion.montoOk) {
+    return 1;
+  }
+  return 0;
+}
+
 function compararPagoOpenAI(esperado, lectura) {
   const montoLeido = toNumber(lectura?.monto, 0);
   if (!lectura || montoLeido <= 0) {
@@ -306,18 +329,12 @@ function compararPagoOpenAI(esperado, lectura) {
   };
 }
 
-async function validarComprobanteOpenAI({
+async function extraerLecturaComprobanteOpenAI({
   imageUrl,
-  imageMetaId = null,
-  documentMetaId = null,
-  metaToken = null,
   mimeType = null,
   filename = null,
   messageType = null,
-  payment = {},
 } = {}) {
-  const esperado = normalizarPaymentEsperado(payment);
-
   if (!imageUrl) {
     const invalido = {
       ok: true,
@@ -382,8 +399,6 @@ async function validarComprobanteOpenAI({
       messageType: tipoMsg || null,
       mimeType: mimeType || null,
       filename: filename || null,
-      montoEsperado: esperado.montoEsperado,
-      monedaEsperada: esperado.monedaEsperada,
     })
   );
 
@@ -409,7 +424,43 @@ async function validarComprobanteOpenAI({
     return invalido;
   }
 
-  const comparacion = compararPagoOpenAI(esperado, lectura);
+  return {
+    ok: true,
+    valido: true,
+    motivo: null,
+    lectura: formatearLecturaSalida(lectura),
+  };
+}
+
+async function validarComprobanteOpenAI({
+  imageUrl,
+  imageMetaId = null,
+  documentMetaId = null,
+  metaToken = null,
+  mimeType = null,
+  filename = null,
+  messageType = null,
+  payment = {},
+} = {}) {
+  const esperado = normalizarPaymentEsperado(payment);
+
+  const ocr = await extraerLecturaComprobanteOpenAI({
+    imageUrl,
+    mimeType,
+    filename,
+    messageType,
+  });
+
+  if (!ocr.valido || !ocr.lectura) {
+    return {
+      ok: true,
+      valido: false,
+      motivo: ocr.motivo || "ocr_invalido",
+      lectura: ocr.lectura || null,
+    };
+  }
+
+  const comparacion = compararPagoOpenAI(esperado, ocr.lectura);
   console.log(
     "[OPENAI_PAYMENT_READER_VALIDATION]",
     JSON.stringify({
@@ -418,7 +469,7 @@ async function validarComprobanteOpenAI({
       montoOk: comparacion.montoOk,
       monedaOk: comparacion.monedaOk,
       nombreOk: comparacion.nombreOk,
-      lectura: formatearLecturaSalida(lectura),
+      lectura: ocr.lectura,
     })
   );
 
@@ -427,21 +478,65 @@ async function validarComprobanteOpenAI({
       ok: true,
       valido: false,
       motivo: comparacion.motivo,
-      lectura: formatearLecturaSalida(lectura),
+      lectura: ocr.lectura,
     };
   }
 
   return {
     ok: true,
     valido: true,
-    lectura: formatearLecturaSalida(lectura),
+    lectura: ocr.lectura,
   };
+}
+
+function evaluarRutasPaymentReaderContraLectura(rutasPaymentReader, lectura) {
+  const candidatos = [];
+
+  rutasPaymentReader.forEach((route, orden) => {
+    const esperado = normalizarPaymentEsperado(route.payment);
+    const comparacion = compararPagoOpenAI(esperado, lectura);
+    const especificidad = calcularEspecificidadRuta(esperado, comparacion);
+
+    console.log(
+      "[OPENAI_PAYMENT_READER_EVAL_ROUTE]",
+      JSON.stringify({
+        routeId: route.id,
+        routeNombre: route.nombre || null,
+        orden,
+        valido: comparacion.valido,
+        motivo: comparacion.motivo || null,
+        montoOk: comparacion.montoOk,
+        monedaOk: comparacion.monedaOk,
+        nombreOk: comparacion.nombreOk,
+        especificidad,
+        payment: esperado,
+      })
+    );
+
+    if (comparacion.valido) {
+      candidatos.push({ route, comparacion, especificidad, orden });
+    }
+  });
+
+  if (!candidatos.length) return null;
+
+  candidatos.sort((a, b) => {
+    if (b.especificidad !== a.especificidad) {
+      return b.especificidad - a.especificidad;
+    }
+    return a.orden - b.orden;
+  });
+
+  return candidatos[0];
 }
 
 module.exports = {
   validarComprobanteOpenAI,
+  extraerLecturaComprobanteOpenAI,
   analizarComprobanteConVision,
   compararPagoOpenAI,
+  calcularEspecificidadRuta,
+  evaluarRutasPaymentReaderContraLectura,
   compararMonedaFlexible,
   compararNombreFlexible,
   normalizarPaymentEsperado,
