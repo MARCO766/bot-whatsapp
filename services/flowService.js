@@ -88,14 +88,26 @@ function extraerMediaEntrante(opts = {}) {
   const messageType = opts.messageType ? String(opts.messageType).trim() : null;
   const imageUrl = opts.imageUrl || null;
   const imageMetaId = opts.imageMetaId || null;
+  const documentMetaId = opts.documentMetaId || null;
   const metaToken = opts.metaToken || null;
+  const mimeType = opts.mimeType ? String(opts.mimeType).trim() : null;
+  const filename = opts.filename ? String(opts.filename).trim() : null;
   const esMedia =
     messageType === "image" ||
     messageType === "document" ||
     !!imageUrl ||
-    !!imageMetaId;
+    !!imageMetaId ||
+    !!documentMetaId;
   if (!esMedia) return null;
-  return { messageType, imageUrl, imageMetaId, metaToken };
+  return {
+    messageType,
+    imageUrl,
+    imageMetaId,
+    documentMetaId,
+    metaToken,
+    mimeType,
+    filename,
+  };
 }
 
 function optsMediaParaOpenAI(opts = {}) {
@@ -109,7 +121,10 @@ function prepararFlowContextSesionIA(flowContext) {
   delete ctx.messageType;
   delete ctx.imageUrl;
   delete ctx.imageMetaId;
+  delete ctx.documentMetaId;
   delete ctx.metaToken;
+  delete ctx.mimeType;
+  delete ctx.filename;
   ctx.ultimo_mensaje = "";
   ctx.ultimoMensaje = "";
   return ctx;
@@ -1322,7 +1337,10 @@ async function ejecutarFlujo(
             messageType: opts.messageType || null,
             imageUrl: opts.imageUrl || null,
             imageMetaId: opts.imageMetaId || null,
+            documentMetaId: opts.documentMetaId || null,
             metaToken: opts.metaToken || null,
+            mimeType: opts.mimeType || null,
+            filename: opts.filename || null,
           }
         );
         logChatHistorySource("flowService_despues_openai_agent", flowContext.chat_history);
@@ -2036,7 +2054,10 @@ async function procesarMensajeEntrante(
       messageType: opts.messageType || null,
       imageUrl: opts.imageUrl || null,
       imageMetaId: opts.imageMetaId || null,
+      documentMetaId: opts.documentMetaId || null,
       metaToken: opts.metaToken || null,
+      mimeType: opts.mimeType || null,
+      filename: opts.filename || null,
     }
   );
   if (reanudado) {

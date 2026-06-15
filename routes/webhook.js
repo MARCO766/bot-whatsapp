@@ -604,6 +604,17 @@ if (message.type === "image") {
   });
 }
 
+if (message.type === "document") {
+  console.log("[LECTOR_PAGO_MULTI] documento entrante", {
+    from,
+    usuario: usuarioIdWebhook,
+    conexion_whatsapp_id: conexionWhatsappId || null,
+    mime_type: message.document?.mime_type || null,
+    filename: message.document?.filename || null,
+    mediaUrl: mediaUrlFinal ? true : false,
+  });
+}
+
 const activadorEjecutado = await procesarMensajeEntrante(
   from,
   textoParaActivador,
@@ -611,9 +622,12 @@ const activadorEjecutado = await procesarMensajeEntrante(
   message.id,
   {
     messageType: message.type,
-    imageMetaId: message.image?.id || message.document?.id || null,
+    imageMetaId: message.image?.id || null,
+    documentMetaId: message.document?.id || null,
     metaToken: conexionWebhook?.token || null,
     imageUrl: mediaUrlFinal || null,
+    mimeType: message.document?.mime_type || message.image?.mime_type || null,
+    filename: message.document?.filename || null,
     conexionWhatsappId: conexionWhatsappId || null,
   }
 );

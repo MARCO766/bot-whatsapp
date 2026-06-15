@@ -171,6 +171,33 @@ function extractJson(text) {
   }
 }
 
+function esPdfComprobante({ mimeType, filename, imageUrl } = {}) {
+  const mt = normalizeText(mimeType);
+  if (mt === "application/pdf" || mt.includes("pdf")) return true;
+  const fn = String(filename || "").toLowerCase();
+  if (fn.endsWith(".pdf")) return true;
+  const url = String(imageUrl || "").toLowerCase();
+  return /\.pdf(\?|$)/.test(url) || url.includes("-doc.pdf");
+}
+
+function esImagenComprobante({ mimeType, filename } = {}) {
+  const mt = normalizeText(mimeType);
+  if (mt.startsWith("image/")) return true;
+  const fn = String(filename || "").toLowerCase();
+  return /\.(jpe?g|png|webp|gif|bmp|heic|heif)$/.test(fn);
+}
+
+function esDocumentoNoLegible({ mimeType, filename } = {}) {
+  const mt = normalizeText(mimeType);
+  const fn = String(filename || "").toLowerCase();
+  if (esImagenComprobante({ mimeType, filename })) return false;
+  if (esPdfComprobante({ mimeType, filename })) return false;
+  if (!mt && !fn) return false;
+  if (mt && !mt.startsWith("image/")) return true;
+  if (/\.(doc|docx|xls|xlsx|zip|rar|txt|csv|mp4|mp3)$/.test(fn)) return true;
+  return false;
+}
+
 async function analizarComprobanteConVision({ imageDataUrl, imagePublicUrl }) {
   if (!OPENAI_API_KEY) throw new Error("OPENAI_API_KEY no configurada");
   if (!imageDataUrl && !imagePublicUrl) throw new Error("Imagen no disponible");
@@ -282,7 +309,11 @@ function compararPagoOpenAI(esperado, lectura) {
 async function validarComprobanteOpenAI({
   imageUrl,
   imageMetaId = null,
+  documentMetaId = null,
   metaToken = null,
+  mimeType = null,
+  filename = null,
+  messageType = null,
   payment = {},
 } = {}) {
   const esperado = normalizarPaymentEsperado(payment);
@@ -301,10 +332,56 @@ async function validarComprobanteOpenAI({
     return invalido;
   }
 
+  if (esPdfComprobante({ mimeType, filename, imageUrl })) {
+    console.log(
+      "[OPENAI_PAYMENT_READER_OCR_START]",
+      JSON.stringify({
+        messageType: messageType || "document",
+        mimeType: mimeType || "application/pdf",
+        filename: filename || null,
+        formato: "pdf",
+      })
+    );
+    const invalidoPdf = {
+      ok: true,
+      valido: false,
+      motivo: "formato_no_soportado",
+      lectura: null,
+    };
+    console.log(
+      "[OPENAI_PAYMENT_READER_OCR_RESULT]",
+      JSON.stringify({ error: "pdf_no_soportado_por_vision" })
+    );
+    console.log("[OPENAI_PAYMENT_READER_VALIDATION]", JSON.stringify(invalidoPdf));
+    return invalidoPdf;
+  }
+
+  const tipoMsg = messageType ? String(messageType).trim() : null;
+  if (tipoMsg === "document" && esDocumentoNoLegible({ mimeType, filename })) {
+    const invalidoFormato = {
+      ok: true,
+      valido: false,
+      motivo: "formato_no_soportado",
+      lectura: null,
+    };
+    console.log(
+      "[OPENAI_PAYMENT_READER_VALIDATION]",
+      JSON.stringify({
+        ...invalidoFormato,
+        mimeType: mimeType || null,
+        filename: filename || null,
+      })
+    );
+    return invalidoFormato;
+  }
+
   console.log(
     "[OPENAI_PAYMENT_READER_OCR_START]",
     JSON.stringify({
       imageUrl: String(imageUrl).slice(0, 120),
+      messageType: tipoMsg || null,
+      mimeType: mimeType || null,
+      filename: filename || null,
       montoEsperado: esperado.montoEsperado,
       monedaEsperada: esperado.monedaEsperada,
     })

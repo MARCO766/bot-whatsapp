@@ -42,6 +42,8 @@ const FALLBACK_SALUDO_GENERAL_ACTIVO = false;
 const MSG_IA_NO_DISPONIBLE = "⚠️ OPENAI FALLÓ";
 const MSG_COMPROBANTE_INVALIDO =
   "No pude validar el comprobante. Por favor envía una captura clara donde se vea el monto, moneda y nombre.";
+const MSG_ARCHIVO_NO_LEGIBLE =
+  "No pude leer ese archivo. Por favor envíame captura o imagen del comprobante.";
 
 function rutasPaymentReaderActivas(config) {
   return (config?.caminos || []).filter(
@@ -54,7 +56,10 @@ function limpiarMediaEntranteContexto(ctx) {
   delete out.messageType;
   delete out.imageUrl;
   delete out.imageMetaId;
+  delete out.documentMetaId;
   delete out.metaToken;
+  delete out.mimeType;
+  delete out.filename;
   return out;
 }
 
@@ -138,11 +143,27 @@ function absorberMensajePaymentReaderValidating({
   return true;
 }
 
+function esMediaComprobantePaymentReader(opts = {}) {
+  const type = opts.messageType ? String(opts.messageType).trim() : null;
+  return (type === "image" || type === "document") && !!opts.imageUrl;
+}
+
+function logPaymentReaderMedia(opts = {}) {
+  console.log(
+    "[OPENAI_PAYMENT_READER_MEDIA]",
+    JSON.stringify({
+      messageType: opts.messageType || null,
+      mimeType: opts.mimeType || null,
+      filename: opts.filename || null,
+      imageUrlExists: !!opts.imageUrl,
+    })
+  );
+}
+
 function esImagenPaymentReaderEntrante(config, opts = {}) {
   return (
     !!opts.resume &&
-    opts.messageType === "image" &&
-    !!opts.imageUrl &&
+    esMediaComprobantePaymentReader(opts) &&
     rutasPaymentReaderActivas(config).length > 0
   );
 }
@@ -1419,7 +1440,7 @@ async function resolverPaymentReaderOpenAI(
   opts = {},
   chatScope = {}
 ) {
-  if (opts.messageType !== "image" || !opts.imageUrl) return null;
+  if (!esMediaComprobantePaymentReader(opts)) return null;
 
   const rutasPaymentReader = rutasPaymentReaderActivas(config);
   if (!rutasPaymentReader.length) return null;
@@ -1427,11 +1448,14 @@ async function resolverPaymentReaderOpenAI(
   const route = rutasPaymentReader[0];
   const { usuarioId, conexionWhatsappId, numero } = chatScope;
 
+  logPaymentReaderMedia(opts);
+
   console.log(
     "[OPENAI_PAYMENT_READER_START]",
     JSON.stringify({
       routeId: route.id,
       routeNombre: route.nombre,
+      messageType: opts.messageType || null,
       imageUrl: String(opts.imageUrl).slice(0, 120),
     })
   );
@@ -1441,7 +1465,11 @@ async function resolverPaymentReaderOpenAI(
     validacion = await validarComprobanteOpenAI({
       imageUrl: opts.imageUrl,
       imageMetaId: opts.imageMetaId || mediaEntrante?.imageMetaId || null,
+      documentMetaId: opts.documentMetaId || mediaEntrante?.documentMetaId || null,
       metaToken: opts.metaToken || mediaEntrante?.metaToken || null,
+      mimeType: opts.mimeType || mediaEntrante?.mimeType || null,
+      filename: opts.filename || mediaEntrante?.filename || null,
+      messageType: opts.messageType || mediaEntrante?.messageType || null,
       payment: route.payment,
     });
   } catch (error) {
@@ -1488,13 +1516,18 @@ async function resolverPaymentReaderOpenAI(
 
   setPaymentReaderStatus(usuarioId, conexionWhatsappId, numero, "waiting");
 
+  const replyInvalido =
+    validacion.motivo === "formato_no_soportado"
+      ? MSG_ARCHIVO_NO_LEGIBLE
+      : MSG_COMPROBANTE_INVALIDO;
+
   return {
     ok: true,
     action: "reply",
     intent: "payment_reader_invalido",
     score: 0,
     routeId: null,
-    reply: MSG_COMPROBANTE_INVALIDO,
+    reply: replyInvalido,
     source: "openai-payment-reader",
     paymentReaderEsperando: true,
     paymentReaderMotivo: validacion.motivo || null,
@@ -1600,14 +1633,26 @@ function resolverMediaEntranteOpenAI(contexto = {}, opts = {}) {
   const messageType = opts.messageType || contexto.messageType || null;
   const imageUrl = opts.imageUrl || contexto.imageUrl || null;
   const imageMetaId = opts.imageMetaId || contexto.imageMetaId || null;
+  const documentMetaId = opts.documentMetaId || contexto.documentMetaId || null;
   const metaToken = opts.metaToken || contexto.metaToken || null;
+  const mimeType = opts.mimeType || contexto.mimeType || null;
+  const filename = opts.filename || contexto.filename || null;
   const tieneMedia =
     messageType === "image" ||
     messageType === "document" ||
     !!imageUrl ||
-    !!imageMetaId;
+    !!imageMetaId ||
+    !!documentMetaId;
   if (!tieneMedia) return null;
-  return { messageType, imageUrl, imageMetaId, metaToken };
+  return {
+    messageType,
+    imageUrl,
+    imageMetaId,
+    documentMetaId,
+    metaToken,
+    mimeType,
+    filename,
+  };
 }
 
 async function ejecutarNodoOpenAIAgent(nodo, contexto, opts = {}) {
@@ -1617,13 +1662,17 @@ async function ejecutarNodoOpenAIAgent(nodo, contexto, opts = {}) {
   const conexionWhatsappId = contexto?.conexionWhatsappId || null;
   const mediaEntrante = resolverMediaEntranteOpenAI(contexto, opts);
 
-  if (opts.resume && opts.messageType === "image" && opts.imageUrl) {
+  if (opts.resume && esMediaComprobantePaymentReader(opts)) {
+    logPaymentReaderMedia(opts);
     console.log(
       "[OPENAI_MEDIA_INPUT]",
       JSON.stringify({
         messageType: opts.messageType,
+        mimeType: opts.mimeType || null,
+        filename: opts.filename || null,
         imageUrl: opts.imageUrl,
         imageMetaId: opts.imageMetaId || null,
+        documentMetaId: opts.documentMetaId || null,
       })
     );
   }
