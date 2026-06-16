@@ -763,7 +763,7 @@ function hacerMovible(nodo){
     nodo.style.left = nodeX + "px";
     nodo.style.top = nodeY + "px";
 
-    actualizarLineas();
+    scheduleActualizarLineas(nodo);
     actualizarPanelPosicion(nodo);
     resizeWorldSurface();
     scheduleBuilderMinimapUpdate();
@@ -1861,6 +1861,91 @@ function conectarNodos(nodo1, nodo2, sourceHandle){
   actualizarLineas();
 }
 
+let actualizarLineasRAF = null;
+let actualizarLineasRAFNodo = null;
+const PERF_LINES_PARTIAL_DEBUG = false;
+
+function scheduleActualizarLineas(nodo){
+  if(nodo){
+    actualizarLineasRAFNodo = nodo;
+  }else{
+    actualizarLineasRAFNodo = null;
+  }
+
+  if(actualizarLineasRAF) return;
+
+  actualizarLineasRAF = requestAnimationFrame(function(){
+    const targetNodo = actualizarLineasRAFNodo;
+    actualizarLineasRAF = null;
+    actualizarLineasRAFNodo = null;
+
+    if(targetNodo && document.body.contains(targetNodo)){
+      actualizarLineasDeNodo(targetNodo);
+    }else{
+      actualizarLineas();
+    }
+  });
+}
+
+function actualizarConexionVisual(c){
+  const puertoDesde = obtenerPuertoSalida(c.desde, c.sourceHandle);
+  const puertoHasta = c.hasta.querySelector(".port.in") || c.hasta.querySelector(".port");
+
+  if(!puertoDesde || !puertoHasta) return;
+
+  const inicio = getPortCanvasPoint(puertoDesde);
+  const fin = getPortCanvasPoint(puertoHasta);
+
+  const route = getProfessionalConnectionPath(c);
+
+  posicionarLinea(c.linea, inicio.x, inicio.y, fin.x, fin.y, route);
+
+  aplicarEstiloConexion(
+    c.linea,
+    getConnectionVisualType(c.desde, c.hasta, c)
+  );
+  wireConnectionHover(c);
+
+  if(c.borrar){
+    const label = route.labelPoint || {
+      x: (inicio.x + fin.x) / 2,
+      y: (inicio.y + fin.y) / 2,
+    };
+    c.borrar.style.left = label.x - 12 + "px";
+    c.borrar.style.top = label.y - 12 + "px";
+
+    if(conexionSeleccionadaLinea !== c.linea){
+      c.borrar.classList.remove("borrar-linea--visible");
+    }
+  }
+}
+
+function actualizarLineasDeNodo(nodo){
+  if(!nodo || !document.body.contains(nodo)){
+    actualizarLineas();
+    return;
+  }
+
+  const canvas = document.getElementById("canvasFlujo");
+  if(!canvas) return;
+
+  const subset = conexiones.filter(function(c){
+    return c.desde === nodo || c.hasta === nodo;
+  });
+
+  if(PERF_LINES_PARTIAL_DEBUG){
+    console.log(
+      "[PERF_LINES_PARTIAL]",
+      nodo.id,
+      subset.length,
+      conexiones.length
+    );
+  }
+
+  subset.forEach(actualizarConexionVisual);
+  scheduleBuilderMinimapUpdate();
+}
+
 function actualizarLineas(){
   const canvas = document.getElementById("canvasFlujo");
   if(!canvas) return;
@@ -1885,38 +1970,7 @@ function actualizarLineas(){
   migrateEdgesToLayer(canvas);
   assignConnectionLaneMeta(conexiones);
 
-  conexiones.forEach(c => {
-    const puertoDesde = obtenerPuertoSalida(c.desde, c.sourceHandle);
-    const puertoHasta = c.hasta.querySelector(".port.in") || c.hasta.querySelector(".port");
-
-    if(!puertoDesde || !puertoHasta) return;
-
-    const inicio = getPortCanvasPoint(puertoDesde);
-    const fin = getPortCanvasPoint(puertoHasta);
-
-    const route = getProfessionalConnectionPath(c);
-
-    posicionarLinea(c.linea, inicio.x, inicio.y, fin.x, fin.y, route);
-
-    aplicarEstiloConexion(
-      c.linea,
-      getConnectionVisualType(c.desde, c.hasta, c)
-    );
-    wireConnectionHover(c);
-
-    if(c.borrar){
-      const label = route.labelPoint || {
-        x: (inicio.x + fin.x) / 2,
-        y: (inicio.y + fin.y) / 2,
-      };
-      c.borrar.style.left = label.x - 12 + "px";
-      c.borrar.style.top = label.y - 12 + "px";
-
-      if(conexionSeleccionadaLinea !== c.linea){
-        c.borrar.classList.remove("borrar-linea--visible");
-      }
-    }
-  });
+  conexiones.forEach(actualizarConexionVisual);
 
   scheduleBuilderMinimapUpdate();
 }
