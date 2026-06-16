@@ -30,7 +30,130 @@
   outline-offset: 3px;
 }
 
-/* ── Modo visual compacto (canvas) ── */
+/* ── Modo visual compacto cuadrado tipo n8n (canvas) ── */
+#builderArea .node.content-node.content-node--visual-compact-square,
+.content-node.node.content-node--visual-compact-square {
+  width: 88px !important;
+  max-width: 88px !important;
+  min-width: 88px !important;
+  min-height: 88px !important;
+  max-height: 88px !important;
+  height: 88px !important;
+  padding: 0 !important;
+  border-radius: 14px !important;
+  background: #0f1724 !important;
+  border: 1px solid rgba(56, 189, 248, 0.35) !important;
+  box-shadow: none !important;
+  overflow: visible !important;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.15s ease, outline 0.15s ease;
+}
+
+#builderArea .node.content-node.content-node--visual-compact-square::before,
+#builderArea .node.node-contenido.content-node--visual-compact-square::before {
+  display: none !important;
+}
+
+#builderArea .node.content-node.content-node--visual-compact-square:hover,
+.content-node.node.content-node--visual-compact-square:hover,
+#builderArea .node.node-contenido.content-node--visual-compact-square:hover {
+  transform: none !important;
+  box-shadow: none !important;
+  border-color: rgba(56, 189, 248, 0.5) !important;
+}
+
+#builderArea .node.content-node.content-node--visual-compact-square.selected,
+#builderArea .node.node-contenido.content-node--visual-compact-square.selected {
+  outline: 2px solid rgba(56, 189, 248, 0.75) !important;
+  outline-offset: 2px;
+  box-shadow: none !important;
+}
+
+.content-node--visual-compact-square .content-header {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.content-node--visual-compact-square .content-body {
+  flex: 1 1 auto;
+  width: 100%;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.content-compact-icon {
+  font-size: 30px;
+  line-height: 1;
+}
+
+.content-compact-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #67e8f9;
+  line-height: 1.1;
+  text-align: center;
+  max-width: 100%;
+  padding: 0 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#builderArea .node.content-node.content-node--visual-compact-square > .port.in,
+#builderArea .node.content-node.content-node--visual-compact-square > .port.out,
+#builderArea .node.node-contenido.content-node--visual-compact-square > .port.in,
+#builderArea .node.node-contenido.content-node--visual-compact-square > .port.out {
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+#builderArea .node.content-node.content-node--visual-compact-square > .port.in:hover,
+#builderArea .node.content-node.content-node--visual-compact-square > .port.out:hover,
+#builderArea .node.node-contenido.content-node--visual-compact-square > .port.in:hover,
+#builderArea .node.node-contenido.content-node--visual-compact-square > .port.out:hover {
+  animation: none !important;
+  transform: translateY(-50%) scale(1.06) !important;
+}
+
+#builderArea .node.content-node.content-node--visual-compact-square .node-actions {
+  top: -6px;
+  right: -6px;
+  gap: 3px;
+  transform: scale(0.76);
+  transform-origin: top right;
+}
+
+.content-node--visual-compact-square .content-summary-compact,
+.content-node--visual-compact-square .content-variants,
+.content-node--visual-compact-square .content-variant-card,
+.content-node--visual-compact-square .content-variant-preview,
+.content-node--visual-compact-square .content-stats,
+.content-node--visual-compact-square .content-variants-title,
+.content-node--visual-compact-square .cnt-wa-thread,
+.content-node--visual-compact-square .cnt-bubble,
+.content-node--visual-compact-square .cnt-bubble-media,
+.content-node--visual-compact-square .cnt-btn-pills,
+.content-node--visual-compact-square .content-empty {
+  display: none !important;
+}
+
+/* ── Modo visual compacto rectangular (legacy) ── */
 #builderArea .node.content-node.content-node--visual-compact,
 .content-node.node.content-node--visual-compact {
   width: 180px !important;

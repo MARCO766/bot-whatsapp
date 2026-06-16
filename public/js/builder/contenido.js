@@ -379,25 +379,10 @@ window.MacBotContenido = (function () {
   }
 
   function buildContenidoPreviewCompact(variantes) {
-    const stats = analizarVariantes(variantes);
-    const validas = variantesValidas(variantes);
-
-    if (!validas.length) {
-      return '<div class="content-summary-compact content-summary-compact--empty">Sin bloques</div>';
-    }
-
-    const partes = [
-      stats.variantes + " var",
-      stats.bloques + " blk",
-      stats.media + " media",
-    ];
-
-    if (stats.botones > 0) {
-      partes.push(stats.botones + " btn");
-    }
-
+    void variantes;
     return (
-      '<div class="content-summary-compact">' + esc(partes.join(" · ")) + "</div>"
+      '<div class="content-compact-icon" aria-hidden="true">💬</div>' +
+      '<div class="content-compact-label">Contenido</div>'
     );
   }
 
@@ -448,8 +433,8 @@ window.MacBotContenido = (function () {
     const body = nodo.querySelector(".content-body");
     const estado = calcularEstado(vars);
 
-    nodo.classList.add("content-node--visual-compact");
-    nodo.classList.remove("content-node--compact");
+    nodo.classList.add("content-node--visual-compact-square");
+    nodo.classList.remove("content-node--visual-compact", "content-node--compact");
     if (body) {
       body.classList.remove("content-body--scroll");
     }
@@ -484,8 +469,8 @@ window.MacBotContenido = (function () {
   function asegurarEstructuraNodo(nodo) {
     if (!nodo) return;
 
-    nodo.classList.add("content-node", "node-contenido", "content-node--visual-compact");
-    nodo.classList.remove("blue", "content-node--compact");
+    nodo.classList.add("content-node", "node-contenido", "content-node--visual-compact-square");
+    nodo.classList.remove("blue", "content-node--compact", "content-node--visual-compact");
     nodo.dataset.tipo = "contenido";
 
     if (nodo.querySelector(".content-header")) return;
@@ -1536,7 +1521,7 @@ window.MacBotContenido = (function () {
       .replace(/>/g, "&gt;");
 
     const nodo = document.createElement("div");
-    nodo.className = "node content-node node-contenido content-node--visual-compact";
+    nodo.className = "node content-node node-contenido content-node--visual-compact-square";
     nodo.id = "nodo_" + nodoCount;
     nodo.dataset.tipo = "contenido";
     nodo.style.left = 120 + nodoCount * 20 + "px";
