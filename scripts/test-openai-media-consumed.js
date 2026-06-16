@@ -34,6 +34,12 @@ function resolverMediaOpenAIAgent(flowContext = {}, opts = {}) {
   };
 }
 
+function debePausarOpenAISinProcesarMensajeConsumido(flowContext, opts, resumeIA) {
+  if (!flowContext?.openaiPaymentMediaConsumed || !resumeIA) return false;
+  const type = opts.messageType ? String(opts.messageType).trim() : null;
+  return type === "image" || type === "document";
+}
+
 function simularRoutePaymentReader(contexto) {
   const out = { ...contexto };
   delete out.imageUrl;
@@ -106,5 +112,31 @@ const mediaTexto = resolverMediaOpenAIAgent(
   { messageType: "text" }
 );
 assert(!mediaTexto.contextMedia.imageUrl, "texto no inyecta media con flag");
+
+// Caso 5: OpenAI posterior debe pausar sin procesar mensaje del comprobante
+assert(
+  debePausarOpenAISinProcesarMensajeConsumido(
+    { openaiPaymentMediaConsumed: true },
+    { messageType: "image", mensajeResume: "imagen" },
+    true
+  ),
+  "debe pausar con media consumida + image + iaResume"
+);
+assert(
+  !debePausarOpenAISinProcesarMensajeConsumido(
+    { openaiPaymentMediaConsumed: true },
+    { messageType: "text", mensajeResume: "quiero otra cosa" },
+    true
+  ),
+  "texto nuevo NO debe pausar por mensaje consumido"
+);
+assert(
+  !debePausarOpenAISinProcesarMensajeConsumido(
+    { openaiPaymentMediaConsumed: true },
+    { messageType: "image" },
+    false
+  ),
+  "sin iaResume no debe pausar por skip"
+);
 
 console.log("✅ test-openai-media-consumed: todos los casos OK");

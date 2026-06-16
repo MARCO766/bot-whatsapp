@@ -138,6 +138,12 @@ function resolverMediaOpenAIAgent(flowContext = {}, opts = {}) {
   };
 }
 
+function debePausarOpenAISinProcesarMensajeConsumido(flowContext, opts, resumeIA) {
+  if (!flowContext?.openaiPaymentMediaConsumed || !resumeIA) return false;
+  const type = opts.messageType ? String(opts.messageType).trim() : null;
+  return type === "image" || type === "document";
+}
+
 function prepararFlowContextSesionIA(flowContext) {
   const ctx = limpiarRutasContexto({ ...(flowContext || {}) });
   delete ctx.messageType;
@@ -1338,6 +1344,46 @@ async function ejecutarFlujo(
       });
 
       logChatHistorySource("flowService_antes_openai_agent", flowContext.chat_history);
+
+      if (debePausarOpenAISinProcesarMensajeConsumido(flowContext, opts, resumeIA)) {
+        console.log(
+          "[OPENAI_MEDIA_SKIP] media ya consumida, no se reinyecta en este OpenAI"
+        );
+        console.log(
+          "[OPENAI_MESSAGE_SKIP] mensaje original ya consumido por payment_reader, OpenAI queda esperando nuevo input"
+        );
+
+        const flowContextGuardar = {
+          ...flowContext,
+          openaiAgentPausar: true,
+          iaPausar: true,
+          openaiAgentAction: null,
+          openaiAgentEjecutada: false,
+          ultimo_mensaje: "",
+          ultimoMensaje: "",
+        };
+
+        logChatHistorySource(
+          "openai_agent_skip_mensaje_consumido",
+          flowContextGuardar.chat_history
+        );
+        guardarSesionOpenAIPendiente({
+          usuarioId,
+          conexionWhatsappId: flowContext.conexionWhatsappId,
+          numero,
+          flujoId,
+          nodoId,
+          visitados: Array.from(visitados),
+          flowContext: flowContextGuardar,
+        });
+        console.log("[IA_SESSION_SAVED] sesión guardada en OpenAI posterior", {
+          nodoId,
+          numero,
+          flujoId,
+        });
+        console.log("[FLUJO] Agente OpenAI en espera — nodo:", nodoId);
+        return;
+      }
 
       try {
         const { contextMedia: mediaOpenAI, agentOpts: mediaOptsAgent } =
