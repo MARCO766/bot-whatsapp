@@ -7,8 +7,6 @@ let puertoOrigenConexion = null;
 let puertoHandleOrigen = null;
 let canvasPanningActive = false;
 
-const EDGE_PULSE_ENABLED = false;
-
 const MACBOT_BUILDER = window.MACBOT_BUILDER || {};
 const SEGUIMIENTO_LEGACY_ENABLED = MACBOT_BUILDER.seguimientoLegacyEnabled !== false;
 const SEGUIMIENTO_LEGACY_OBSOLETO_MSG = "Este nodo está obsoleto. Utiliza Seguimiento CRM V2.";
@@ -1663,25 +1661,9 @@ function getSmartConnectionPathFromNodes(sourceNode, targetNode, connectionIndex
 function syncEdgePathLayers(svg, d){
   if(!svg || !d) return;
 
-  const layers = [
-    svg._connBase,
-    svg._connMicro,
-    svg._connDash,
-    svg._connPath,
-    svg._connGlow,
-    svg._connHitbox,
-  ];
-
-  layers.forEach(function (el) {
+  [svg._connDash, svg._connHitbox].forEach(function (el) {
     if(el) el.setAttribute("d", d);
   });
-
-  if(svg._connMotion){
-    svg._connMotion.setAttribute("path", d);
-  }
-  if(svg._connMotionGlow){
-    svg._connMotionGlow.setAttribute("path", d);
-  }
 }
 
 function aplicarPathConexion(svg, route){
@@ -1690,36 +1672,6 @@ function aplicarPathConexion(svg, route){
   const d = route.d || route;
   syncEdgePathLayers(svg, d);
   svg._routeLabelPoint = route.labelPoint || null;
-}
-
-function appendEdgePulse(svg, NS, options){
-  options = options || {};
-  const pulseGlow = document.createElementNS(NS, "circle");
-  pulseGlow.setAttribute("class", "flow-edge-pulse-glow");
-  pulseGlow.setAttribute("r", options.glowR || "5");
-
-  const pulse = document.createElementNS(NS, "circle");
-  pulse.setAttribute("class", "flow-edge-pulse flow-connection-packet");
-  pulse.setAttribute("r", options.coreR || "2.5");
-
-  const motion = document.createElementNS(NS, "animateMotion");
-  motion.setAttribute("dur", options.dur || "2.2s");
-  motion.setAttribute("repeatCount", "indefinite");
-  motion.setAttribute("path", "");
-  motion.setAttribute("rotate", "auto");
-  pulse.appendChild(motion);
-
-  const motionGlow = document.createElementNS(NS, "animateMotion");
-  motionGlow.setAttribute("dur", options.dur || "2.2s");
-  motionGlow.setAttribute("repeatCount", "indefinite");
-  motionGlow.setAttribute("path", "");
-  motionGlow.setAttribute("rotate", "auto");
-  pulseGlow.appendChild(motionGlow);
-
-  svg.appendChild(pulseGlow);
-  svg.appendChild(pulse);
-
-  return { pulseGlow: pulseGlow, pulse: pulse, motion: motion, motionGlow: motionGlow };
 }
 
 function crearLineaTemporalSvg(canvas){
@@ -1755,14 +1707,6 @@ function crearConexionSvg(canvas){
   );
   svg.setAttribute("aria-hidden", "true");
 
-  const base = document.createElementNS(NS, "path");
-  base.setAttribute("class", "flow-edge-base");
-  base.setAttribute("fill", "none");
-
-  const micro = document.createElementNS(NS, "path");
-  micro.setAttribute("class", "flow-edge-halo flow-connection-glow flow-edge-glow");
-  micro.setAttribute("fill", "none");
-
   const dash = document.createElementNS(NS, "path");
   dash.setAttribute("class", "flow-edge-dash flow-connection-path flow-edge");
   dash.setAttribute("fill", "none");
@@ -1771,28 +1715,11 @@ function crearConexionSvg(canvas){
   hitbox.setAttribute("class", "flow-connection-hitbox flow-edge-hitbox");
   hitbox.setAttribute("fill", "none");
 
-  svg.appendChild(base);
-  svg.appendChild(micro);
   svg.appendChild(dash);
-  if (EDGE_PULSE_ENABLED) {
-    const pulseRefs = appendEdgePulse(svg, NS, { dur: "2.2s" });
-    svg._connPulse = pulseRefs.pulse;
-    svg._connPulseGlow = pulseRefs.pulseGlow;
-    svg._connMotion = pulseRefs.motion;
-    svg._connMotionGlow = pulseRefs.motionGlow;
-  } else {
-    svg._connPulse = null;
-    svg._connPulseGlow = null;
-    svg._connMotion = null;
-    svg._connMotionGlow = null;
-  }
   svg.appendChild(hitbox);
 
-  svg._connBase = base;
-  svg._connMicro = micro;
   svg._connDash = dash;
   svg._connPath = dash;
-  svg._connGlow = micro;
   svg._connHitbox = hitbox;
 
   const layer = ensureFlowEdgesLayer(canvas) || canvas;
