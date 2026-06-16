@@ -378,19 +378,40 @@ window.MacBotContenido = (function () {
     return { html: html, estado: estado, bloques: stats.bloques };
   }
 
+  function buildContenidoPreviewCompact(variantes) {
+    const stats = analizarVariantes(variantes);
+    const validas = variantesValidas(variantes);
+
+    if (!validas.length) {
+      return '<div class="content-summary-compact content-summary-compact--empty">Sin bloques</div>';
+    }
+
+    const partes = [
+      stats.variantes + " var",
+      stats.bloques + " blk",
+      stats.media + " media",
+    ];
+
+    if (stats.botones > 0) {
+      partes.push(stats.botones + " btn");
+    }
+
+    return (
+      '<div class="content-summary-compact">' + esc(partes.join(" · ")) + "</div>"
+    );
+  }
+
   function buildContenidoPreviewHtml(variantesValidasList) {
     const jsonVariantes = JSON.stringify(variantesValidasList)
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;");
 
-    const body = buildContenidoPreviewBody(variantesValidasList);
-
     return (
       '<textarea class="contenido-variantes-data" style="display:none;">' +
       jsonVariantes +
       "</textarea>" +
-      (typeof body === "string" ? body : body.html)
+      buildContenidoPreviewCompact(variantesValidasList)
     );
   }
 
@@ -426,15 +447,19 @@ window.MacBotContenido = (function () {
     const vars = variantes || leerVariantesDeNodo(nodo);
     const body = nodo.querySelector(".content-body");
     const estado = calcularEstado(vars);
-    const stats = analizarVariantes(vars);
-    const preview = buildContenidoPreviewBody(vars);
+
+    nodo.classList.add("content-node--visual-compact");
+    nodo.classList.remove("content-node--compact");
+    if (body) {
+      body.classList.remove("content-body--scroll");
+    }
 
     actualizarStatusBadge(nodo, estado);
 
     if (!body) return;
 
-    body.innerHTML = typeof preview === "string" ? preview : preview.html;
-    aplicarLayoutDinamicoNodo(nodo, stats.bloques);
+    body.innerHTML = buildContenidoPreviewCompact(vars);
+    notificarLayoutCanvas();
   }
 
   function guardarVariantesEnNodo(nodo, variantes) {
@@ -459,8 +484,8 @@ window.MacBotContenido = (function () {
   function asegurarEstructuraNodo(nodo) {
     if (!nodo) return;
 
-    nodo.classList.add("content-node", "node-contenido");
-    nodo.classList.remove("blue");
+    nodo.classList.add("content-node", "node-contenido", "content-node--visual-compact");
+    nodo.classList.remove("blue", "content-node--compact");
     nodo.dataset.tipo = "contenido";
 
     if (nodo.querySelector(".content-header")) return;
@@ -1504,16 +1529,14 @@ window.MacBotContenido = (function () {
 
     const variantes = [[]];
     const estado = calcularEstado(variantes);
-    const previewBody = buildContenidoPreviewBody(variantes);
-    const bodyHtml =
-      typeof previewBody === "string" ? previewBody : previewBody.html || "";
+    const bodyHtml = buildContenidoPreviewCompact(variantes);
     const jsonVariantes = JSON.stringify(variantes)
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;");
 
     const nodo = document.createElement("div");
-    nodo.className = "node content-node node-contenido";
+    nodo.className = "node content-node node-contenido content-node--visual-compact";
     nodo.id = "nodo_" + nodoCount;
     nodo.dataset.tipo = "contenido";
     nodo.style.left = 120 + nodoCount * 20 + "px";
@@ -1577,6 +1600,7 @@ window.MacBotContenido = (function () {
   return {
     buildContenidoPreviewHtml: buildContenidoPreviewHtml,
     buildContenidoPreviewBody: buildContenidoPreviewBody,
+    buildContenidoPreviewCompact: buildContenidoPreviewCompact,
     calcularEstado: calcularEstado,
     textoEstado: textoEstado,
     renderPreviewNodo: renderPreviewNodo,

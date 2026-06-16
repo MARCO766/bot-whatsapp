@@ -30,6 +30,79 @@
   outline-offset: 3px;
 }
 
+/* ── Modo visual compacto (canvas) ── */
+#builderArea .node.content-node.content-node--visual-compact,
+.content-node.node.content-node--visual-compact {
+  width: 180px !important;
+  max-width: 180px !important;
+  min-height: 64px;
+  max-height: 72px;
+  height: 72px !important;
+}
+
+#builderArea .node.content-node.content-node--visual-compact:hover,
+.content-node.node.content-node--visual-compact:hover,
+#builderArea .node.node-contenido.content-node--visual-compact:hover {
+  transform: none !important;
+  box-shadow: 0 0 14px rgba(0, 210, 106, 0.16) !important;
+}
+
+.content-node--visual-compact .content-header {
+  padding: 8px 56px 2px 12px;
+  border-bottom: none;
+  border-radius: 22px 22px 0 0;
+  gap: 6px;
+}
+
+.content-node--visual-compact .content-header-title {
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.content-node--visual-compact .content-status {
+  font-size: 9px;
+  padding: 3px 6px;
+  letter-spacing: 0.3px;
+}
+
+.content-node--visual-compact .content-body {
+  flex: 0 0 auto;
+  padding: 0 12px 8px;
+  overflow: hidden;
+}
+
+.content-summary-compact {
+  margin: 0;
+  font-size: 10px;
+  font-weight: 700;
+  color: #94a3b8;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.content-summary-compact--empty {
+  color: #64748b;
+  font-weight: 600;
+}
+
+.content-node--visual-compact .content-variants,
+.content-node--visual-compact .content-variant-card,
+.content-node--visual-compact .content-variant-preview,
+.content-node--visual-compact .content-stats,
+.content-node--visual-compact .content-variants-title,
+.content-node--visual-compact .cnt-wa-thread,
+.content-node--visual-compact .cnt-bubble,
+.content-node--visual-compact .cnt-bubble-media,
+.content-node--visual-compact .cnt-btn-pills,
+.content-node--visual-compact .content-empty {
+  display: none !important;
+}
+
 .content-node .content-header {
   flex: 0 0 auto;
   display: flex;
