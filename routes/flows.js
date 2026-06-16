@@ -1,9 +1,6 @@
 const express = require("express");
 const router = express.Router();
 
-router.use(express.urlencoded({ extended: true }));
-router.use(express.json());
-
 const axios = require("axios");
 const multer = require("multer");
 const ffmpeg = require("fluent-ffmpeg");

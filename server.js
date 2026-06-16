@@ -55,9 +55,11 @@ if (isProduction || process.env.TRUST_PROXY === "true") {
 app.set("view engine", "ejs");
 app.set("views", "views");
 
+const JSON_BODY_LIMIT = "10mb";
+
 app.use(express.static("public"));
-app.use(bodyParser.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(bodyParser.json({ limit: JSON_BODY_LIMIT }));
+app.use(bodyParser.urlencoded({ extended: true, limit: JSON_BODY_LIMIT }));
 
 warnIfMissingSessionSecret();
 warnIfMissingPasswordResetEnv();
@@ -199,6 +201,16 @@ if (hasFrontendBuild) {
   app.use(authRoutes);
 }
 
+app.use((err, req, res, next) => {
+  if (err.type === "entity.too.large") {
+    return res.status(413).json({
+      ok: false,
+      error: "PAYLOAD_TOO_LARGE",
+      message: "El flujo es demasiado grande para guardar.",
+    });
+  }
+  next(err);
+});
 
 // 🔑 VARIABLES (Railway)
 const TOKEN = process.env.TOKEN;

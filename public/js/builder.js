@@ -2688,6 +2688,8 @@ async function guardarFlujo(){
     payloadGuardar.conexion_whatsapp_id = conexionWhatsappIdGuardar;
   }
 
+  console.log("[SAVE_SIZE]", JSON.stringify(payloadGuardar).length);
+
   let res;
   try {
     res = await fetch("/guardar-flujo-builder", {
@@ -2707,12 +2709,31 @@ async function guardarFlujo(){
     return;
   }
 
+  console.log("[SAVE_STATUS]", res.status);
+
   const respuesta = await res.text();
   await esperarMinimoVisualGuardado(inicioVisual);
   setFlowSaveLoading(false);
   guardandoFlujo = false;
 
-  if(respuesta.includes("<!DOCTYPE html>") || respuesta.includes("<html")){
+  if (res.status === 413) {
+    showBuilderFlowToast(
+      "El flujo es demasiado grande para guardar. Reduce nodos o intenta optimización.",
+      "error"
+    );
+    return;
+  }
+
+  const urlFinalLogin = Boolean(res.url && res.url.includes("/login"));
+  const respuestaEsHtml =
+    respuesta.includes("<!DOCTYPE html>") || respuesta.includes("<html");
+  const sesionExpirada =
+    res.status === 401 ||
+    res.status === 403 ||
+    urlFinalLogin ||
+    (respuestaEsHtml && (res.status === 401 || res.status === 403 || urlFinalLogin));
+
+  if (sesionExpirada) {
     showBuilderFlowToast("Tu sesión expiró. Inicia sesión otra vez.", "error");
     setTimeout(() => {
       window.location.href = "/login";
