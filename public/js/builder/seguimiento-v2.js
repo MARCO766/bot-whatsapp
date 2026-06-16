@@ -741,37 +741,82 @@ window.MacBotSeguimientoV2 = (function () {
   }
 
   function buildTimelineHtml(pasos) {
-    if (!pasos.length) return "";
+    if (!pasos || !pasos.length) return "";
 
-    const maxVisibles = 3;
-    const visibles = pasos.slice(0, maxVisibles);
-    const restantes = pasos.length - visibles.length;
+    const tiposVistos = {};
+    const labels = [];
 
-    let html = '<div class="segv2-timeline segv2-timeline--canvas">';
-    visibles.forEach(function (paso, index) {
-      const isLastVisible = index === visibles.length - 1;
-      const showRail = !isLastVisible || restantes > 0;
-      html +=
-        '<div class="segv2-timeline-canvas-item' +
-        (showRail ? "" : " segv2-timeline-canvas-item--last") +
-        '">' +
-        '<span class="segv2-timeline-canvas-dot" aria-hidden="true"></span>' +
-        '<p class="segv2-timeline-canvas-line">' +
-        esc(lineaPasoCanvas(paso)) +
-        "</p>" +
-        (showRail ? '<span class="segv2-timeline-canvas-rail" aria-hidden="true"></span>' : "") +
-        "</div>";
+    pasos.forEach(function (paso) {
+      const key = normalizarTipo(paso.tipo);
+      if (tiposVistos[key]) return;
+      tiposVistos[key] = true;
+      labels.push(labelTipo(paso.tipo));
     });
 
-    if (restantes > 0) {
-      html +=
-        '<p class="segv2-timeline-more">+' +
-        esc(String(restantes)) +
-        " más</p>";
+    if (!labels.length) return "";
+
+    const abrev = {
+      Texto: "Txt",
+      Imagen: "Img",
+      Video: "Vid",
+      Audio: "Aud",
+      Archivo: "Doc",
+    };
+
+    const partes = labels.slice(0, 3).map(function (label) {
+      return abrev[label] || label.slice(0, 3);
+    });
+
+    let texto = partes.join(" + ");
+    if (labels.length > 3) {
+      texto += "…";
     }
 
-    html += "</div>";
-    return html;
+    return '<span class="segv2-canvas-compact-tipos">' + esc(texto) + "</span>";
+  }
+
+  function buildCanvasBodyHtml(pasos) {
+    const lista = pasos || [];
+    const n = lista.length;
+    const countText = n === 1 ? "1 paso" : n + " pasos";
+    const tiposHtml = buildTimelineHtml(lista);
+
+    return (
+      '<div class="segv2-canvas-compact">' +
+      '<span class="segv2-canvas-compact-icon" aria-hidden="true">⏱️</span>' +
+      '<span class="segv2-canvas-compact-label">Seguimiento</span>' +
+      '<span class="segv2-canvas-compact-count">' +
+      esc(countText) +
+      "</span>" +
+      tiposHtml +
+      "</div>"
+    );
+  }
+
+  function buildNodoInnerHtml(nodoId, config) {
+    const cfg = parseConfigAlmacenada(config);
+    const json = JSON.stringify(cfg).replace(/</g, "\\u003c");
+
+    return (
+      '<div class="node-actions">' +
+      '<button type="button" class="edit-node segv2-action-btn" onclick="event.stopPropagation(); editarNodo(\'' +
+      nodoId +
+      '\')" aria-label="Editar">✎</button>' +
+      '<button type="button" class="duplicate-node segv2-action-btn" onclick="event.stopPropagation(); duplicarNodo(\'' +
+      nodoId +
+      '\')" title="Duplicar" aria-label="Duplicar">⧉</button>' +
+      '<button type="button" class="delete-node segv2-action-btn" onclick="event.stopPropagation(); borrarNodo(\'' +
+      nodoId +
+      '\')" aria-label="Eliminar">×</button>' +
+      "</div>" +
+      '<div class="segv2-shell segv2-shell--compact-square" data-tipo="seguimiento_crm_v2">' +
+      '<div class="segv2-canvas-content">' +
+      buildCanvasBodyHtml(cfg.pasos) +
+      "</div>" +
+      '<textarea class="seguimiento-v2-data" style="display:none;">' +
+      json +
+      "</textarea></div>"
+    );
   }
 
   function buildTimelineCardHtml(paso, index, total, clases) {
@@ -810,59 +855,6 @@ window.MacBotSeguimientoV2 = (function () {
       esc(formatearDelayCorto(paso.delay)) +
       "</span>" +
       "</div></div></div>"
-    );
-  }
-
-  function buildCanvasBodyHtml(pasos) {
-    if (!pasos.length) {
-      return (
-        '<div class="segv2-canvas-empty-wrap segv2-canvas-empty-wrap--compact">' +
-        '<p class="segv2-canvas-empty">Sin configurar</p>' +
-        "</div>"
-      );
-    }
-    const n = pasos.length;
-    return (
-      '<p class="segv2-canvas-count">' +
-      esc(n + " paso" + (n === 1 ? "" : "s")) +
-      "</p>" +
-      '<div class="segv2-body">' +
-      buildTimelineHtml(pasos) +
-      "</div>"
-    );
-  }
-
-  function buildNodoInnerHtml(nodoId, config) {
-    const cfg = parseConfigAlmacenada(config);
-    const json = JSON.stringify(cfg).replace(/</g, "\\u003c");
-
-    return (
-      '<div class="node-actions">' +
-      '<button type="button" class="edit-node segv2-action-btn" onclick="event.stopPropagation(); editarNodo(\'' +
-      nodoId +
-      '\')" aria-label="Editar">✎</button>' +
-      '<button type="button" class="duplicate-node segv2-action-btn" onclick="event.stopPropagation(); duplicarNodo(\'' +
-      nodoId +
-      '\')" title="Duplicar" aria-label="Duplicar">⧉</button>' +
-      '<button type="button" class="delete-node segv2-action-btn" onclick="event.stopPropagation(); borrarNodo(\'' +
-      nodoId +
-      '\')" aria-label="Eliminar">×</button>' +
-      "</div>" +
-      '<div class="segv2-shell" data-tipo="seguimiento_crm_v2">' +
-      '<div class="segv2-header">' +
-      '<span class="segv2-lock" aria-hidden="true">🔒</span>' +
-      '<div class="segv2-header-main">' +
-      '<span class="segv2-title">🔒 Seguimiento CRM V2</span>' +
-      '<div class="segv2-badges-row">' +
-      '<span class="segv2-badge">V2 Seguro</span>' +
-      '<span class="segv2-badge segv2-badge--soft">Multi-número</span>' +
-      "</div></div></div>" +
-      '<div class="segv2-canvas-content">' +
-      buildCanvasBodyHtml(cfg.pasos) +
-      "</div></div>" +
-      '<textarea class="seguimiento-v2-data" style="display:none;">' +
-      json +
-      "</textarea>"
     );
   }
 
