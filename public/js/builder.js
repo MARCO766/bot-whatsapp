@@ -182,8 +182,10 @@ window.addEventListener("load", function(){
 
   ensureInfiniteViewport();
   console.log("🎨 Flow lines premium loaded");
+  initNodeDragDelegado();
   cargarFlujoGuardado();
   crearNodoInicioAutomatico();
+  bootstrapDraggableNodes();
   resizeWorldSurface();
   initCanvasViewport();
   initBuilderMinimapModule();
@@ -306,6 +308,7 @@ function cargarFlujoGuardado(){
   const canvas = document.getElementById("canvasFlujo");
   if(!canvas) return;
 
+  cancelNodeDrag();
   canvas.innerHTML = "";
 
   conexiones = [];
@@ -710,6 +713,16 @@ function agregarNodo(tipo){
    MOVER NODOS
 ========================= */
 
+const nodeDragState = {
+  active: false,
+  nodo: null,
+  offsetX: 0,
+  offsetY: 0,
+  historialRegistrado: false,
+};
+
+let nodeDragDelegadoReady = false;
+
 function getNodeCanvasPosition(nodo){
   const left = parseFloat(nodo.style.left);
   const top = parseFloat(nodo.style.top);
@@ -720,61 +733,140 @@ function getNodeCanvasPosition(nodo){
   };
 }
 
+function shouldIgnoreNodeDragStart(e){
+  if(!e || !e.target){
+    return true;
+  }
+
+  if(nodoArrastrando || lineaTemporal){
+    return true;
+  }
+
+  if(e.target.closest("#panelNodo")){
+    return true;
+  }
+
+  if(e.target.closest(".port")){
+    return true;
+  }
+
+  if(e.target.closest(".node-actions")){
+    return true;
+  }
+
+  if(e.target.closest('a[href]')){
+    return true;
+  }
+
+  if(e.target.closest('[contenteditable="true"]')){
+    return true;
+  }
+
+  if(e.target.closest("input, textarea, select, button, label")){
+    return true;
+  }
+
+  return false;
+}
+
+function cancelNodeDrag(){
+  nodeDragState.active = false;
+  nodeDragState.nodo = null;
+  nodeDragState.offsetX = 0;
+  nodeDragState.offsetY = 0;
+  nodeDragState.historialRegistrado = false;
+}
+
+function onNodeDragPointerDown(e){
+  const nodo = e.target.closest(".node");
+  if(!nodo || nodo.dataset.draggableNode !== "1"){
+    return;
+  }
+
+  if(shouldIgnoreNodeDragStart(e)){
+    return;
+  }
+
+  if(e.button !== 0){
+    return;
+  }
+
+  if(!nodeDragState.historialRegistrado){
+    registrarHistorialBuilder();
+    nodeDragState.historialRegistrado = true;
+  }
+
+  const canvasPos = screenToCanvas(e);
+  const nodePos = getNodeCanvasPosition(nodo);
+
+  nodeDragState.nodo = nodo;
+  nodeDragState.offsetX = canvasPos.x - nodePos.x;
+  nodeDragState.offsetY = canvasPos.y - nodePos.y;
+  nodeDragState.active = true;
+
+  e.stopPropagation();
+  e.preventDefault();
+  marcarNodoSeleccionado(nodo);
+}
+
+function onNodeDragPointerMove(e){
+  if(!nodeDragState.active || !nodeDragState.nodo){
+    return;
+  }
+
+  const nodo = nodeDragState.nodo;
+  const canvasPos = screenToCanvas(e);
+  const nodeX = canvasPos.x - nodeDragState.offsetX;
+  const nodeY = canvasPos.y - nodeDragState.offsetY;
+
+  nodo.style.left = nodeX + "px";
+  nodo.style.top = nodeY + "px";
+
+  scheduleActualizarLineas(nodo);
+  actualizarPanelPosicion(nodo);
+  scheduleBuilderMinimapUpdate();
+}
+
+function onNodeDragPointerUp(){
+  if(!nodeDragState.active){
+    return;
+  }
+
+  resizeWorldSurface();
+  scheduleBuilderMinimapUpdate();
+  cancelNodeDrag();
+}
+
+function initNodeDragDelegado(){
+  if(nodeDragDelegadoReady){
+    return;
+  }
+
+  const canvas = document.getElementById("canvasFlujo");
+  if(!canvas){
+    return;
+  }
+
+  nodeDragDelegadoReady = true;
+  canvas.addEventListener("mousedown", onNodeDragPointerDown);
+  document.addEventListener("mousemove", onNodeDragPointerMove);
+  document.addEventListener("mouseup", onNodeDragPointerUp);
+}
+
+function bootstrapDraggableNodes(){
+  document.querySelectorAll("#canvasFlujo .node").forEach(hacerMovible);
+}
+
 function hacerMovible(nodo){
-  let moviendo = false;
-  let dragOffsetX = 0;
-  let dragOffsetY = 0;
-  let historialDragRegistrado = false;
+  if(!nodo){
+    return;
+  }
 
-  nodo.addEventListener("mousedown", function(e){
-    if(
-      e.target.tagName === "TEXTAREA" ||
-      e.target.tagName === "INPUT" ||
-      e.target.tagName === "BUTTON" ||
-      e.target.tagName === "SELECT" ||
-      e.target.classList.contains("port")
-    ){
-      return;
-    }
+  if(nodo.dataset.draggableNode === "1"){
+    return;
+  }
 
-    if(!historialDragRegistrado){
-      registrarHistorialBuilder();
-      historialDragRegistrado = true;
-    }
-
-    const canvasPos = screenToCanvas(e);
-    const nodePos = getNodeCanvasPosition(nodo);
-
-    dragOffsetX = canvasPos.x - nodePos.x;
-    dragOffsetY = canvasPos.y - nodePos.y;
-    moviendo = true;
-    e.stopPropagation();
-    e.preventDefault();
-    marcarNodoSeleccionado(nodo);
-  });
-
-  document.addEventListener("mousemove", function(e){
-    if(!moviendo) return;
-
-    const canvasPos = screenToCanvas(e);
-    const nodeX = canvasPos.x - dragOffsetX;
-    const nodeY = canvasPos.y - dragOffsetY;
-
-    nodo.style.left = nodeX + "px";
-    nodo.style.top = nodeY + "px";
-
-    scheduleActualizarLineas(nodo);
-    actualizarPanelPosicion(nodo);
-    resizeWorldSurface();
-    scheduleBuilderMinimapUpdate();
-  });
-
-  document.addEventListener("mouseup", function(){
-    if(moviendo){
-      historialDragRegistrado = false;
-    }
-    moviendo = false;
-  });
+  nodo.dataset.draggableNode = "1";
 }
 
 /* =========================
@@ -2536,6 +2628,7 @@ function validarFlujoAntesDeGuardar(nodos, conexionesGuardadas){
 }
 
 function macbotUnlockCanvasInteraction(){
+  cancelNodeDrag();
   canvasPanningActive = false;
   const wrap = getCanvasViewport();
   if(wrap){
@@ -3918,6 +4011,8 @@ function restaurarSnapshotBuilder(snapshot){
   if(window.MacBotSeguimiento && window.MacBotSeguimiento.clearPanelActivo){
     window.MacBotSeguimiento.clearPanelActivo();
   }
+
+  cancelNodeDrag();
 
   conexiones.forEach((c) => {
     c.linea?.remove();
