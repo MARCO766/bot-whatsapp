@@ -7,6 +7,7 @@ window.MacBotOpenAIAgent = (function () {
   let nodoActivo = null;
   let configActiva = crearConfigPorDefecto();
   let renderVisualTimer = null;
+  let firmaRutasVisualAnterior = "";
 
   const PROMPT_PLACEHOLDER =
     "Ejemplo:\n" +
@@ -384,7 +385,7 @@ window.MacBotOpenAIAgent = (function () {
     if (!configActiva) return;
     deduplicarListasBiblioteca(configActiva.mediaLibrary);
     if (nodoActivo) {
-      actualizarHTMLNodo(nodoActivo, sanitizeOpenAIData(configActiva));
+      syncDraftToNodeData(nodoActivo, configActiva);
     }
   }
 
@@ -630,10 +631,23 @@ window.MacBotOpenAIAgent = (function () {
     return cfg;
   }
 
-  function normalizarCaminos(caminos, soloValidos) {
+  function resolverModoSanitizeCaminos(modeArg) {
+    if (modeArg === "draft" || modeArg === "persist") return modeArg;
+    if (modeArg && typeof modeArg === "object" && modeArg.mode) {
+      return modeArg.mode === "draft" ? "draft" : "persist";
+    }
+    if (modeArg === false) return "draft";
+    if (modeArg === true) return "persist";
+    return "persist";
+  }
+
+  function normalizarCaminos(caminos, modeArg) {
+    const mode = resolverModoSanitizeCaminos(modeArg);
     if (!Array.isArray(caminos)) return [];
     return caminos
       .map(function (r) {
+        const id = obtenerRouteId(r);
+        if (!id) return null;
         const syns = Array.isArray(r.synonyms)
           ? r.synonyms
           : String(r.synonyms || "")
@@ -645,7 +659,7 @@ window.MacBotOpenAIAgent = (function () {
         const text = textoCamino(r);
         const type = normalizarTipoCamino(r.type);
         const camino = {
-          id: obtenerRouteId(r) || generarRouteId(),
+          id: id,
           text: text,
           nombre: text,
           type: type,
@@ -660,15 +674,16 @@ window.MacBotOpenAIAgent = (function () {
         return camino;
       })
       .filter(function (r) {
-        if (!r.id) return false;
-        if (soloValidos === false) return true;
+        if (!r || !r.id) return false;
+        if (mode === "draft") return true;
         return !!r.text;
       });
   }
 
-  function sanitizeOpenAIData(local) {
+  function sanitizeOpenAIData(local, opts) {
+    const mode = resolverModoSanitizeCaminos(opts);
     const src = local && typeof local === "object" ? local : {};
-    const routes = normalizarCaminos(obtenerRoutes(src), true);
+    const routes = normalizarCaminos(obtenerRoutes(src), mode);
     const temp = parseFloat(src.temperature);
     let openaiPrompt = String(src.openaiPrompt || "").trim();
     if (!openaiPrompt) {
@@ -694,11 +709,11 @@ window.MacBotOpenAIAgent = (function () {
 
   function normalizarConfig(data) {
     const base = { ...crearConfigPorDefecto(), ...(data || {}) };
-    return sanitizeOpenAIData(base);
+    return sanitizeOpenAIData(base, { mode: "persist" });
   }
 
   function caminosParaVisual(config) {
-    return normalizarCaminos(obtenerRoutes(config), false).filter(function (r) {
+    return normalizarCaminos(obtenerRoutes(config), "draft").filter(function (r) {
       return r.enabled !== false;
     });
   }
@@ -709,7 +724,8 @@ window.MacBotOpenAIAgent = (function () {
     try {
       const raw = (box.value || box.textContent || "").trim();
       if (!raw) return crearConfigPorDefecto();
-      return normalizarConfig(JSON.parse(raw));
+      const base = { ...crearConfigPorDefecto(), ...JSON.parse(raw) };
+      return sanitizeOpenAIData(base, { mode: "draft" });
     } catch (e) {
       console.warn("IA Pro: JSON inválido", e.message);
       return crearConfigPorDefecto();
@@ -797,23 +813,83 @@ window.MacBotOpenAIAgent = (function () {
     else nodo.appendChild(shell);
   }
 
-  function renderVisualNodo(nodo, config) {
+  function firmaEstructuraRutasActivas(config) {
+    return caminosParaVisual(config)
+      .map(function (r) {
+        return obtenerRouteId(r);
+      })
+      .join("\n");
+  }
+
+  function programarLineasNodoOpenAI(nodo) {
+    if (typeof scheduleActualizarLineas === "function") {
+      scheduleActualizarLineas(nodo);
+    } else if (typeof actualizarLineasDeNodo === "function") {
+      actualizarLineasDeNodo(nodo);
+    }
+  }
+
+  function aplicarEstiloTipoRutaVisual(li, port, route, nodo) {
+    const label = labelCaminoVisual(route);
+    const iconTipo = tipoIconoCamino(route);
+    const esPayment = esCaminoPaymentReader(route);
+    const iconKey = esPayment ? ROUTE_TYPE_PAYMENT_READER : iconTipo;
+
+    li.className = "openai-agent-route-pill openai-agent-route-pill--" + iconTipo;
+    if (esPayment) {
+      li.classList.add("openai-agent-route-pill--payment-reader");
+    }
+
+    const iconWrap = li.querySelector(".openai-agent-route-icon");
+    if (iconWrap) {
+      iconWrap.className =
+        "openai-agent-route-icon openai-agent-route-icon--" + iconKey;
+      iconWrap.innerHTML = ROUTE_ICON_SVG[iconKey] || ROUTE_ICON_SVG.default;
+    }
+
+    const name = li.querySelector(".openai-agent-route-name");
+    if (name) {
+      name.textContent = label;
+    }
+
+    if (port) {
+      port.className = "port out openai-agent-port-route";
+      if (esPayment) {
+        port.classList.add("openai-agent-port-route--payment-reader");
+      }
+      port.dataset.nodo = nodo.id;
+      port.dataset.handle = route.id;
+      port.dataset.routeType = esPayment ? ROUTE_TYPE_PAYMENT_READER : iconTipo;
+      port.title = label;
+    }
+  }
+
+  function crearElementoRutaVisual(nodo, route) {
+    const li = document.createElement("li");
+    li.dataset.routeId = route.id;
+    const iconWrap = document.createElement("span");
+    iconWrap.className = "openai-agent-route-icon";
+    li.appendChild(iconWrap);
+    const name = document.createElement("span");
+    name.className = "openai-agent-route-name";
+    li.appendChild(name);
+    const port = document.createElement(TAG_DIV);
+    li.appendChild(port);
+    aplicarEstiloTipoRutaVisual(li, port, route, nodo);
+    return li;
+  }
+
+  function actualizarCuerpoYCabeceraNodoOpenAI(nodo, config) {
     const activos = caminosParaVisual(config);
     const numListas = contarListasBiblioteca(config);
     ensureEstructuraCircular(nodo);
     ensureBadgeEnCirculo(nodo.querySelector(".openai-agent-circle"));
-
-    nodo.querySelector(".openai-agent-routes-branch")?.remove();
-    nodo.querySelectorAll(".port.out").forEach(function (p) {
-      p.remove();
-    });
 
     const body = nodo.querySelector(".openai-agent-body");
     const titleEl = nodo.querySelector(".openai-agent-title");
     if (!body || !titleEl) return;
 
     titleEl.textContent = config.nombreNodo || "Agente OpenAI";
-    nodo.classList.remove("openai-agent-node--with-routes");
 
     const partesCuerpo = [];
     partesCuerpo.push(
@@ -835,17 +911,152 @@ window.MacBotOpenAIAgent = (function () {
       partesCuerpo.push(
         '<p class="openai-agent-desc-pill openai-agent-desc-pill--empty">Doble click para configurar</p>'
       );
-      body.innerHTML = partesCuerpo.join("");
-      return;
+      nodo.classList.remove("openai-agent-node--with-routes");
+    } else if (activos.length) {
+      nodo.classList.add("openai-agent-node--with-routes");
+    } else {
+      nodo.classList.remove("openai-agent-node--with-routes");
     }
 
     body.innerHTML = partesCuerpo.join("");
+  }
 
+  function ensureRutasBranchLista(nodo) {
+    let branch = nodo.querySelector(".openai-agent-routes-branch");
+    if (branch) {
+      return branch.querySelector(".openai-agent-routes-list");
+    }
+
+    const shell = nodo.querySelector(".openai-agent-node-shell");
+    if (!shell) return null;
+
+    branch = document.createElement(TAG_DIV);
+    branch.className = "openai-agent-routes-branch";
+
+    const stem = document.createElement(TAG_DIV);
+    stem.className = "openai-agent-routes-stem";
+    stem.setAttribute("aria-hidden", "true");
+    branch.appendChild(stem);
+
+    const list = document.createElement("ul");
+    list.className = "openai-agent-routes-list";
+    branch.appendChild(list);
+    shell.appendChild(branch);
+    return list;
+  }
+
+  function actualizarLabelsRutasVisuales(nodo, config) {
+    if (!nodo || !config) return;
+
+    actualizarCuerpoYCabeceraNodoOpenAI(nodo, config);
+
+    const activos = caminosParaVisual(config);
     if (!activos.length) {
+      nodo.querySelector(".openai-agent-routes-branch")?.remove();
+      programarLineasNodoOpenAI(nodo);
       return;
     }
 
+    const list = ensureRutasBranchLista(nodo);
+    if (!list) return;
+
+    activos.forEach(function (route) {
+      const rid = obtenerRouteId(route);
+      if (!rid) return;
+      let li = list.querySelector('li[data-route-id="' + rid + '"]');
+      if (!li) {
+        li = crearElementoRutaVisual(nodo, route);
+        list.appendChild(li);
+      } else {
+        const port = li.querySelector(".port.out");
+        aplicarEstiloTipoRutaVisual(li, port, route, nodo);
+      }
+    });
+
+    programarLineasNodoOpenAI(nodo);
+  }
+
+  function sincronizarRutasVisualesEstructural(nodo, config) {
+    if (!nodo || !config) return;
+
+    actualizarCuerpoYCabeceraNodoOpenAI(nodo, config);
+    const activos = caminosParaVisual(config);
+
+    if (!activos.length) {
+      nodo.querySelector(".openai-agent-routes-branch")?.remove();
+      if (typeof actualizarHandlersPuertosCanvas === "function") {
+        actualizarHandlersPuertosCanvas();
+      }
+      programarLineasNodoOpenAI(nodo);
+      return;
+    }
+
+    const list = ensureRutasBranchLista(nodo);
+    if (!list) {
+      renderVisualNodo(nodo, config);
+      return;
+    }
+
+    const activosPorId = new Map();
+    activos.forEach(function (r) {
+      const id = obtenerRouteId(r);
+      if (id) activosPorId.set(id, r);
+    });
+
+    list.querySelectorAll("li[data-route-id]").forEach(function (li) {
+      const rid = String(li.dataset.routeId || "").trim();
+      if (!activosPorId.has(rid)) {
+        li.remove();
+      }
+    });
+
+    activos.forEach(function (route, index) {
+      const rid = obtenerRouteId(route);
+      if (!rid) return;
+      let li = list.querySelector('li[data-route-id="' + rid + '"]');
+      if (!li) {
+        li = crearElementoRutaVisual(nodo, route);
+        list.appendChild(li);
+      } else {
+        const port = li.querySelector(".port.out");
+        aplicarEstiloTipoRutaVisual(li, port, route, nodo);
+      }
+      const ref = list.children[index];
+      if (li !== ref) {
+        list.insertBefore(li, ref || null);
+      }
+    });
+
     nodo.classList.add("openai-agent-node--with-routes");
+
+    if (typeof actualizarHandlersPuertosCanvas === "function") {
+      actualizarHandlersPuertosCanvas();
+    }
+    programarLineasNodoOpenAI(nodo);
+  }
+
+  function renderVisualNodo(nodo, config) {
+    const activos = caminosParaVisual(config);
+    ensureEstructuraCircular(nodo);
+    ensureBadgeEnCirculo(nodo.querySelector(".openai-agent-circle"));
+
+    nodo.querySelector(".openai-agent-routes-branch")?.remove();
+    nodo.querySelectorAll(".port.out").forEach(function (p) {
+      p.remove();
+    });
+
+    actualizarCuerpoYCabeceraNodoOpenAI(nodo, config);
+
+    const body = nodo.querySelector(".openai-agent-body");
+    if (!body) return;
+
+    if (!activos.length) {
+      if (typeof actualizarHandlersPuertosCanvas === "function") {
+        actualizarHandlersPuertosCanvas();
+      }
+      programarLineasNodoOpenAI(nodo);
+      return;
+    }
 
     const shell = nodo.querySelector(".openai-agent-node-shell");
     const branch = document.createElement(TAG_DIV);
@@ -860,40 +1071,7 @@ window.MacBotOpenAIAgent = (function () {
     list.className = "openai-agent-routes-list";
 
     activos.forEach(function (route) {
-      const label = labelCaminoVisual(route);
-      const iconTipo = tipoIconoCamino(route);
-      const esPayment = esCaminoPaymentReader(route);
-      const li = document.createElement("li");
-      li.className =
-        "openai-agent-route-pill openai-agent-route-pill--" + iconTipo;
-      if (esPayment) {
-        li.classList.add("openai-agent-route-pill--payment-reader");
-      }
-      li.dataset.routeId = route.id;
-
-      const iconWrap = document.createElement("span");
-      iconWrap.className =
-        "openai-agent-route-icon openai-agent-route-icon--" + iconTipo;
-      iconWrap.innerHTML = ROUTE_ICON_SVG[iconTipo] || ROUTE_ICON_SVG.default;
-      li.appendChild(iconWrap);
-
-      const name = document.createElement("span");
-      name.className = "openai-agent-route-name";
-      name.textContent = label;
-      li.appendChild(name);
-
-      const port = document.createElement(TAG_DIV);
-      port.className = "port out openai-agent-port-route";
-      if (esPayment) {
-        port.classList.add("openai-agent-port-route--payment-reader");
-      }
-      port.dataset.nodo = nodo.id;
-      port.dataset.handle = route.id;
-      port.dataset.routeType = esPayment ? ROUTE_TYPE_PAYMENT_READER : iconTipo;
-      port.title = label;
-      li.appendChild(port);
-
-      list.appendChild(li);
+      list.appendChild(crearElementoRutaVisual(nodo, route));
     });
 
     branch.appendChild(list);
@@ -902,12 +1080,10 @@ window.MacBotOpenAIAgent = (function () {
     if (typeof actualizarHandlersPuertosCanvas === "function") {
       actualizarHandlersPuertosCanvas();
     }
-    if (typeof actualizarLineas === "function") actualizarLineas();
+    programarLineasNodoOpenAI(nodo);
   }
 
-  function actualizarHTMLNodo(nodo, cleanData) {
-    if (!nodo) return;
-    const cfg = sanitizeOpenAIData(cleanData);
+  function escribirOpenAIDataEnNodo(nodo, cfg) {
     const json = JSON.stringify(cfg);
     const box = nodo.querySelector(".openai-agent-data");
     if (box) {
@@ -920,6 +1096,23 @@ window.MacBotOpenAIAgent = (function () {
       ta.value = json;
       nodo.appendChild(ta);
     }
+  }
+
+  function syncDraftToNodeData(nodo, config) {
+    if (!nodo) return null;
+    const cfg = sanitizeOpenAIData(config, { mode: "draft" });
+    escribirOpenAIDataEnNodo(nodo, cfg);
+    if (nodo === nodoActivo) {
+      configActiva = cfg;
+    }
+    return cfg;
+  }
+
+  function actualizarHTMLNodo(nodo, cleanData, opts) {
+    if (!nodo) return;
+    const mode = resolverModoSanitizeCaminos(opts);
+    const cfg = sanitizeOpenAIData(cleanData, { mode: mode });
+    escribirOpenAIDataEnNodo(nodo, cfg);
     renderVisualNodo(nodo, cfg);
     configActiva = cfg;
   }
@@ -1282,7 +1475,7 @@ window.MacBotOpenAIAgent = (function () {
     configActiva.caminos.push(nuevo);
     configActiva.routes = configActiva.caminos;
     renderCaminosEditor();
-    if (nodoActivo) renderVisualNodo(nodoActivo, configActiva);
+    onFormChange();
   }
 
   function renderItemsBibliotecaEditor(lista) {
@@ -1442,7 +1635,9 @@ window.MacBotOpenAIAgent = (function () {
         deduplicarListasBiblioteca(configActiva.mediaLibrary);
         renderMediaLibraryEditor();
         persistirBibliotecaActivaEnNodo();
-        scheduleRenderVisual();
+        if (nodoActivo) {
+          actualizarLabelsRutasVisuales(nodoActivo, configActiva);
+        }
         scrollToListaBiblioteca(listIdCanon);
         resaltarUltimaFotoLista(listIdCanon);
         mostrarToastBiblioteca("Foto subida a " + tituloLista, "success");
@@ -1775,6 +1970,7 @@ window.MacBotOpenAIAgent = (function () {
 
     renderMediaLibraryEditor();
     renderCaminosEditor();
+    firmaRutasVisualAnterior = firmaEstructuraRutasActivas(configActiva);
     document.getElementById("openaiAgentAgregarLista")?.addEventListener("click", function (ev) {
       ev.preventDefault();
       agregarListaBiblioteca();
@@ -1801,6 +1997,13 @@ window.MacBotOpenAIAgent = (function () {
     });
   }
 
+  function cancelPendingRenderVisual() {
+    if (renderVisualTimer) {
+      clearTimeout(renderVisualTimer);
+      renderVisualTimer = null;
+    }
+  }
+
   function scheduleRenderVisual() {
     if (!nodoActivo) return;
     if (renderVisualTimer) clearTimeout(renderVisualTimer);
@@ -1814,7 +2017,23 @@ window.MacBotOpenAIAgent = (function () {
     const listasAntes =
       configActiva?.mediaLibrary?.lists?.length || 0;
     const enabledAntes = configActiva?.mediaLibrary?.enabled === true;
+    const firmaRutasAntes = firmaRutasVisualAnterior;
+
     syncCamposPanelDraft();
+    if (nodoActivo) {
+      syncDraftToNodeData(nodoActivo, configActiva);
+    }
+
+    if (nodoActivo) {
+      const firmaRutasNueva = firmaEstructuraRutasActivas(configActiva);
+      if (firmaRutasNueva !== firmaRutasAntes) {
+        sincronizarRutasVisualesEstructural(nodoActivo, configActiva);
+      } else {
+        actualizarLabelsRutasVisuales(nodoActivo, configActiva);
+      }
+      firmaRutasVisualAnterior = firmaRutasNueva;
+    }
+
     const ml = configActiva?.mediaLibrary;
     const debeRenderBiblioteca =
       document.getElementById("openaiAgentMediaLists") &&
@@ -1823,7 +2042,6 @@ window.MacBotOpenAIAgent = (function () {
     if (debeRenderBiblioteca) {
       renderMediaLibraryEditor();
     }
-    scheduleRenderVisual();
     if (typeof window.macbotRecordHistoryDebounced === "function") {
       window.macbotRecordHistoryDebounced();
     }
@@ -1837,24 +2055,33 @@ window.MacBotOpenAIAgent = (function () {
       renderVisualTimer = null;
     }
     syncCamposPanelDraft();
-    actualizarHTMLNodo(nodoActivo, sanitizeOpenAIData(configActiva));
+    actualizarHTMLNodo(nodoActivo, configActiva, { mode: "persist" });
     if (typeof actualizarHandlersPuertosCanvas === "function") {
       actualizarHandlersPuertosCanvas();
     }
     if (typeof actualizarLineas === "function") actualizarLineas();
-    if (typeof cerrarPanelNodo === "function") cerrarPanelNodo();
+    if (typeof cerrarPanelNodo === "function") {
+      cerrarPanelNodo({ skipFlush: true });
+    }
     if (typeof registrarHistorialBuilder === "function") registrarHistorialBuilder();
   }
 
-  function flushPanelToNode() {
+  function flushPanelToNode(opts) {
     if (!nodoActivo) return;
+    cancelPendingRenderVisual();
+    const mode = resolverModoSanitizeCaminos(opts || { mode: "draft" });
     syncCamposPanelDraft();
-    actualizarHTMLNodo(nodoActivo, sanitizeOpenAIData(configActiva));
+    if (mode === "persist") {
+      actualizarHTMLNodo(nodoActivo, configActiva, { mode: "persist" });
+      return;
+    }
+    syncDraftToNodeData(nodoActivo, configActiva);
   }
 
   function clearPanelActivo() {
     if (renderVisualTimer) clearTimeout(renderVisualTimer);
     renderVisualTimer = null;
+    firmaRutasVisualAnterior = "";
     nodoActivo = null;
     configActiva = crearConfigPorDefecto();
     document.getElementById("panelNodo")?.classList.remove("panel-nodo--openai-agent");
@@ -1971,6 +2198,7 @@ window.MacBotOpenAIAgent = (function () {
     initNodoRecienCreado,
     refrescarNodoCargado,
     flushPanelToNode,
+    cancelPendingRenderVisual,
     clearPanelActivo,
     getNodoActivo,
     buildOpenAILogoSvg,

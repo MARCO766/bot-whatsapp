@@ -2656,7 +2656,7 @@ async function guardarFlujo(){
   macbotUnlockCanvasInteraction();
 
   try {
-    sincronizarPanelAntesDeSnapshot();
+    sincronizarPanelAntesDeSnapshot({ persist: true });
   } catch (err) {
     console.error("[BUILDER] Error sincronizando panel antes de guardar:", err.message);
     showBuilderFlowToast("❌ Error al guardar flujo", "error");
@@ -3882,9 +3882,13 @@ function guardarPanelNodo(){
   }
 }
 
-function cerrarPanelNodo(){
+function cerrarPanelNodo(opts){
   console.log("❌ CERRANDO PANEL CONFIG");
   macbotUnlockCanvasInteraction();
+
+  if(!(opts && opts.skipFlush)){
+    sincronizarPanelAntesDeSnapshot({ persist: false });
+  }
 
   const panel = document.getElementById("panelNodo");
   const contenido = document.getElementById("panelNodoContenido");
@@ -3939,7 +3943,10 @@ function cerrarPanelNodo(){
    HISTORIAL DESHACER / REHACER
 ========================= */
 
-function sincronizarPanelAntesDeSnapshot(){
+function sincronizarPanelAntesDeSnapshot(opts){
+  opts = opts || {};
+  const openaiFlushOpts = { mode: opts.persist ? "persist" : "draft" };
+
   if(window.MacBotSeguimiento && window.MacBotSeguimiento.flushPanelToNode){
     window.MacBotSeguimiento.flushPanelToNode();
   }
@@ -3949,7 +3956,7 @@ function sincronizarPanelAntesDeSnapshot(){
   }
 
   if(window.MacBotOpenAIAgent && window.MacBotOpenAIAgent.flushPanelToNode){
-    window.MacBotOpenAIAgent.flushPanelToNode();
+    window.MacBotOpenAIAgent.flushPanelToNode(openaiFlushOpts);
   }
   if(window.MacBotIAPro && window.MacBotIAPro.flushPanelToNode){
     window.MacBotIAPro.flushPanelToNode();
@@ -3971,7 +3978,7 @@ function sincronizarPanelAntesDeSnapshot(){
 }
 
 function capturarSnapshotBuilder(){
-  sincronizarPanelAntesDeSnapshot();
+  sincronizarPanelAntesDeSnapshot({ persist: false });
 
   const nodos = [];
 
@@ -3994,6 +4001,7 @@ function capturarSnapshotBuilder(){
     conexiones: conexiones.map((c) => ({
       desde: c.desde.id,
       hasta: c.hasta.id,
+      sourceHandle: c.sourceHandle || null,
     })),
     panelAbierto: configPanelOpen,
     nodoSeleccionadoId: nodoSeleccionadoPanel?.id || null,
@@ -4195,6 +4203,13 @@ function registrarHistorialBuilder(){
 function macbotRecordHistoryDebounced(){
   if(builderHistorial.restaurando || !document.getElementById("builderArea")){
     return;
+  }
+
+  if(
+    window.MacBotOpenAIAgent &&
+    window.MacBotOpenAIAgent.cancelPendingRenderVisual
+  ){
+    window.MacBotOpenAIAgent.cancelPendingRenderVisual();
   }
 
   clearTimeout(builderHistorial.debounceTimer);
