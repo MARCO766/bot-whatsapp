@@ -591,7 +591,7 @@ function agregarNodo(tipo){
   }
 
   if(tipo === "conversion"){
-    nodo.classList.add("conversion-node", "node-conversion", "conversion-node--circular");
+    nodo.classList.add("conversion-node", "node-conversion", "conversion-node--visual-compact-square");
 
     contenido = `
       <div class="node-actions">
@@ -602,11 +602,11 @@ function agregarNodo(tipo){
       <div class="conversion-node-shell">
         <div class="conversion-core-column">
           <div class="conversion-circle">
-            <span class="conversion-badge-event">EVENTO</span>
             <div class="conversion-icon" aria-hidden="true">💰</div>
             <h3 class="conversion-title">Conversión</h3>
-            <p class="conversion-venta conversion-hint">Registra venta real</p>
-            <p class="conversion-footnote">Registra venta real</p>
+            <span class="conversion-badge-event" aria-hidden="true">EVENTO</span>
+            <p class="conversion-venta conversion-hint" aria-hidden="true"></p>
+            <p class="conversion-footnote" aria-hidden="true"></p>
           </div>
         </div>
       </div>
@@ -3616,11 +3616,11 @@ function ensureConversionFieldsHidden(nodo){
 function initConversionNodeUI(nodo){
   if(!esNodoConversion(nodo)) return;
 
-  nodo.classList.add("conversion-node", "node-conversion", "conversion-node--circular");
+  nodo.classList.add("conversion-node", "node-conversion", "conversion-node--visual-compact-square");
+  nodo.classList.remove("conversion-node--circular");
 
   const portIn = nodo.querySelector(".port.in");
   const portOut = nodo.querySelector(".port.out");
-  const actions = nodo.querySelector(".node-actions");
   ensureConversionFieldsHidden(nodo);
 
   let shell = nodo.querySelector(".conversion-node-shell");
@@ -3634,11 +3634,11 @@ function initConversionNodeUI(nodo){
     const circle = document.createElement("div");
     circle.className = "conversion-circle";
     circle.innerHTML =
-      '<span class="conversion-badge-event">EVENTO</span>' +
       '<div class="conversion-icon" aria-hidden="true">💰</div>' +
       '<h3 class="conversion-title">Conversión</h3>' +
-      '<p class="conversion-venta conversion-hint">Registra venta real</p>' +
-      '<p class="conversion-footnote">Registra venta real</p>';
+      '<span class="conversion-badge-event" aria-hidden="true">EVENTO</span>' +
+      '<p class="conversion-venta conversion-hint" aria-hidden="true"></p>' +
+      '<p class="conversion-footnote" aria-hidden="true"></p>';
 
     col.appendChild(circle);
     shell.appendChild(col);
@@ -3650,14 +3650,8 @@ function initConversionNodeUI(nodo){
   const circle = nodo.querySelector(".conversion-circle");
   if(!circle) return;
 
-  if(portIn && portIn.parentElement !== circle){
-    circle.insertBefore(portIn, circle.firstChild);
-  }
-
-  if(actions && actions.parentElement !== circle){
-    const badge = circle.querySelector(".conversion-badge-event");
-    if(badge) circle.insertBefore(actions, badge.nextSibling);
-    else circle.appendChild(actions);
+  if(portIn && portIn.parentElement === circle){
+    nodo.insertBefore(portIn, nodo.firstChild);
   }
 
   nodo.querySelectorAll(".node-title").forEach((el) => {

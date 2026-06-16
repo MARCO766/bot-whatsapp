@@ -1066,8 +1066,8 @@ body:has(#builderArea) {
 #builderArea .node.node-seguimiento.selected,
 #builderArea .node.node-espera.selected,
 #builderArea .node.node-etiqueta.selected,
-#builderArea .node.node-conversion.selected:not(.conversion-node--circular),
-#builderArea .node.conversion-node.selected:not(.conversion-node--circular),
+#builderArea .node.node-conversion.selected:not(.conversion-node--circular):not(.conversion-node--visual-compact-square),
+#builderArea .node.conversion-node.selected:not(.conversion-node--circular):not(.conversion-node--visual-compact-square),
 #builderArea .node[data-tipo="espera"].selected,
 #builderArea .node[data-tipo="etiqueta"].selected {
   outline: 2px solid var(--node-accent) !important;
@@ -1077,12 +1077,11 @@ body:has(#builderArea) {
     0 0 32px var(--node-glow) !important;
 }
 
-#builderArea .node.conversion-node.conversion-node--circular.selected .conversion-circle {
-  outline: 2px solid var(--node-accent);
-  outline-offset: 4px;
-  box-shadow:
-    0 0 0 8px color-mix(in srgb, var(--node-glow) 50%, transparent),
-    0 0 36px var(--node-glow) !important;
+#builderArea .node.conversion-node.conversion-node--circular.selected .conversion-circle,
+#builderArea .node.conversion-node.conversion-node--visual-compact-square.selected .conversion-circle {
+  outline: 2px solid rgba(250, 204, 21, 0.75);
+  outline-offset: 2px;
+  box-shadow: none !important;
 }
 
 #builderArea .node.ia-node.selected .ia-circle,
