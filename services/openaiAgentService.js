@@ -1846,6 +1846,13 @@ async function ejecutarNodoOpenAIAgent(nodo, contexto, opts = {}) {
     contexto.score = resultado.score ?? "";
 
     if (resultado.action === "route" && resultado.routeId) {
+      const paymentReaderConsumioMedia =
+        resultado.source === "openai-payment-reader";
+      if (paymentReaderConsumioMedia) {
+        console.log(
+          "[OPENAI_MEDIA_CONSUMED] payment_reader válido consumió media"
+        );
+      }
       console.log(
         "[OPENAI PATH DEBUG] activando camino — handle:",
         resultado.routeId,
@@ -1867,6 +1874,9 @@ async function ejecutarNodoOpenAIAgent(nodo, contexto, opts = {}) {
         chat_history: chatHistory,
         intent: resultado.intent,
         score: resultado.score,
+        ...(paymentReaderConsumioMedia
+          ? { openaiPaymentMediaConsumed: true }
+          : {}),
       });
     }
 

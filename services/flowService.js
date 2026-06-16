@@ -116,6 +116,28 @@ function optsMediaParaOpenAI(opts = {}) {
   return media;
 }
 
+function resolverMediaOpenAIAgent(flowContext = {}, opts = {}) {
+  if (flowContext.openaiPaymentMediaConsumed) {
+    console.log(
+      "[OPENAI_MEDIA_SKIP] media ya consumida, no se reinyecta en este OpenAI"
+    );
+    return { contextMedia: {}, agentOpts: {} };
+  }
+  const contextMedia = optsMediaParaOpenAI(opts);
+  return {
+    contextMedia,
+    agentOpts: {
+      messageType: opts.messageType || null,
+      imageUrl: opts.imageUrl || null,
+      imageMetaId: opts.imageMetaId || null,
+      documentMetaId: opts.documentMetaId || null,
+      metaToken: opts.metaToken || null,
+      mimeType: opts.mimeType || null,
+      filename: opts.filename || null,
+    },
+  };
+}
+
 function prepararFlowContextSesionIA(flowContext) {
   const ctx = limpiarRutasContexto({ ...(flowContext || {}) });
   delete ctx.messageType;
@@ -778,6 +800,9 @@ async function ejecutarFlujo(
 
   const mediaEntrante = extraerMediaEntrante(opts);
   if (mediaEntrante) {
+    if (flowContext.openaiPaymentMediaConsumed) {
+      delete flowContext.openaiPaymentMediaConsumed;
+    }
     Object.assign(flowContext, mediaEntrante);
   }
 
@@ -1315,7 +1340,8 @@ async function ejecutarFlujo(
       logChatHistorySource("flowService_antes_openai_agent", flowContext.chat_history);
 
       try {
-        const mediaOpenAI = optsMediaParaOpenAI(opts);
+        const { contextMedia: mediaOpenAI, agentOpts: mediaOptsAgent } =
+          resolverMediaOpenAIAgent(flowContext, opts);
         flowContext = await ejecutarNodoOpenAIAgent(
           nodo,
           {
@@ -1334,13 +1360,7 @@ async function ejecutarFlujo(
             resume: resumeIA,
             usuarioId,
             nodoId,
-            messageType: opts.messageType || null,
-            imageUrl: opts.imageUrl || null,
-            imageMetaId: opts.imageMetaId || null,
-            documentMetaId: opts.documentMetaId || null,
-            metaToken: opts.metaToken || null,
-            mimeType: opts.mimeType || null,
-            filename: opts.filename || null,
+            ...mediaOptsAgent,
           }
         );
         logChatHistorySource("flowService_despues_openai_agent", flowContext.chat_history);
