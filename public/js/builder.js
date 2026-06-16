@@ -760,12 +760,6 @@ function hacerMovible(nodo){
     const nodeX = canvasPos.x - dragOffsetX;
     const nodeY = canvasPos.y - dragOffsetY;
 
-    console.log("[DRAG DEBUG] clientX/clientY", e.clientX, e.clientY);
-    console.log("[DRAG DEBUG] canvasX/canvasY", canvasPos.x, canvasPos.y);
-    console.log("[DRAG DEBUG] panX/panY", viewportState.panX, viewportState.panY);
-    console.log("[DRAG DEBUG] zoom", getCanvasZoom());
-    console.log("[DRAG DEBUG] node x/y", nodeX, nodeY);
-
     nodo.style.left = nodeX + "px";
     nodo.style.top = nodeY + "px";
 
