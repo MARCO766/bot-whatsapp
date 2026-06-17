@@ -215,6 +215,24 @@ async function resetearFlujoLead(numero, usuarioId, conexionWhatsappId = null) {
     }
   }
 
+  if (uid) {
+    try {
+      const {
+        cancelarSeguimientosV2PorResetbot,
+      } = require("./seguimientoV2/seguimientoV2CancelOnResetbot");
+      await cancelarSeguimientosV2PorResetbot({
+        usuarioId: uid,
+        numero: num,
+        conexionWhatsappId: conexionId,
+      });
+    } catch (err) {
+      console.log(
+        "[RESETBOT_CANCEL_V2] error:",
+        err.response?.data || err.message
+      );
+    }
+  }
+
   await cancelarSeguimientosPendientesLead(num, uid, conexionId);
   await limpiarHistorialFlujoLead(num, uid, conexionId);
 
