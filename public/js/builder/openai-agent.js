@@ -701,7 +701,10 @@ window.MacBotOpenAIAgent = (function () {
       temperature: Number.isFinite(temp) ? Math.min(1, Math.max(0, temp)) : 0.7,
       model: String(src.model || "gpt-4o-mini").trim() || "gpt-4o-mini",
       openaiPrompt: openaiPrompt,
-      mediaLibrary: normalizarMediaLibrary(src.mediaLibrary, false),
+      mediaLibrary: normalizarMediaLibrary(
+        src.mediaLibrary,
+        mode === "draft"
+      ),
       caminos: routes,
       routes: routes,
     };
