@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useRevenueBreakdown } from "../useRevenueBreakdown";
 import {
-  REVENUE_PERIODOS,
   pickDefaultMoneda,
   sortMonedasRevenue,
 } from "../format";
@@ -25,18 +24,20 @@ function RevenueErrorCard({ message, onRetry }) {
 }
 
 export default function RevenuePremiumSection({
+  periodo = "7d",
+  customRange = null,
   flujoId = "",
   conexionSeleccionadaId = null,
   conexionesLoading = false,
 }) {
-  const [periodoApi, setPeriodoApi] = useState("7d");
   const [monedaActiva, setMonedaActiva] = useState("BOB");
 
   const { data, loading, error, reload } = useRevenueBreakdown(
-    periodoApi,
+    periodo,
     flujoId,
     conexionSeleccionadaId,
-    conexionesLoading
+    conexionesLoading,
+    customRange
   );
 
   const monedas = useMemo(
@@ -75,19 +76,6 @@ export default function RevenuePremiumSection({
               disabled={loading || !!error}
             />
           )}
-          <div className="periodos revenuePeriodos">
-            {REVENUE_PERIODOS.map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                className={periodoApi === p.id ? "active" : ""}
-                onClick={() => setPeriodoApi(p.id)}
-                disabled={loading}
-              >
-                {p.label}
-              </button>
-            ))}
-          </div>
         </div>
       </div>
 
@@ -181,11 +169,9 @@ const sectionStyles = `
   justify-content: flex-end;
   flex: 0 1 auto;
 }
-.revenuePremiumSection .revenuePeriodos,
 .revenuePremiumSection .revenueMonedaTabs {
   gap: 6px;
 }
-.revenuePremiumSection .revenuePeriodos button,
 .revenuePremiumSection .revenueMonedaTabs button {
   height: 32px;
   padding: 0 11px;

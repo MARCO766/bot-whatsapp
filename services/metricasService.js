@@ -18,9 +18,9 @@ function headers(extra = {}) {
 
 function parseRango(query = {}) {
   const now = new Date();
-  const hasta = query.hasta ? new Date(query.hasta).toISOString() : now.toISOString();
 
   if (query.desde) {
+    const hasta = query.hasta ? new Date(query.hasta).toISOString() : now.toISOString();
     return {
       desde: new Date(query.desde).toISOString(),
       hasta,
@@ -28,27 +28,61 @@ function parseRango(query = {}) {
     };
   }
 
-  const periodo = String(query.periodo || "7d").toLowerCase();
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
+  const periodo = String(query.periodo || "7d").toLowerCase().trim();
+  const hoyInicio = new Date();
+  hoyInicio.setHours(0, 0, 0, 0);
+  const hasta = now.toISOString();
 
   if (periodo === "hoy" || periodo === "today") {
-    return { desde: d.toISOString(), hasta, periodo: "hoy" };
+    return { desde: hoyInicio.toISOString(), hasta, periodo: "hoy" };
+  }
+
+  if (periodo === "ayer" || periodo === "yesterday") {
+    const inicioAyer = new Date(hoyInicio);
+    inicioAyer.setDate(inicioAyer.getDate() - 1);
+    const finAyer = new Date(hoyInicio);
+    finAyer.setMilliseconds(finAyer.getMilliseconds() - 1);
+    return {
+      desde: inicioAyer.toISOString(),
+      hasta: finAyer.toISOString(),
+      periodo: "ayer",
+    };
+  }
+
+  const desde = new Date(hoyInicio);
+
+  if (periodo === "90d" || periodo === "90") {
+    desde.setDate(desde.getDate() - 89);
+    return { desde: desde.toISOString(), hasta, periodo: "90d" };
   }
   if (periodo === "30d" || periodo === "30") {
-    d.setDate(d.getDate() - 29);
-    return { desde: d.toISOString(), hasta, periodo: "30d" };
+    desde.setDate(desde.getDate() - 29);
+    return { desde: desde.toISOString(), hasta, periodo: "30d" };
   }
   if (periodo === "7d" || periodo === "7") {
-    d.setDate(d.getDate() - 6);
-    return { desde: d.toISOString(), hasta, periodo: "7d" };
+    desde.setDate(desde.getDate() - 6);
+    return { desde: desde.toISOString(), hasta, periodo: "7d" };
   }
 
-  d.setDate(d.getDate() - 6);
-  return { desde: d.toISOString(), hasta, periodo: "7d" };
+  desde.setDate(desde.getDate() - 6);
+  return { desde: desde.toISOString(), hasta, periodo: "7d" };
 }
 
-function rangoAnterior(desdeIso, hastaIso) {
+function rangoAnterior(desdeIso, hastaIso, periodo = "") {
+  const p = String(periodo || "").toLowerCase();
+
+  if (p === "ayer") {
+    const inicioAyer = new Date(desdeIso);
+    const inicioAnteayer = new Date(inicioAyer);
+    inicioAnteayer.setDate(inicioAnteayer.getDate() - 1);
+    const finAnteayer = new Date(inicioAyer);
+    finAnteayer.setMilliseconds(finAnteayer.getMilliseconds() - 1);
+    return {
+      desde: inicioAnteayer.toISOString(),
+      hasta: finAnteayer.toISOString(),
+    };
+  }
+
   const desde = new Date(desdeIso);
   const hasta = new Date(hastaIso);
   const ms = hasta.getTime() - desde.getTime();
@@ -686,7 +720,7 @@ async function loadMetricasBase(usuarioId, query = {}) {
   const conexionWhatsappId =
     query.conexion_whatsapp_id ?? query.conexionWhatsappId ?? null;
   logMetricasMulti(conexionWhatsappId, "loadMetricasBase");
-  const anterior = rangoAnterior(rango.desde, rango.hasta);
+  const anterior = rangoAnterior(rango.desde, rango.hasta, rango.periodo);
 
   const [clientes, mensajes, conversiones, seguimientos, flujos, metaAdsConectado] = await Promise.all([
     fetchClientesEnRango(usuarioId, rango.desde, rango.hasta, flujoId),
@@ -896,6 +930,7 @@ async function computeHeatmap(usuarioId, query) {
 
 module.exports = {
   parseRango,
+  rangoAnterior,
   computeResumen,
   computeFunnel,
   computeSeries,

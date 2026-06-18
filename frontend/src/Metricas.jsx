@@ -2,16 +2,15 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useMetricas } from "./metricas/useMetricas";
 import { useMetaAdsStatus } from "./metricas/useMetaAdsStatus";
 import { useMetaAdsInsights } from "./metricas/useMetaAdsInsights";
-import { formatMoney, formatNum, formatPct, formatTendencia } from "./metricas/format";
+import { formatMoney, formatNum, formatPct, formatTendencia, formatCustomRangeDisplay } from "./metricas/format";
 import FlujoCampanaSelect from "./metricas/FlujoCampanaSelect";
+import MetricasPeriodoSelector from "./metricas/MetricasPeriodoSelector";
 import RevenuePremiumSection from "./metricas/revenue/RevenuePremiumSection";
 import MetaAdsConnectModal, { MetaAdsCompactCard, META_CAMPAIGN_TODAS } from "./metricas/MetaAdsSection";
 import { useMetaAdsCampaigns } from "./metricas/useMetaAdsCampaigns";
 import ConexionLineaTabs from "./components/conexion/ConexionLineaTabs";
 import { useMetricasConexion } from "./hooks/useMetricasConexion";
 import { CONEXION_TODAS } from "./utils/conexionesInbox";
-
-const PERIODOS = ["Hoy", "7 días", "30 días"];
 
 /** Fase 1 — ocultar secciones en UI; lógica, fetch y componentes siguen intactos */
 const UI_OCULTAR_FASE1 = {
@@ -109,7 +108,9 @@ function HeatmapGrid({ heatmap }) {
 }
 
 export default function Metricas() {
-  const [periodo, setPeriodo] = useState("7 días");
+  const [periodo, setPeriodo] = useState("7d");
+  const [customRange, setCustomRange] = useState(null);
+  const [periodoToast, setPeriodoToast] = useState("");
   const [flujoId, setFlujoId] = useState("");
   const [metaAdsModalOpen, setMetaAdsModalOpen] = useState(false);
   const [metaAdsCampaignId, setMetaAdsCampaignId] = useState(META_CAMPAIGN_TODAS);
@@ -121,7 +122,7 @@ export default function Metricas() {
     etiquetaTabConexion,
   } = useMetricasConexion();
   const { resumen, funnel, series, flujos, diagnostico, heatmap, flujosLista, loading, error, reload } =
-    useMetricas(periodo, flujoId, conexionSeleccionadaId, conexionesLoading, UI_OCULTAR_FASE1);
+    useMetricas(periodo, flujoId, conexionSeleccionadaId, conexionesLoading, UI_OCULTAR_FASE1, customRange);
   const {
     status: metaAdsStatus,
     loading: metaAdsStatusLoading,
@@ -262,6 +263,23 @@ export default function Metricas() {
         ? etiquetaTabConexion(conexionActiva)
         : null;
 
+  const customRangeLabel =
+    periodo === "custom" && customRange ? formatCustomRangeDisplay(customRange) : "";
+
+  const showPeriodoToast = (message) => {
+    setPeriodoToast(message);
+    window.setTimeout(() => setPeriodoToast(""), 2800);
+  };
+
+  const handleCustomApply = (range) => {
+    setCustomRange(range);
+    setPeriodo("custom");
+  };
+
+  const handlePeriodoChange = (next) => {
+    setPeriodo(next);
+  };
+
   if (error && !loading) {
     return (
       <div className="metricasMeta">
@@ -326,18 +344,20 @@ export default function Metricas() {
           />
         </div>
 
-        <div className="periodos">
-          {PERIODOS.map((p) => (
-            <button
-              key={p}
-              type="button"
-              className={periodo === p ? "active" : ""}
-              onClick={() => setPeriodo(p)}
-              disabled={loading}
-            >
-              {p}
-            </button>
-          ))}
+        <div className="periodoBox">
+          <MetricasPeriodoSelector
+            value={periodo}
+            onChange={handlePeriodoChange}
+            customRange={customRange}
+            onCustomApply={handleCustomApply}
+            onValidationError={showPeriodoToast}
+            disabled={loading}
+          />
+          {customRangeLabel ? (
+            <p className="metricasCustomRangeHint">
+              <span aria-hidden="true">📅</span> Mostrando: {customRangeLabel}
+            </p>
+          ) : null}
         </div>
 
         <div className="controlActions">
@@ -376,10 +396,14 @@ export default function Metricas() {
       </section>
 
       <RevenuePremiumSection
+        periodo={periodo}
+        customRange={customRange}
         flujoId={flujoId}
         conexionSeleccionadaId={conexionSeleccionadaId}
         conexionesLoading={conexionesLoading}
       />
+
+      {periodoToast ? <div className="metricasPeriodoToast">{periodoToast}</div> : null}
 
       <section className="dashBottom">
         <div className="dashMain">
@@ -652,9 +676,32 @@ const styles = `
 .heroScore small { color: #94a3b8; }
 .controlBar { border-radius: 22px; padding: 14px; margin-bottom: 14px; background: rgba(15,23,42,.72); border: 1px solid rgba(148,163,184,.14); display: grid; grid-template-columns: 1fr auto auto; gap: 14px; align-items: end; }
 .selectorBox label { display: block; color: #94a3b8; font-size: 12px; margin-bottom: 7px; font-weight: 900; }
-.periodos { display: flex; gap: 8px; flex-wrap: wrap; }
-.periodos button { height: 42px; border: 0; border-radius: 14px; padding: 0 14px; color: white; background: rgba(255,255,255,.08); cursor: pointer; font-weight: 900; }
-.periodos button.active { background: linear-gradient(135deg, #22c55e, #06b6d4); color: #031827; }
+.periodoBox { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.metricasCustomRangeHint {
+  margin: 0;
+  font-size: 11px;
+  color: #94a3b8;
+  font-weight: 600;
+  line-height: 1.35;
+  text-align: right;
+}
+.metricasCustomRangeHint span { margin-right: 4px; }
+.metricasPeriodoToast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1100;
+  padding: 10px 16px;
+  border-radius: 10px;
+  border: 1px solid rgba(148,163,184,.25);
+  background: rgba(15,23,42,.96);
+  color: #e2e8f0;
+  font-size: 13px;
+  font-weight: 600;
+  pointer-events: none;
+  animation: fadeUp .2s ease both;
+}
 .controlActions { display: flex; gap: 10px; align-items: center; }
 .refreshBtn { height: 42px; border: 0; border-radius: 14px; padding: 0 16px; background: rgba(255,255,255,.1); color: white; font-weight: 900; cursor: pointer; }
 .liveBadge { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 14px; background: rgba(255,255,255,.06); }

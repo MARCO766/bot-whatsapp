@@ -9,18 +9,19 @@ import {
   fetchMetricasSeries,
   fetchFlujosLista,
 } from "./api";
-import { periodoToApi } from "./format";
+import { buildMetricasParams } from "./format";
 import { useSocketEvent } from "../hooks/useSocketEvent";
 import { useDebouncedCallback } from "../hooks/useDebouncedCallback";
 import { RT } from "../realtime/events";
 import { apiConexionWhatsappParam } from "../utils/conexionesInbox";
 
 export function useMetricas(
-  periodoLabel = "7 días",
+  periodo = "7d",
   flujoId = "",
   conexionWhatsappId = null,
   conexionesLoading = false,
-  uiOcultar = {}
+  uiOcultar = {},
+  customRange = null
 ) {
   const [resumen, setResumen] = useState(null);
   const [funnel, setFunnel] = useState(null);
@@ -35,11 +36,13 @@ export function useMetricas(
   const load = useCallback(async () => {
     if (conexionesLoading || conexionWhatsappId == null) return;
     const conn = apiConexionWhatsappParam(conexionWhatsappId);
-    const params = {
-      periodo: periodoToApi(periodoLabel),
-      flujo_id: flujoId || undefined,
-      ...(conn ? { conexion_whatsapp_id: conn } : {}),
-    };
+    const params = buildMetricasParams(
+      periodo,
+      flujoId || undefined,
+      conn || undefined,
+      customRange
+    );
+    if (params.periodo === "custom" && (!params.desde || !params.hasta)) return;
     setLoading(true);
     setError(null);
     try {
@@ -72,7 +75,7 @@ export function useMetricas(
     } finally {
       setLoading(false);
     }
-  }, [periodoLabel, flujoId, conexionWhatsappId, conexionesLoading, uiOcultar]);
+  }, [periodo, flujoId, conexionWhatsappId, conexionesLoading, uiOcultar, customRange]);
 
   useEffect(() => {
     load();

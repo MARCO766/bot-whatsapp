@@ -10,10 +10,11 @@ import { RT } from "../realtime/events";
 import { apiConexionWhatsappParam } from "../utils/conexionesInbox";
 
 export function useRevenueBreakdown(
-  periodoApi = "7d",
+  periodo = "7d",
   flujoId = "",
   conexionWhatsappId = null,
-  conexionesLoading = false
+  conexionesLoading = false,
+  customRange = null
 ) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -24,10 +25,13 @@ export function useRevenueBreakdown(
 
     const conn = apiConexionWhatsappParam(conexionWhatsappId);
     const params = buildRevenueBreakdownParams(
-      periodoApi,
+      periodo,
       flujoId || undefined,
-      conn || undefined
+      conn || undefined,
+      customRange
     );
+
+    if (params.periodo === "custom" && (!params.desde || !params.hasta)) return;
 
     setLoading(true);
     setError(null);
@@ -45,7 +49,7 @@ export function useRevenueBreakdown(
     } finally {
       setLoading(false);
     }
-  }, [periodoApi, flujoId, conexionWhatsappId, conexionesLoading]);
+  }, [periodo, flujoId, conexionWhatsappId, conexionesLoading, customRange]);
 
   useEffect(() => {
     load();
