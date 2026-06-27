@@ -151,6 +151,224 @@ async function fetchClientesEnRango(usuarioId, desdeIso, hastaIso, flujoId) {
   return rows.filter((c) => numeros.has(c.numero));
 }
 
+async function countClientesEnRango(usuarioId, desdeIso, hastaIso, flujoId) {
+  const baseFilter = `${buildUsuarioFilter(usuarioId)}&${buildDateFilter(desdeIso, hastaIso)}&estado=neq.bloqueado`;
+
+  if (!flujoId) {
+    const total = await supabaseCount("clientes", baseFilter);
+    return total ?? 0;
+  }
+
+  const segRows = await supabaseSelect(
+    "seguimientos_programados",
+    `${buildUsuarioFilter(usuarioId)}&flujo_id=eq.${encodeURIComponent(flujoId)}`,
+    "cliente_numero"
+  );
+  const numeros = [...new Set((segRows || []).map((r) => r.cliente_numero).filter(Boolean))];
+  if (!numeros.length) return 0;
+
+  let total = 0;
+  for (let i = 0; i < numeros.length; i += 80) {
+    const chunk = numeros.slice(i, i + 80);
+    const inList = chunk.map((n) => encodeURIComponent(n)).join(",");
+    const n = await supabaseCount("clientes", `${baseFilter}&numero=in.(${inList})`);
+    if (n === null) return 0;
+    total += n;
+  }
+  return total;
+}
+
+async function fetchFlujoClienteNumeros(usuarioId, flujoId) {
+  if (!flujoId) return [];
+  const segRows = await supabaseSelect(
+    "seguimientos_programados",
+    `${buildUsuarioFilter(usuarioId)}&flujo_id=eq.${encodeURIComponent(flujoId)}`,
+    "cliente_numero"
+  );
+  return [...new Set((segRows || []).map((r) => r.cliente_numero).filter(Boolean))];
+}
+
+async function countMensajesEnRango(
+  usuarioId,
+  desdeIso,
+  hastaIso,
+  flujoId,
+  conexionWhatsappId = null,
+  direccion = null
+) {
+  const baseFilter = `${buildUsuarioFilter(usuarioId)}${buildConexionFilter(conexionWhatsappId)}&${buildDateFilter(desdeIso, hastaIso)}`;
+  const dirF = direccion ? `&direccion=eq.${encodeURIComponent(direccion)}` : "";
+
+  if (!flujoId) {
+    const total = await supabaseCount("mensajes", `${baseFilter}${dirF}`);
+    return total ?? 0;
+  }
+
+  const numeros = await fetchFlujoClienteNumeros(usuarioId, flujoId);
+  if (!numeros.length) return 0;
+
+  let total = 0;
+  for (let i = 0; i < numeros.length; i += 80) {
+    const chunk = numeros.slice(i, i + 80);
+    const inList = chunk.map((n) => encodeURIComponent(n)).join(",");
+    const n = await supabaseCount("mensajes", `${baseFilter}${dirF}&cliente_numero=in.(${inList})`);
+    if (n === null) return 0;
+    total += n;
+  }
+  return total;
+}
+
+async function countDistinctClientesMensajesEnRango(
+  usuarioId,
+  desdeIso,
+  hastaIso,
+  flujoId,
+  conexionWhatsappId = null
+) {
+  const baseFilter = `${buildUsuarioFilter(usuarioId)}${buildConexionFilter(conexionWhatsappId)}&${buildDateFilter(desdeIso, hastaIso)}`;
+
+  if (!flujoId) {
+    const rows = await supabaseSelect("mensajes", baseFilter, "cliente_numero");
+    if (!Array.isArray(rows)) return 0;
+    return new Set(rows.map((m) => m.cliente_numero).filter(Boolean)).size;
+  }
+
+  const numeros = await fetchFlujoClienteNumeros(usuarioId, flujoId);
+  if (!numeros.length) return 0;
+
+  const seen = new Set();
+  for (let i = 0; i < numeros.length; i += 80) {
+    const chunk = numeros.slice(i, i + 80);
+    const inList = chunk.map((n) => encodeURIComponent(n)).join(",");
+    const rows = await supabaseSelect(
+      "mensajes",
+      `${baseFilter}&cliente_numero=in.(${inList})`,
+      "cliente_numero"
+    );
+    if (!Array.isArray(rows)) continue;
+    rows.forEach((r) => {
+      if (r.cliente_numero) seen.add(r.cliente_numero);
+    });
+  }
+  return seen.size;
+}
+
+async function countConversacionesEnRango(
+  usuarioId,
+  desdeIso,
+  hastaIso,
+  flujoId,
+  conexionWhatsappId = null
+) {
+  const uid = encodeURIComponent(usuarioId);
+  const dateF = buildDateFilter(desdeIso, hastaIso);
+  const connF = buildConexionFilter(conexionWhatsappId);
+
+  if (!flujoId) {
+    const count = await supabaseCount("conversaciones", `usuario_id=eq.${uid}${connF}&${dateF}`);
+    if (count !== null && count > 0) return count;
+    return countDistinctClientesMensajesEnRango(
+      usuarioId,
+      desdeIso,
+      hastaIso,
+      null,
+      conexionWhatsappId
+    );
+  }
+
+  return countDistinctClientesMensajesEnRango(
+    usuarioId,
+    desdeIso,
+    hastaIso,
+    flujoId,
+    conexionWhatsappId
+  );
+}
+
+async function countRespuestasEnRango(
+  usuarioId,
+  desdeIso,
+  hastaIso,
+  flujoId,
+  conexionWhatsappId = null
+) {
+  const baseFilter = `${buildUsuarioFilter(usuarioId)}${buildConexionFilter(conexionWhatsappId)}&${buildDateFilter(desdeIso, hastaIso)}&direccion=eq.entrante`;
+
+  if (!flujoId) {
+    const rows = await supabaseSelect("mensajes", baseFilter, "cliente_numero");
+    if (!Array.isArray(rows)) return 0;
+    return new Set(rows.map((r) => r.cliente_numero).filter(Boolean)).size;
+  }
+
+  const numeros = await fetchFlujoClienteNumeros(usuarioId, flujoId);
+  if (!numeros.length) return 0;
+
+  const seen = new Set();
+  for (let i = 0; i < numeros.length; i += 80) {
+    const chunk = numeros.slice(i, i + 80);
+    const inList = chunk.map((n) => encodeURIComponent(n)).join(",");
+    const rows = await supabaseSelect(
+      "mensajes",
+      `${baseFilter}&cliente_numero=in.(${inList})`,
+      "cliente_numero"
+    );
+    if (!Array.isArray(rows)) continue;
+    rows.forEach((r) => {
+      if (r.cliente_numero) seen.add(r.cliente_numero);
+    });
+  }
+  return seen.size;
+}
+
+async function countConversionesEnRango(
+  usuarioId,
+  desdeIso,
+  hastaIso,
+  flujoId,
+  conexionWhatsappId = null
+) {
+  let filter = `${buildUsuarioFilter(usuarioId)}${buildConexionFilter(conexionWhatsappId)}&${buildDateFilter(desdeIso, hastaIso)}`;
+  if (flujoId) filter += `&flujo_id=eq.${encodeURIComponent(flujoId)}`;
+  const total = await supabaseCount("crm_conversiones", filter);
+  return total ?? 0;
+}
+
+async function sumIngresosConversionesEnRango(
+  usuarioId,
+  desdeIso,
+  hastaIso,
+  flujoId,
+  conexionWhatsappId = null
+) {
+  let filter = `${buildUsuarioFilter(usuarioId)}${buildConexionFilter(conexionWhatsappId)}&${buildDateFilter(desdeIso, hastaIso)}`;
+  if (flujoId) filter += `&flujo_id=eq.${encodeURIComponent(flujoId)}`;
+  const rows = await supabaseSelect("crm_conversiones", filter, "valor,moneda");
+  if (!Array.isArray(rows)) return { monto: 0, moneda: "BOB", desglose: {} };
+  return sumarIngresos(rows);
+}
+
+async function countSeguimientosPorEstadoEnRango(
+  usuarioId,
+  desdeIso,
+  hastaIso,
+  flujoId,
+  conexionWhatsappId = null
+) {
+  const base = `${buildUsuarioFilter(usuarioId)}${buildConexionFilter(conexionWhatsappId)}&${buildDateFilter(desdeIso, hastaIso)}`;
+  const flujoF = flujoId ? `&flujo_id=eq.${encodeURIComponent(flujoId)}` : "";
+  const estados = ["pendiente", "enviado", "cancelado", "respondido"];
+  const counts = { pendiente: 0, enviado: 0, cancelado: 0, respondido: 0 };
+
+  await Promise.all(
+    estados.map(async (est) => {
+      const n = await supabaseCount("seguimientos_programados", `${base}${flujoF}&estado=eq.${est}`);
+      counts[est] = n ?? 0;
+    })
+  );
+
+  return counts;
+}
+
 async function fetchMensajesEnRango(usuarioId, desdeIso, hastaIso, flujoId, conexionWhatsappId = null) {
   let filter = `${buildUsuarioFilter(usuarioId)}${buildConexionFilter(conexionWhatsappId)}&${buildDateFilter(desdeIso, hastaIso)}`;
   const rows = await supabaseSelect(
@@ -791,6 +1009,116 @@ async function loadMetricasBase(usuarioId, query = {}) {
   };
 }
 
+/** Carga agregada solo para resumen — sin arrays completos de métricas base. */
+async function loadResumenBase(usuarioId, query = {}) {
+  const rango = parseRango(query);
+  const flujoId = query.flujo_id || query.flujoId || null;
+  const conexionWhatsappId =
+    query.conexion_whatsapp_id ?? query.conexionWhatsappId ?? null;
+  logMetricasMulti(conexionWhatsappId, "loadResumenBase");
+  const anterior = rangoAnterior(rango.desde, rango.hasta, rango.periodo);
+
+  const [
+    leads,
+    leadsAnt,
+    conversaciones,
+    conversacionesAnt,
+    salientes,
+    entrantes,
+    respuestas,
+    ventas,
+    ventasAnt,
+    ingresos,
+    segEstados,
+    metaAdsConectado,
+  ] = await Promise.all([
+    countClientesEnRango(usuarioId, rango.desde, rango.hasta, flujoId),
+    countClientesEnRango(usuarioId, anterior.desde, anterior.hasta, flujoId),
+    countConversacionesEnRango(usuarioId, rango.desde, rango.hasta, flujoId, conexionWhatsappId),
+    countConversacionesEnRango(
+      usuarioId,
+      anterior.desde,
+      anterior.hasta,
+      flujoId,
+      conexionWhatsappId
+    ),
+    countMensajesEnRango(
+      usuarioId,
+      rango.desde,
+      rango.hasta,
+      flujoId,
+      conexionWhatsappId,
+      "saliente"
+    ),
+    countMensajesEnRango(
+      usuarioId,
+      rango.desde,
+      rango.hasta,
+      flujoId,
+      conexionWhatsappId,
+      "entrante"
+    ),
+    countRespuestasEnRango(usuarioId, rango.desde, rango.hasta, flujoId, conexionWhatsappId),
+    countConversionesEnRango(usuarioId, rango.desde, rango.hasta, flujoId, conexionWhatsappId),
+    countConversionesEnRango(
+      usuarioId,
+      anterior.desde,
+      anterior.hasta,
+      flujoId,
+      conexionWhatsappId
+    ),
+    sumIngresosConversionesEnRango(
+      usuarioId,
+      rango.desde,
+      rango.hasta,
+      flujoId,
+      conexionWhatsappId
+    ),
+    countSeguimientosPorEstadoEnRango(
+      usuarioId,
+      rango.desde,
+      rango.hasta,
+      flujoId,
+      conexionWhatsappId
+    ),
+    checkMetaAdsConectado(usuarioId),
+  ]);
+
+  const tasaCierre = pct(ventas, conversaciones);
+  const conversion = pct(ventas, leads);
+
+  const kpis = {
+    leads,
+    conversaciones,
+    mensajesEnviados: salientes,
+    respuestas,
+    mensajesEntrantes: entrantes,
+    ventas,
+    ingresos: ingresos.monto,
+    moneda: ingresos.moneda,
+    ingresosDesglose: ingresos.desglose,
+    seguimientosActivos: segEstados.pendiente,
+    seguimientosEnviados: segEstados.enviado,
+    seguimientosCancelados: segEstados.cancelado,
+    seguimientosRespondidos: segEstados.respondido,
+    tasaCierre,
+    conversion,
+    tendenciaLeads: calcTendencia(leads, leadsAnt),
+    tendenciaConversaciones: calcTendencia(conversaciones, conversacionesAnt),
+    tendenciaVentas: calcTendencia(ventas, ventasAnt),
+  };
+
+  const salud = computeSalud({ ...kpis, seguimientosActivos: segEstados.pendiente });
+
+  return {
+    rango,
+    flujoId,
+    kpis,
+    salud,
+    metaAdsConectado,
+  };
+}
+
 function computeResumenFromBase(base) {
   const { kpis, salud, rango, flujoId, metaAdsConectado } = base;
 
@@ -816,7 +1144,8 @@ function computeResumenFromBase(base) {
 }
 
 async function computeResumen(usuarioId, query) {
-  return computeResumenFromBase(await resolveMetricasBase(usuarioId, query));
+  const base = await loadResumenBase(usuarioId, query);
+  return computeResumenFromBase(base);
 }
 
 function computeFunnelFromBase(base) {
