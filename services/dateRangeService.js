@@ -1,6 +1,6 @@
 /**
  * Fuente única de verdad para rangos de fechas.
- * Fase D2.1: Hoy/Ayer usan día calendario completo en TZ explícita (default America/La_Paz).
+ * Fase D2.2: 7d/30d/90d usan días calendario completos en TZ explícita (default America/La_Paz).
  */
 
 const DEFAULT_TIMEZONE = "America/La_Paz";
@@ -146,25 +146,31 @@ function resolveYesterday(context = {}) {
 }
 
 /**
- * Últimos n días calendario inclusive (7 → hoyInicio - 6 días).
- * Sin cambios D2.1 — sigue usando TZ del servidor.
+ * Últimos n días calendario inclusive en timeZone (7 → hace 6 días 00:00 → hoy 23:59:59.999).
  * @param {number} n
- * @param {{ hoyInicio?: Date, hasta?: string, periodo?: string }} [context]
+ * @param {{ now?: Date, timeZone?: string, zona_horaria?: string, zonaHoraria?: string, periodo?: string }} [context]
  * @returns {{ desde: string, hasta: string, periodo: string }}
  */
 function resolveLastDays(n, context = {}) {
-  const hoyInicio = context.hoyInicio ?? (() => {
-    const d = new Date();
-    d.setHours(0, 0, 0, 0);
-    return d;
-  })();
-  const hasta = context.hasta ?? new Date().toISOString();
-  const desde = new Date(hoyInicio);
-  desde.setDate(desde.getDate() - (n - 1));
+  const now = context.now ?? new Date();
+  const timeZone = context.timeZone ?? normalizeTimezone(context);
+  const today = getZonedCalendarParts(now, timeZone);
+  const startDay = shiftCalendarDate(today.year, today.month, today.day, -(n - 1));
+  const desdeRange = calendarDateToDayRangeIso(
+    startDay.year,
+    startDay.month,
+    startDay.day,
+    timeZone
+  );
+  const hastaRange = calendarDateToDayRangeIso(today.year, today.month, today.day, timeZone);
   const periodo =
     context.periodo ??
     (n === 90 ? "90d" : n === 30 ? "30d" : "7d");
-  return { desde: desde.toISOString(), hasta, periodo };
+  return {
+    desde: desdeRange.desde,
+    hasta: hastaRange.hasta,
+    periodo,
+  };
 }
 
 /**
@@ -185,9 +191,6 @@ function resolveDateRange(query = {}, options = {}) {
   }
 
   const periodo = String(query.periodo || "7d").toLowerCase().trim();
-  const hoyInicio = new Date();
-  hoyInicio.setHours(0, 0, 0, 0);
-  const hasta = now.toISOString();
 
   if (periodo === "hoy" || periodo === "today") {
     return resolveToday({ now, timeZone });
@@ -198,16 +201,16 @@ function resolveDateRange(query = {}, options = {}) {
   }
 
   if (periodo === "90d" || periodo === "90") {
-    return resolveLastDays(90, { hoyInicio, hasta, periodo: "90d" });
+    return resolveLastDays(90, { now, timeZone, periodo: "90d" });
   }
   if (periodo === "30d" || periodo === "30") {
-    return resolveLastDays(30, { hoyInicio, hasta, periodo: "30d" });
+    return resolveLastDays(30, { now, timeZone, periodo: "30d" });
   }
   if (periodo === "7d" || periodo === "7") {
-    return resolveLastDays(7, { hoyInicio, hasta, periodo: "7d" });
+    return resolveLastDays(7, { now, timeZone, periodo: "7d" });
   }
 
-  return resolveLastDays(7, { hoyInicio, hasta, periodo: "7d" });
+  return resolveLastDays(7, { now, timeZone, periodo: "7d" });
 }
 
 module.exports = {
