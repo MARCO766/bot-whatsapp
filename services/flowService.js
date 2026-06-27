@@ -1948,7 +1948,7 @@ async function reanudarFlujoIAPendiente(
     return false;
   }
 
-  const sesion = obtenerSesionIAPendiente(usuarioId, conexionWhatsappId, numero);
+  const sesion = await obtenerSesionIAPendiente(usuarioId, conexionWhatsappId, numero);
   if (!sesion?.flujoId || !sesion?.nodoId) return false;
 
   if (!SUPABASE_URL || !SUPABASE_KEY) return false;
@@ -2077,7 +2077,7 @@ async function procesarMensajeEntrante(
     filename: opts.filename || null,
   };
   const sesionIAPendiente = conexionWhatsappIdEntrante
-    ? obtenerSesionIAPendiente(usuarioId, conexionWhatsappIdEntrante, numero)
+    ? await obtenerSesionIAPendiente(usuarioId, conexionWhatsappIdEntrante, numero)
     : null;
   const tieneSesionOpenAIPendiente = !!(
     sesionIAPendiente?.flujoId && sesionIAPendiente?.nodoId

@@ -4,6 +4,35 @@
  */
 
 const sesiones = new Map();
+const missingSessionCache = new Map();
+const restoresInProgress = new Map();
+const MISS_CACHE_TTL_MS = 30000;
+
+function esTimeoutSupabase(err) {
+  return (
+    err?.code === "ECONNABORTED" || /timeout/i.test(String(err?.message || ""))
+  );
+}
+
+function missCacheActivo(key) {
+  const cachedAt = missingSessionCache.get(key);
+  if (cachedAt == null) return false;
+
+  if (Date.now() - cachedAt >= MISS_CACHE_TTL_MS) {
+    missingSessionCache.delete(key);
+    return false;
+  }
+
+  return true;
+}
+
+function registrarMissCache(key) {
+  missingSessionCache.set(key, Date.now());
+}
+
+function limpiarMissCache(key) {
+  missingSessionCache.delete(key);
+}
 
 function claveSesion(usuarioId, conexionWhatsappId, numero) {
   return `${usuarioId || "0"}:${conexionWhatsappId || ""}:${numero || ""}`;
@@ -18,6 +47,61 @@ function logFlowKey(usuarioId, conexionWhatsappId, numero) {
     flowKey,
   });
   return flowKey;
+}
+
+const MAX_LAST_REPLIES_SYNC = 3;
+
+function extraerLastRepliesSync(flowContext) {
+  const chatHistory = Array.isArray(flowContext?.chat_history) ? flowContext.chat_history : [];
+  return chatHistory
+    .filter((turno) => ["assistant", "bot", "ia"].includes(String(turno?.role || "")))
+    .map((turno) => String(turno.text || turno.content || "").trim())
+    .filter(Boolean)
+    .slice(-MAX_LAST_REPLIES_SYNC);
+}
+
+function resolverPaymentReaderStatus(usuarioId, conexionWhatsappId, numero) {
+  try {
+    const { getPaymentReaderStatus } = require("./openaiAgentService");
+    return getPaymentReaderStatus(usuarioId, conexionWhatsappId, numero);
+  } catch {
+    return null;
+  }
+}
+
+function sincronizarSesionSupabase(sesion) {
+  void (async () => {
+    try {
+      const { upsertIaSession } = require("./iaSessionsRepository");
+      const flowContext = sesion.flowContext || {};
+      const chatHistory = Array.isArray(flowContext.chat_history)
+        ? flowContext.chat_history
+        : [];
+
+      await upsertIaSession({
+        usuarioId: sesion.usuarioId,
+        conexionWhatsappId: sesion.conexionWhatsappId,
+        clienteNumero: sesion.numero,
+        flujoId: sesion.flujoId,
+        nodoId: sesion.nodoId,
+        flowContext,
+        chatHistory,
+        lastReplies: extraerLastRepliesSync(flowContext),
+        paymentReaderStatus: resolverPaymentReaderStatus(
+          sesion.usuarioId,
+          sesion.conexionWhatsappId,
+          sesion.numero
+        ),
+      });
+
+      console.log("[IA_SESSION_SYNC] Guardada sesión IA en Supabase");
+    } catch (err) {
+      console.error(
+        "[IA_SESSION_SYNC_ERROR]",
+        err.response?.data || err.message || err
+      );
+    }
+  })();
 }
 
 function logChatHistorySource(origen, chatHistory) {
@@ -81,15 +165,116 @@ function guardarSesionIAPendiente(payload) {
     payload.flowContext?.chat_history
   );
   console.log("[IA] Sesión pendiente guardada:", key, "| nodo:", payload.nodoId);
+  sincronizarSesionSupabase(sesion);
   return sesion;
 }
 
-function obtenerSesionIAPendiente(usuarioId, conexionWhatsappId, numero) {
+function reconstruirSesionDesdeSupabase(usuarioId, conexionWhatsappId, numero, row) {
+  const { jsonSeguro } = require("./iaSessionsRepository");
+  const conexionLinea = String(conexionWhatsappId).trim();
+  const clienteNumero = String(numero).trim();
+  const flowContext = jsonSeguro(row.flow_context, {});
+  const chatHistory = jsonSeguro(row.chat_history, []);
+
+  flowContext.chat_history = chatHistory.length
+    ? chatHistory
+    : Array.isArray(flowContext.chat_history)
+      ? flowContext.chat_history
+      : [];
+
+  if (!flowContext.conexionWhatsappId) {
+    flowContext.conexionWhatsappId = conexionLinea;
+  }
+
+  const visitados = Array.isArray(flowContext.visitados) ? flowContext.visitados : [];
+  const sesion = {
+    usuarioId,
+    conexionWhatsappId: conexionLinea,
+    numero: clienteNumero,
+    flujoId: row.flujo_id || null,
+    nodoId: row.nodo_id || null,
+    visitados,
+    flowContext,
+    creadoEn: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
+  };
+
+  if (flowContext.iaLoopReentry === true) {
+    sesion.iaLoopReentry = true;
+  }
+
+  return sesion;
+}
+
+async function restaurarSesionDesdeSupabase(usuarioId, conexionWhatsappId, numero, key) {
+  try {
+    const { obtenerIaSession } = require("./iaSessionsRepository");
+    const row = await obtenerIaSession({
+      usuarioId,
+      conexionWhatsappId,
+      clienteNumero: numero,
+    });
+
+    if (!row) {
+      registrarMissCache(key);
+      return null;
+    }
+
+    limpiarMissCache(key);
+
+    const sesion = reconstruirSesionDesdeSupabase(
+      usuarioId,
+      conexionWhatsappId,
+      numero,
+      row
+    );
+
+    sesiones.set(key, sesion);
+    console.log("[IA_SESSION_RESTORE] Sesión restaurada desde Supabase");
+    return sesion;
+  } catch (err) {
+    if (esTimeoutSupabase(err)) {
+      console.log("[IA_SESSION_TIMEOUT]");
+      registrarMissCache(key);
+      return null;
+    }
+
+    console.error(
+      "[IA_SESSION_RESTORE_ERROR]",
+      err.response?.data || err.message || err
+    );
+    return null;
+  }
+}
+
+async function obtenerSesionIAPendiente(usuarioId, conexionWhatsappId, numero) {
   if (!conexionWhatsappId) return null;
 
   const key = claveSesion(usuarioId, conexionWhatsappId, numero);
   logFlowKey(usuarioId, conexionWhatsappId, numero);
-  return sesiones.get(key) || null;
+
+  const sesionRam = sesiones.get(key);
+  if (sesionRam) return sesionRam;
+
+  if (missCacheActivo(key)) {
+    return null;
+  }
+
+  const restoreEnCurso = restoresInProgress.get(key);
+  if (restoreEnCurso) {
+    return restoreEnCurso;
+  }
+
+  const restorePromise = restaurarSesionDesdeSupabase(
+    usuarioId,
+    conexionWhatsappId,
+    numero,
+    key
+  ).finally(() => {
+    restoresInProgress.delete(key);
+  });
+
+  restoresInProgress.set(key, restorePromise);
+  return restorePromise;
 }
 
 function limpiarSesionIAPendiente(usuarioId, conexionWhatsappId, numero) {
