@@ -176,6 +176,35 @@ function guardarSesionOpenAIPendiente(payload) {
   });
 }
 
+async function cerrarSesionOpenAIPorRuta(usuarioId, conexionWhatsappId, numero) {
+  console.log("[OPENAI_SESSION_CLOSE]", {
+    usuario: usuarioId,
+    conexion: conexionWhatsappId,
+    numero,
+  });
+  limpiarSesionIAPendiente(usuarioId, conexionWhatsappId, numero);
+  try {
+    const { deleteIaSession } = require("./iaSessionsRepository");
+    await deleteIaSession({
+      usuarioId,
+      conexionWhatsappId,
+      clienteNumero: numero,
+    });
+    console.log("[OPENAI_SESSION_DELETE_OK]", {
+      usuario: usuarioId,
+      conexion: conexionWhatsappId,
+      numero,
+    });
+  } catch (err) {
+    console.log("[OPENAI_SESSION_DELETE_ERROR]", {
+      usuario: usuarioId,
+      conexion: conexionWhatsappId,
+      numero,
+      error: err.response?.data || err.message || err,
+    });
+  }
+}
+
 async function agregarEtiquetaCliente(
   numero,
   etiqueta,
@@ -1523,7 +1552,11 @@ async function ejecutarFlujo(
       }
 
       if (debeContinuar) {
-        limpiarSesionIAPendiente(usuarioId, flowContext.conexionWhatsappId, numero);
+        await cerrarSesionOpenAIPorRuta(
+          usuarioId,
+          flowContext.conexionWhatsappId,
+          numero
+        );
         logConexionesSalientes(nodoId, "OpenAI");
         await continuarASiguientes(nodoId, visitados, "openai_agent", routeHandle);
         return;

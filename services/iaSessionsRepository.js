@@ -126,9 +126,35 @@ async function obtenerIaSession({ usuarioId, conexionWhatsappId, clienteNumero }
   };
 }
 
+async function deleteIaSession({ usuarioId, conexionWhatsappId, clienteNumero }) {
+  if (!SUPABASE_URL || !SUPABASE_KEY) {
+    throw new Error("Supabase no configurado");
+  }
+
+  const usuario_id = uuidValido(usuarioId);
+  const conexion_whatsapp_id = uuidValido(conexionWhatsappId);
+  const cliente_numero = String(clienteNumero || "").trim();
+
+  if (!usuario_id || !conexion_whatsapp_id || !cliente_numero) {
+    throw new Error("Clave de sesión IA inválida para Supabase");
+  }
+
+  await axios.delete(
+    `${SUPABASE_URL}/rest/v1/ia_sessions` +
+      `?usuario_id=eq.${encodeURIComponent(usuario_id)}` +
+      `&conexion_whatsapp_id=eq.${encodeURIComponent(conexion_whatsapp_id)}` +
+      `&cliente_numero=eq.${encodeURIComponent(cliente_numero)}`,
+    {
+      headers: supabaseHeaders(),
+      timeout: IA_SESSION_READ_TIMEOUT_MS,
+    }
+  );
+}
+
 module.exports = {
   upsertIaSession,
   obtenerIaSession,
+  deleteIaSession,
   uuidValido,
   jsonSeguro,
 };
