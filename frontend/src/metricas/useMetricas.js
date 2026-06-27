@@ -33,7 +33,17 @@ export function useMetricas(
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  const load = useCallback(async () => {
+  const loadFlujosLista = useCallback(async () => {
+    if (conexionesLoading || conexionWhatsappId == null) return;
+    try {
+      const lista = await fetchFlujosLista();
+      setFlujosLista(lista.flujos || []);
+    } catch {
+      /* conservar lista previa si falla el selector */
+    }
+  }, [conexionWhatsappId, conexionesLoading]);
+
+  const loadMetrics = useCallback(async () => {
     if (conexionesLoading || conexionWhatsappId == null) return;
     const conn = apiConexionWhatsappParam(conexionWhatsappId);
     const params = buildMetricasParams(
@@ -46,14 +56,13 @@ export function useMetricas(
     setLoading(true);
     setError(null);
     try {
-      const [r, f, s, fl, d, h, lista] = await Promise.all([
+      const [r, f, s, fl, d, h] = await Promise.all([
         fetchMetricasResumen(params),
         uiOcultar.embudoReal ? Promise.resolve(null) : fetchMetricasFunnel(params),
         fetchMetricasSeries(params),
         uiOcultar.metricasPorFlujo ? Promise.resolve(null) : fetchMetricasFlujos(params),
         fetchMetricasDiagnostico(params),
         uiOcultar.heatmapHorario ? Promise.resolve(null) : fetchMetricasHeatmap(params),
-        fetchFlujosLista(),
       ]);
       setResumen(r);
       setFunnel(f);
@@ -61,7 +70,6 @@ export function useMetricas(
       setFlujos(fl);
       setDiagnostico(d);
       setHeatmap(h);
-      setFlujosLista(lista.flujos || []);
     } catch (err) {
       const msg =
         err instanceof MetricasApiError ? err.message : "Error al cargar métricas";
@@ -77,15 +85,26 @@ export function useMetricas(
     }
   }, [periodo, flujoId, conexionWhatsappId, conexionesLoading, uiOcultar, customRange]);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  const loadAll = useCallback(async () => {
+    await Promise.all([loadMetrics(), loadFlujosLista()]);
+  }, [loadMetrics, loadFlujosLista]);
 
-  const reloadLive = useDebouncedCallback(load, 600);
-  useSocketEvent(RT.METRICA_ACTUALIZADA, reloadLive);
-  useSocketEvent(RT.CONVERSION_REGISTRADA, reloadLive);
-  useSocketEvent(RT.NUEVO_MENSAJE, reloadLive);
-  useSocketEvent(RT.CLIENTE_ACTUALIZADO, reloadLive);
+  useEffect(() => {
+    loadMetrics();
+  }, [loadMetrics]);
+
+  useEffect(() => {
+    loadFlujosLista();
+  }, [loadFlujosLista]);
+
+  const reloadLiveMetrics = useDebouncedCallback(loadMetrics, 600);
+  useSocketEvent(RT.METRICA_ACTUALIZADA, reloadLiveMetrics);
+  useSocketEvent(RT.CONVERSION_REGISTRADA, reloadLiveMetrics);
+  useSocketEvent(RT.NUEVO_MENSAJE, reloadLiveMetrics);
+  useSocketEvent(RT.CLIENTE_ACTUALIZADO, reloadLiveMetrics);
+
+  const reloadFlujosListaLive = useDebouncedCallback(loadFlujosLista, 600);
+  useSocketEvent(RT.FLUJO_GUARDADO, reloadFlujosListaLive);
 
   return {
     resumen,
@@ -97,6 +116,6 @@ export function useMetricas(
     flujosLista,
     loading,
     error,
-    reload: load,
+    reload: loadAll,
   };
 }
