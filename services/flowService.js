@@ -37,6 +37,7 @@ const {
   guardarSesionIAPendiente,
   obtenerSesionIAPendiente,
   limpiarSesionIAPendiente,
+  cerrarSesionOpenAICompleta,
   logFlowKey,
   logChatHistorySource,
 } = require("./iaFlowSession");
@@ -177,32 +178,7 @@ function guardarSesionOpenAIPendiente(payload) {
 }
 
 async function cerrarSesionOpenAIPorRuta(usuarioId, conexionWhatsappId, numero) {
-  console.log("[OPENAI_SESSION_CLOSE]", {
-    usuario: usuarioId,
-    conexion: conexionWhatsappId,
-    numero,
-  });
-  limpiarSesionIAPendiente(usuarioId, conexionWhatsappId, numero);
-  try {
-    const { deleteIaSession } = require("./iaSessionsRepository");
-    await deleteIaSession({
-      usuarioId,
-      conexionWhatsappId,
-      clienteNumero: numero,
-    });
-    console.log("[OPENAI_SESSION_DELETE_OK]", {
-      usuario: usuarioId,
-      conexion: conexionWhatsappId,
-      numero,
-    });
-  } catch (err) {
-    console.log("[OPENAI_SESSION_DELETE_ERROR]", {
-      usuario: usuarioId,
-      conexion: conexionWhatsappId,
-      numero,
-      error: err.response?.data || err.message || err,
-    });
-  }
+  return cerrarSesionOpenAICompleta(usuarioId, conexionWhatsappId, numero, "route");
 }
 
 async function agregarEtiquetaCliente(

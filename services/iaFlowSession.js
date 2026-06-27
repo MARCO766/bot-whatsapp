@@ -310,6 +310,46 @@ function limpiarSesionIAPendiente(usuarioId, conexionWhatsappId, numero) {
   }
 }
 
+const OPENAI_SESSION_CLOSE_LOGS = {
+  route: {
+    close: "[OPENAI_SESSION_CLOSE]",
+    ok: "[OPENAI_SESSION_DELETE_OK]",
+    error: "[OPENAI_SESSION_DELETE_ERROR]",
+  },
+  resetbot: {
+    close: "[RESETBOT_OPENAI_CLOSE]",
+    ok: "[RESETBOT_OPENAI_CLOSE_OK]",
+    error: "[RESETBOT_OPENAI_CLOSE_ERROR]",
+  },
+};
+
+async function cerrarSesionOpenAICompleta(
+  usuarioId,
+  conexionWhatsappId,
+  numero,
+  origen = "route"
+) {
+  const labels = OPENAI_SESSION_CLOSE_LOGS[origen] || OPENAI_SESSION_CLOSE_LOGS.route;
+  const ctx = { usuario: usuarioId, conexion: conexionWhatsappId, numero };
+
+  console.log(labels.close, ctx);
+  limpiarSesionIAPendiente(usuarioId, conexionWhatsappId, numero);
+  try {
+    const { deleteIaSession } = require("./iaSessionsRepository");
+    await deleteIaSession({
+      usuarioId,
+      conexionWhatsappId,
+      clienteNumero: numero,
+    });
+    console.log(labels.ok, ctx);
+  } catch (err) {
+    console.log(labels.error, {
+      ...ctx,
+      error: err.response?.data || err.message || err,
+    });
+  }
+}
+
 module.exports = {
   claveSesion,
   logFlowKey,
@@ -317,4 +357,5 @@ module.exports = {
   guardarSesionIAPendiente,
   obtenerSesionIAPendiente,
   limpiarSesionIAPendiente,
+  cerrarSesionOpenAICompleta,
 };

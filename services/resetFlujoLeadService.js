@@ -4,7 +4,7 @@
  */
 
 const axios = require("axios");
-const { limpiarSesionIAPendiente } = require("./iaFlowSession");
+const { cerrarSesionOpenAICompleta, limpiarSesionIAPendiente } = require("./iaFlowSession");
 const { limpiarLastReplies: limpiarLastRepliesPro } = require("./iaProService");
 const {
   limpiarLastReplies: limpiarLastRepliesOpenAI,
@@ -158,7 +158,7 @@ async function resetearFlujoLead(numero, usuarioId, conexionWhatsappId = null) {
   );
 
   if (conexionId) {
-    limpiarSesionIAPendiente(uid, conexionId, num);
+    await cerrarSesionOpenAICompleta(uid, conexionId, num, "resetbot");
     limpiarLastRepliesPro(uid, conexionId, num);
     limpiarLastRepliesOpenAI(uid, conexionId, num);
     limpiarPaymentReaderStatus(uid, conexionId, num);
