@@ -151,7 +151,23 @@ async function fetchClientesEnRango(usuarioId, desdeIso, hastaIso, flujoId) {
   return rows.filter((c) => numeros.has(c.numero));
 }
 
-async function countClientesEnRango(usuarioId, desdeIso, hastaIso, flujoId) {
+async function countClientesEnRango(
+  usuarioId,
+  desdeIso,
+  hastaIso,
+  flujoId,
+  conexionWhatsappId = null
+) {
+  if (buildConexionFilter(conexionWhatsappId)) {
+    return countConversacionesEnRango(
+      usuarioId,
+      desdeIso,
+      hastaIso,
+      flujoId,
+      conexionWhatsappId
+    );
+  }
+
   const baseFilter = `${buildUsuarioFilter(usuarioId)}&${buildDateFilter(desdeIso, hastaIso)}&estado=neq.bloqueado`;
 
   if (!flujoId) {
@@ -1032,8 +1048,8 @@ async function loadResumenBase(usuarioId, query = {}) {
     segEstados,
     metaAdsConectado,
   ] = await Promise.all([
-    countClientesEnRango(usuarioId, rango.desde, rango.hasta, flujoId),
-    countClientesEnRango(usuarioId, anterior.desde, anterior.hasta, flujoId),
+    countClientesEnRango(usuarioId, rango.desde, rango.hasta, flujoId, conexionWhatsappId),
+    countClientesEnRango(usuarioId, anterior.desde, anterior.hasta, flujoId, conexionWhatsappId),
     countConversacionesEnRango(usuarioId, rango.desde, rango.hasta, flujoId, conexionWhatsappId),
     countConversacionesEnRango(
       usuarioId,
