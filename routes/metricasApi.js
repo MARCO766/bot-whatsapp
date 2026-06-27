@@ -12,7 +12,7 @@ const {
   computeDiagnostico,
   computeHeatmap,
   computeRevenueBreakdown,
-  fetchFlujosList,
+  fetchFlujosListMetricas,
 } = require("../services/metricasService");
 const { protegerApi } = require("../middlewares/auth");
 
@@ -110,7 +110,7 @@ router.get("/api/metricas/revenue-breakdown", protegerApi, async (req, res) => {
 // GET /api/metricas/flujos-lista (selector)
 router.get("/api/metricas/flujos-lista", protegerApi, async (req, res) => {
   try {
-    const flujos = await fetchFlujosList(req.session.usuario.id);
+    const flujos = await fetchFlujosListMetricas(req.session.usuario.id);
     res.json({
       ok: true,
       flujos: flujos.map((f) => ({ id: f.id, nombre: f.nombre })),

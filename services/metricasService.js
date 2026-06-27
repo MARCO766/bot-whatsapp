@@ -166,13 +166,20 @@ function logMetricasMulti(conexionWhatsappId, ctx = "") {
   );
 }
 
-async function fetchFlujosList(usuarioId) {
+const FLUJOS_LIST_SELECT_METRICAS = "id,nombre";
+const FLUJOS_LIST_SELECT_DEFAULT = "id,nombre,creado_en,data";
+
+async function fetchFlujosList(usuarioId, selectFields = FLUJOS_LIST_SELECT_DEFAULT) {
   const rows = await supabaseSelect(
     "flujos_builder",
     `${buildUsuarioFilter(usuarioId)}&order=nombre.asc`,
-    "id,nombre,creado_en,data"
+    selectFields
   );
   return Array.isArray(rows) ? rows : [];
+}
+
+function fetchFlujosListMetricas(usuarioId) {
+  return fetchFlujosList(usuarioId, FLUJOS_LIST_SELECT_METRICAS);
 }
 
 async function fetchClientesEnRango(usuarioId, desdeIso, hastaIso, flujoId) {
@@ -714,6 +721,50 @@ function computeFlujosRanking(flujos, seguimientos, conversiones, mensajes) {
   };
 }
 
+function metricasBaseRequestKey(usuarioId, query = {}) {
+  const flujoId = query.flujo_id || query.flujoId || null;
+  const conexionWhatsappId =
+    query.conexion_whatsapp_id ?? query.conexionWhatsappId ?? null;
+  const conn =
+    conexionWhatsappId == null || String(conexionWhatsappId).trim() === ""
+      ? null
+      : String(conexionWhatsappId).trim();
+
+  if (query.desde) {
+    return JSON.stringify({
+      u: String(usuarioId),
+      periodo: String(query.periodo || "custom").toLowerCase().trim(),
+      desde: new Date(query.desde).toISOString(),
+      hasta: query.hasta ? new Date(query.hasta).toISOString() : null,
+      flujoId: flujoId || null,
+      conexionWhatsappId: conn,
+    });
+  }
+
+  const periodo = String(query.periodo || "7d").toLowerCase().trim();
+  return JSON.stringify({
+    u: String(usuarioId),
+    periodo,
+    flujoId: flujoId || null,
+    conexionWhatsappId: conn,
+  });
+}
+
+/** Cargas idénticas en vuelo comparten una sola promesa; no persiste tras completar. */
+const metricasBaseInflight = new Map();
+
+async function resolveMetricasBase(usuarioId, query = {}) {
+  const key = metricasBaseRequestKey(usuarioId, query);
+  const existing = metricasBaseInflight.get(key);
+  if (existing) return existing;
+
+  const pending = loadMetricasBase(usuarioId, query).finally(() => {
+    metricasBaseInflight.delete(key);
+  });
+  metricasBaseInflight.set(key, pending);
+  return pending;
+}
+
 async function loadMetricasBase(usuarioId, query = {}) {
   const rango = parseRango(query);
   const flujoId = query.flujo_id || query.flujoId || null;
@@ -727,7 +778,7 @@ async function loadMetricasBase(usuarioId, query = {}) {
     fetchMensajesEnRango(usuarioId, rango.desde, rango.hasta, flujoId, conexionWhatsappId),
     fetchConversionesEnRango(usuarioId, rango.desde, rango.hasta, flujoId, conexionWhatsappId),
     fetchSeguimientosEnRango(usuarioId, rango.desde, rango.hasta, flujoId, conexionWhatsappId),
-    fetchFlujosList(usuarioId),
+    fetchFlujosListMetricas(usuarioId),
     checkMetaAdsConectado(usuarioId),
   ]);
 
@@ -787,8 +838,7 @@ async function loadMetricasBase(usuarioId, query = {}) {
   };
 }
 
-async function computeResumen(usuarioId, query) {
-  const base = await loadMetricasBase(usuarioId, query);
+function computeResumenFromBase(base) {
   const { kpis, salud, rango, flujoId, metaAdsConectado } = base;
 
   return {
@@ -812,8 +862,11 @@ async function computeResumen(usuarioId, query) {
   };
 }
 
-async function computeFunnel(usuarioId, query) {
-  const base = await loadMetricasBase(usuarioId, query);
+async function computeResumen(usuarioId, query) {
+  return computeResumenFromBase(await resolveMetricasBase(usuarioId, query));
+}
+
+function computeFunnelFromBase(base) {
   const { kpis, segEstados, rango, flujoId } = base;
 
   const pasos = [
@@ -843,8 +896,11 @@ async function computeFunnel(usuarioId, query) {
   };
 }
 
-async function computeSeries(usuarioId, query) {
-  const base = await loadMetricasBase(usuarioId, query);
+async function computeFunnel(usuarioId, query) {
+  return computeFunnelFromBase(await resolveMetricasBase(usuarioId, query));
+}
+
+function computeSeriesFromBase(base) {
   const { clientes, mensajes, conversiones, rango, flujoId } = base;
 
   const diario = buildSeriesDiarias(rango.desde, rango.hasta, clientes, mensajes, conversiones);
@@ -870,8 +926,11 @@ async function computeSeries(usuarioId, query) {
   };
 }
 
-async function computeFlujos(usuarioId, query) {
-  const base = await loadMetricasBase(usuarioId, query);
+async function computeSeries(usuarioId, query) {
+  return computeSeriesFromBase(await resolveMetricasBase(usuarioId, query));
+}
+
+function computeFlujosFromBase(base) {
   const ranking = computeFlujosRanking(
     base.flujos,
     base.seguimientos,
@@ -889,8 +948,11 @@ async function computeFlujos(usuarioId, query) {
   };
 }
 
-async function computeDiagnostico(usuarioId, query) {
-  const base = await loadMetricasBase(usuarioId, query);
+async function computeFlujos(usuarioId, query) {
+  return computeFlujosFromBase(await resolveMetricasBase(usuarioId, query));
+}
+
+function computeDiagnosticoFromBase(base) {
   const items = buildDiagnosticoItems(base.kpis);
 
   return {
@@ -912,8 +974,11 @@ async function computeDiagnostico(usuarioId, query) {
   };
 }
 
-async function computeHeatmap(usuarioId, query) {
-  const base = await loadMetricasBase(usuarioId, query);
+async function computeDiagnostico(usuarioId, query) {
+  return computeDiagnosticoFromBase(await resolveMetricasBase(usuarioId, query));
+}
+
+function computeHeatmapFromBase(base) {
   const heatmap = buildHeatmap(base.mensajes, base.clientes);
 
   return {
@@ -928,6 +993,10 @@ async function computeHeatmap(usuarioId, query) {
   };
 }
 
+async function computeHeatmap(usuarioId, query) {
+  return computeHeatmapFromBase(await resolveMetricasBase(usuarioId, query));
+}
+
 module.exports = {
   parseRango,
   rangoAnterior,
@@ -939,4 +1008,5 @@ module.exports = {
   computeHeatmap,
   computeRevenueBreakdown,
   fetchFlujosList,
+  fetchFlujosListMetricas,
 };
