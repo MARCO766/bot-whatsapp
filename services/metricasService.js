@@ -4,6 +4,7 @@
 const axios = require("axios");
 const { calcTendencia, sumarVentasPorMoneda } = require("./flujosMetricsService");
 const { isSchemaMissingError, logSchemaFallback } = require("./supabaseSafe");
+const { resolveDateRange } = require("./dateRangeService");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
@@ -17,55 +18,7 @@ function headers(extra = {}) {
 }
 
 function parseRango(query = {}) {
-  const now = new Date();
-
-  if (query.desde) {
-    const hasta = query.hasta ? new Date(query.hasta).toISOString() : now.toISOString();
-    return {
-      desde: new Date(query.desde).toISOString(),
-      hasta,
-      periodo: query.periodo || "custom",
-    };
-  }
-
-  const periodo = String(query.periodo || "7d").toLowerCase().trim();
-  const hoyInicio = new Date();
-  hoyInicio.setHours(0, 0, 0, 0);
-  const hasta = now.toISOString();
-
-  if (periodo === "hoy" || periodo === "today") {
-    return { desde: hoyInicio.toISOString(), hasta, periodo: "hoy" };
-  }
-
-  if (periodo === "ayer" || periodo === "yesterday") {
-    const inicioAyer = new Date(hoyInicio);
-    inicioAyer.setDate(inicioAyer.getDate() - 1);
-    const finAyer = new Date(hoyInicio);
-    finAyer.setMilliseconds(finAyer.getMilliseconds() - 1);
-    return {
-      desde: inicioAyer.toISOString(),
-      hasta: finAyer.toISOString(),
-      periodo: "ayer",
-    };
-  }
-
-  const desde = new Date(hoyInicio);
-
-  if (periodo === "90d" || periodo === "90") {
-    desde.setDate(desde.getDate() - 89);
-    return { desde: desde.toISOString(), hasta, periodo: "90d" };
-  }
-  if (periodo === "30d" || periodo === "30") {
-    desde.setDate(desde.getDate() - 29);
-    return { desde: desde.toISOString(), hasta, periodo: "30d" };
-  }
-  if (periodo === "7d" || periodo === "7") {
-    desde.setDate(desde.getDate() - 6);
-    return { desde: desde.toISOString(), hasta, periodo: "7d" };
-  }
-
-  desde.setDate(desde.getDate() - 6);
-  return { desde: desde.toISOString(), hasta, periodo: "7d" };
+  return resolveDateRange(query);
 }
 
 function rangoAnterior(desdeIso, hastaIso, periodo = "") {
