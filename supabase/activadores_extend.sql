@@ -24,5 +24,5 @@ ALTER TABLE activadores
 ALTER TABLE activadores
   ADD COLUMN IF NOT EXISTS palabras_clave_array text[] DEFAULT '{}';
 
-COMMENT ON COLUMN activadores.tipo_activador IS 'palabra_unica | multiples_palabras | cualquier_mensaje';
+COMMENT ON COLUMN activadores.tipo_activador IS 'palabra_unica | multiples_palabras | cualquier_mensaje | primer_mensaje';
 COMMENT ON COLUMN activadores.palabras_clave_array IS 'Lista de palabras para tipo multiples_palabras';

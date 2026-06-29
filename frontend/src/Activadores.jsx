@@ -237,8 +237,9 @@ export default function Activadores() {
                 <div>
                   <div className="actTipoBadge">{labelTipoActivador(a.tipo_activador)}</div>
                   <div className="actKeyword">
-                    {a.tipo_activador === "cualquier_mensaje"
-                      ? "Cualquier mensaje"
+                    {a.tipo_activador === "cualquier_mensaje" ||
+                    a.tipo_activador === "primer_mensaje"
+                      ? displayActivadorTrigger(a)
                       : `"${displayActivadorTrigger(a)}"`}
                   </div>
                 </div>
@@ -248,7 +249,8 @@ export default function Activadores() {
                 <div>
                   Flujo: <b>{a.flujo_nombre || a.flujo_id || "—"}</b>
                 </div>
-                {a.tipo_activador !== "cualquier_mensaje" ? (
+                {a.tipo_activador !== "cualquier_mensaje" &&
+                a.tipo_activador !== "primer_mensaje" ? (
                   <div>
                     Coincidencia: <b>{a.coincidencia}</b> · Prioridad: <b>{a.prioridad}</b>
                   </div>
@@ -305,11 +307,7 @@ export default function Activadores() {
 
       <ActivadorDeleteModal
         open={Boolean(confirmDelete)}
-        palabra={
-          confirmDelete?.tipo_activador === "cualquier_mensaje"
-            ? "Cualquier mensaje"
-            : displayActivadorTrigger(confirmDelete || {})
-        }
+        palabra={displayActivadorTrigger(confirmDelete || {})}
         deleting={deleting}
         onCancel={() => {
           if (!deleting) setConfirmDelete(null);

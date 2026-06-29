@@ -23,6 +23,7 @@ const {
 } = require("../services/seguimiento/registrarRespuestaBoton");
 const rt = require("../services/realtimeService");
 const { evaluarLimiteContactoEntrante } = require("../middlewares/planLimits");
+const { calcularEsPrimerMensaje } = require("../services/firstMessageService");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
@@ -436,6 +437,19 @@ if (message.document && message.document.id && conexionWebhook?.token) {
 
 const conexionWhatsappId = conexionWebhook?.id || null;
 
+const { esPrimerMensaje, motivo: motivoPrimerMensaje } = await calcularEsPrimerMensaje(
+  usuarioIdWebhook,
+  from,
+  conexionWhatsappId
+);
+console.log("[FIRST_MESSAGE_CHECK]", {
+  usuario: usuarioIdWebhook,
+  conexion: conexionWhatsappId,
+  numero: from,
+  resultado: esPrimerMensaje,
+  motivo: motivoPrimerMensaje,
+});
+
 await axios.post(
   `${SUPABASE_URL}/rest/v1/mensajes`,
   
@@ -629,6 +643,7 @@ const activadorEjecutado = await procesarMensajeEntrante(
     mimeType: message.document?.mime_type || message.image?.mime_type || null,
     filename: message.document?.filename || null,
     conexionWhatsappId: conexionWhatsappId || null,
+    esPrimerMensaje,
   }
 );
 

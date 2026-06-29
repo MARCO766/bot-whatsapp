@@ -54,8 +54,10 @@ export default function ActivadorModal({
   if (!open) return null;
 
   const esCualquier = form.tipo_activador === "cualquier_mensaje";
+  const esPrimerMensaje = form.tipo_activador === "primer_mensaje";
   const esMultiples = form.tipo_activador === "multiples_palabras";
   const esUnica = form.tipo_activador === "palabra_unica";
+  const esSinPalabraClave = esCualquier || esPrimerMensaje;
 
   function setField(key, value) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -72,7 +74,7 @@ export default function ActivadorModal({
       repetible: form.repetible,
     };
 
-    if (esCualquier) return base;
+    if (esSinPalabraClave) return base;
     if (esMultiples) {
       return { ...base, palabras_clave_text: form.palabras_clave_text };
     }
@@ -81,7 +83,7 @@ export default function ActivadorModal({
 
   function validate() {
     if (!form.flujo_id) return false;
-    if (esCualquier) return true;
+    if (esSinPalabraClave) return true;
     if (esMultiples) {
       return (
         form.palabras_clave_text
@@ -166,6 +168,13 @@ export default function ActivadorModal({
             </p>
           )}
 
+          {esPrimerMensaje && (
+            <p className="actHint">
+              Se activará únicamente con el primer mensaje entrante del lead en esta línea
+              WhatsApp.
+            </p>
+          )}
+
           <div className="actField">
             <label>Flujo asignado *</label>
             <select
@@ -185,7 +194,7 @@ export default function ActivadorModal({
             )}
           </div>
 
-          {!esCualquier && (
+          {!esSinPalabraClave && (
             <div className="actRow2">
               <div className="actField">
                 <label>Coincidencia</label>
@@ -211,7 +220,7 @@ export default function ActivadorModal({
             </div>
           )}
 
-          {esCualquier && (
+          {esSinPalabraClave && (
             <div className="actField">
               <label>Prioridad</label>
               <input

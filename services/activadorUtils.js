@@ -7,11 +7,13 @@ const TIPOS = {
   PALABRA_UNICA: "palabra_unica",
   MULTIPLES: "multiples_palabras",
   CUALQUIER: "cualquier_mensaje",
+  PRIMER_MENSAJE: "primer_mensaje",
 };
 
 function resolveTipo(activador) {
   const t = activador?.tipo_activador;
   if (t === TIPOS.CUALQUIER) return TIPOS.CUALQUIER;
+  if (t === TIPOS.PRIMER_MENSAJE) return TIPOS.PRIMER_MENSAJE;
   if (t === TIPOS.MULTIPLES) return TIPOS.MULTIPLES;
   return TIPOS.PALABRA_UNICA;
 }
@@ -49,10 +51,30 @@ function coincidePalabra(textoNorm, palabra, modo) {
   return textoNorm.includes(palabra);
 }
 
-function matchActivador(textoNorm, activador) {
+function matchActivador(textoNorm, activador, matchOpts = {}) {
   if (!textoNorm) return { matched: false };
 
   const tipo = resolveTipo(activador);
+
+  if (tipo === TIPOS.PRIMER_MENSAJE) {
+    const esPrimer = matchOpts.esPrimerMensaje;
+    if (esPrimer === true) {
+      console.log("[FIRST_MESSAGE_MATCH]", {
+        tipo: "primer_mensaje",
+        resultado: true,
+        motivo: "primer_mensaje",
+      });
+      return { matched: true, tipo, detalle: "primer_mensaje" };
+    }
+    const motivo =
+      esPrimer === false ? "no_es_primer_mensaje" : "contexto_no_disponible";
+    console.log("[FIRST_MESSAGE_MATCH]", {
+      tipo: "primer_mensaje",
+      resultado: false,
+      motivo,
+    });
+    return { matched: false };
+  }
 
   if (tipo === TIPOS.CUALQUIER) {
     return { matched: true, tipo, detalle: "cualquier_mensaje" };
@@ -101,7 +123,7 @@ function validateActivadorBody(body) {
 
   const tipo = body.tipo_activador || TIPOS.PALABRA_UNICA;
 
-  if (tipo === TIPOS.CUALQUIER) {
+  if (tipo === TIPOS.CUALQUIER || tipo === TIPOS.PRIMER_MENSAJE) {
     return { ok: true };
   }
 
@@ -131,7 +153,7 @@ function bodyToActivadorFields(body, usuarioId, conexionWhatsappId = null) {
   let frase = "";
   let palabras_clave_array = null;
 
-  if (tipo === TIPOS.CUALQUIER) {
+  if (tipo === TIPOS.CUALQUIER || tipo === TIPOS.PRIMER_MENSAJE) {
     frase = "*";
   } else if (tipo === TIPOS.MULTIPLES) {
     palabras_clave_array = parsePalabrasFromBody(body);
@@ -143,9 +165,11 @@ function bodyToActivadorFields(body, usuarioId, conexionWhatsappId = null) {
   const nombreBase =
     tipo === TIPOS.CUALQUIER
       ? "Cualquier mensaje"
-      : tipo === TIPOS.MULTIPLES
-        ? palabras_clave_array.slice(0, 3).join(", ")
-        : frase;
+      : tipo === TIPOS.PRIMER_MENSAJE
+        ? "Primer mensaje"
+        : tipo === TIPOS.MULTIPLES
+          ? palabras_clave_array.slice(0, 3).join(", ")
+          : frase;
 
   const nombre =
     String(body.nombre ?? "").trim() ||
@@ -205,6 +229,8 @@ function mapActivadorRow(row, flujosById = {}) {
   let palabraDisplay = row.frase || "";
   if (tipo === TIPOS.CUALQUIER) {
     palabraDisplay = "Cualquier mensaje";
+  } else if (tipo === TIPOS.PRIMER_MENSAJE) {
+    palabraDisplay = "Primer mensaje";
   } else if (tipo === TIPOS.MULTIPLES) {
     palabraDisplay = palabrasArray.join(", ") || row.frase || "";
   }
@@ -214,7 +240,8 @@ function mapActivadorRow(row, flujosById = {}) {
     usuario_id: row.usuario_id,
     nombre: row.nombre || "",
     tipo_activador: tipo,
-    palabra_clave: tipo === TIPOS.CUALQUIER ? "" : palabraDisplay,
+    palabra_clave:
+      tipo === TIPOS.CUALQUIER || tipo === TIPOS.PRIMER_MENSAJE ? "" : palabraDisplay,
     palabras_clave_array: palabrasArray,
     palabras_clave_text: palabrasArray.join(", "),
     frase: row.frase || "",
@@ -235,6 +262,7 @@ function mapActivadorRow(row, flujosById = {}) {
 
 function tipoLabel(tipo) {
   if (tipo === TIPOS.CUALQUIER) return "Cualquier mensaje";
+  if (tipo === TIPOS.PRIMER_MENSAJE) return "Primer mensaje";
   if (tipo === TIPOS.MULTIPLES) return "Varias palabras";
   return "Palabra única";
 }

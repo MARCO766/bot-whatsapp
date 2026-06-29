@@ -2215,7 +2215,8 @@ async function procesarMensajeEntrante(
           texto,
           usuarioId,
           messageId,
-          opts.conexionWhatsappId || null
+          opts.conexionWhatsappId || null,
+          { esPrimerMensaje: opts.esPrimerMensaje }
         );
 
         if (activadorPrioritario) {
@@ -2312,7 +2313,8 @@ async function procesarMensajeEntrante(
     texto,
     usuarioId,
     messageId,
-    opts.conexionWhatsappId || null
+    opts.conexionWhatsappId || null,
+    { esPrimerMensaje: opts.esPrimerMensaje }
   );
   if (!activadorEjecutado && usuarioId && numero) {
     try {
@@ -2453,7 +2455,7 @@ async function resolverActivadorEntrante(
     if (opts.excluirCualquierMensaje && resolveTipo(a) === TIPOS.CUALQUIER) {
       continue;
     }
-    const result = matchActivador(textoNorm, a);
+    const result = matchActivador(textoNorm, a, opts);
     if (result.matched) {
       activador = a;
       matchInfo = result;
@@ -2567,7 +2569,8 @@ async function buscarYEjecutarActivador(
   textoCliente,
   usuarioId = null,
   messageId = null,
-  conexionWhatsappId = null
+  conexionWhatsappId = null,
+  matchOpts = {}
 ) {
   if (!textoCliente || !usuarioId) {
     console.log("⚠️ ACTIVADOR — omitido (sin texto o sin usuario_id):", {
@@ -2599,7 +2602,8 @@ async function buscarYEjecutarActivador(
   const resolved = await resolverActivadorEntrante(
     textoCliente,
     usuarioId,
-    conexionWhatsappId
+    conexionWhatsappId,
+    matchOpts
   );
   if (!resolved) {
     console.log("⚠️ ACTIVADOR — no encontrado para texto:", textoNorm);
