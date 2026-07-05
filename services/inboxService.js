@@ -130,10 +130,20 @@ async function loadConversacionesPorClientesEtiqueta(
       ? Math.floor(Number(offset))
       : 0;
 
-  return axios.get(
-    `${SUPABASE_URL}/rest/v1/conversaciones?usuario_id=eq.${usuarioId}${filtroConexion}&select=*&or=(${orClause})&order=ultimo_mensaje_en.desc&limit=${pageLimit}&offset=${pageOffset}`,
-    { headers: supabaseHeaders() }
-  );
+  const url = `${SUPABASE_URL}/rest/v1/conversaciones?usuario_id=eq.${usuarioId}${filtroConexion}&select=*&or=(${orClause})&order=ultimo_mensaje_en.desc&limit=${pageLimit}&offset=${pageOffset}`;
+
+  console.log("URL COMPLETA:");
+  console.log(url);
+
+  try {
+    return await axios.get(url, { headers: supabaseHeaders() });
+  } catch (error) {
+    console.log("STATUS:");
+    console.log(error.response?.status);
+    console.log("BODY:");
+    console.log(error.response?.data);
+    throw error;
+  }
 }
 
 async function loadEtiquetasParaConversacionesVisibles(
