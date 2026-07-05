@@ -290,15 +290,13 @@ async function loadInboxData(
     contentRangeEtiquetas != null ? contentRangeEtiquetas : "(no presente)"
   );
 
-  const asignacionesParaChips = conexionWhatsappId
-    ? etiquetasClientes.filter((e) =>
+  const etiquetasParaFiltro = conexionWhatsappId
+    ? etiquetasDisponibles.filter((e) =>
         sameConexionId(e.conexion_whatsapp_id, conexionWhatsappId)
       )
-    : etiquetasClientes;
+    : etiquetasDisponibles;
   const etiquetasUnicas = [
-    ...new Set(
-      asignacionesParaChips.map((e) => e.etiqueta).filter(Boolean)
-    ),
+    ...new Set(etiquetasParaFiltro.map((e) => e.nombre).filter(Boolean)),
   ];
 
   const conversaciones = {};
