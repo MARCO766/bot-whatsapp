@@ -84,6 +84,19 @@ async function loadConexionesInbox(usuarioId) {
   }));
 }
 
+async function loadClientesPorEtiquetaFiltro(
+  usuarioId,
+  etiqueta,
+  conexionWhatsappId = null
+) {
+  const filtroConexion = filtroConexionQuery(conexionWhatsappId);
+  const res = await axios.get(
+    `${SUPABASE_URL}/rest/v1/clientes_etiquetas?usuario_id=eq.${encodeURIComponent(usuarioId)}&etiqueta=eq.${encodeURIComponent(etiqueta)}${filtroConexion}&select=cliente_numero,conexion_whatsapp_id`,
+    { headers: supabaseHeaders() }
+  );
+  return Array.isArray(res.data) ? res.data : [];
+}
+
 async function loadEtiquetasParaConversacionesVisibles(
   usuarioId,
   conversacionesVisibles
@@ -138,6 +151,13 @@ async function loadInboxData(
     offset = 0,
   } = {}
 ) {
+  const tTotalStart = performance.now();
+  let msConversaciones = 0;
+  let msClientes = 0;
+  let msEtiquetas = 0;
+  let msMapaConversaciones = 0;
+  let msConstruccionTags = 0;
+
   const filtroConexion = filtroConexionQuery(conexionWhatsappId);
   const pageLimit =
     Number.isFinite(Number(limit)) && Number(limit) > 0
@@ -147,6 +167,44 @@ async function loadInboxData(
     Number.isFinite(Number(offset)) && Number(offset) >= 0
       ? Math.floor(Number(offset))
       : 0;
+
+  // --- FASE 7.1: ruta preparatoria filtro por etiqueta (sin uso aún) ---
+  if (etiquetaFiltro) {
+    const clientesEtiquetaFiltro = await loadClientesPorEtiquetaFiltro(
+      usuarioId,
+      etiquetaFiltro,
+      conexionWhatsappId
+    );
+    console.log("=====================");
+    console.log("FILTRO ETIQUETA");
+    console.log("=====================");
+    console.log(`Etiqueta: ${etiquetaFiltro}`);
+    console.log(`Clientes encontrados: ${clientesEtiquetaFiltro.length}`);
+    console.log("=====================");
+  }
+  // --- fin FASE 7.1 ---
+
+  const tConversacionesStart = performance.now();
+  const conversacionesPromise = axios
+    .get(
+      `${SUPABASE_URL}/rest/v1/conversaciones?usuario_id=eq.${usuarioId}${filtroConexion}&select=*&order=ultimo_mensaje_en.desc&limit=${pageLimit}&offset=${pageOffset}`,
+      { headers: supabaseHeaders() }
+    )
+    .then((res) => {
+      msConversaciones = performance.now() - tConversacionesStart;
+      return res;
+    });
+
+  const tClientesStart = performance.now();
+  const clientesPromise = axios
+    .get(
+      `${SUPABASE_URL}/rest/v1/clientes?usuario_id=eq.${usuarioId}&select=*`,
+      { headers: supabaseHeaders() }
+    )
+    .then((res) => {
+      msClientes = performance.now() - tClientesStart;
+      return res;
+    });
 
   const [
     responseMensajes,
@@ -164,14 +222,8 @@ async function loadInboxData(
       `${SUPABASE_URL}/rest/v1/etiquetas?usuario_id=eq.${usuarioId}&select=nombre,color,conexion_whatsapp_id`,
       { headers: supabaseHeaders() }
     ),
-    axios.get(
-      `${SUPABASE_URL}/rest/v1/clientes?usuario_id=eq.${usuarioId}&select=*`,
-      { headers: supabaseHeaders() }
-    ),
-    axios.get(
-      `${SUPABASE_URL}/rest/v1/conversaciones?usuario_id=eq.${usuarioId}${filtroConexion}&select=*&order=ultimo_mensaje_en.desc&limit=${pageLimit}&offset=${pageOffset}`,
-      { headers: supabaseHeaders() }
-    ),
+    clientesPromise,
+    conversacionesPromise,
     loadConexionesInbox(usuarioId),
     countConversacionesInbox(usuarioId, conexionWhatsappId),
   ]);
@@ -254,6 +306,7 @@ async function loadInboxData(
   const conversacionesDB = responseConversaciones.data || [];
   const mapaUnread = {};
   const mapaConversaciones = {};
+  const tMapaConversacionesStart = performance.now();
   conversacionesDB.forEach((c) => {
     const numero = c.cliente_numero;
     const connId = c.conexion_whatsapp_id;
@@ -262,11 +315,14 @@ async function loadInboxData(
     mapaUnread[key] = c.unread_count || 0;
     mapaConversaciones[key] = c;
   });
+  msMapaConversaciones = performance.now() - tMapaConversacionesStart;
 
+  const tEtiquetasStart = performance.now();
   const responseEtiquetas = await loadEtiquetasParaConversacionesVisibles(
     usuarioId,
     conversacionesDB
   );
+  msEtiquetas = performance.now() - tEtiquetasStart;
   const etiquetasClientes = responseEtiquetas.data || [];
   console.log(
     "[inbox] etiquetas cargadas para conversaciones visibles:",
@@ -369,6 +425,7 @@ async function loadInboxData(
       lastMsg?.contenido ||
       lastMsg?.tipo ||
       "";
+    const tTagsFilterStart = performance.now();
     const tags = etiquetasClientes
       .filter(
         (e) =>
@@ -379,6 +436,7 @@ async function loadInboxData(
         nombre: e.etiqueta,
         color: mapaColoresEtiquetas[e.etiqueta] || "#25d366",
       }));
+    msConstruccionTags += performance.now() - tTagsFilterStart;
 
     return {
       chatKey: chatCompositeKey(numero, connId),
@@ -406,6 +464,18 @@ async function loadInboxData(
     totalConversations != null
       ? pageOffset + loadedConversacionesCount < totalConversations
       : loadedConversacionesCount === pageLimit;
+
+  const msTotal = performance.now() - tTotalStart;
+  console.log("==========================");
+  console.log("INBOX PERFORMANCE");
+  console.log("==========================");
+  console.log(`Conversaciones: ${msConversaciones.toFixed(2)} ms`);
+  console.log(`Clientes: ${msClientes.toFixed(2)} ms`);
+  console.log(`Etiquetas: ${msEtiquetas.toFixed(2)} ms`);
+  console.log(`Mapa conversaciones: ${msMapaConversaciones.toFixed(2)} ms`);
+  console.log(`Construcción tags: ${msConstruccionTags.toFixed(2)} ms`);
+  console.log(`Total inbox: ${msTotal.toFixed(2)} ms`);
+  console.log("==========================");
 
   return {
     conexionWhatsappId,
