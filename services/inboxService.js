@@ -84,6 +84,34 @@ async function loadConexionesInbox(usuarioId) {
   }));
 }
 
+async function loadEtiquetasParaConversacionesVisibles(
+  usuarioId,
+  conversacionesVisibles
+) {
+  const pares = (conversacionesVisibles || [])
+    .filter((c) => c?.cliente_numero && c?.conexion_whatsapp_id)
+    .map((c) => ({
+      cliente_numero: String(c.cliente_numero).trim(),
+      conexion_whatsapp_id: String(c.conexion_whatsapp_id).trim(),
+    }));
+
+  if (pares.length === 0) {
+    return { data: [], headers: {} };
+  }
+
+  const orClause = pares
+    .map(
+      (p) =>
+        `and(cliente_numero.eq.${encodeURIComponent(p.cliente_numero)},conexion_whatsapp_id.eq.${encodeURIComponent(p.conexion_whatsapp_id)})`
+    )
+    .join(",");
+
+  return axios.get(
+    `${SUPABASE_URL}/rest/v1/clientes_etiquetas?usuario_id=eq.${usuarioId}&select=*&or=(${orClause})`,
+    { headers: supabaseHeaders() }
+  );
+}
+
 async function loadInboxData(
   usuarioId,
   { etiquetaFiltro = "", conexionWhatsappId = null } = {}
@@ -92,7 +120,6 @@ async function loadInboxData(
 
   const [
     responseMensajes,
-    responseEtiquetas,
     responseColoresEtiquetas,
     responseClientes,
     responseConversaciones,
@@ -100,10 +127,6 @@ async function loadInboxData(
   ] = await Promise.all([
     axios.get(
       `${SUPABASE_URL}/rest/v1/mensajes?usuario_id=eq.${usuarioId}${filtroConexion}&select=*&order=creado_en.desc&limit=200`,
-      { headers: supabaseHeaders() }
-    ),
-    axios.get(
-      `${SUPABASE_URL}/rest/v1/clientes_etiquetas?usuario_id=eq.${usuarioId}&select=*`,
       { headers: supabaseHeaders() }
     ),
     axios.get(
@@ -123,16 +146,11 @@ async function loadInboxData(
 
   // --- FASE 1: instrumentación diagnóstica (temporal) ---
   const conversacionesDataLength = (responseConversaciones.data || []).length;
-  const etiquetasDataLength = (responseEtiquetas.data || []).length;
   const mensajesDataLength = (responseMensajes.data || []).length;
 
   const contentRangeConversaciones =
     responseConversaciones.headers?.["content-range"] ??
     responseConversaciones.headers?.["Content-Range"] ??
-    null;
-  const contentRangeEtiquetas =
-    responseEtiquetas.headers?.["content-range"] ??
-    responseEtiquetas.headers?.["Content-Range"] ??
     null;
   const contentRangeMensajes =
     responseMensajes.headers?.["content-range"] ??
@@ -144,7 +162,6 @@ async function loadInboxData(
     conversacionesDataLength
   );
   console.log("[inbox] conversaciones cargadas:", conversacionesDataLength);
-  console.log("[inbox] responseEtiquetas.data.length:", etiquetasDataLength);
   console.log("[inbox] responseMensajes.data.length:", mensajesDataLength);
 
   if (contentRangeConversaciones != null) {
@@ -154,11 +171,6 @@ async function loadInboxData(
     );
   } else {
     console.log("[inbox] conversaciones Content-Range: (no presente)");
-  }
-  if (contentRangeEtiquetas != null) {
-    console.log("[inbox] clientes_etiquetas Content-Range:", contentRangeEtiquetas);
-  } else {
-    console.log("[inbox] clientes_etiquetas Content-Range: (no presente)");
   }
   if (contentRangeMensajes != null) {
     console.log("[inbox] mensajes Content-Range:", contentRangeMensajes);
@@ -174,12 +186,6 @@ async function loadInboxData(
   console.log(
     "- Content-Range:",
     contentRangeConversaciones != null ? contentRangeConversaciones : "(no presente)"
-  );
-  console.log("Etiquetas:");
-  console.log("- data.length:", etiquetasDataLength);
-  console.log(
-    "- Content-Range:",
-    contentRangeEtiquetas != null ? contentRangeEtiquetas : "(no presente)"
   );
   console.log("Mensajes:");
   console.log("- data.length:", mensajesDataLength);
@@ -205,17 +211,6 @@ async function loadInboxData(
     mapaColoresEtiquetas[e.nombre] = e.color || "#25d366";
   });
 
-  const etiquetasClientes = responseEtiquetas.data || [];
-  const asignacionesParaChips = conexionWhatsappId
-    ? etiquetasClientes.filter((e) =>
-        sameConexionId(e.conexion_whatsapp_id, conexionWhatsappId)
-      )
-    : etiquetasClientes;
-  const etiquetasUnicas = [
-    ...new Set(
-      asignacionesParaChips.map((e) => e.etiqueta).filter(Boolean)
-    ),
-  ];
   const etiquetasDisponibles = responseColoresEtiquetas.data || [];
 
   const clientes = responseClientes.data || [];
@@ -235,6 +230,44 @@ async function loadInboxData(
     mapaUnread[key] = c.unread_count || 0;
     mapaConversaciones[key] = c;
   });
+
+  const responseEtiquetas = await loadEtiquetasParaConversacionesVisibles(
+    usuarioId,
+    conversacionesDB
+  );
+  const etiquetasClientes = responseEtiquetas.data || [];
+  console.log(
+    "[inbox] etiquetas cargadas para conversaciones visibles:",
+    etiquetasClientes.length
+  );
+
+  const contentRangeEtiquetas =
+    responseEtiquetas.headers?.["content-range"] ??
+    responseEtiquetas.headers?.["Content-Range"] ??
+    null;
+  console.log("[inbox] responseEtiquetas.data.length:", etiquetasClientes.length);
+  if (contentRangeEtiquetas != null) {
+    console.log("[inbox] clientes_etiquetas Content-Range:", contentRangeEtiquetas);
+  } else {
+    console.log("[inbox] clientes_etiquetas Content-Range: (no presente)");
+  }
+  console.log("Etiquetas:");
+  console.log("- data.length:", etiquetasClientes.length);
+  console.log(
+    "- Content-Range:",
+    contentRangeEtiquetas != null ? contentRangeEtiquetas : "(no presente)"
+  );
+
+  const asignacionesParaChips = conexionWhatsappId
+    ? etiquetasClientes.filter((e) =>
+        sameConexionId(e.conexion_whatsapp_id, conexionWhatsappId)
+      )
+    : etiquetasClientes;
+  const etiquetasUnicas = [
+    ...new Set(
+      asignacionesParaChips.map((e) => e.etiqueta).filter(Boolean)
+    ),
+  ];
 
   const conversaciones = {};
   const mensajes = responseMensajes.data || [];
