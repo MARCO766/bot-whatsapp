@@ -121,6 +121,74 @@ async function loadInboxData(
     loadConexionesInbox(usuarioId),
   ]);
 
+  // --- FASE 1: instrumentación diagnóstica (temporal) ---
+  const conversacionesDataLength = (responseConversaciones.data || []).length;
+  const etiquetasDataLength = (responseEtiquetas.data || []).length;
+  const mensajesDataLength = (responseMensajes.data || []).length;
+
+  const contentRangeConversaciones =
+    responseConversaciones.headers?.["content-range"] ??
+    responseConversaciones.headers?.["Content-Range"] ??
+    null;
+  const contentRangeEtiquetas =
+    responseEtiquetas.headers?.["content-range"] ??
+    responseEtiquetas.headers?.["Content-Range"] ??
+    null;
+  const contentRangeMensajes =
+    responseMensajes.headers?.["content-range"] ??
+    responseMensajes.headers?.["Content-Range"] ??
+    null;
+
+  console.log(
+    "[inbox] responseConversaciones.data.length:",
+    conversacionesDataLength
+  );
+  console.log("[inbox] responseEtiquetas.data.length:", etiquetasDataLength);
+  console.log("[inbox] responseMensajes.data.length:", mensajesDataLength);
+
+  if (contentRangeConversaciones != null) {
+    console.log(
+      "[inbox] conversaciones Content-Range:",
+      contentRangeConversaciones
+    );
+  } else {
+    console.log("[inbox] conversaciones Content-Range: (no presente)");
+  }
+  if (contentRangeEtiquetas != null) {
+    console.log("[inbox] clientes_etiquetas Content-Range:", contentRangeEtiquetas);
+  } else {
+    console.log("[inbox] clientes_etiquetas Content-Range: (no presente)");
+  }
+  if (contentRangeMensajes != null) {
+    console.log("[inbox] mensajes Content-Range:", contentRangeMensajes);
+  } else {
+    console.log("[inbox] mensajes Content-Range: (no presente)");
+  }
+
+  console.log("=============================");
+  console.log("INBOX LOAD");
+  console.log("=============================");
+  console.log("Conversaciones:");
+  console.log("- data.length:", conversacionesDataLength);
+  console.log(
+    "- Content-Range:",
+    contentRangeConversaciones != null ? contentRangeConversaciones : "(no presente)"
+  );
+  console.log("Etiquetas:");
+  console.log("- data.length:", etiquetasDataLength);
+  console.log(
+    "- Content-Range:",
+    contentRangeEtiquetas != null ? contentRangeEtiquetas : "(no presente)"
+  );
+  console.log("Mensajes:");
+  console.log("- data.length:", mensajesDataLength);
+  console.log(
+    "- Content-Range:",
+    contentRangeMensajes != null ? contentRangeMensajes : "(no presente)"
+  );
+  console.log("=============================");
+  // --- fin instrumentación FASE 1 ---
+
   const mapaNombreConexion = {};
   (conexionesInbox || []).forEach((c) => {
     if (c?.id != null) {
