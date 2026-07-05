@@ -115,7 +115,7 @@ async function loadInboxData(
       { headers: supabaseHeaders() }
     ),
     axios.get(
-      `${SUPABASE_URL}/rest/v1/conversaciones?usuario_id=eq.${usuarioId}${filtroConexion}&select=*`,
+      `${SUPABASE_URL}/rest/v1/conversaciones?usuario_id=eq.${usuarioId}${filtroConexion}&select=*&order=ultimo_mensaje_en.desc&limit=20`,
       { headers: supabaseHeaders() }
     ),
     loadConexionesInbox(usuarioId),
@@ -143,6 +143,7 @@ async function loadInboxData(
     "[inbox] responseConversaciones.data.length:",
     conversacionesDataLength
   );
+  console.log("[inbox] conversaciones cargadas:", conversacionesDataLength);
   console.log("[inbox] responseEtiquetas.data.length:", etiquetasDataLength);
   console.log("[inbox] responseMensajes.data.length:", mensajesDataLength);
 
@@ -251,12 +252,7 @@ async function loadInboxData(
     conversaciones[key].push(msg);
   });
 
-  let chatKeys = [
-    ...new Set([
-      ...Object.keys(mapaConversaciones),
-      ...Object.keys(conversaciones),
-    ]),
-  ].filter((key) => {
+  let chatKeys = Object.keys(mapaConversaciones).filter((key) => {
     const { numero, conexionWhatsappId } = parseChatCompositeKey(key);
     return numero && conexionWhatsappId;
   });
