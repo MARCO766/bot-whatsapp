@@ -30,6 +30,20 @@ export { CONEXION_TODAS };
 
 const STORAGE_INBOX_NUMERO = "macbot_inbox_numero";
 const STORAGE_INBOX_NUMERO_CONEXION = "macbot_inbox_numero_conexion_id";
+const INBOX_PAGE_LIMIT = 20;
+
+function mergeChatsByKey(prev, nuevos) {
+  if (!nuevos?.length) return prev;
+  const keys = new Set(prev.map((c) => c.chatKey).filter(Boolean));
+  const merged = [...prev];
+  for (const chat of nuevos) {
+    const key = chat.chatKey;
+    if (!key || keys.has(key)) continue;
+    keys.add(key);
+    merged.push(chat);
+  }
+  return merged;
+}
 
 function selectedChatMatchesTab(selectedChat, conexionSeleccionadaId) {
   if (!selectedChat) return false;
@@ -88,11 +102,18 @@ export function useInbox({ onUnreadChange } = {}) {
   const [tagModalTarget, setTagModalTarget] = useState(null);
   const [conexionesInbox, setConexionesInbox] = useState([]);
   const [conexionSeleccionadaId, setConexionSeleccionadaId] = useState(null);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   const abrirChatSeqRef = useRef(0);
   const conexionSeleccionadaIdRef = useRef(null);
   const conexionesInboxRef = useRef([]);
   const selectedChatRef = useRef(null);
+  const hasMoreRef = useRef(false);
+  const loadingMoreRef = useRef(false);
+  const nextOffsetRef = useRef(0);
+  const pageLimitRef = useRef(INBOX_PAGE_LIMIT);
+  const inboxLoadSeqRef = useRef(0);
 
   useEffect(() => {
     conexionSeleccionadaIdRef.current = conexionSeleccionadaId;
@@ -130,14 +151,29 @@ export function useInbox({ onUnreadChange } = {}) {
     async (filtro = etiquetaFiltro, conexionId = conexionSeleccionadaId) => {
       setLoading(true);
       setError(null);
+      inboxLoadSeqRef.current += 1;
+      hasMoreRef.current = false;
+      loadingMoreRef.current = false;
+      nextOffsetRef.current = 0;
+      setHasMore(false);
+      setLoadingMore(false);
       try {
         const apiConexion =
           conexionId && conexionId !== CONEXION_TODAS ? conexionId : null;
-        const data = await fetchInbox(filtro, apiConexion);
+        const data = await fetchInbox(filtro, apiConexion, {
+          limit: INBOX_PAGE_LIMIT,
+          offset: 0,
+        });
         if (filtro && !(data.etiquetasUnicas || []).includes(filtro)) {
           setEtiquetaFiltro("");
           return;
         }
+        const limit = data.limit ?? INBOX_PAGE_LIMIT;
+        pageLimitRef.current = limit;
+        nextOffsetRef.current = limit;
+        const more = Boolean(data.hasMore);
+        hasMoreRef.current = more;
+        setHasMore(more);
         setChats(data.chats || []);
         setEtiquetasUnicas(data.etiquetasUnicas || []);
         setEtiquetasDisponibles(data.etiquetasDisponibles || []);
@@ -150,6 +186,45 @@ export function useInbox({ onUnreadChange } = {}) {
     },
     [etiquetaFiltro, conexionSeleccionadaId]
   );
+
+  const loadMoreInbox = useCallback(async () => {
+    if (
+      !hasMoreRef.current ||
+      loadingMoreRef.current ||
+      loading ||
+      !conexionSeleccionadaId
+    ) {
+      return;
+    }
+
+    loadingMoreRef.current = true;
+    setLoadingMore(true);
+    const loadSeq = inboxLoadSeqRef.current;
+    try {
+      const apiConexion =
+        conexionSeleccionadaId && conexionSeleccionadaId !== CONEXION_TODAS
+          ? conexionSeleccionadaId
+          : null;
+      const offset = nextOffsetRef.current;
+      const limit = pageLimitRef.current;
+      const data = await fetchInbox(etiquetaFiltro, apiConexion, {
+        limit,
+        offset,
+      });
+      if (loadSeq !== inboxLoadSeqRef.current) return;
+      const nuevosChats = data.chats || [];
+      setChats((prev) => mergeChatsByKey(prev, nuevosChats));
+      const more = Boolean(data.hasMore);
+      hasMoreRef.current = more;
+      setHasMore(more);
+      nextOffsetRef.current = offset + limit;
+    } catch (err) {
+      setError(err.message || "Error cargando más conversaciones");
+    } finally {
+      loadingMoreRef.current = false;
+      setLoadingMore(false);
+    }
+  }, [loading, conexionSeleccionadaId, etiquetaFiltro]);
 
   useEffect(() => {
     let cancelled = false;
@@ -240,6 +315,9 @@ export function useInbox({ onUnreadChange } = {}) {
     if (prev !== conexionSeleccionadaId) {
       resetPanelState();
       setChats([]);
+      hasMoreRef.current = false;
+      nextOffsetRef.current = 0;
+      setHasMore(false);
     }
   }, [conexionSeleccionadaId, resetPanelState]);
 
@@ -531,6 +609,9 @@ export function useInbox({ onUnreadChange } = {}) {
     setTagModalTarget(null);
     setCargandoChat(false);
     setChats([]);
+    hasMoreRef.current = false;
+    nextOffsetRef.current = 0;
+    setHasMore(false);
     setConexionSeleccionadaId(nextId);
   }, []);
 
@@ -706,6 +787,9 @@ export function useInbox({ onUnreadChange } = {}) {
     patchBotPause,
     moverChatArriba,
     reload: loadInbox,
+    loadMoreInbox,
+    hasMore,
+    loadingMore,
     conexionesInbox,
     conexionSeleccionadaId,
     conexionActual,

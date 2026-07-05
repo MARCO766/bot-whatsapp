@@ -112,11 +112,41 @@ async function loadEtiquetasParaConversacionesVisibles(
   );
 }
 
+async function countConversacionesInbox(usuarioId, conexionWhatsappId = null) {
+  const filtroConexion = filtroConexionQuery(conexionWhatsappId);
+  const url = `${SUPABASE_URL}/rest/v1/conversaciones?select=id&usuario_id=eq.${encodeURIComponent(usuarioId)}${filtroConexion}`;
+  try {
+    const res = await axios.get(url, {
+      headers: supabaseHeaders({ Prefer: "count=exact", Range: "0-0" }),
+    });
+    const range =
+      res.headers["content-range"] || res.headers["Content-Range"] || "";
+    const part = String(range).split("/")[1];
+    const n = parseInt(part, 10);
+    return Number.isFinite(n) ? n : null;
+  } catch {
+    return null;
+  }
+}
+
 async function loadInboxData(
   usuarioId,
-  { etiquetaFiltro = "", conexionWhatsappId = null } = {}
+  {
+    etiquetaFiltro = "",
+    conexionWhatsappId = null,
+    limit = 20,
+    offset = 0,
+  } = {}
 ) {
   const filtroConexion = filtroConexionQuery(conexionWhatsappId);
+  const pageLimit =
+    Number.isFinite(Number(limit)) && Number(limit) > 0
+      ? Math.floor(Number(limit))
+      : 20;
+  const pageOffset =
+    Number.isFinite(Number(offset)) && Number(offset) >= 0
+      ? Math.floor(Number(offset))
+      : 0;
 
   const [
     responseMensajes,
@@ -124,6 +154,7 @@ async function loadInboxData(
     responseClientes,
     responseConversaciones,
     conexionesInbox,
+    totalConversations,
   ] = await Promise.all([
     axios.get(
       `${SUPABASE_URL}/rest/v1/mensajes?usuario_id=eq.${usuarioId}${filtroConexion}&select=*&order=creado_en.desc&limit=200`,
@@ -138,10 +169,11 @@ async function loadInboxData(
       { headers: supabaseHeaders() }
     ),
     axios.get(
-      `${SUPABASE_URL}/rest/v1/conversaciones?usuario_id=eq.${usuarioId}${filtroConexion}&select=*&order=ultimo_mensaje_en.desc&limit=20`,
+      `${SUPABASE_URL}/rest/v1/conversaciones?usuario_id=eq.${usuarioId}${filtroConexion}&select=*&order=ultimo_mensaje_en.desc&limit=${pageLimit}&offset=${pageOffset}`,
       { headers: supabaseHeaders() }
     ),
     loadConexionesInbox(usuarioId),
+    countConversacionesInbox(usuarioId, conexionWhatsappId),
   ]);
 
   // --- FASE 1: instrumentación diagnóstica (temporal) ---
@@ -371,6 +403,11 @@ async function loadInboxData(
   });
 
   const totalNoLeidos = chats.reduce((sum, c) => sum + (c.noLeidos || 0), 0);
+  const loadedConversacionesCount = conversacionesDB.length;
+  const hasMore =
+    totalConversations != null
+      ? pageOffset + loadedConversacionesCount < totalConversations
+      : loadedConversacionesCount === pageLimit;
 
   return {
     conexionWhatsappId,
@@ -387,6 +424,10 @@ async function loadInboxData(
     chats,
     totalNoLeidos,
     horaBolivia,
+    limit: pageLimit,
+    offset: pageOffset,
+    totalConversations,
+    hasMore,
   };
 }
 

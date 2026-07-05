@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useRef } from "react";
 import ChatListItem from "./ChatListItem";
 import { sameChat } from "../../utils/chatFormat";
 
@@ -18,7 +18,32 @@ export default function ChatList({
   onBloquear,
   onEliminar,
   onFiltroEtiqueta,
+  hasMore = false,
+  loadingMore = false,
+  onLoadMore,
 }) {
+  const scrollRef = useRef(null);
+  const sentinelRef = useRef(null);
+
+  useEffect(() => {
+    if (!onLoadMore || !hasMore || loadingMore) return;
+    const root = scrollRef.current;
+    const sentinel = sentinelRef.current;
+    if (!root || !sentinel) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          onLoadMore();
+        }
+      },
+      { root, rootMargin: "120px", threshold: 0 }
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [onLoadMore, hasMore, loadingMore, chats.length]);
+
   return (
     <aside className="chatSidebar">
       <div className="sidebarFilters">
@@ -49,7 +74,7 @@ export default function ChatList({
         </div>
       </div>
 
-      <div className="chatListScroll">
+      <div className="chatListScroll" ref={scrollRef}>
         {chats.length === 0 && (
           <p className="emptyList">Sin conversaciones</p>
         )}
@@ -74,6 +99,10 @@ export default function ChatList({
             onEliminar={onEliminar}
           />
         ))}
+        {hasMore && <div ref={sentinelRef} className="chatListSentinel" aria-hidden />}
+        {loadingMore && (
+          <p className="chatListLoadingMore">Cargando más conversaciones...</p>
+        )}
       </div>
     </aside>
   );

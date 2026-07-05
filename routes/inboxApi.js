@@ -70,7 +70,7 @@ router.get("/api/inbox/conexiones", protegerApi, async (req, res) => {
   }
 });
 
-// GET /api/inbox?etiqueta=&conexion_whatsapp_id=
+// GET /api/inbox?etiqueta=&conexion_whatsapp_id=&limit=&offset=
 router.get("/api/inbox", protegerApi, async (req, res) => {
   try {
     const etiquetaFiltro = req.query.etiqueta || "";
@@ -78,6 +78,8 @@ router.get("/api/inbox", protegerApi, async (req, res) => {
     const data = await loadInboxData(req.session.usuario.id, {
       etiquetaFiltro,
       conexionWhatsappId,
+      limit: req.query.limit,
+      offset: req.query.offset,
     });
     res.json({
       ok: true,
@@ -89,6 +91,10 @@ router.get("/api/inbox", protegerApi, async (req, res) => {
       mapaColoresEtiquetas: data.mapaColoresEtiquetas,
       chats: data.chats,
       totalNoLeidos: data.totalNoLeidos,
+      hasMore: data.hasMore,
+      offset: data.offset,
+      limit: data.limit,
+      totalConversations: data.totalConversations,
     });
   } catch (error) {
     log("GET /api/inbox ERROR", error.response?.data || error.message);

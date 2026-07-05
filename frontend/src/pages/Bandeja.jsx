@@ -122,6 +122,9 @@ export default function Bandeja({ onUnreadChange }) {
           onBloquear={inbox.toggleBloqueo}
           onEliminar={inbox.eliminarChatHandler}
           onFiltroEtiqueta={inbox.cambiarFiltroEtiqueta}
+          hasMore={inbox.hasMore}
+          loadingMore={inbox.loadingMore}
+          onLoadMore={inbox.loadMoreInbox}
         />
 
         <div className={`bandejaChatArea ${crmAbierto ? "bandejaChatArea--crmOpen" : ""}`}>
