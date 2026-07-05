@@ -123,6 +123,81 @@ function buildUsuarioFilter(usuarioId) {
 
 const CONEXION_TODAS = "__todas__";
 
+function isResumenTodasLasLineas(conexionWhatsappId) {
+  const raw = conexionWhatsappId == null ? "" : String(conexionWhatsappId).trim();
+  return !raw || raw === CONEXION_TODAS;
+}
+
+async function fetchConexionesActivasUsuario(usuarioId) {
+  if (!SUPABASE_URL || !SUPABASE_KEY || !usuarioId) return [];
+  try {
+    const res = await axios.get(
+      `${SUPABASE_URL}/rest/v1/conexiones_whatsapp?usuario_id=eq.${encodeURIComponent(usuarioId)}&activo=eq.true&select=id&order=creado_en.asc`,
+      { headers: headers() }
+    );
+    return Array.isArray(res.data) ? res.data : [];
+  } catch (e) {
+    console.log("[metricas] fetchConexionesActivas:", e.response?.data || e.message);
+    return [];
+  }
+}
+
+function mergeIngresosResumen(desgloses) {
+  const desglose = {};
+  desgloses.forEach((d) => {
+    Object.entries(d || {}).forEach(([moneda, monto]) => {
+      desglose[moneda] = (desglose[moneda] || 0) + (Number(monto) || 0);
+    });
+  });
+  const monedas = Object.keys(desglose);
+  if (!monedas.length) return { monto: 0, moneda: "BOB", desglose: {} };
+  const rounded = {};
+  monedas.forEach((m) => {
+    rounded[m] = Math.round(desglose[m] * 100) / 100;
+  });
+  return { monto: rounded[monedas[0]] || 0, moneda: monedas[0], desglose: rounded };
+}
+
+function mergeResumenPorLineas(bases) {
+  const first = bases[0];
+  const sumKpi = (key) => bases.reduce((s, b) => s + (Number(b.kpis?.[key]) || 0), 0);
+  const sumAnt = (key) => bases.reduce((s, b) => s + (Number(b._ant?.[key]) || 0), 0);
+
+  const leads = sumKpi("leads");
+  const conversaciones = sumKpi("conversaciones");
+  const ventas = sumKpi("ventas");
+  const ingresosMerged = mergeIngresosResumen(bases.map((b) => b.kpis?.ingresosDesglose || {}));
+
+  const kpis = {
+    leads,
+    conversaciones,
+    mensajesEnviados: sumKpi("mensajesEnviados"),
+    respuestas: sumKpi("respuestas"),
+    mensajesEntrantes: sumKpi("mensajesEntrantes"),
+    ventas,
+    ingresos: ingresosMerged.monto,
+    moneda: ingresosMerged.moneda,
+    ingresosDesglose: ingresosMerged.desglose,
+    seguimientosActivos: sumKpi("seguimientosActivos"),
+    seguimientosEnviados: sumKpi("seguimientosEnviados"),
+    seguimientosCancelados: sumKpi("seguimientosCancelados"),
+    seguimientosRespondidos: sumKpi("seguimientosRespondidos"),
+    tasaCierre: pct(ventas, conversaciones),
+    conversion: pct(ventas, leads),
+    tendenciaLeads: calcTendencia(leads, sumAnt("leads")),
+    tendenciaConversaciones: calcTendencia(conversaciones, sumAnt("conversaciones")),
+    tendenciaVentas: calcTendencia(ventas, sumAnt("ventas")),
+  };
+
+  return {
+    rango: first.rango,
+    flujoId: first.flujoId,
+    kpis,
+    salud: computeSalud({ ...kpis, seguimientosActivos: kpis.seguimientosActivos }),
+    metaAdsConectado: bases.some((b) => b.metaAdsConectado),
+  };
+}
+
 function buildConexionFilter(conexionWhatsappId) {
   const raw = conexionWhatsappId == null ? "" : String(conexionWhatsappId).trim();
   if (!raw || raw === CONEXION_TODAS) return "";
@@ -1056,10 +1131,62 @@ async function loadMetricasBase(usuarioId, query = {}) {
 
 /** Carga agregada solo para resumen — sin arrays completos de métricas base. */
 async function loadResumenBase(usuarioId, query = {}) {
-  const rango = parseRango(query);
-  const flujoId = query.flujo_id || query.flujoId || null;
   const conexionWhatsappId =
     query.conexion_whatsapp_id ?? query.conexionWhatsappId ?? null;
+
+  if (isResumenTodasLasLineas(conexionWhatsappId)) {
+    logMetricasMulti(conexionWhatsappId, "loadResumenBase");
+    const rows = await fetchConexionesActivasUsuario(usuarioId);
+    const ids = rows.map((r) => String(r.id)).filter(Boolean);
+    console.log(
+      `[METRICAS_MULTI] resumen Todas las líneas: agregando ${ids.length} conexión(es) activa(s)`
+    );
+    if (!ids.length) {
+      const rango = parseRango(query);
+      const flujoId = query.flujo_id || query.flujoId || null;
+      const metaAdsConectado = await checkMetaAdsConectado(usuarioId);
+      const kpis = {
+        leads: 0,
+        conversaciones: 0,
+        mensajesEnviados: 0,
+        respuestas: 0,
+        mensajesEntrantes: 0,
+        ventas: 0,
+        ingresos: 0,
+        moneda: "BOB",
+        ingresosDesglose: {},
+        seguimientosActivos: 0,
+        seguimientosEnviados: 0,
+        seguimientosCancelados: 0,
+        seguimientosRespondidos: 0,
+        tasaCierre: 0,
+        conversion: 0,
+        tendenciaLeads: calcTendencia(0, 0),
+        tendenciaConversaciones: calcTendencia(0, 0),
+        tendenciaVentas: calcTendencia(0, 0),
+      };
+      return {
+        rango,
+        flujoId,
+        kpis,
+        salud: computeSalud({ ...kpis, seguimientosActivos: 0 }),
+        metaAdsConectado,
+      };
+    }
+    const bases = await Promise.all(
+      ids.map((id) =>
+        loadResumenBase(usuarioId, {
+          ...query,
+          conexion_whatsapp_id: id,
+          conexionWhatsappId: id,
+        })
+      )
+    );
+    return mergeResumenPorLineas(bases);
+  }
+
+  const rango = parseRango(query);
+  const flujoId = query.flujo_id || query.flujoId || null;
   logMetricasMulti(conexionWhatsappId, "loadResumenBase");
   const anterior = rangoAnterior(rango.desde, rango.hasta, rango.periodo);
 
@@ -1161,6 +1288,11 @@ async function loadResumenBase(usuarioId, query = {}) {
     kpis,
     salud,
     metaAdsConectado,
+    _ant: {
+      leads: leadsAnt,
+      conversaciones: conversacionesAnt,
+      ventas: ventasAnt,
+    },
   };
 }
 
