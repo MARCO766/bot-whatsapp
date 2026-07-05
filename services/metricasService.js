@@ -3,7 +3,7 @@
  */
 const axios = require("axios");
 const { calcTendencia, sumarVentasPorMoneda } = require("./flujosMetricsService");
-const { isSchemaMissingError, logSchemaFallback } = require("./supabaseSafe");
+const { isSchemaMissingError, logSchemaFallback, errorMessage } = require("./supabaseSafe");
 const { resolveDateRange } = require("./dateRangeService");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -92,6 +92,25 @@ async function supabaseSelect(table, filterQuery, selectFields = "*", limit = 50
   }
 }
 
+async function supabaseRpc(functionName, params) {
+  const url = `${SUPABASE_URL}/rest/v1/rpc/${functionName}`;
+  try {
+    const res = await axios.post(url, params, { headers: headers() });
+    const n = Number(res.data);
+    return Number.isFinite(n) ? n : 0;
+  } catch (e) {
+    if (isSchemaMissingError(e)) {
+      logSchemaFallback(`rpc/${functionName}`, e);
+      return null;
+    }
+    const detail = errorMessage(e) || e.message;
+    throw new Error(
+      `[metricas] RPC ${functionName} falló: ${detail}. ` +
+        "Si la función no existe, ejecuta supabase/migrations/create_count_leads_por_linea_rpc.sql"
+    );
+  }
+}
+
 function buildDateFilter(desdeIso, hastaIso, field = "creado_en") {
   const desde = encodeURIComponent(desdeIso);
   const hasta = encodeURIComponent(hastaIso);
@@ -158,17 +177,27 @@ async function countClientesEnRango(
   flujoId,
   conexionWhatsappId = null
 ) {
-  if (buildConexionFilter(conexionWhatsappId)) {
-    return countConversacionesEnRango(
-      usuarioId,
-      desdeIso,
-      hastaIso,
-      flujoId,
-      conexionWhatsappId
-    );
-  }
-
   const baseFilter = `${buildUsuarioFilter(usuarioId)}&${buildDateFilter(desdeIso, hastaIso)}&estado=neq.bloqueado`;
+
+  if (buildConexionFilter(conexionWhatsappId)) {
+    const connId = String(conexionWhatsappId).trim();
+    const rpcParams = {
+      p_usuario_id: usuarioId,
+      p_conexion_whatsapp_id: connId,
+      p_desde: desdeIso,
+      p_hasta: hastaIso,
+    };
+    if (flujoId) rpcParams.p_flujo_id = flujoId;
+
+    const total = await supabaseRpc("count_leads_por_linea", rpcParams);
+    if (total === null) {
+      throw new Error(
+        "[metricas] RPC count_leads_por_linea no disponible. " +
+          "Ejecuta supabase/migrations/create_count_leads_por_linea_rpc.sql en Supabase."
+      );
+    }
+    return total;
+  }
 
   if (!flujoId) {
     const total = await supabaseCount("clientes", baseFilter);
