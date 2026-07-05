@@ -84,68 +84,6 @@ async function loadConexionesInbox(usuarioId) {
   }));
 }
 
-async function loadClientesPorEtiquetaFiltro(
-  usuarioId,
-  etiqueta,
-  conexionWhatsappId = null
-) {
-  const filtroConexion = filtroConexionQuery(conexionWhatsappId);
-  const res = await axios.get(
-    `${SUPABASE_URL}/rest/v1/clientes_etiquetas?usuario_id=eq.${encodeURIComponent(usuarioId)}&etiqueta=eq.${encodeURIComponent(etiqueta)}${filtroConexion}&select=cliente_numero,conexion_whatsapp_id`,
-    { headers: supabaseHeaders() }
-  );
-  return Array.isArray(res.data) ? res.data : [];
-}
-
-async function loadConversacionesPorClientesEtiqueta(
-  usuarioId,
-  clientesEtiqueta,
-  { limit, offset, conexionWhatsappId = null } = {}
-) {
-  const pares = (clientesEtiqueta || [])
-    .filter((c) => c?.cliente_numero && c?.conexion_whatsapp_id)
-    .map((c) => ({
-      cliente_numero: String(c.cliente_numero).trim(),
-      conexion_whatsapp_id: String(c.conexion_whatsapp_id).trim(),
-    }));
-
-  if (pares.length === 0) {
-    return { data: [], headers: {} };
-  }
-
-  const orClause = pares
-    .map(
-      (p) =>
-        `and(cliente_numero.eq.${encodeURIComponent(p.cliente_numero)},conexion_whatsapp_id.eq.${encodeURIComponent(p.conexion_whatsapp_id)})`
-    )
-    .join(",");
-
-  const filtroConexion = filtroConexionQuery(conexionWhatsappId);
-  const pageLimit =
-    Number.isFinite(Number(limit)) && Number(limit) > 0
-      ? Math.floor(Number(limit))
-      : 20;
-  const pageOffset =
-    Number.isFinite(Number(offset)) && Number(offset) >= 0
-      ? Math.floor(Number(offset))
-      : 0;
-
-  const url = `${SUPABASE_URL}/rest/v1/conversaciones?usuario_id=eq.${usuarioId}${filtroConexion}&select=*&or=(${orClause})&order=ultimo_mensaje_en.desc&limit=${pageLimit}&offset=${pageOffset}`;
-
-  console.log("URL COMPLETA:");
-  console.log(url);
-
-  try {
-    return await axios.get(url, { headers: supabaseHeaders() });
-  } catch (error) {
-    console.log("STATUS:");
-    console.log(error.response?.status);
-    console.log("BODY:");
-    console.log(error.response?.data);
-    throw error;
-  }
-}
-
 async function loadEtiquetasParaConversacionesVisibles(
   usuarioId,
   conversacionesVisibles
@@ -217,36 +155,6 @@ async function loadInboxData(
       ? Math.floor(Number(offset))
       : 0;
 
-  // --- FASE 7.1 / 7.2: ruta preparatoria filtro por etiqueta ---
-  let clientesEtiquetaFiltro = null;
-  if (etiquetaFiltro) {
-    clientesEtiquetaFiltro = await loadClientesPorEtiquetaFiltro(
-      usuarioId,
-      etiquetaFiltro,
-      conexionWhatsappId
-    );
-    console.log("=====================");
-    console.log("FILTRO ETIQUETA");
-    console.log("=====================");
-    console.log(`Etiqueta: ${etiquetaFiltro}`);
-    console.log(`Clientes encontrados: ${clientesEtiquetaFiltro.length}`);
-    console.log("=====================");
-  }
-
-  const conversacionesPorEtiquetaPromise =
-    etiquetaFiltro && clientesEtiquetaFiltro
-      ? loadConversacionesPorClientesEtiqueta(
-          usuarioId,
-          clientesEtiquetaFiltro,
-          {
-            limit: pageLimit,
-            offset: pageOffset,
-            conexionWhatsappId,
-          }
-        )
-      : Promise.resolve({ data: [], headers: {} });
-  // --- fin FASE 7.1 / 7.2 preparación ---
-
   const tConversacionesStart = performance.now();
   const conversacionesPromise = axios
     .get(
@@ -276,7 +184,6 @@ async function loadInboxData(
     responseConversaciones,
     conexionesInbox,
     totalConversations,
-    responseConversacionesPorEtiqueta,
   ] = await Promise.all([
     axios.get(
       `${SUPABASE_URL}/rest/v1/mensajes?usuario_id=eq.${usuarioId}${filtroConexion}&select=*&order=creado_en.desc&limit=200`,
@@ -290,26 +197,7 @@ async function loadInboxData(
     conversacionesPromise,
     loadConexionesInbox(usuarioId),
     countConversacionesInbox(usuarioId, conexionWhatsappId),
-    conversacionesPorEtiquetaPromise,
   ]);
-
-  if (etiquetaFiltro) {
-    const conversacionesAntiguaCount = (responseConversaciones.data || []).length;
-    const conversacionesNuevaCount = (
-      responseConversacionesPorEtiqueta.data || []
-    ).length;
-    console.log("=========================");
-    console.log("CONVERSACIONES POR ETIQUETA");
-    console.log("=========================");
-    console.log(`Etiqueta: ${etiquetaFiltro}`);
-    console.log(
-      `Clientes encontrados: ${(clientesEtiquetaFiltro || []).length}`
-    );
-    console.log(`Conversaciones encontradas: ${conversacionesNuevaCount}`);
-    console.log("=========================");
-    console.log(`Consulta antigua: ${conversacionesAntiguaCount} conversaciones`);
-    console.log(`Consulta nueva: ${conversacionesNuevaCount} conversaciones`);
-  }
 
   // --- FASE 1: instrumentación diagnóstica (temporal) ---
   const conversacionesDataLength = (responseConversaciones.data || []).length;
