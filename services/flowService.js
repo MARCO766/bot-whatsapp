@@ -166,6 +166,7 @@ function prepararFlowContextSesionIA(flowContext) {
   delete ctx.metaToken;
   delete ctx.mimeType;
   delete ctx.filename;
+  delete ctx.iaPaymentReaderReply;
   ctx.ultimo_mensaje = "";
   ctx.ultimoMensaje = "";
   return ctx;
@@ -1708,6 +1709,7 @@ async function ejecutarFlujo(
         if (numero && opEnvio) {
           await enviarTextoWhatsApp(numero, flowContext.iaPaymentReaderReply, opEnvio);
         }
+        delete flowContext.iaPaymentReaderReply;
         guardarSesionIAPendiente({
           usuarioId,
           conexionWhatsappId: flowContext.conexionWhatsappId,

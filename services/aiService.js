@@ -75,7 +75,12 @@ function clampFallbackMaximo(valor) {
 
 function normalizarFallbackLimite(raw) {
   const base = raw && typeof raw === "object" ? raw : {};
-  const ilimitado = base.ilimitado !== false;
+  const ilimitado =
+    base.ilimitado === false || base.ilimitado === "false" || base.ilimitado === 0
+      ? false
+      : base.ilimitado === true || base.ilimitado === "true"
+        ? true
+        : base.ilimitado !== false;
   return {
     ilimitado,
     maximo: clampFallbackMaximo(base.maximo),
@@ -89,14 +94,20 @@ function normalizarFallbackLimite(raw) {
   };
 }
 
-function normalizarFallbacksIA(config) {
-  const base = config && typeof config === "object" ? config : {};
+function normalizarFallbacksIA(cfg) {
+  const src = cfg && typeof cfg === "object" ? cfg : {};
+  const tieneFallbackTexto = Object.prototype.hasOwnProperty.call(src, "fallbackTexto");
+  const tieneFallbackPayment = Object.prototype.hasOwnProperty.call(
+    src,
+    "fallbackPaymentReader"
+  );
+
   return {
     fallbackTexto: normalizarFallbackLimite(
-      base.fallbackTexto || crearFallbackLimitePorDefecto()
+      tieneFallbackTexto ? src.fallbackTexto : crearFallbackLimitePorDefecto()
     ),
     fallbackPaymentReader: normalizarFallbackLimite(
-      base.fallbackPaymentReader || crearFallbackLimitePorDefecto()
+      tieneFallbackPayment ? src.fallbackPaymentReader : crearFallbackLimitePorDefecto()
     ),
   };
 }
@@ -271,6 +282,12 @@ function limpiarMediaEntranteContextoIA(ctx) {
   delete out.metaToken;
   delete out.mimeType;
   delete out.filename;
+  return out;
+}
+
+function limpiarStalePaymentReaderReplyIA(ctx) {
+  const out = { ...(ctx || {}) };
+  delete out.iaPaymentReaderReply;
   return out;
 }
 
@@ -733,7 +750,7 @@ function normalizarConfig(cfg) {
   if (esConfigRouterLocal(config)) {
     const preservados = preservarCamposRouterExtra(config);
     const normalizado = normalizarConfigRouter(config);
-    const fallbacks = normalizarFallbacksIA(config);
+    const fallbacks = normalizarFallbacksIA(cfg || {});
     return preservarCaminosExtra(config, {
       ...normalizado,
       ...preservados,
@@ -1238,12 +1255,12 @@ async function ejecutarNodoIARouter(nodo, contexto, opts = {}) {
     console.log("🤖 IA LOCAL — modo silencioso: esperando respuesta del lead");
     return limpiarMediaEntranteContextoIA(
       aplicarEstadoFallbackAContexto(
-        {
+        limpiarStalePaymentReaderReplyIA({
           ...contexto,
           iaPausar: true,
           iaEjecutada: false,
           ...(esperandoPaymentReader ? { iaPaymentReaderEsperando: true } : {}),
-        },
+        }),
         fallbackEstado
       )
     );
@@ -1270,12 +1287,12 @@ async function ejecutarNodoIARouter(nodo, contexto, opts = {}) {
   ) {
     return limpiarMediaEntranteContextoIA(
       aplicarEstadoFallbackAContexto(
-        {
+        limpiarStalePaymentReaderReplyIA({
           ...contexto,
           iaPausar: true,
           iaPaymentReaderEsperando: true,
           iaEjecutada: false,
-        },
+        }),
         fallbackEstado
       )
     );
@@ -1302,7 +1319,7 @@ async function ejecutarNodoIARouter(nodo, contexto, opts = {}) {
     reiniciarContadorFallbackPayment(fallbackEstado);
     return limpiarMediaEntranteContextoIA(
       aplicarEstadoFallbackAContexto(
-        {
+        limpiarStalePaymentReaderReplyIA({
           ...contexto,
           iaPausar: false,
           iaRouteId: resultadoPayment.routeId,
@@ -1311,7 +1328,7 @@ async function ejecutarNodoIARouter(nodo, contexto, opts = {}) {
           score: resultadoPayment.score,
           route: resultadoPayment.routeId,
           iaPaymentReaderEsperando: false,
-        },
+        }),
         fallbackEstado
       )
     );
@@ -1332,18 +1349,20 @@ async function ejecutarNodoIARouter(nodo, contexto, opts = {}) {
         motivo: resultadoPayment.paymentReaderMotivo || null,
         fallbackEnviar: accionPayment.enviar,
         fallbackUsados: fallbackEstado.paymentReader.usados,
+        fallbackIlimitado: config.fallbackPaymentReader?.ilimitado === true,
+        fallbackMaximo: config.fallbackPaymentReader?.maximo ?? null,
       })
     );
 
     const salidaPayment = aplicarEstadoFallbackAContexto(
-      {
+      limpiarStalePaymentReaderReplyIA({
         ...contexto,
         iaPausar: true,
         iaPaymentReaderEsperando: true,
         iaEjecutada: true,
         intent: resultadoPayment.intent || "payment_reader_invalido",
         score: resultadoPayment.score,
-      },
+      }),
       fallbackEstado
     );
 
@@ -1353,6 +1372,8 @@ async function ejecutarNodoIARouter(nodo, contexto, opts = {}) {
 
     return limpiarMediaEntranteContextoIA(salidaPayment);
   }
+
+  delete contexto.iaPaymentReaderReply;
 
   const memoria = contexto.memoriaIA || {
     ultimoMensajeBot: contexto.ultimaSalidaBot || "",
@@ -1375,14 +1396,14 @@ async function ejecutarNodoIARouter(nodo, contexto, opts = {}) {
     if (contexto.iaPaymentReaderEsperando && !tieneRutasTextoActivas) {
       return limpiarMediaEntranteContextoIA(
         aplicarEstadoFallbackAContexto(
-          {
+          limpiarStalePaymentReaderReplyIA({
             ...contexto,
             iaPausar: true,
             iaPaymentReaderEsperando: true,
             iaEjecutada: true,
             intent: contexto.intent,
             score: contexto.score,
-          },
+          }),
           fallbackEstado
         )
       );
@@ -1392,12 +1413,12 @@ async function ejecutarNodoIARouter(nodo, contexto, opts = {}) {
       const activado = await contexto._buscarActivadores();
       if (activado) {
         return aplicarEstadoFallbackAContexto(
-          {
+          limpiarStalePaymentReaderReplyIA({
             ...contexto,
             iaPausar: false,
             iaActivadorGlobal: true,
             iaEjecutada: true,
-          },
+          }),
           fallbackEstado
         );
       }
@@ -1424,42 +1445,44 @@ async function ejecutarNodoIARouter(nodo, contexto, opts = {}) {
       }
 
       return aplicarEstadoFallbackAContexto(
-        {
+        limpiarStalePaymentReaderReplyIA({
           ...contexto,
           iaPausar: true,
           iaFallback: accionTexto.enviar,
           iaEjecutada: true,
           intent: contexto.intent,
           score: contexto.score,
-        },
+        }),
         fallbackEstado
       );
     }
 
     return aplicarEstadoFallbackAContexto(
-      {
+      limpiarStalePaymentReaderReplyIA({
         ...contexto,
         iaPausar: false,
         iaSinCoincidencia: true,
         iaEjecutada: true,
-      },
+      }),
       fallbackEstado
     );
   }
 
   reiniciarContadorFallbackTexto(fallbackEstado);
-  return aplicarEstadoFallbackAContexto(
-    {
-      ...contexto,
-      iaPausar: false,
-      iaRouteId: analisis.routeId,
-      iaEjecutada: true,
-      intent: analisis.intent,
-      score: analisis.score,
-      route: analisis.route,
-      iaPaymentReaderEsperando: false,
-    },
-    fallbackEstado
+  return limpiarMediaEntranteContextoIA(
+    aplicarEstadoFallbackAContexto(
+      limpiarStalePaymentReaderReplyIA({
+        ...contexto,
+        iaPausar: false,
+        iaRouteId: analisis.routeId,
+        iaEjecutada: true,
+        intent: analisis.intent,
+        score: analisis.score,
+        route: analisis.route,
+        iaPaymentReaderEsperando: false,
+      }),
+      fallbackEstado
+    )
   );
 }
 

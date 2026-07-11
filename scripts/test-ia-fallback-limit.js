@@ -10,6 +10,7 @@ const {
   reiniciarContadorFallbackTexto,
   reiniciarContadorFallbackPayment,
   crearFallbackLimitePorDefecto,
+  normalizarConfig,
   FALLBACK_LIMITE_MIN,
   FALLBACK_LIMITE_MAX,
 } = require("../services/aiService");
@@ -27,6 +28,15 @@ assert(normHigh.maximo === FALLBACK_LIMITE_MAX, "maximo clamp máximo");
 
 const normDefault = normalizarFallbackLimite({});
 assert(normDefault.ilimitado === true, "default ilimitado");
+
+const normGuardado = normalizarConfig({
+  version: 3,
+  caminos: [],
+  fallbackPaymentReader: { ilimitado: false, maximo: 4, alSuperarLimite: "nada" },
+});
+assert(normGuardado.fallbackPaymentReader.ilimitado === false, "JSON guardado ilimitado false");
+assert(normGuardado.fallbackPaymentReader.maximo === 4, "JSON guardado maximo 4");
+assert(normGuardado.fallbackTexto.ilimitado === true, "fallbackTexto ausente sigue ilimitado");
 
 // Ilimitado
 let r = resolverAccionFallbackLimite({
