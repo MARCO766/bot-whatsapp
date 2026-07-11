@@ -483,13 +483,112 @@
   accent-color: #22c55e;
 }
 
+.ia-panel .ia-fallback-max-wrap--hidden,
+.ia-panel .ia-fallback-soporte-wrap--hidden,
 .node.ia-node .ia-fallback-max-wrap--hidden,
 .node.ia-node .ia-fallback-soporte-wrap--hidden {
-  display: none;
+  display: none !important;
 }
 
-.node.ia-node .ia-card--fallback-limit {
+.ia-card--fallback-limit {
   margin-top: 12px;
+}
+
+.ia-fallback-block {
+  margin-bottom: 10px;
+}
+
+.ia-fallback-block:last-of-type {
+  margin-bottom: 6px;
+}
+
+.ia-fallback-block__heading {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #94a3b8;
+  line-height: 1.35;
+}
+
+.ia-fallback-block__heading--sub {
+  margin-top: 2px;
+  margin-bottom: 6px;
+}
+
+.ia-fallback-block__icon {
+  margin-right: 2px;
+}
+
+.ia-fallback-picker {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+.ia-fallback-picker .ia-route-type-card {
+  padding: 8px 10px 7px;
+  gap: 2px;
+}
+
+.ia-fallback-option-card {
+  cursor: pointer;
+  position: relative;
+  margin: 0;
+}
+
+.ia-fallback-option-card input[type="radio"] {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.ia-fallback-max-wrap {
+  margin-top: 6px;
+  margin-bottom: 0;
+}
+
+.ia-fallback-max-wrap .panel-campo,
+.ia-fallback-max-wrap.ia-field {
+  margin-bottom: 0;
+}
+
+.ia-fallback-soporte-wrap .panel-campo:last-child,
+.ia-fallback-soporte-wrap .ia-field:last-child {
+  margin-bottom: 0;
+}
+
+.ia-fallback-resumen {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(6, 78, 59, 0.22);
+  border: 1px solid rgba(52, 211, 153, 0.2);
+}
+
+.ia-fallback-resumen__title {
+  margin: 0 0 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #6ee7b7;
+}
+
+.ia-fallback-resumen__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ia-fallback-resumen__item {
+  font-size: 11px;
+  line-height: 1.4;
+  color: #94a3b8;
+}
+
+.ia-fallback-resumen__item + .ia-fallback-resumen__item {
+  margin-top: 2px;
 }
 
 .node.ia-node:hover .ia-circle {

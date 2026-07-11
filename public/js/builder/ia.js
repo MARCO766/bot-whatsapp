@@ -109,6 +109,59 @@ window.MacBotIA = (function () {
     });
   }
 
+  function sincronizarTarjetasFallbackLimite(prefix) {
+    const ilimitado = !!document.getElementById("iaFallback" + prefix + "Ilimitado")?.checked;
+    const soporte = !!document.getElementById("iaFallback" + prefix + "Soporte")?.checked;
+    const ilimitadoCard = document
+      .getElementById("iaFallback" + prefix + "Ilimitado")
+      ?.closest(".ia-fallback-option-card");
+    const limitarCard = document
+      .getElementById("iaFallback" + prefix + "Limitar")
+      ?.closest(".ia-fallback-option-card");
+    const nadaCard = document
+      .getElementById("iaFallback" + prefix + "Nada")
+      ?.closest(".ia-fallback-option-card");
+    const soporteCard = document
+      .getElementById("iaFallback" + prefix + "Soporte")
+      ?.closest(".ia-fallback-option-card");
+    ilimitadoCard?.classList.toggle("ia-route-type-card--active", ilimitado);
+    limitarCard?.classList.toggle("ia-route-type-card--active", !ilimitado);
+    nadaCard?.classList.toggle("ia-route-type-card--active", !soporte);
+    soporteCard?.classList.toggle("ia-route-type-card--active", soporte);
+  }
+
+  function actualizarResumenFallbackLimite(prefix) {
+    const resumenEl = document.getElementById("iaFallback" + prefix + "Resumen");
+    if (!resumenEl) return;
+    const limite = leerFallbackLimiteDesdeDom(prefix);
+    const lines = [];
+    if (limite.ilimitado) {
+      lines.push("Respuestas ilimitadas.");
+    } else {
+      lines.push("Máximo " + limite.maximo + " respuestas automáticas.");
+      if (limite.alSuperarLimite === "soporte") {
+        lines.push("Luego enviará el contacto del soporte.");
+      } else {
+        lines.push("Luego dejará de responder.");
+      }
+    }
+    resumenEl.innerHTML =
+      '<p class="ia-fallback-resumen__title">Resumen</p>' +
+      '<ul class="ia-fallback-resumen__list">' +
+      lines
+        .map(function (line) {
+          return '<li class="ia-fallback-resumen__item">✓ ' + esc(line) + "</li>";
+        })
+        .join("") +
+      "</ul>";
+  }
+
+  function refrescarFallbackLimiteUI(prefix) {
+    actualizarVisibilidadFallbackLimite(prefix);
+    sincronizarTarjetasFallbackLimite(prefix);
+    actualizarResumenFallbackLimite(prefix);
+  }
+
   function renderFallbackLimiteCard(prefix, titulo, cfg) {
     const limite = normalizarFallbackLimiteBuilder(cfg);
     const maxAttrs =
@@ -124,21 +177,35 @@ window.MacBotIA = (function () {
       '<h5 class="ia-card__title oai-card__title">' +
       esc(titulo) +
       "</h5>" +
-      '<p class="ia-card__hint oai-card__hint">Cantidad de fallbacks</p>' +
-      '<label class="ia-radio ia-radio-premium"><input type="radio" name="iaFallback' +
+      '<div class="ia-fallback-block">' +
+      '<p class="ia-fallback-block__heading"><span class="ia-fallback-block__icon" aria-hidden="true">💬</span> Respuestas automáticas</p>' +
+      '<div class="ia-route-type-picker ia-fallback-picker" role="radiogroup" aria-label="Respuestas automáticas">' +
+      '<label class="ia-route-type-card ia-fallback-option-card' +
+      (limite.ilimitado ? " ia-route-type-card--active" : "") +
+      '">' +
+      '<input type="radio" name="iaFallback' +
       prefix +
       'Cantidad" id="iaFallback' +
       prefix +
       'Ilimitado" value="ilimitado"' +
       (limite.ilimitado ? " checked" : "") +
-      '><span>Ilimitados</span></label>' +
-      '<label class="ia-radio ia-radio-premium"><input type="radio" name="iaFallback' +
+      '>' +
+      '<span class="ia-route-type-card__label">Sin límite</span>' +
+      '<span class="ia-route-type-card__desc">Responder siempre.</span>' +
+      "</label>" +
+      '<label class="ia-route-type-card ia-fallback-option-card' +
+      (!limite.ilimitado ? " ia-route-type-card--active" : "") +
+      '">' +
+      '<input type="radio" name="iaFallback' +
       prefix +
       'Cantidad" id="iaFallback' +
       prefix +
       'Limitar" value="limitar"' +
       (!limite.ilimitado ? " checked" : "") +
-      '><span>Limitar cantidad</span></label>' +
+      '>' +
+      '<span class="ia-route-type-card__label">Limitar respuestas</span>' +
+      '<span class="ia-route-type-card__desc">Responder solo cierta cantidad de veces.</span>' +
+      "</label></div>" +
       '<div class="panel-campo ia-field oai-field ia-fallback-max-wrap' +
       (limite.ilimitado ? " ia-fallback-max-wrap--hidden" : "") +
       '" id="iaFallback' +
@@ -151,39 +218,57 @@ window.MacBotIA = (function () {
       maxAttrs +
       ' value="' +
       esc(String(limite.maximo)) +
-      '"></div>' +
-      '<p class="ia-card__hint oai-card__hint">Al superar el límite</p>' +
-      '<label class="ia-radio ia-radio-premium"><input type="radio" name="iaFallback' +
+      '"></div></div>' +
+      '<div class="ia-fallback-block">' +
+      '<p class="ia-fallback-block__heading"><span class="ia-fallback-block__icon" aria-hidden="true">🛟</span> Acción al alcanzar el límite</p>' +
+      '<div class="ia-route-type-picker ia-fallback-picker" role="radiogroup" aria-label="Acción al alcanzar el límite">' +
+      '<label class="ia-route-type-card ia-fallback-option-card' +
+      (limite.alSuperarLimite !== "soporte" ? " ia-route-type-card--active" : "") +
+      '">' +
+      '<input type="radio" name="iaFallback' +
       prefix +
       'Superar" id="iaFallback' +
       prefix +
       'Nada" value="nada"' +
       (limite.alSuperarLimite !== "soporte" ? " checked" : "") +
-      '><span>No hacer nada</span></label>' +
-      '<label class="ia-radio ia-radio-premium"><input type="radio" name="iaFallback' +
+      '>' +
+      '<span class="ia-route-type-card__label">No hacer nada</span>' +
+      '<span class="ia-route-type-card__desc">MacBot deja de responder.</span>' +
+      "</label>" +
+      '<label class="ia-route-type-card ia-fallback-option-card' +
+      (limite.alSuperarLimite === "soporte" ? " ia-route-type-card--active" : "") +
+      '">' +
+      '<input type="radio" name="iaFallback' +
       prefix +
       'Superar" id="iaFallback' +
       prefix +
       'Soporte" value="soporte"' +
       (limite.alSuperarLimite === "soporte" ? " checked" : "") +
-      '><span>Enviar contacto de soporte</span></label>' +
+      '>' +
+      '<span class="ia-route-type-card__label">Enviar a soporte</span>' +
+      '<span class="ia-route-type-card__desc">MacBot envía el contacto del asesor.</span>' +
+      "</label></div>" +
       '<div class="ia-fallback-soporte-wrap' +
       (limite.alSuperarLimite === "soporte" ? "" : " ia-fallback-soporte-wrap--hidden") +
       '" id="iaFallback' +
       prefix +
       'SoporteWrap">' +
-      '<div class="panel-campo ia-field oai-field"><label>Nombre del soporte</label>' +
+      '<p class="ia-fallback-block__heading ia-fallback-block__heading--sub"><span class="ia-fallback-block__icon" aria-hidden="true">👤</span> Contacto de soporte</p>' +
+      '<div class="panel-campo ia-field oai-field"><label>Nombre</label>' +
       '<input type="text" id="iaFallback' +
       prefix +
       'SoporteNombre" class="ia-input oai-input" value="' +
       esc(limite.soporteNombre) +
       '"></div>' +
-      '<div class="panel-campo ia-field oai-field"><label>Número WhatsApp</label>' +
+      '<div class="panel-campo ia-field oai-field"><label>WhatsApp</label>' +
       '<input type="text" id="iaFallback' +
       prefix +
       'SoporteNumero" class="ia-input oai-input" value="' +
       esc(limite.soporteNumero) +
-      '"></div></div></section>'
+      '"></div></div></div>' +
+      '<div class="ia-fallback-resumen" id="iaFallback' +
+      prefix +
+      'Resumen" aria-live="polite"></div></section>'
     );
   }
 
@@ -206,16 +291,20 @@ window.MacBotIA = (function () {
       "iaFallback" + prefix + "Nada",
     ].forEach(function (id) {
       document.getElementById(id)?.addEventListener("change", function () {
-        actualizarVisibilidadFallbackLimite(prefix);
+        refrescarFallbackLimiteUI(prefix);
         onFormChange();
       });
     });
 
     const maxInput = document.getElementById("iaFallback" + prefix + "Maximo");
     if (maxInput) {
-      maxInput.addEventListener("input", onFormChange);
+      maxInput.addEventListener("input", function () {
+        actualizarResumenFallbackLimite(prefix);
+        onFormChange();
+      });
       maxInput.addEventListener("change", function () {
         maxInput.value = String(clampFallbackMaximoBuilder(maxInput.value));
+        actualizarResumenFallbackLimite(prefix);
         onFormChange();
       });
     }
@@ -227,7 +316,7 @@ window.MacBotIA = (function () {
       }
     );
 
-    actualizarVisibilidadFallbackLimite(prefix);
+    refrescarFallbackLimiteUI(prefix);
   }
 
   function crearConfigPorDefecto() {
