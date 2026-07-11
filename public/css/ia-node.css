@@ -1143,3 +1143,238 @@
   background: rgba(127, 29, 29, 0.35);
   border-color: rgba(248, 113, 113, 0.6);
 }
+
+/* ── Panel: badges de tipo de ruta ── */
+.ia-route-card__title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.ia-route-kind-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  line-height: 1.3;
+}
+
+.ia-route-kind-badge--texto {
+  color: #99f6e4;
+  background: rgba(34, 211, 238, 0.14);
+  border: 1px solid rgba(45, 212, 191, 0.38);
+}
+
+.ia-route-kind-badge--payment {
+  color: #86efac;
+  background: rgba(34, 197, 94, 0.18);
+  border: 1px solid rgba(74, 222, 128, 0.42);
+}
+
+.ia-route-card--payment-reader {
+  border-color: rgba(74, 222, 128, 0.34);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.03),
+    0 0 0 1px rgba(34, 197, 94, 0.1);
+}
+
+.ia-route-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* ── Panel: selector visual de tipo ── */
+.ia-route-type-picker {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.ia-route-type-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 10px 10px 9px;
+  border-radius: 12px;
+  border: 1px solid rgba(52, 211, 153, 0.22);
+  background: rgba(8, 16, 14, 0.82);
+  color: #cbd5e1;
+  cursor: pointer;
+  text-align: left;
+  transition:
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.15s ease,
+    background 0.18s ease;
+}
+
+.ia-route-type-card:hover {
+  border-color: rgba(34, 211, 238, 0.45);
+  transform: translateY(-1px);
+}
+
+.ia-route-type-card--active {
+  border-color: rgba(52, 211, 153, 0.65);
+  background: linear-gradient(
+    155deg,
+    rgba(6, 78, 59, 0.42) 0%,
+    rgba(8, 16, 14, 0.9) 100%
+  );
+  box-shadow:
+    0 0 0 1px rgba(52, 211, 153, 0.2),
+    0 8px 20px rgba(16, 185, 129, 0.12);
+}
+
+.ia-route-type-card--payment.ia-route-type-card--active {
+  border-color: rgba(74, 222, 128, 0.58);
+  background: linear-gradient(
+    155deg,
+    rgba(6, 44, 28, 0.5) 0%,
+    rgba(8, 16, 14, 0.9) 100%
+  );
+  box-shadow:
+    0 0 0 1px rgba(34, 197, 94, 0.18),
+    0 8px 20px rgba(34, 197, 94, 0.1);
+}
+
+.ia-route-type-card__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: rgba(34, 211, 238, 0.1);
+  border: 1px solid rgba(45, 212, 191, 0.28);
+  color: #5eead4;
+}
+
+.ia-route-type-card--payment .ia-route-type-card__icon {
+  background: rgba(34, 197, 94, 0.12);
+  border-color: rgba(74, 222, 128, 0.32);
+  color: #86efac;
+}
+
+.ia-route-type-card__svg {
+  width: 20px;
+  height: 20px;
+  display: block;
+}
+
+.ia-route-type-card__label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #e2e8f0;
+}
+
+.ia-route-type-card__desc {
+  font-size: 10px;
+  line-height: 1.35;
+  color: #64748b;
+}
+
+/* ── Panel: bloque lectura de pago ── */
+.ia-ruta-payment-block {
+  margin: 6px 0 2px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(6, 44, 28, 0.48);
+  border: 1px solid rgba(74, 222, 128, 0.26);
+}
+
+.ia-route-payment-note {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: #a7f3d0;
+  background: rgba(6, 78, 59, 0.35);
+  border: 1px solid rgba(52, 211, 153, 0.22);
+}
+
+.ia-route-payment-label {
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #86efac;
+  letter-spacing: 0.02em;
+}
+
+.ia-route-payment-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.ia-route-payment-grid .ia-field--full {
+  grid-column: 1 / -1;
+}
+
+/* ── Canvas: iconos y pills por tipo ── */
+.node.ia-node .ia-route-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  color: #5eead4;
+  background: rgba(34, 211, 238, 0.1);
+  border: 1px solid rgba(45, 212, 191, 0.28);
+}
+
+.node.ia-node .ia-route-icon--payment_reader {
+  color: #86efac;
+  background: rgba(34, 197, 94, 0.14);
+  border-color: rgba(74, 222, 128, 0.35);
+}
+
+.node.ia-node .ia-route-icon-svg {
+  display: block;
+}
+
+.node.ia-node .ia-route-pill--payment-reader {
+  background: linear-gradient(
+    135deg,
+    rgba(6, 44, 28, 0.92) 0%,
+    rgba(12, 74, 46, 0.78) 100%
+  );
+  border-color: rgba(74, 222, 128, 0.42);
+}
+
+.node.ia-node .ia-route-pill--payment-reader::before {
+  background: #4ade80;
+  box-shadow: 0 0 6px rgba(74, 222, 128, 0.45);
+}
+
+.node.ia-node .ia-route-pill--payment-reader .ia-route-name {
+  color: #86efac;
+}
+
+.node.ia-node .ia-route-pill--payment-reader > .port.out.ia-port-route--payment-reader {
+  background: linear-gradient(135deg, #4ade80, #22c55e) !important;
+  border-color: rgba(255, 255, 255, 0.42) !important;
+  box-shadow:
+    0 0 12px rgba(74, 222, 128, 0.7),
+    0 0 18px rgba(34, 197, 94, 0.35) !important;
+}
+
+#builderArea .node.ia-node .ia-route-pill--payment-reader > .port.out.ia-port-route--payment-reader:hover {
+  transform: scale(1.12) !important;
+}
+
+@media (max-width: 420px) {
+  .ia-route-type-picker {
+    grid-template-columns: 1fr;
+  }
+}

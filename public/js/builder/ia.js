@@ -36,12 +36,31 @@ window.MacBotIA = (function () {
     "session",
   ]);
 
+  const ROUTE_TYPE_TEXTO = "texto";
+  const ROUTE_TYPE_PAYMENT_READER = "payment_reader";
+
   const ROUTE_ICON_SVG = {
     texto:
-      '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M2 4h12v1.5H2V4zm0 3.5h8v1.5H2V7.5zm0 3.5h10v1.5H2V11z"/></svg>',
+      '<svg class="ia-route-icon-svg" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">' +
+      '<path fill="currentColor" d="M2.5 3.5h11a1 1 0 0 1 1 1v5.5a1 1 0 0 1-1 1H6.2L3.5 14V4.5a1 1 0 0 1 1-1zm1.5 2.2h7v1.1h-7V5.7zm0 2.2h5v1.1h-5V7.9z"/></svg>',
+    payment_reader:
+      '<svg class="ia-route-icon-svg" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">' +
+      '<path fill="currentColor" d="M3 2h10a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zm2 4h6v1.2H5V6zm0 2.5h4v1.2H5V8.5zm5.5 3.5a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"/></svg>',
     default:
-      '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="8" cy="8" r="5" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>',
+      '<svg class="ia-route-icon-svg" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="8" cy="8" r="5" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>',
   };
+
+  const ROUTE_TYPE_PICKER_SVG = {
+    texto:
+      '<svg class="ia-route-type-card__svg" viewBox="0 0 24 24" aria-hidden="true">' +
+      '<path fill="currentColor" d="M4 5.5h16a1.5 1.5 0 0 1 1.5 1.5v7A1.5 1.5 0 0 1 20 15.5H9.2L5.5 19.2V7A1.5 1.5 0 0 1 4 5.5zm2.2 3h9.6v1.4H6.2V8.5zm0 2.8h7v1.4h-7v-1.4z"/></svg>',
+    payment_reader:
+      '<svg class="ia-route-type-card__svg" viewBox="0 0 24 24" aria-hidden="true">' +
+      '<path fill="currentColor" d="M4 5h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zm3 6h10v1.5H7V11zm0 3h7v1.5H7V14zm8.5 2.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z"/></svg>',
+  };
+
+  const IA_PAYMENT_BUILDER_NOTE =
+    "Esta fase solo prepara el Builder y el JSON de la ruta. El procesamiento de comprobantes (OCR) se implementará en una fase posterior.";
 
   function crearConfigPorDefecto() {
     return {
@@ -216,8 +235,23 @@ window.MacBotIA = (function () {
   }
 
   function normalizarTipoCamino(raw) {
-    const tipo = String(raw || "texto").trim();
-    return tipo === "payment_reader" ? "payment_reader" : "texto";
+    const tipo = String(raw || ROUTE_TYPE_TEXTO).trim();
+    return tipo === ROUTE_TYPE_PAYMENT_READER
+      ? ROUTE_TYPE_PAYMENT_READER
+      : ROUTE_TYPE_TEXTO;
+  }
+
+  function normalizarPaymentCamino(raw) {
+    const p = raw && typeof raw.payment === "object" ? raw.payment : raw || {};
+    return {
+      montoEsperado: parseFloat(p.montoEsperado ?? p.monto_esperado) || 0,
+      monedaEsperada: String(p.monedaEsperada ?? p.moneda_esperada ?? "").trim(),
+      nombreEsperado: String(p.nombreEsperado ?? p.nombre_esperado ?? "").trim(),
+    };
+  }
+
+  function esCaminoPaymentReader(route) {
+    return normalizarTipoCamino(route?.type) === ROUTE_TYPE_PAYMENT_READER;
   }
 
   function normalizarRutaExtensible(route) {
@@ -253,6 +287,7 @@ window.MacBotIA = (function () {
       "priority",
       "mediaId",
       "enabled",
+      "payment",
       "keywords",
       "palabras",
       "etiquetas",
@@ -262,7 +297,11 @@ window.MacBotIA = (function () {
       if (!conocidos.has(key)) extras[key] = r[key];
     });
 
-    return { ...extras, ...base };
+    const merged = { ...extras, ...base };
+    if (base.type === ROUTE_TYPE_PAYMENT_READER) {
+      merged.payment = normalizarPaymentCamino(r);
+    }
+    return merged;
   }
 
   function normalizarCaminos(caminos, soloValidos) {
@@ -443,6 +482,7 @@ window.MacBotIA = (function () {
       const label = labelCaminoVisual(route);
       const sinNombre = !textoCamino(route);
       const tipo = normalizarTipoCamino(route.type);
+      const esPayment = esCaminoPaymentReader(route);
       console.log("🔌 Handle ruta:", route.id, label);
       console.log("🔌 Source handle:", route.id);
 
@@ -451,11 +491,15 @@ window.MacBotIA = (function () {
         "ia-route-pill ia-route-pill--" +
         tipo +
         (sinNombre ? " ia-route-pill--sin-nombre" : "");
+      if (esPayment) {
+        li.classList.add("ia-route-pill--payment-reader");
+      }
       li.dataset.routeId = route.id;
 
       const iconWrap = document.createElement("span");
       iconWrap.className = "ia-route-icon ia-route-icon--" + tipo;
-      iconWrap.innerHTML = ROUTE_ICON_SVG[tipo] || ROUTE_ICON_SVG.default;
+      iconWrap.innerHTML =
+        ROUTE_ICON_SVG[tipo] || ROUTE_ICON_SVG.default;
       li.appendChild(iconWrap);
 
       const name = document.createElement("span");
@@ -465,6 +509,9 @@ window.MacBotIA = (function () {
 
       const port = document.createElement(TAG_DIV);
       port.className = "port out ia-port-route";
+      if (esPayment) {
+        port.classList.add("ia-port-route--payment-reader");
+      }
       port.dataset.nodo = nodo.id;
       port.dataset.handle = route.id;
       port.dataset.routeType = tipo;
@@ -553,19 +600,30 @@ window.MacBotIA = (function () {
         })
         .filter(Boolean);
       const mediaRaw = row.querySelector(".ia-ruta-media")?.value.trim() || "";
-      caminos.push(
-        normalizarRutaExtensible({
-          ...existing,
-          id: id,
-          text: text,
-          name: text,
-          nombre: text,
-          synonyms: syns,
-          priority: parseInt(row.querySelector(".ia-ruta-prioridad")?.value, 10) || 50,
-          mediaId: mediaRaw || null,
-          enabled: row.querySelector(".ia-ruta-enabled")?.checked !== false,
-        })
-      );
+      const type = normalizarTipoCamino(row.querySelector(".ia-ruta-tipo")?.value);
+      const caminoData = {
+        ...existing,
+        id: id,
+        text: text,
+        name: text,
+        nombre: text,
+        type: type,
+        synonyms: syns,
+        priority: parseInt(row.querySelector(".ia-ruta-prioridad")?.value, 10) || 50,
+        mediaId: mediaRaw || null,
+        enabled: row.querySelector(".ia-ruta-enabled")?.checked !== false,
+      };
+      if (type === ROUTE_TYPE_PAYMENT_READER) {
+        caminoData.payment = {
+          montoEsperado:
+            parseFloat(row.querySelector(".ia-ruta-monto")?.value) || 0,
+          monedaEsperada:
+            row.querySelector(".ia-ruta-moneda")?.value.trim() || "",
+          nombreEsperado:
+            row.querySelector(".ia-ruta-nombre")?.value.trim() || "",
+        };
+      }
+      caminos.push(normalizarRutaExtensible(caminoData));
     });
     configActiva.caminos = caminos;
     configActiva.routes = caminos;
@@ -616,7 +674,7 @@ window.MacBotIA = (function () {
       text: "",
       name: "",
       nombre: "",
-      type: "texto",
+      type: ROUTE_TYPE_TEXTO,
       synonyms: [],
       priority: 50,
       mediaId: null,
@@ -633,6 +691,130 @@ window.MacBotIA = (function () {
     if (nodoActivo) {
       renderVisualNodoIA(nodoActivo, configActiva);
     }
+  }
+
+  function renderBadgeTipoCamino(tipo) {
+    if (normalizarTipoCamino(tipo) === ROUTE_TYPE_PAYMENT_READER) {
+      return (
+        '<span class="ia-route-kind-badge ia-route-kind-badge--payment">LECTURA DE PAGO</span>'
+      );
+    }
+    return '<span class="ia-route-kind-badge ia-route-kind-badge--texto">TEXTO</span>';
+  }
+
+  function renderSelectorTipoCamino(route) {
+    const tipo = normalizarTipoCamino(route.type);
+    const isTexto = tipo === ROUTE_TYPE_TEXTO;
+    const isPayment = tipo === ROUTE_TYPE_PAYMENT_READER;
+    return (
+      '<div class="panel-campo ia-field ia-field--tipo">' +
+      '<label>Tipo de camino</label>' +
+      '<div class="ia-route-type-picker" role="radiogroup" aria-label="Tipo de camino">' +
+      '<button type="button" class="ia-route-type-card ia-route-type-card--texto' +
+      (isTexto ? " ia-route-type-card--active" : "") +
+      '" data-type="' +
+      ROUTE_TYPE_TEXTO +
+      '" aria-pressed="' +
+      (isTexto ? "true" : "false") +
+      '">' +
+      '<span class="ia-route-type-card__icon">' +
+      ROUTE_TYPE_PICKER_SVG.texto +
+      "</span>" +
+      '<span class="ia-route-type-card__label">Texto</span>' +
+      '<span class="ia-route-type-card__desc">Palabras clave y sinónimos</span>' +
+      "</button>" +
+      '<button type="button" class="ia-route-type-card ia-route-type-card--payment' +
+      (isPayment ? " ia-route-type-card--active" : "") +
+      '" data-type="' +
+      ROUTE_TYPE_PAYMENT_READER +
+      '" aria-pressed="' +
+      (isPayment ? "true" : "false") +
+      '">' +
+      '<span class="ia-route-type-card__icon">' +
+      ROUTE_TYPE_PICKER_SVG.payment_reader +
+      "</span>" +
+      '<span class="ia-route-type-card__label">Lectura de Pago</span>' +
+      '<span class="ia-route-type-card__desc">Comprobante y validación</span>' +
+      "</button>" +
+      "</div>" +
+      '<input type="hidden" class="ia-ruta-tipo" value="' +
+      esc(tipo) +
+      '">' +
+      "</div>"
+    );
+  }
+
+  function renderCamposPaymentEditor(route) {
+    const payment = normalizarPaymentCamino(route);
+    const esPayment = esCaminoPaymentReader(route);
+    return (
+      '<div class="ia-ruta-payment-block"' +
+      (esPayment ? "" : ' style="display:none"') +
+      ">" +
+      '<p class="ia-route-payment-note">' +
+      esc(IA_PAYMENT_BUILDER_NOTE) +
+      "</p>" +
+      '<p class="ia-route-payment-label">Datos esperados del comprobante</p>' +
+      '<div class="ia-route-payment-grid">' +
+      '<div class="panel-campo ia-field"><label>Monto esperado</label>' +
+      '<input type="number" class="ia-ruta-monto ia-input" min="0" step="0.01" value="' +
+      esc(payment.montoEsperado) +
+      '"></div>' +
+      '<div class="panel-campo ia-field"><label>Moneda</label>' +
+      '<input class="ia-ruta-moneda ia-input" placeholder="Bs, USD..." value="' +
+      esc(payment.monedaEsperada) +
+      '"></div>' +
+      '<div class="panel-campo ia-field ia-field--full"><label>Nombre esperado (opcional)</label>' +
+      '<input class="ia-ruta-nombre ia-input" placeholder="Titular del pago" value="' +
+      esc(payment.nombreEsperado) +
+      '"></div>' +
+      "</div></div>"
+    );
+  }
+
+  function actualizarVisibilidadPaymentRow(row) {
+    if (!row) return;
+    const tipo = normalizarTipoCamino(row.querySelector(".ia-ruta-tipo")?.value);
+    const block = row.querySelector(".ia-ruta-payment-block");
+    if (block) {
+      block.style.display = tipo === ROUTE_TYPE_PAYMENT_READER ? "" : "none";
+    }
+    row.classList.toggle(
+      "ia-route-card--payment-reader",
+      tipo === ROUTE_TYPE_PAYMENT_READER
+    );
+    const badgeWrap = row.querySelector(".ia-route-kind-badge-wrap");
+    if (badgeWrap) {
+      badgeWrap.innerHTML = renderBadgeTipoCamino(tipo);
+    }
+  }
+
+  function seleccionarTipoCaminoEnRow(row, tipoNuevo) {
+    if (!row) return;
+    const tipo = normalizarTipoCamino(tipoNuevo);
+    const hidden = row.querySelector(".ia-ruta-tipo");
+    if (hidden) hidden.value = tipo;
+
+    row.querySelectorAll(".ia-route-type-card").forEach(function (btn) {
+      const activo = btn.dataset.type === tipo;
+      btn.classList.toggle("ia-route-type-card--active", activo);
+      btn.setAttribute("aria-pressed", activo ? "true" : "false");
+    });
+
+    actualizarVisibilidadPaymentRow(row);
+  }
+
+  function bindSelectorTipoCaminoEvents(wrap) {
+    if (!wrap) return;
+    wrap.querySelectorAll(".ia-route-type-card").forEach(function (btn) {
+      btn.addEventListener("click", function (ev) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        const row = btn.closest(".ia-ruta-row");
+        seleccionarTipoCaminoEnRow(row, btn.dataset.type);
+        onFormChange();
+      });
+    });
   }
 
   function renderCaminosEditor() {
@@ -659,13 +841,20 @@ window.MacBotIA = (function () {
         const label = textoCamino(route) || "Sin nombre";
         const tipo = normalizarTipoCamino(route.type);
         return (
-          '<div class="ia-ruta-row ia-route-card" data-route-id="' +
+          '<div class="ia-ruta-row ia-route-card' +
+          (tipo === ROUTE_TYPE_PAYMENT_READER
+            ? " ia-route-card--payment-reader"
+            : "") +
+          '" data-route-id="' +
           esc(route.id) +
           '">' +
           '<div class="ia-ruta-head ia-route-card__head">' +
           '<div class="ia-route-card__title">' +
           '<span class="ia-ruta-num ia-route-badge">Ruta ' +
           (index + 1) +
+          "</span>" +
+          '<span class="ia-route-kind-badge-wrap">' +
+          renderBadgeTipoCamino(tipo) +
           "</span>" +
           '<span class="ia-route-name-preview">' +
           esc(label) +
@@ -677,10 +866,12 @@ window.MacBotIA = (function () {
           '<button type="button" class="ia-ruta-del ia-btn ia-btn--danger ia-btn--sm" data-action="del">Eliminar</button>' +
           "</div></div>" +
           '<div class="ia-route-card__body">' +
+          renderSelectorTipoCamino(route) +
           '<div class="panel-campo ia-field"><label>Texto del camino</label>' +
           '<input class="ia-ruta-texto ia-input" placeholder="Ej: qr, depósito, precio" value="' +
           esc(textoCamino(route)) +
           '"></div>' +
+          renderCamposPaymentEditor(route) +
           '<div class="panel-campo ia-field"><label>Sinónimos (coma)</label>' +
           '<textarea class="ia-ruta-sinonimos ia-textarea ia-input" rows="2" placeholder="palabra1, palabra2">' +
           esc(syns) +
@@ -697,9 +888,6 @@ window.MacBotIA = (function () {
           '<p class="ia-handle-hint oai-handle-hint">Handle conexión: <code>' +
           esc(route.id) +
           "</code></p>" +
-          (tipo === "payment_reader"
-            ? '<p class="ia-card__hint ia-route-future-hint">Ruta payment_reader guardada — lectura de pago se activará en una fase posterior.</p>'
-            : "") +
           "</div></div>"
         );
       })
@@ -719,6 +907,8 @@ window.MacBotIA = (function () {
         onFormChange();
       });
     });
+
+    bindSelectorTipoCaminoEvents(wrap);
 
     wrap.querySelectorAll("input, textarea").forEach(function (el) {
       el.addEventListener("input", onFormChange);
