@@ -32,10 +32,13 @@ function nombreRuta(route) {
   return String(route?.nombre || route?.text || route?.name || "").trim();
 }
 
+const { esCaminoPaymentReader } = require("./openaiCaminoMatcher");
+
 function buildRoutesFromConfig(config) {
   const raw = config?.caminos ?? config?.routes;
   const caminos = Array.isArray(raw) ? raw : [];
   return caminos
+    .filter((r) => !esCaminoPaymentReader(r))
     .map((r) => ({
       id: String(r.id || "").trim(),
       name: nombreRuta(r),

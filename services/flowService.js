@@ -24,6 +24,7 @@ const {
   enriquecerContextoFlujo,
   esConfigRouterLocal,
   parseIAFromNodo,
+  absorberMensajeIAPaymentReaderValidating,
 } = require("./aiService");
 const { ejecutarNodoIAPro, parseIAProFromNodo } = require("./iaProService");
 const {
@@ -115,6 +116,17 @@ function optsMediaParaOpenAI(opts = {}) {
   const media = extraerMediaEntrante(opts);
   if (!media) return {};
   return media;
+}
+
+function resolverMediaIARouter(_flowContext, opts = {}) {
+  const media = extraerMediaEntrante(opts);
+  if (!media) {
+    return { contextMedia: {}, agentOpts: {} };
+  }
+  return {
+    contextMedia: media,
+    agentOpts: media,
+  };
 }
 
 function resolverMediaOpenAIAgent(flowContext = {}, opts = {}) {
@@ -1636,11 +1648,16 @@ async function ejecutarFlujo(
       const configIA = parseIAFromNodo(nodo);
       const esRouter = esConfigRouterLocal(configIA);
       const resumeIA = !!opts.iaResume;
+      const { contextMedia: mediaIA, agentOpts: mediaOptsIA } = resolverMediaIARouter(
+        flowContext,
+        opts
+      );
 
       flowContext = await ejecutarNodoIA(
         nodo,
         {
           ...flowContext,
+          ...mediaIA,
           numero,
           from: numero,
           telefono: numero,
@@ -1674,8 +1691,35 @@ async function ejecutarFlujo(
                 )
             : null,
         },
-        { resume: resumeIA }
+        { resume: resumeIA, ...mediaOptsIA }
       );
+
+      if (flowContext.iaPaymentReaderReply && flowContext.iaPausar) {
+        const conexionEnvio =
+          flowContext.conexionWhatsappId || opts.conexionWhatsappId || null;
+        const opEnvio =
+          usuarioId && conexionEnvio
+            ? {
+                usuarioId,
+                conexionWhatsappId: conexionEnvio,
+                strictConexionWhatsappId: true,
+              }
+            : null;
+        if (numero && opEnvio) {
+          await enviarTextoWhatsApp(numero, flowContext.iaPaymentReaderReply, opEnvio);
+        }
+        guardarSesionIAPendiente({
+          usuarioId,
+          conexionWhatsappId: flowContext.conexionWhatsappId,
+          numero,
+          flujoId,
+          nodoId,
+          visitados: Array.from(visitados),
+          flowContext: prepararFlowContextSesionIA(flowContext),
+        });
+        console.log("[FLUJO] IA payment_reader inválido — sigue esperando comprobante");
+        return;
+      }
 
       if (esRouter && flowContext.iaPausar && !resumeIA) {
         guardarSesionIAPendiente({
@@ -2119,6 +2163,19 @@ async function procesarMensajeEntrante(
   if (
     !mediaVaAOcrOpenAI &&
     absorberMensajePaymentReaderValidating({
+      usuarioId,
+      conexionWhatsappId: conexionWhatsappIdEntrante,
+      numero,
+      messageType: messageTypeEntrante,
+      texto,
+    })
+  ) {
+    return true;
+  }
+
+  if (
+    !mediaVaAOcrOpenAI &&
+    absorberMensajeIAPaymentReaderValidating({
       usuarioId,
       conexionWhatsappId: conexionWhatsappIdEntrante,
       numero,

@@ -2,6 +2,12 @@
  * MacBot — IA local ultra: normalización, corrección, scoring y rutas.
  */
 
+const {
+  esCaminoPaymentReader,
+  normalizarPaymentCamino,
+  normalizarTipoCamino,
+} = require("./openaiCaminoMatcher");
+
 const CORRECCIONES = {
   presio: "precio",
   presios: "precios",
@@ -266,6 +272,8 @@ function normalizarConfigRouter(cfg) {
       .map((r) => ({
         id: String(r.id || "").trim(),
         nombre: String(r.nombre || r.text || r.name || "").trim(),
+        type: normalizarTipoCamino(r.type),
+        payment: normalizarPaymentCamino(r),
         synonyms: Array.isArray(r.synonyms)
           ? r.synonyms.map((s) => String(s || "").trim()).filter(Boolean)
           : String(r.synonyms || "")
@@ -311,7 +319,11 @@ function analizarRutaLocal(config, mensaje, memoria = {}) {
   })));
   console.log("[IA PATH DEBUG] familia pago detectada:", familiaMsg || "(ninguna)");
 
-  const ranking = cfg.caminos
+  const caminosTexto = cfg.caminos.filter(
+    (c) => c.enabled !== false && !esCaminoPaymentReader(c)
+  );
+
+  const ranking = caminosTexto
     .map((route) => ({
       id: route.id,
       nombre: route.nombre,

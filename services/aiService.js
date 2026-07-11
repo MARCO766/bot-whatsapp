@@ -1,9 +1,15 @@
 const axios = require("axios");
 const { enviarTextoWhatsApp } = require("./whatsappService");
+const { claveSesion } = require("./iaFlowSession");
 const {
   normalizarConfigRouter,
   analizarRutaLocal,
 } = require("./iaLocalRouter");
+const { esCaminoPaymentReader } = require("./openaiCaminoMatcher");
+const {
+  extraerLecturaComprobanteOpenAI,
+  evaluarRutasPaymentReaderContraLectura,
+} = require("./openaiPaymentReaderService");
 const {
   usePythonAi,
   resolveDetectIntentEndpoint,
@@ -47,6 +53,215 @@ const INTENT_PRIORITY = [
 ];
 
 const SCORES_VALIDOS = new Set(["caliente", "medio", "frio"]);
+
+const MSG_COMPROBANTE_INVALIDO =
+  "No pude validar el comprobante. Por favor envía una captura clara donde se vea el monto, moneda y nombre.";
+const MSG_ARCHIVO_NO_LEGIBLE =
+  "No pude leer ese archivo. Por favor envíame captura o imagen del comprobante.";
+
+/** validating | waiting | null — OCR payment_reader por chatKey (Agente Rápido) */
+const iaPaymentReaderStatusPorChat = new Map();
+
+function getIAPaymentReaderStatus(usuarioId, conexionWhatsappId, numero) {
+  if (!conexionWhatsappId) return null;
+  return (
+    iaPaymentReaderStatusPorChat.get(claveSesion(usuarioId, conexionWhatsappId, numero)) ??
+    null
+  );
+}
+
+function setIAPaymentReaderStatus(usuarioId, conexionWhatsappId, numero, status) {
+  if (!conexionWhatsappId) return;
+  const key = claveSesion(usuarioId, conexionWhatsappId, numero);
+  if (status == null) {
+    iaPaymentReaderStatusPorChat.delete(key);
+  } else {
+    iaPaymentReaderStatusPorChat.set(key, status);
+  }
+}
+
+function limpiarIAPaymentReaderStatus(usuarioId, conexionWhatsappId, numero) {
+  setIAPaymentReaderStatus(usuarioId, conexionWhatsappId, numero, null);
+}
+
+function absorberMensajeIAPaymentReaderValidating({
+  usuarioId,
+  conexionWhatsappId,
+  numero,
+  messageType = null,
+  texto = "",
+} = {}) {
+  if (!conexionWhatsappId) return false;
+  if (getIAPaymentReaderStatus(usuarioId, conexionWhatsappId, numero) !== "validating") {
+    return false;
+  }
+
+  console.log(
+    "[IA_PAYMENT_READER_MESSAGE_ABSORBED]",
+    JSON.stringify({
+      numero,
+      messageType: messageType || null,
+      texto: String(texto || "").slice(0, 300),
+    })
+  );
+  return true;
+}
+
+function rutasPaymentReaderActivas(config) {
+  return (config?.caminos || []).filter(
+    (r) => r.enabled !== false && esCaminoPaymentReader(r)
+  );
+}
+
+function esMediaComprobantePaymentReader(opts = {}) {
+  const type = opts.messageType ? String(opts.messageType).trim() : null;
+  return (type === "image" || type === "document") && !!opts.imageUrl;
+}
+
+function limpiarMediaEntranteContextoIA(ctx) {
+  const out = { ...(ctx || {}) };
+  delete out.messageType;
+  delete out.imageUrl;
+  delete out.imageMetaId;
+  delete out.documentMetaId;
+  delete out.metaToken;
+  delete out.mimeType;
+  delete out.filename;
+  return out;
+}
+
+function respuestaPaymentReaderInvalidoIA(validacion, lectura = null) {
+  const replyInvalido =
+    validacion.motivo === "formato_no_soportado"
+      ? MSG_ARCHIVO_NO_LEGIBLE
+      : MSG_COMPROBANTE_INVALIDO;
+
+  return {
+    ok: true,
+    action: "reply",
+    intent: "payment_reader_invalido",
+    score: 0,
+    routeId: null,
+    reply: replyInvalido,
+    source: "ia-payment-reader",
+    paymentReaderEsperando: true,
+    paymentReaderMotivo: validacion.motivo || null,
+    paymentReaderLectura: lectura,
+  };
+}
+
+async function resolverPaymentReaderIA(config, opts = {}, chatScope = {}) {
+  if (!esMediaComprobantePaymentReader(opts)) return null;
+
+  const rutasPaymentReader = rutasPaymentReaderActivas(config);
+  if (!rutasPaymentReader.length) return null;
+
+  const { usuarioId, conexionWhatsappId, numero } = chatScope;
+
+  console.log(
+    "[IA_PAYMENT_READER_MEDIA]",
+    JSON.stringify({
+      messageType: opts.messageType || null,
+      mimeType: opts.mimeType || null,
+      filename: opts.filename || null,
+      imageUrlExists: !!opts.imageUrl,
+    })
+  );
+
+  console.log(
+    "[IA_PAYMENT_READER_ROUTES]",
+    JSON.stringify({
+      total: rutasPaymentReader.length,
+      routes: rutasPaymentReader.map((r) => ({
+        id: r.id,
+        nombre: r.nombre || null,
+        payment: r.payment || null,
+      })),
+    })
+  );
+
+  console.log(
+    "[IA_PAYMENT_READER_START]",
+    JSON.stringify({
+      totalRutas: rutasPaymentReader.length,
+      messageType: opts.messageType || null,
+      imageUrl: String(opts.imageUrl).slice(0, 120),
+    })
+  );
+
+  let ocrResult;
+  try {
+    ocrResult = await extraerLecturaComprobanteOpenAI({
+      imageUrl: opts.imageUrl,
+      mimeType: opts.mimeType || null,
+      filename: opts.filename || null,
+      messageType: opts.messageType || null,
+    });
+  } catch (error) {
+    setIAPaymentReaderStatus(usuarioId, conexionWhatsappId, numero, "waiting");
+    throw error;
+  }
+
+  if (!ocrResult.valido || !ocrResult.lectura) {
+    console.log(
+      "[IA_PAYMENT_READER_NO_MATCH]",
+      JSON.stringify({
+        motivo: ocrResult.motivo || "ocr_invalido",
+        lectura: ocrResult.lectura || null,
+        rutasEvaluadas: 0,
+      })
+    );
+    setIAPaymentReaderStatus(usuarioId, conexionWhatsappId, numero, "waiting");
+    return respuestaPaymentReaderInvalidoIA(ocrResult, ocrResult.lectura || null);
+  }
+
+  const ganadora = evaluarRutasPaymentReaderContraLectura(
+    rutasPaymentReader,
+    ocrResult.lectura
+  );
+
+  if (ganadora) {
+    const route = ganadora.route;
+    setIAPaymentReaderStatus(usuarioId, conexionWhatsappId, numero, null);
+    console.log(
+      "[IA_PAYMENT_READER_MATCH]",
+      JSON.stringify({
+        routeId: route.id,
+        routeNombre: route.nombre || null,
+        orden: ganadora.orden,
+        especificidad: ganadora.especificidad,
+        lectura: ocrResult.lectura,
+        candidatos: rutasPaymentReader.length,
+      })
+    );
+    return {
+      ok: true,
+      action: "route",
+      intent: route.nombre || "payment_reader",
+      score: 100,
+      routeId: route.id,
+      reply: "",
+      source: "ia-payment-reader",
+      paymentReaderLectura: ocrResult.lectura,
+    };
+  }
+
+  console.log(
+    "[IA_PAYMENT_READER_NO_MATCH]",
+    JSON.stringify({
+      lectura: ocrResult.lectura,
+      rutasEvaluadas: rutasPaymentReader.length,
+      motivo: "ninguna_ruta_coincide",
+    })
+  );
+
+  setIAPaymentReaderStatus(usuarioId, conexionWhatsappId, numero, "waiting");
+
+  return respuestaPaymentReaderInvalidoIA(
+    { motivo: "ninguna_ruta_coincide" },
+    ocrResult.lectura
+  );
+}
 
 const REGLAS_POR_DEFECTO = {
   saludo: [
@@ -863,15 +1078,19 @@ function opcionesEnvioIA(contexto, usuarioId) {
 async function ejecutarNodoIARouter(nodo, contexto, opts = {}) {
   const numero = contexto?.numero || contexto?.from || contexto?.telefono;
   const usuarioId = contexto?.usuarioId || null;
+  const conexionWhatsappId = contexto?.conexionWhatsappId || null;
   const config = normalizarConfigRouter(parseIAFromNodo(nodo));
+  const chatScope = { usuarioId, conexionWhatsappId, numero };
 
   if (!opts.resume) {
+    const esperandoPaymentReader = rutasPaymentReaderActivas(config).length > 0;
     console.log("🤖 IA LOCAL — modo silencioso: esperando respuesta del lead");
-    return {
+    return limpiarMediaEntranteContextoIA({
       ...contexto,
       iaPausar: true,
       iaEjecutada: false,
-    };
+      ...(esperandoPaymentReader ? { iaPaymentReaderEsperando: true } : {}),
+    });
   }
 
   const mensajeLead = sanitizeInput(
@@ -883,6 +1102,72 @@ async function ejecutarNodoIARouter(nodo, contexto, opts = {}) {
       "",
     2000
   );
+
+  if (
+    absorberMensajeIAPaymentReaderValidating({
+      usuarioId,
+      conexionWhatsappId,
+      numero,
+      messageType: opts.messageType || null,
+      texto: mensajeLead,
+    })
+  ) {
+    return limpiarMediaEntranteContextoIA({
+      ...contexto,
+      iaPausar: true,
+      iaPaymentReaderEsperando: true,
+      iaEjecutada: false,
+    });
+  }
+
+  const imagenPaymentReader =
+    esMediaComprobantePaymentReader(opts) && rutasPaymentReaderActivas(config).length > 0;
+
+  if (imagenPaymentReader) {
+    setIAPaymentReaderStatus(usuarioId, conexionWhatsappId, numero, "validating");
+  }
+
+  let resultadoPayment = null;
+  try {
+    resultadoPayment = await resolverPaymentReaderIA(config, opts, chatScope);
+  } catch (error) {
+    if (getIAPaymentReaderStatus(usuarioId, conexionWhatsappId, numero) === "validating") {
+      setIAPaymentReaderStatus(usuarioId, conexionWhatsappId, numero, "waiting");
+    }
+    throw error;
+  }
+
+  if (resultadoPayment?.action === "route" && resultadoPayment.routeId) {
+    return limpiarMediaEntranteContextoIA({
+      ...contexto,
+      iaPausar: false,
+      iaRouteId: resultadoPayment.routeId,
+      iaEjecutada: true,
+      intent: resultadoPayment.intent,
+      score: resultadoPayment.score,
+      route: resultadoPayment.routeId,
+      iaPaymentReaderEsperando: false,
+    });
+  }
+
+  if (resultadoPayment?.action === "reply") {
+    console.log(
+      "[IA_PAYMENT_READER_WAITING]",
+      JSON.stringify({
+        rutasEvaluadas: rutasPaymentReaderActivas(config).length,
+        motivo: resultadoPayment.paymentReaderMotivo || null,
+      })
+    );
+    return limpiarMediaEntranteContextoIA({
+      ...contexto,
+      iaPausar: true,
+      iaPaymentReaderEsperando: true,
+      iaPaymentReaderReply: resultadoPayment.reply,
+      iaEjecutada: true,
+      intent: resultadoPayment.intent || "payment_reader_invalido",
+      score: resultadoPayment.score,
+    });
+  }
 
   const memoria = contexto.memoriaIA || {
     ultimoMensajeBot: contexto.ultimaSalidaBot || "",
@@ -898,6 +1183,17 @@ async function ejecutarNodoIARouter(nodo, contexto, opts = {}) {
   contexto.ultimo_mensaje = mensajeLead;
 
   if (!analisis.matched) {
+    if (contexto.iaPaymentReaderEsperando) {
+      return limpiarMediaEntranteContextoIA({
+        ...contexto,
+        iaPausar: true,
+        iaPaymentReaderEsperando: true,
+        iaEjecutada: true,
+        intent: contexto.intent,
+        score: contexto.score,
+      });
+    }
+
     if (config.comportamiento.activarOtrosFlujos && contexto._buscarActivadores) {
       const activado = await contexto._buscarActivadores();
       if (activado) {
@@ -948,6 +1244,7 @@ async function ejecutarNodoIARouter(nodo, contexto, opts = {}) {
     intent: analisis.intent,
     score: analisis.score,
     route: analisis.route,
+    iaPaymentReaderEsperando: false,
   };
 }
 
@@ -1243,6 +1540,9 @@ module.exports = {
   ejecutarIANodo,
   ejecutarNodoIA,
   ejecutarNodoIARouter,
+  absorberMensajeIAPaymentReaderValidating,
+  limpiarIAPaymentReaderStatus,
+  getIAPaymentReaderStatus,
   runAI,
   testIALocal,
   getIAStatus,
