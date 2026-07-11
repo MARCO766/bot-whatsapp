@@ -162,7 +162,62 @@ window.MacBotIA = (function () {
     actualizarResumenFallbackLimite(prefix);
   }
 
-  function renderFallbackLimiteCard(prefix, titulo, cfg) {
+  function renderFallbackTextoActivacion(comportamiento) {
+    const comp = comportamiento || {};
+    return (
+      '<div class="ia-fallback-activacion" data-fallback-prefix="Texto">' +
+      '<label class="ia-toggle ia-toggle-premium oai-toggle"><input type="checkbox" id="iaResponderFallback"' +
+      (comp.responderSiNoCoincide !== false ? " checked" : "") +
+      '><span class="ia-toggle__track oai-toggle__track" aria-hidden="true"></span><span class="ia-toggle__label oai-toggle__label">Responder si no coincide</span></label>' +
+      '<div class="panel-campo ia-field oai-field"><label>Mensaje fallback</label>' +
+      '<textarea id="iaMensajeFallback" class="ia-textarea ia-input oai-input oai-textarea" rows="3">' +
+      esc(comp.mensajeFallback || "") +
+      "</textarea></div></div>"
+    );
+  }
+
+  function renderAccordionSection(accordionId, titulo, contenidoHtml, abierto) {
+    const openClass = abierto ? " ia-accordion--open" : " ia-accordion--closed";
+    const expanded = abierto ? "true" : "false";
+    const chevron = abierto ? "▼" : "▶";
+    return (
+      '<section class="ia-card oai-card ia-accordion' +
+      openClass +
+      '" data-ia-accordion="' +
+      esc(accordionId) +
+      '">' +
+      '<button type="button" class="ia-accordion__header" aria-expanded="' +
+      expanded +
+      '">' +
+      '<span class="ia-accordion__chevron" aria-hidden="true">' +
+      chevron +
+      "</span>" +
+      '<span class="ia-accordion__title">' +
+      esc(titulo) +
+      "</span></button>" +
+      '<div class="ia-accordion__body"><div class="ia-accordion__inner">' +
+      contenidoHtml +
+      "</div></div></section>"
+    );
+  }
+
+  function enlazarAccordionsIA() {
+    document.querySelectorAll(".ia-accordion__header").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        const section = btn.closest(".ia-accordion");
+        if (!section) return;
+        const abierto = !section.classList.contains("ia-accordion--open");
+        section.classList.toggle("ia-accordion--open", abierto);
+        section.classList.toggle("ia-accordion--closed", !abierto);
+        btn.setAttribute("aria-expanded", abierto ? "true" : "false");
+        const chevron = btn.querySelector(".ia-accordion__chevron");
+        if (chevron) chevron.textContent = abierto ? "▼" : "▶";
+      });
+    });
+  }
+
+  function renderFallbackLimiteCard(prefix, titulo, cfg, opciones) {
+    const opts = opciones || {};
     const limite = normalizarFallbackLimiteBuilder(cfg);
     const maxAttrs =
       ' min="' +
@@ -170,13 +225,11 @@ window.MacBotIA = (function () {
       '" max="' +
       FALLBACK_LIMITE_MAX +
       '" step="1"';
-    return (
-      '<section class="ia-card oai-card ia-card--fallback-limit" data-fallback-prefix="' +
+    const contenido =
+      (opts.prefijoHtml || "") +
+      '<div class="ia-fallback-limit" data-fallback-prefix="' +
       esc(prefix) +
       '">' +
-      '<h5 class="ia-card__title oai-card__title">' +
-      esc(titulo) +
-      "</h5>" +
       '<div class="ia-fallback-block">' +
       '<p class="ia-fallback-block__heading"><span class="ia-fallback-block__icon" aria-hidden="true">💬</span> Respuestas automáticas</p>' +
       '<div class="ia-route-type-picker ia-fallback-picker" role="radiogroup" aria-label="Respuestas automáticas">' +
@@ -268,7 +321,17 @@ window.MacBotIA = (function () {
       '"></div></div></div>' +
       '<div class="ia-fallback-resumen" id="iaFallback' +
       prefix +
-      'Resumen" aria-live="polite"></div></section>'
+      'Resumen" aria-live="polite"></div></div>';
+
+    if (opts.sinEnvoltorio) return contenido;
+
+    return (
+      '<section class="ia-card oai-card ia-card--fallback-limit">' +
+      '<h5 class="ia-card__title oai-card__title">' +
+      esc(titulo || "") +
+      "</h5>" +
+      contenido +
+      "</section>"
     );
   }
 
@@ -1339,27 +1402,34 @@ window.MacBotIA = (function () {
       '<p class="ia-card__hint oai-card__hint">Cada salida usa su <code>route.id</code> como source handle en el canvas.</p>' +
       '<div id="iaCaminosLista" class="ia-caminos-lista oai-routes-list"></div>' +
       '<button type="button" class="panel-btn ia-btn-add-ruta oai-btn oai-btn--add" id="iaAgregarCamino">+ Agregar camino</button></section>' +
-      '<section class="ia-card oai-card ia-card--behavior">' +
-      '<h5 class="ia-card__title oai-card__title">Comportamiento</h5>' +
-      '<p class="ia-card__hint oai-card__hint">Opciones legacy del router — se conservan al guardar.</p>' +
-      '<label class="ia-toggle ia-toggle-premium oai-toggle"><input type="checkbox" id="iaResponderFallback"' +
-      (configActiva.comportamiento.responderSiNoCoincide ? " checked" : "") +
-      '><span class="ia-toggle__track oai-toggle__track" aria-hidden="true"></span><span class="ia-toggle__label oai-toggle__label">Responder si no coincide</span></label>' +
-      '<div class="panel-campo ia-field oai-field"><label>Mensaje fallback</label>' +
-      '<textarea id="iaMensajeFallback" class="ia-textarea ia-input oai-input oai-textarea" rows="3">' +
-      esc(configActiva.comportamiento.mensajeFallback) +
-      "</textarea></div>" +
-      '<label class="ia-toggle ia-toggle-premium oai-toggle"><input type="checkbox" id="iaActivarFlujos"' +
-      (configActiva.comportamiento.activarOtrosFlujos ? " checked" : "") +
-      '><span class="ia-toggle__track oai-toggle__track" aria-hidden="true"></span><span class="ia-toggle__label oai-toggle__label">Activar otros flujos (antes del fallback)</span></label>' +
-      '<label class="ia-toggle ia-toggle-premium oai-toggle"><input type="checkbox" id="iaResponderAudio"' +
-      (configActiva.comportamiento.responderConAudio ? " checked" : "") +
-      '><span class="ia-toggle__track oai-toggle__track" aria-hidden="true"></span><span class="ia-toggle__label oai-toggle__label">Responder con audio (usa transcripción si existe)</span></label></section>' +
-      renderFallbackLimiteCard("Texto", "Límite fallback de texto", configActiva.fallbackTexto) +
-      renderFallbackLimiteCard(
-        "Payment",
+      renderAccordionSection(
+        "comportamiento",
+        "Comportamiento",
+        '<p class="ia-card__hint oai-card__hint">Opciones legacy del router — se conservan al guardar.</p>' +
+          '<label class="ia-toggle ia-toggle-premium oai-toggle"><input type="checkbox" id="iaActivarFlujos"' +
+          (configActiva.comportamiento.activarOtrosFlujos ? " checked" : "") +
+          '><span class="ia-toggle__track oai-toggle__track" aria-hidden="true"></span><span class="ia-toggle__label oai-toggle__label">Activar otros flujos (antes del fallback)</span></label>' +
+          '<label class="ia-toggle ia-toggle-premium oai-toggle"><input type="checkbox" id="iaResponderAudio"' +
+          (configActiva.comportamiento.responderConAudio ? " checked" : "") +
+          '><span class="ia-toggle__track oai-toggle__track" aria-hidden="true"></span><span class="ia-toggle__label oai-toggle__label">Responder con audio (usa transcripción si existe)</span></label>',
+        false
+      ) +
+      renderAccordionSection(
+        "fallback-texto",
+        "Límite fallback de texto",
+        renderFallbackTextoActivacion(configActiva.comportamiento) +
+          renderFallbackLimiteCard("Texto", "", configActiva.fallbackTexto, {
+            sinEnvoltorio: true,
+          }),
+        false
+      ) +
+      renderAccordionSection(
+        "fallback-payment",
         "Límite fallback de lectura de pago",
-        configActiva.fallbackPaymentReader
+        renderFallbackLimiteCard("Payment", "", configActiva.fallbackPaymentReader, {
+          sinEnvoltorio: true,
+        }),
+        false
       ) +
       '<section class="ia-card oai-card ia-card--test ia-prueba-block">' +
       '<h5 class="ia-card__title oai-card__title">Prueba interna</h5>' +
@@ -1396,6 +1466,8 @@ window.MacBotIA = (function () {
       };
     }
     document.getElementById("iaBtnPrueba")?.addEventListener("click", ejecutarPruebaInterna);
+
+    enlazarAccordionsIA();
 
     enlazarFallbackLimiteUI("Texto");
     enlazarFallbackLimiteUI("Payment");

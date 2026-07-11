@@ -490,8 +490,81 @@
   display: none !important;
 }
 
+.ia-accordion .ia-accordion__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin: 0 0 0;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+}
+
+.ia-accordion__chevron {
+  flex-shrink: 0;
+  width: 14px;
+  font-size: 10px;
+  line-height: 1;
+  color: #6ee7b7;
+  transition: color 0.2s ease;
+}
+
+.ia-accordion__title {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #6ee7b7;
+}
+
+.ia-accordion__header:hover .ia-accordion__chevron,
+.ia-accordion__header:hover .ia-accordion__title {
+  color: #a7f3d0;
+}
+
+.ia-accordion__body {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.26s ease;
+}
+
+.ia-accordion--open .ia-accordion__body {
+  grid-template-rows: 1fr;
+}
+
+.ia-accordion__inner {
+  overflow: hidden;
+  min-height: 0;
+}
+
+.ia-accordion--open .ia-accordion__inner {
+  padding-top: 10px;
+}
+
+.ia-accordion--closed .ia-accordion__inner > * {
+  margin-top: 0;
+}
+
+.ia-accordion.ia-card--fallback-limit,
 .ia-card--fallback-limit {
-  margin-top: 12px;
+  margin-top: 0;
+}
+
+.ia-fallback-activacion {
+  margin-bottom: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(52, 211, 153, 0.14);
+}
+
+.ia-fallback-activacion .panel-campo:last-child,
+.ia-fallback-activacion .ia-field:last-child {
+  margin-bottom: 0;
 }
 
 .ia-fallback-block {
