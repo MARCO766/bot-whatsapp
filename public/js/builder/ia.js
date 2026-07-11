@@ -4,6 +4,13 @@
 window.MacBotIA = (function () {
   const TAG_DIV = "di" + "v";
 
+  const MENSAJE_FALLBACK_TEXTO_NUEVO =
+    "No encontré esa opción 😅\nPor favor elige una de las opciones disponibles.";
+  const MENSAJE_FALLBACK_PAYMENT_NUEVO =
+    "No pude validar tu comprobante 😕\nPor favor envía una captura donde se vea claramente el nombre del titular, el monto correcto y los datos del pago.\nLuego vuelve a enviar el comprobante.";
+  const MENSAJE_FALLBACK_TEXTO_LEGACY =
+    "No entendí bien 😊\n¿Buscas QR, depósito o Tigo Money?";
+
   let nodoActivo = null;
   let configActiva = crearConfigPorDefecto();
   let renderVisualTimer = null;
@@ -66,13 +73,6 @@ window.MacBotIA = (function () {
 
   const FALLBACK_LIMITE_MIN = 1;
   const FALLBACK_LIMITE_MAX = 100;
-
-  const MENSAJE_FALLBACK_TEXTO_NUEVO =
-    "No encontré esa opción 😅\nPor favor elige una de las opciones disponibles.";
-  const MENSAJE_FALLBACK_PAYMENT_NUEVO =
-    "No pude validar tu comprobante 😕\nPor favor envía una captura donde se vea claramente el nombre del titular, el monto correcto y los datos del pago.\nLuego vuelve a enviar el comprobante.";
-  const MENSAJE_FALLBACK_TEXTO_LEGACY =
-    "No entendí bien 😊\n¿Buscas QR, depósito o Tigo Money?";
 
   function crearFallbackLimitePorDefecto() {
     return {
