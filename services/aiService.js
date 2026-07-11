@@ -67,6 +67,14 @@ function crearFallbackLimitePorDefecto() {
   };
 }
 
+function crearFallbackPaymentReaderPorDefecto() {
+  return {
+    ...crearFallbackLimitePorDefecto(),
+    responderSiNoCoincide: true,
+    mensajeFallback: "",
+  };
+}
+
 function clampFallbackMaximo(valor) {
   const n = parseInt(valor, 10);
   if (!Number.isFinite(n)) return 3;
@@ -94,6 +102,31 @@ function normalizarFallbackLimite(raw) {
   };
 }
 
+function normalizarFallbackPaymentReader(raw) {
+  const base = raw && typeof raw === "object" ? raw : {};
+  return {
+    ...normalizarFallbackLimite(base),
+    responderSiNoCoincide: base.responderSiNoCoincide !== false,
+    mensajeFallback: sanitizeInput(base.mensajeFallback, 500),
+  };
+}
+
+function resolverMensajeFallbackPaymentReaderIA({
+  configPayment,
+  mensajeSistema,
+  contexto,
+}) {
+  const cfg = normalizarFallbackPaymentReader(configPayment);
+  if (!cfg.responderSiNoCoincide) {
+    return { activo: false, mensaje: "" };
+  }
+  const custom = String(cfg.mensajeFallback || "").trim();
+  const mensaje = custom
+    ? interpolarVariables(custom, contexto || {}).trim()
+    : String(mensajeSistema || "").trim();
+  return { activo: true, mensaje };
+}
+
 function normalizarFallbacksIA(cfg) {
   const src = cfg && typeof cfg === "object" ? cfg : {};
   const tieneFallbackTexto = Object.prototype.hasOwnProperty.call(src, "fallbackTexto");
@@ -106,8 +139,8 @@ function normalizarFallbacksIA(cfg) {
     fallbackTexto: normalizarFallbackLimite(
       tieneFallbackTexto ? src.fallbackTexto : crearFallbackLimitePorDefecto()
     ),
-    fallbackPaymentReader: normalizarFallbackLimite(
-      tieneFallbackPayment ? src.fallbackPaymentReader : crearFallbackLimitePorDefecto()
+    fallbackPaymentReader: normalizarFallbackPaymentReader(
+      tieneFallbackPayment ? src.fallbackPaymentReader : crearFallbackPaymentReaderPorDefecto()
     ),
   };
 }
@@ -638,7 +671,7 @@ function crearConfigPorDefecto() {
       responderConAudio: false,
     },
     fallbackTexto: crearFallbackLimitePorDefecto(),
-    fallbackPaymentReader: crearFallbackLimitePorDefecto(),
+    fallbackPaymentReader: crearFallbackPaymentReaderPorDefecto(),
     modo: "detectar_intencion",
     proveedorIA: "local",
     reglas: { ...REGLAS_POR_DEFECTO },
@@ -1335,10 +1368,44 @@ async function ejecutarNodoIARouter(nodo, contexto, opts = {}) {
   }
 
   if (resultadoPayment?.action === "reply") {
+    const configPayment = normalizarFallbackPaymentReader(config.fallbackPaymentReader);
+    const mensajeResuelto = resolverMensajeFallbackPaymentReaderIA({
+      configPayment: configPayment,
+      mensajeSistema: resultadoPayment.reply,
+      contexto,
+    });
+
+    if (!mensajeResuelto.activo) {
+      console.log(
+        "[IA_PAYMENT_READER_WAITING]",
+        JSON.stringify({
+          rutasEvaluadas: rutasPaymentReaderActivas(config).length,
+          motivo: resultadoPayment.paymentReaderMotivo || null,
+          fallbackEnviar: false,
+          fallbackDesactivado: true,
+          fallbackUsados: fallbackEstado.paymentReader.usados,
+        })
+      );
+
+      return limpiarMediaEntranteContextoIA(
+        aplicarEstadoFallbackAContexto(
+          limpiarStalePaymentReaderReplyIA({
+            ...contexto,
+            iaPausar: true,
+            iaPaymentReaderEsperando: true,
+            iaEjecutada: true,
+            intent: resultadoPayment.intent || "payment_reader_invalido",
+            score: resultadoPayment.score,
+          }),
+          fallbackEstado
+        )
+      );
+    }
+
     const accionPayment = resolverAccionFallbackLimite({
-      configLimite: config.fallbackPaymentReader,
+      configLimite: configPayment,
       estadoParcial: fallbackEstado.paymentReader,
-      mensajeNormal: resultadoPayment.reply,
+      mensajeNormal: mensajeResuelto.mensaje,
     });
     fallbackEstado.paymentReader = accionPayment.nuevoEstado;
 
@@ -1782,11 +1849,14 @@ module.exports = {
   limpiarIAPaymentReaderStatus,
   getIAPaymentReaderStatus,
   normalizarFallbackLimite,
+  normalizarFallbackPaymentReader,
+  resolverMensajeFallbackPaymentReaderIA,
   resolverAccionFallbackLimite,
   leerEstadoFallbackContadores,
   reiniciarContadorFallbackTexto,
   reiniciarContadorFallbackPayment,
   crearFallbackLimitePorDefecto,
+  crearFallbackPaymentReaderPorDefecto,
   FALLBACK_LIMITE_MIN,
   FALLBACK_LIMITE_MAX,
   runAI,

@@ -5,11 +5,14 @@
 
 const {
   normalizarFallbackLimite,
+  normalizarFallbackPaymentReader,
+  resolverMensajeFallbackPaymentReaderIA,
   resolverAccionFallbackLimite,
   leerEstadoFallbackContadores,
   reiniciarContadorFallbackTexto,
   reiniciarContadorFallbackPayment,
   crearFallbackLimitePorDefecto,
+  crearFallbackPaymentReaderPorDefecto,
   normalizarConfig,
   FALLBACK_LIMITE_MIN,
   FALLBACK_LIMITE_MAX,
@@ -37,6 +40,51 @@ const normGuardado = normalizarConfig({
 assert(normGuardado.fallbackPaymentReader.ilimitado === false, "JSON guardado ilimitado false");
 assert(normGuardado.fallbackPaymentReader.maximo === 4, "JSON guardado maximo 4");
 assert(normGuardado.fallbackTexto.ilimitado === true, "fallbackTexto ausente sigue ilimitado");
+assert(
+  normGuardado.fallbackPaymentReader.responderSiNoCoincide === true,
+  "payment default responderSiNoCoincide true"
+);
+assert(
+  normGuardado.fallbackPaymentReader.mensajeFallback === "",
+  "payment default mensajeFallback vacío"
+);
+
+const normPaymentLegacy = normalizarFallbackPaymentReader({
+  ilimitado: false,
+  maximo: 2,
+  alSuperarLimite: "nada",
+});
+assert(normPaymentLegacy.maximo === 2, "payment legacy conserva límites");
+assert(
+  normPaymentLegacy.responderSiNoCoincide === true,
+  "payment legacy sin flag sigue activo"
+);
+assert(normPaymentLegacy.mensajeFallback === "", "payment legacy sin mensaje custom");
+
+const msgOff = resolverMensajeFallbackPaymentReaderIA({
+  configPayment: { responderSiNoCoincide: false },
+  mensajeSistema: "sistema",
+  contexto: {},
+});
+assert(msgOff.activo === false && msgOff.mensaje === "", "payment desactivado no envía");
+
+const msgLegacy = resolverMensajeFallbackPaymentReaderIA({
+  configPayment: crearFallbackPaymentReaderPorDefecto(),
+  mensajeSistema: "mensaje sistema",
+  contexto: {},
+});
+assert(msgLegacy.activo === true, "payment legacy activo");
+assert(msgLegacy.mensaje === "mensaje sistema", "payment vacío usa mensaje sistema");
+
+const msgCustom = resolverMensajeFallbackPaymentReaderIA({
+  configPayment: {
+    ...crearFallbackPaymentReaderPorDefecto(),
+    mensajeFallback: "Hola {{ultimo_mensaje}}",
+  },
+  mensajeSistema: "mensaje sistema",
+  contexto: { ultimo_mensaje: "lead" },
+});
+assert(msgCustom.mensaje === "Hola lead", "payment custom usa mensajeFallback");
 
 // Ilimitado
 let r = resolverAccionFallbackLimite({

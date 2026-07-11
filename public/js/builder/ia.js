@@ -77,6 +77,14 @@ window.MacBotIA = (function () {
     };
   }
 
+  function crearFallbackPaymentReaderPorDefecto() {
+    return {
+      ...crearFallbackLimitePorDefecto(),
+      responderSiNoCoincide: true,
+      mensajeFallback: "",
+    };
+  }
+
   function clampFallbackMaximoBuilder(valor) {
     const n = parseInt(valor, 10);
     if (!Number.isFinite(n)) return 3;
@@ -94,19 +102,36 @@ window.MacBotIA = (function () {
     };
   }
 
+  function normalizarFallbackPaymentReaderBuilder(raw) {
+    const base = raw && typeof raw === "object" ? raw : {};
+    return {
+      ...normalizarFallbackLimiteBuilder(base),
+      responderSiNoCoincide: base.responderSiNoCoincide !== false,
+      mensajeFallback: String(base.mensajeFallback || "").trim().slice(0, 500),
+    };
+  }
+
   function leerFallbackLimiteDesdeDom(prefix) {
     const ilimitado = !!document.getElementById("iaFallback" + prefix + "Ilimitado")?.checked;
     const maximo = clampFallbackMaximoBuilder(
       document.getElementById("iaFallback" + prefix + "Maximo")?.value
     );
     const soporte = !!document.getElementById("iaFallback" + prefix + "Soporte")?.checked;
-    return normalizarFallbackLimiteBuilder({
+    const base = {
       ilimitado: ilimitado,
       maximo: maximo,
       alSuperarLimite: soporte ? "soporte" : "nada",
       soporteNombre: document.getElementById("iaFallback" + prefix + "SoporteNombre")?.value || "",
       soporteNumero: document.getElementById("iaFallback" + prefix + "SoporteNumero")?.value || "",
-    });
+    };
+    if (prefix === "Payment") {
+      base.responderSiNoCoincide =
+        !!document.getElementById("iaResponderFallbackPayment")?.checked;
+      base.mensajeFallback =
+        document.getElementById("iaMensajeFallbackPayment")?.value || "";
+      return normalizarFallbackPaymentReaderBuilder(base);
+    }
+    return normalizarFallbackLimiteBuilder(base);
   }
 
   function sincronizarTarjetasFallbackLimite(prefix) {
@@ -172,6 +197,20 @@ window.MacBotIA = (function () {
       '<div class="panel-campo ia-field oai-field"><label>Mensaje fallback</label>' +
       '<textarea id="iaMensajeFallback" class="ia-textarea ia-input oai-input oai-textarea" rows="3">' +
       esc(comp.mensajeFallback || "") +
+      "</textarea></div></div>"
+    );
+  }
+
+  function renderFallbackPaymentActivacion(cfg) {
+    const payment = normalizarFallbackPaymentReaderBuilder(cfg);
+    return (
+      '<div class="ia-fallback-activacion" data-fallback-prefix="Payment">' +
+      '<label class="ia-toggle ia-toggle-premium oai-toggle"><input type="checkbox" id="iaResponderFallbackPayment"' +
+      (payment.responderSiNoCoincide !== false ? " checked" : "") +
+      '><span class="ia-toggle__track oai-toggle__track" aria-hidden="true"></span><span class="ia-toggle__label oai-toggle__label">Responder si no coincide</span></label>' +
+      '<div class="panel-campo ia-field oai-field"><label>Mensaje fallback</label>' +
+      '<textarea id="iaMensajeFallbackPayment" class="ia-textarea ia-input oai-input oai-textarea" rows="3" placeholder="Vacío = mensaje automático del sistema">' +
+      esc(payment.mensajeFallback || "") +
       "</textarea></div></div>"
     );
   }
@@ -408,7 +447,7 @@ window.MacBotIA = (function () {
         responderConAudio: false,
       },
       fallbackTexto: crearFallbackLimitePorDefecto(),
-      fallbackPaymentReader: crearFallbackLimitePorDefecto(),
+      fallbackPaymentReader: crearFallbackPaymentReaderPorDefecto(),
     };
   }
 
@@ -488,7 +527,7 @@ window.MacBotIA = (function () {
     cfg.fallbackTexto = normalizarFallbackLimiteBuilder(
       data.fallbackTexto || cfg.fallbackTexto
     );
-    cfg.fallbackPaymentReader = normalizarFallbackLimiteBuilder(
+    cfg.fallbackPaymentReader = normalizarFallbackPaymentReaderBuilder(
       data.fallbackPaymentReader || cfg.fallbackPaymentReader
     );
 
@@ -530,7 +569,7 @@ window.MacBotIA = (function () {
       fallbackTexto: normalizarFallbackLimiteBuilder(
         src.fallbackTexto || crearConfigPorDefecto().fallbackTexto
       ),
-      fallbackPaymentReader: normalizarFallbackLimiteBuilder(
+      fallbackPaymentReader: normalizarFallbackPaymentReaderBuilder(
         src.fallbackPaymentReader || crearConfigPorDefecto().fallbackPaymentReader
       ),
       ...extrasTop,
@@ -1430,9 +1469,10 @@ window.MacBotIA = (function () {
           renderAccordionSection(
             "fallback-payment",
             "Límite fallback de lectura de pago",
-            renderFallbackLimiteCard("Payment", "", configActiva.fallbackPaymentReader, {
-              sinEnvoltorio: true,
-            }),
+            renderFallbackPaymentActivacion(configActiva.fallbackPaymentReader) +
+              renderFallbackLimiteCard("Payment", "", configActiva.fallbackPaymentReader, {
+                sinEnvoltorio: true,
+              }),
             false,
             { anidado: true }
           ) +
@@ -1488,6 +1528,8 @@ window.MacBotIA = (function () {
       "iaCorreccionOrtografica",
       "iaMensajeFallback",
       "iaResponderFallback",
+      "iaResponderFallbackPayment",
+      "iaMensajeFallbackPayment",
       "iaActivarFlujos",
       "iaResponderAudio",
     ].forEach(function (id) {
