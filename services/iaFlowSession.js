@@ -153,8 +153,17 @@ function guardarSesionIAPendiente(payload) {
 
   logFlowKey(usuarioId, conexionLinea, numero);
 
+  const flowContext = { ...(payload.flowContext || {}) };
+  if (Array.isArray(payload.visitados)) {
+    flowContext.visitados = payload.visitados;
+  }
+  if (payload.iaLoopReentry === true) {
+    flowContext.iaLoopReentry = true;
+  }
+
   const sesion = {
     ...payload,
+    flowContext,
     conexionWhatsappId: conexionLinea,
     creadoEn: Date.now(),
   };

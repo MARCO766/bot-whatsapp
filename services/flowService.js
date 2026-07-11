@@ -1685,10 +1685,7 @@ async function ejecutarFlujo(
           flujoId,
           nodoId,
           visitados: Array.from(visitados),
-          flowContext: {
-            ...flowContext,
-            ultimo_mensaje: "",
-          },
+          flowContext: prepararFlowContextSesionIA(flowContext),
         });
         console.log("[FLUJO] IA en espera silenciosa — nodo:", nodoId);
         return;
@@ -1710,24 +1707,26 @@ async function ejecutarFlujo(
           flujoId,
           nodoId,
           visitados: Array.from(visitados),
-          flowContext: {
-            ...flowContext,
-            ultimo_mensaje: "",
-          },
+          flowContext: prepararFlowContextSesionIA(flowContext),
         });
         console.log("[FLUJO] IA sigue en espera (sin ruta detectada)");
         return;
       }
 
-      if (esRouter && resumeIA) {
-        limpiarSesionIAPendiente(usuarioId, flowContext.conexionWhatsappId, numero);
-      }
-
       logConexionesSalientes(nodoId, "IA");
 
       if (esRouter && resumeIA && routeHandle) {
+        await cerrarSesionOpenAIPorRuta(
+          usuarioId,
+          flowContext.conexionWhatsappId,
+          numero
+        );
         await continuarASiguientes(nodoId, visitados, "ia", routeHandle);
         return;
+      }
+
+      if (resumeIA && !flowContext.iaPausar) {
+        limpiarSesionIAPendiente(usuarioId, flowContext.conexionWhatsappId, numero);
       }
 
       if (esRouter && resumeIA) {

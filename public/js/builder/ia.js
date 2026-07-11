@@ -20,11 +20,41 @@ window.MacBotIA = (function () {
     return "route_" + Math.random().toString(36).slice(2, 8);
   }
 
+  const CAMPOS_CONFIG_TOP_CONOCIDOS = new Set([
+    "version",
+    "nombreNodo",
+    "label",
+    "scoreMinimo",
+    "threshold",
+    "caminos",
+    "routes",
+    "comportamiento",
+    "behavior",
+    "esperarRespuesta",
+    "correccionOrtografica",
+    "ttlHoras",
+    "session",
+  ]);
+
+  const ROUTE_ICON_SVG = {
+    texto:
+      '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M2 4h12v1.5H2V4zm0 3.5h8v1.5H2V7.5zm0 3.5h10v1.5H2V11z"/></svg>',
+    default:
+      '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="8" cy="8" r="5" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>',
+  };
+
   function crearConfigPorDefecto() {
     return {
       version: 3,
       nombreNodo: "Agente Rápido",
       scoreMinimo: 40,
+      esperarRespuesta: true,
+      correccionOrtografica: true,
+      ttlHoras: null,
+      session: {
+        esperarRespuesta: true,
+        ttlHoras: null,
+      },
       caminos: [],
       comportamiento: {
         responderSiNoCoincide: true,
@@ -32,6 +62,39 @@ window.MacBotIA = (function () {
           "No entendí bien 😊\n¿Buscas QR, depósito o Tigo Money?",
         activarOtrosFlujos: false,
         responderConAudio: false,
+      },
+    };
+  }
+
+  function preservarCamposExtraTop(src, conocidos) {
+    const extras = {};
+    if (!src || typeof src !== "object") return extras;
+    Object.keys(src).forEach(function (key) {
+      if (!conocidos.has(key)) extras[key] = src[key];
+    });
+    return extras;
+  }
+
+  function normalizarOpcionesSesion(src) {
+    const base = src && typeof src === "object" ? src : {};
+    const session =
+      base.session && typeof base.session === "object" ? { ...base.session } : {};
+    const esperarRespuesta = base.esperarRespuesta ?? session.esperarRespuesta;
+    const ttlRaw = base.ttlHoras ?? session.ttlHoras;
+    let ttlHoras = null;
+    if (ttlRaw != null && String(ttlRaw).trim() !== "") {
+      const parsed = parseInt(ttlRaw, 10);
+      ttlHoras = Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+    }
+
+    return {
+      esperarRespuesta: esperarRespuesta !== false,
+      correccionOrtografica: base.correccionOrtografica !== false,
+      ttlHoras: ttlHoras,
+      session: {
+        ...session,
+        esperarRespuesta: esperarRespuesta !== false,
+        ttlHoras: ttlHoras,
       },
     };
   }
@@ -78,6 +141,7 @@ window.MacBotIA = (function () {
     };
 
     cfg.scoreMinimo = parseInt(cfg.scoreMinimo, 10) || 40;
+    Object.assign(cfg, normalizarOpcionesSesion(cfg));
     asegurarArraysCaminos(cfg);
     return cfg;
   }
@@ -87,8 +151,9 @@ window.MacBotIA = (function () {
     const src = localIA && typeof localIA === "object" ? localIA : {};
     const routesRaw = obtenerRoutes(src);
     const routes = normalizarCaminos(routesRaw, true);
-
     const comp = src.comportamiento || src.behavior || {};
+    const opcionesSesion = normalizarOpcionesSesion(src);
+    const extrasTop = preservarCamposExtraTop(src, CAMPOS_CONFIG_TOP_CONOCIDOS);
 
     return {
       version: 3,
@@ -97,6 +162,7 @@ window.MacBotIA = (function () {
         100,
         Math.max(0, parseInt(src.scoreMinimo ?? src.threshold, 10) || 40)
       ),
+      ...opcionesSesion,
       caminos: routes,
       routes: routes,
       comportamiento: {
@@ -109,6 +175,7 @@ window.MacBotIA = (function () {
         activarOtrosFlujos: !!comp.activarOtrosFlujos,
         responderConAudio: !!(comp.responderConAudio ?? comp.responderAudio),
       },
+      ...extrasTop,
     };
   }
 
@@ -148,30 +215,60 @@ window.MacBotIA = (function () {
     return t || "Camino sin nombre";
   }
 
+  function normalizarTipoCamino(raw) {
+    const tipo = String(raw || "texto").trim();
+    return tipo === "payment_reader" ? "payment_reader" : "texto";
+  }
+
+  function normalizarRutaExtensible(route) {
+    const r = route && typeof route === "object" ? route : {};
+    const syns = Array.isArray(r.synonyms)
+      ? r.synonyms
+      : String(r.synonyms || "")
+          .split(",")
+          .map(function (s) {
+            return s.trim();
+          })
+          .filter(Boolean);
+    const text = textoCamino(r);
+    const base = {
+      id: String(r.id || generarRouteId()).trim(),
+      text: text,
+      name: text,
+      nombre: text,
+      type: normalizarTipoCamino(r.type),
+      synonyms: syns,
+      priority: parseInt(r.priority, 10) || 50,
+      mediaId: r.mediaId ? String(r.mediaId).trim() : null,
+      enabled: r.enabled !== false,
+    };
+
+    const conocidos = new Set([
+      "id",
+      "text",
+      "name",
+      "nombre",
+      "type",
+      "synonyms",
+      "priority",
+      "mediaId",
+      "enabled",
+      "keywords",
+      "palabras",
+      "etiquetas",
+    ]);
+    const extras = {};
+    Object.keys(r).forEach(function (key) {
+      if (!conocidos.has(key)) extras[key] = r[key];
+    });
+
+    return { ...extras, ...base };
+  }
+
   function normalizarCaminos(caminos, soloValidos) {
     if (!Array.isArray(caminos)) return [];
     return caminos
-      .map(function (r) {
-        const syns = Array.isArray(r.synonyms)
-          ? r.synonyms
-          : String(r.synonyms || "")
-              .split(",")
-              .map(function (s) {
-                return s.trim();
-              })
-              .filter(Boolean);
-        const text = textoCamino(r);
-        return {
-          id: String(r.id || generarRouteId()).trim(),
-          text: text,
-          nombre: text,
-          type: String(r.type || "texto").trim() || "texto",
-          synonyms: syns,
-          priority: parseInt(r.priority, 10) || 50,
-          mediaId: r.mediaId ? String(r.mediaId).trim() : null,
-          enabled: r.enabled !== false,
-        };
-      })
+      .map(normalizarRutaExtensible)
       .filter(function (r) {
         if (!r.id) return false;
         if (soloValidos === false) return true;
@@ -320,15 +417,15 @@ window.MacBotIA = (function () {
 
     if (!activos.length) {
       body.innerHTML =
-        '<p class="ia-subtitle ia-subtitle--muted">Detección rápida + rutas</p>' +
+        '<p class="ia-subtitle ia-subtitle--muted">Detección local + rutas</p>' +
         '<p class="ia-desc-pill ia-desc-pill--empty">Doble click para configurar</p>';
       return;
     }
 
     nodo.classList.add("ia-node--with-routes");
     body.innerHTML =
-      '<p class="ia-subtitle">Detección rápida + rutas</p>' +
-      '<p class="ia-desc-pill">IA responde consultas o avanza por un camino</p>';
+      '<p class="ia-subtitle">Detección local + rutas</p>' +
+      '<p class="ia-desc-pill">Enruta por intención sin IA generativa</p>';
 
     const shell = nodo.querySelector(".ia-node-shell");
     const branch = document.createElement(TAG_DIV);
@@ -345,17 +442,21 @@ window.MacBotIA = (function () {
     activos.forEach(function (route) {
       const label = labelCaminoVisual(route);
       const sinNombre = !textoCamino(route);
+      const tipo = normalizarTipoCamino(route.type);
       console.log("🔌 Handle ruta:", route.id, label);
       console.log("🔌 Source handle:", route.id);
 
       const li = document.createElement("li");
       li.className =
-        "ia-route-pill" + (sinNombre ? " ia-route-pill--sin-nombre" : "");
+        "ia-route-pill ia-route-pill--" +
+        tipo +
+        (sinNombre ? " ia-route-pill--sin-nombre" : "");
       li.dataset.routeId = route.id;
 
-      const dot = document.createElement("span");
-      dot.className = "ia-route-dot";
-      li.appendChild(dot);
+      const iconWrap = document.createElement("span");
+      iconWrap.className = "ia-route-icon ia-route-icon--" + tipo;
+      iconWrap.innerHTML = ROUTE_ICON_SVG[tipo] || ROUTE_ICON_SVG.default;
+      li.appendChild(iconWrap);
 
       const name = document.createElement("span");
       name.className = "ia-route-name";
@@ -366,6 +467,7 @@ window.MacBotIA = (function () {
       port.className = "port out ia-port-route";
       port.dataset.nodo = nodo.id;
       port.dataset.handle = route.id;
+      port.dataset.routeType = tipo;
       port.title = label;
       li.appendChild(port);
 
@@ -432,10 +534,15 @@ window.MacBotIA = (function () {
 
   function syncCaminosDesdeDom() {
     const rows = document.querySelectorAll(".ia-ruta-row");
+    const existentes = obtenerRoutes(configActiva);
     const caminos = [];
     rows.forEach(function (row) {
       const id = row.dataset.routeId;
       if (!id) return;
+      const existing =
+        existentes.find(function (r) {
+          return r.id === id;
+        }) || {};
       const text = row.querySelector(".ia-ruta-texto")?.value.trim() || "";
       console.log("✏️ CAMBIO NOMBRE RUTA:", id, text);
       const synsRaw = row.querySelector(".ia-ruta-sinonimos")?.value || "";
@@ -446,17 +553,19 @@ window.MacBotIA = (function () {
         })
         .filter(Boolean);
       const mediaRaw = row.querySelector(".ia-ruta-media")?.value.trim() || "";
-      caminos.push({
-        id: id,
-        text: text,
-        name: text,
-        nombre: text,
-        type: "texto",
-        synonyms: syns,
-        priority: parseInt(row.querySelector(".ia-ruta-prioridad")?.value, 10) || 50,
-        mediaId: mediaRaw || null,
-        enabled: row.querySelector(".ia-ruta-enabled")?.checked !== false,
-      });
+      caminos.push(
+        normalizarRutaExtensible({
+          ...existing,
+          id: id,
+          text: text,
+          name: text,
+          nombre: text,
+          synonyms: syns,
+          priority: parseInt(row.querySelector(".ia-ruta-prioridad")?.value, 10) || 50,
+          mediaId: mediaRaw || null,
+          enabled: row.querySelector(".ia-ruta-enabled")?.checked !== false,
+        })
+      );
     });
     configActiva.caminos = caminos;
     configActiva.routes = caminos;
@@ -469,9 +578,22 @@ window.MacBotIA = (function () {
       configActiva = crearConfigPorDefecto();
     }
     configActiva.nombreNodo =
-      document.getElementById("iaNombreNodo")?.value.trim() || "🤖 IA";
+      document.getElementById("iaNombreNodo")?.value.trim() || "Agente Rápido";
     configActiva.scoreMinimo =
       parseInt(document.getElementById("iaScoreMinimo")?.value, 10) || 40;
+    const esperarRespuestaEl = document.getElementById("iaEsperarRespuesta");
+    const correccionEl = document.getElementById("iaCorreccionOrtografica");
+    const ttlEl = document.getElementById("iaTtlHoras");
+    const opcionesSesion = normalizarOpcionesSesion({
+      ...configActiva,
+      esperarRespuesta: esperarRespuestaEl ? esperarRespuestaEl.checked : configActiva.esperarRespuesta,
+      correccionOrtografica: correccionEl
+        ? correccionEl.checked
+        : configActiva.correccionOrtografica,
+      ttlHoras: ttlEl ? ttlEl.value : configActiva.ttlHoras,
+      session: configActiva.session,
+    });
+    Object.assign(configActiva, opcionesSesion);
     syncCaminosDesdeDom();
     configActiva.comportamiento = {
       responderSiNoCoincide: !!document.getElementById("iaResponderFallback")?.checked,
@@ -534,44 +656,51 @@ window.MacBotIA = (function () {
         const syns = Array.isArray(route.synonyms)
           ? route.synonyms.join(", ")
           : String(route.synonyms || "");
-        const mediaLabel = route.mediaId ? esc(route.mediaId) : "Sin medio";
+        const label = textoCamino(route) || "Sin nombre";
+        const tipo = normalizarTipoCamino(route.type);
         return (
-          '<div class="ia-ruta-row" data-route-id="' +
+          '<div class="ia-ruta-row ia-route-card" data-route-id="' +
           esc(route.id) +
           '">' +
-          '<div class="ia-ruta-head">' +
-          '<span class="ia-ruta-num">Ruta ' +
+          '<div class="ia-ruta-head ia-route-card__head">' +
+          '<div class="ia-route-card__title">' +
+          '<span class="ia-ruta-num ia-route-badge">Ruta ' +
           (index + 1) +
           "</span>" +
-          '<label class="ia-ruta-enabled-wrap"><input type="checkbox" class="ia-ruta-enabled"' +
+          '<span class="ia-route-name-preview">' +
+          esc(label) +
+          "</span></div>" +
+          '<div class="ia-route-card__toolbar">' +
+          '<label class="ia-ruta-enabled-wrap ia-toggle"><input type="checkbox" class="ia-ruta-enabled"' +
           (route.enabled !== false ? " checked" : "") +
-          "> Activo</label>" +
-          '<button type="button" class="ia-ruta-del" data-action="del">Eliminar</button>' +
-          "</div>" +
-          '<div class="panel-campo"><label>Texto del camino</label>' +
-          '<input class="ia-ruta-texto ia-input" placeholder="Ej: qr" value="' +
+          '><span class="ia-toggle__track" aria-hidden="true"></span><span class="ia-toggle__label">Activo</span></label>' +
+          '<button type="button" class="ia-ruta-del ia-btn ia-btn--danger ia-btn--sm" data-action="del">Eliminar</button>' +
+          "</div></div>" +
+          '<div class="ia-route-card__body">' +
+          '<div class="panel-campo ia-field"><label>Texto del camino</label>' +
+          '<input class="ia-ruta-texto ia-input" placeholder="Ej: qr, depósito, precio" value="' +
           esc(textoCamino(route)) +
           '"></div>' +
-          '<div class="panel-campo"><label>Sinónimos (coma)</label>' +
-          '<textarea class="ia-ruta-sinonimos ia-textarea ia-input" rows="2">' +
+          '<div class="panel-campo ia-field"><label>Sinónimos (coma)</label>' +
+          '<textarea class="ia-ruta-sinonimos ia-textarea ia-input" rows="2" placeholder="palabra1, palabra2">' +
           esc(syns) +
           "</textarea></div>" +
-          '<div class="ia-ruta-meta">' +
-          '<div class="panel-campo"><label>Prioridad</label>' +
+          '<div class="ia-ruta-meta ia-field-row">' +
+          '<div class="panel-campo ia-field ia-field--sm"><label>Prioridad</label>' +
           '<input type="number" class="ia-ruta-prioridad ia-input" min="0" max="100" value="' +
           (route.priority || 50) +
           '"></div>' +
-          '<div class="panel-campo"><label>Media ID / URL</label>' +
-          '<input class="ia-ruta-media ia-input" placeholder="Sin medio" value="' +
+          '<div class="panel-campo ia-field ia-field--grow"><label>Media ID / URL (legacy)</label>' +
+          '<input class="ia-ruta-media ia-input" placeholder="Opcional" value="' +
           esc(route.mediaId || "") +
-          '"><small class="ia-media-hint">' +
-          mediaLabel +
-          "</small></div>" +
-          "</div>" +
-          '<p class="ia-handle-hint">Handle: <code>' +
+          '"></div></div>' +
+          '<p class="ia-handle-hint oai-handle-hint">Handle conexión: <code>' +
           esc(route.id) +
           "</code></p>" +
-          "</div>"
+          (tipo === "payment_reader"
+            ? '<p class="ia-card__hint ia-route-future-hint">Ruta payment_reader guardada — lectura de pago se activará en una fase posterior.</p>'
+            : "") +
+          "</div></div>"
         );
       })
       .join("");
@@ -691,6 +820,7 @@ window.MacBotIA = (function () {
     nodoActivo = nodo;
     configActiva = leerConfigDeNodo(nodo);
     asegurarArraysCaminos(configActiva);
+    const opcionesSesion = normalizarOpcionesSesion(configActiva);
 
     const contenido = document.getElementById("panelNodoContenido");
     if (!contenido) return;
@@ -698,64 +828,82 @@ window.MacBotIA = (function () {
     const panelShell = document.getElementById("panelNodo");
     if (panelShell) {
       panelShell.classList.add("panel-nodo--ia");
+      panelShell.classList.remove("panel-nodo--openai-agent");
     }
 
     contenido.innerHTML =
-      '<div class="ia-panel ia-panel-premium">' +
-      '<header class="ia-panel-hero">' +
-      '<div class="ia-panel-hero__top">' +
-      '<div class="ia-panel-hero__titles">' +
-      '<h4 class="ia-panel-hero__title">Agente Rápido</h4>' +
-      '<span class="ia-panel-hero__badge">Activo</span>' +
+      '<div class="ia-panel ia-panel-premium ia-panel-root">' +
+      '<header class="ia-panel-hero oai-panel-hero">' +
+      '<div class="ia-panel-hero__top oai-panel-hero__top">' +
+      '<div class="ia-panel-hero__titles oai-panel-hero__titles">' +
+      '<h4 class="ia-panel-hero__title oai-panel-hero__title">Agente Rápido</h4>' +
+      '<span class="ia-panel-hero__badge oai-panel-hero__badge">Local</span>' +
       "</div></div>" +
-      '<p class="ia-panel-desc ia-panel-hero__desc">Router silencioso: no responde ni avanza hasta que el lead escriba.</p>' +
+      '<p class="ia-panel-desc ia-panel-hero__desc oai-panel-hero__desc">Detección local por palabras clave — sin IA generativa. Pausa el flujo y espera al lead.</p>' +
       "</header>" +
-      '<div class="ia-panel-scroll">' +
-      '<section class="ia-card ia-card--general">' +
-      '<h5 class="ia-card__title">Configuración general</h5>' +
-      '<p class="ia-card__hint">Modo silencioso: pausa el flujo y espera al lead.</p>' +
-      '<div class="panel-campo ia-field"><label>Nombre del nodo</label>' +
-      '<input id="iaNombreNodo" class="ia-input" value="' +
+      '<div class="ia-panel-scroll oai-panel-scroll">' +
+      '<section class="ia-card oai-card ia-card--general">' +
+      '<h5 class="ia-card__title oai-card__title">Configuración básica</h5>' +
+      '<div class="panel-campo ia-field oai-field"><label>Nombre del nodo</label>' +
+      '<input id="iaNombreNodo" class="ia-input oai-input" value="' +
       esc(configActiva.nombreNodo) +
-      '"></div>' +
-      '<div class="panel-campo ia-field"><label>Score mínimo (threshold)</label>' +
-      '<input id="iaScoreMinimo" class="ia-input" type="number" min="0" max="100" value="' +
+      '"></div></section>' +
+      '<section class="ia-card oai-card ia-card--score">' +
+      '<h5 class="ia-card__title oai-card__title">Opciones de score</h5>' +
+      '<p class="ia-card__hint oai-card__hint">Umbral mínimo (0–100) para considerar una coincidencia de camino.</p>' +
+      '<div class="panel-campo ia-field oai-field"><label>Score mínimo</label>' +
+      '<input id="iaScoreMinimo" class="ia-input oai-input" type="number" min="0" max="100" value="' +
       configActiva.scoreMinimo +
       '"></div></section>' +
-      '<section class="ia-card ia-card--media">' +
-      '<h5 class="ia-card__title">Biblioteca media</h5>' +
-      '<p class="ia-card__hint">Asigna mediaId por camino (URL o id guardado).</p></section>' +
-      '<section class="ia-card ia-card--routes">' +
-      '<h5 class="ia-card__title">Caminos de ruteo</h5>' +
-      '<p class="ia-card__hint">Cada salida detecta intención por texto y sinónimos.</p>' +
-      '<div id="iaCaminosLista" class="ia-caminos-lista"></div>' +
-      '<button type="button" class="panel-btn ia-btn-add-ruta" id="iaAgregarCamino">+ Agregar camino</button></section>' +
-      '<section class="ia-card ia-card--behavior">' +
-      '<h5 class="ia-card__title">Comportamiento</h5>' +
-      '<label class="ia-toggle ia-toggle-premium"><input type="checkbox" id="iaResponderFallback"' +
+      '<section class="ia-card oai-card ia-card--session">' +
+      '<h5 class="ia-card__title oai-card__title">Esperar respuesta</h5>' +
+      '<p class="ia-card__hint oai-card__hint">Controla si el nodo pausa el flujo al entrar. La activación en runtime se habilitará en una fase posterior.</p>' +
+      '<label class="ia-toggle ia-toggle-premium oai-toggle"><input type="checkbox" id="iaEsperarRespuesta"' +
+      (opcionesSesion.esperarRespuesta ? " checked" : "") +
+      '><span class="ia-toggle__track oai-toggle__track" aria-hidden="true"></span><span class="ia-toggle__label oai-toggle__label">Esperar respuesta del lead</span></label>' +
+      '<div class="panel-campo ia-field oai-field ia-field--sm"><label>TTL sesión (horas)</label>' +
+      '<input id="iaTtlHoras" class="ia-input oai-input" type="number" min="0" step="1" placeholder="Sin límite" value="' +
+      esc(opcionesSesion.ttlHoras == null ? "" : opcionesSesion.ttlHoras) +
+      '"></div></section>' +
+      '<section class="ia-card oai-card ia-card--spelling">' +
+      '<h5 class="ia-card__title oai-card__title">Corrección ortográfica</h5>' +
+      '<p class="ia-card__hint oai-card__hint">Corrige typos comunes al analizar mensajes (ej. kiero → quiero). Activación en runtime: fase posterior.</p>' +
+      '<label class="ia-toggle ia-toggle-premium oai-toggle"><input type="checkbox" id="iaCorreccionOrtografica"' +
+      (opcionesSesion.correccionOrtografica ? " checked" : "") +
+      '><span class="ia-toggle__track oai-toggle__track" aria-hidden="true"></span><span class="ia-toggle__label oai-toggle__label">Activar corrección ortográfica</span></label></section>' +
+      '<section class="ia-card oai-card ia-card--routes">' +
+      '<h5 class="ia-card__title oai-card__title">Caminos</h5>' +
+      '<p class="ia-card__hint oai-card__hint">Cada salida usa su <code>route.id</code> como source handle en el canvas.</p>' +
+      '<div id="iaCaminosLista" class="ia-caminos-lista oai-routes-list"></div>' +
+      '<button type="button" class="panel-btn ia-btn-add-ruta oai-btn oai-btn--add" id="iaAgregarCamino">+ Agregar camino</button></section>' +
+      '<section class="ia-card oai-card ia-card--behavior">' +
+      '<h5 class="ia-card__title oai-card__title">Comportamiento</h5>' +
+      '<p class="ia-card__hint oai-card__hint">Opciones legacy del router — se conservan al guardar.</p>' +
+      '<label class="ia-toggle ia-toggle-premium oai-toggle"><input type="checkbox" id="iaResponderFallback"' +
       (configActiva.comportamiento.responderSiNoCoincide ? " checked" : "") +
-      '><span class="ia-toggle__track" aria-hidden="true"></span><span class="ia-toggle__label">Responder si no coincide</span></label>' +
-      '<div class="panel-campo ia-field"><label>Mensaje fallback</label>' +
-      '<textarea id="iaMensajeFallback" class="ia-textarea ia-input" rows="3">' +
+      '><span class="ia-toggle__track oai-toggle__track" aria-hidden="true"></span><span class="ia-toggle__label oai-toggle__label">Responder si no coincide</span></label>' +
+      '<div class="panel-campo ia-field oai-field"><label>Mensaje fallback</label>' +
+      '<textarea id="iaMensajeFallback" class="ia-textarea ia-input oai-input oai-textarea" rows="3">' +
       esc(configActiva.comportamiento.mensajeFallback) +
       "</textarea></div>" +
-      '<label class="ia-toggle ia-toggle-premium"><input type="checkbox" id="iaActivarFlujos"' +
+      '<label class="ia-toggle ia-toggle-premium oai-toggle"><input type="checkbox" id="iaActivarFlujos"' +
       (configActiva.comportamiento.activarOtrosFlujos ? " checked" : "") +
-      '><span class="ia-toggle__track" aria-hidden="true"></span><span class="ia-toggle__label">Activar otros flujos (antes del fallback)</span></label>' +
-      '<label class="ia-toggle ia-toggle-premium"><input type="checkbox" id="iaResponderAudio"' +
+      '><span class="ia-toggle__track oai-toggle__track" aria-hidden="true"></span><span class="ia-toggle__label oai-toggle__label">Activar otros flujos (antes del fallback)</span></label>' +
+      '<label class="ia-toggle ia-toggle-premium oai-toggle"><input type="checkbox" id="iaResponderAudio"' +
       (configActiva.comportamiento.responderConAudio ? " checked" : "") +
-      '><span class="ia-toggle__track" aria-hidden="true"></span><span class="ia-toggle__label">Responder con audio (usa transcripción si existe)</span></label></section>' +
-      '<section class="ia-card ia-card--test ia-prueba-block">' +
-      '<h5 class="ia-card__title">Prueba interna</h5>' +
-      '<div class="panel-campo ia-field"><label>Contexto</label>' +
-      '<input id="iaContextoPrueba" class="ia-input" placeholder="Contexto: última pregunta del bot" /></div>' +
-      '<div class="panel-campo ia-field"><label>Mensaje de prueba</label>' +
-      '<input id="iaMensajePrueba" class="ia-input" placeholder="Ej: quiero pagar por qr" /></div>' +
-      '<button type="button" class="panel-btn ia-btn-prueba" id="iaBtnPrueba">Probar detección</button>' +
+      '><span class="ia-toggle__track oai-toggle__track" aria-hidden="true"></span><span class="ia-toggle__label oai-toggle__label">Responder con audio (usa transcripción si existe)</span></label></section>' +
+      '<section class="ia-card oai-card ia-card--test ia-prueba-block">' +
+      '<h5 class="ia-card__title oai-card__title">Prueba interna</h5>' +
+      '<div class="panel-campo ia-field oai-field"><label>Contexto</label>' +
+      '<input id="iaContextoPrueba" class="ia-input oai-input" placeholder="Última pregunta del bot" /></div>' +
+      '<div class="panel-campo ia-field oai-field"><label>Mensaje de prueba</label>' +
+      '<input id="iaMensajePrueba" class="ia-input oai-input" placeholder="Ej: quiero pagar por qr" /></div>' +
+      '<button type="button" class="panel-btn ia-btn-prueba oai-btn" id="iaBtnPrueba">Probar detección</button>' +
       '<div id="iaResultadoPrueba" class="ia-resultado-prueba"></div></section>' +
       '<p class="ia-vars-hint">Variables: {{intent}} {{score}} {{route}} {{ultimo_mensaje}}</p>' +
-      '<button type="button" class="panel-btn ia-btn-save" id="iaGuardarPanel">Guardar nodo IA</button>' +
-      "</div></div>";
+      '<section class="ia-card oai-card ia-card--actions">' +
+      '<button type="button" class="panel-btn ia-btn-save oai-btn oai-btn--save" id="iaGuardarPanel">Guardar Agente Rápido</button>' +
+      "</section></div></div>";
 
     renderCaminosEditor();
 
@@ -775,7 +923,7 @@ window.MacBotIA = (function () {
       btnGuardar.onclick = function (ev) {
         ev.preventDefault();
         ev.stopPropagation();
-        guardarDesdePanel();
+        guardarDesdePanel(ev);
       };
     }
     document.getElementById("iaBtnPrueba")?.addEventListener("click", ejecutarPruebaInterna);
@@ -783,6 +931,9 @@ window.MacBotIA = (function () {
     [
       "iaNombreNodo",
       "iaScoreMinimo",
+      "iaEsperarRespuesta",
+      "iaTtlHoras",
+      "iaCorreccionOrtografica",
       "iaMensajeFallback",
       "iaResponderFallback",
       "iaActivarFlujos",

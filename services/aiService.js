@@ -157,11 +157,100 @@ function tieneOpenAI() {
   return !!OPENAI_API_KEY;
 }
 
+const CAMPOS_ROUTER_TOP_CONOCIDOS = new Set([
+  "version",
+  "nombreNodo",
+  "scoreMinimo",
+  "caminos",
+  "routes",
+  "comportamiento",
+  "esperarRespuesta",
+  "correccionOrtografica",
+  "ttlHoras",
+  "session",
+]);
+
+function normalizarOpcionesSesionRouter(src) {
+  const base = src && typeof src === "object" ? src : {};
+  const session =
+    base.session && typeof base.session === "object" ? { ...base.session } : {};
+  const esperarRespuesta = base.esperarRespuesta ?? session.esperarRespuesta;
+  const ttlRaw = base.ttlHoras ?? session.ttlHoras;
+  let ttlHoras = null;
+  if (ttlRaw != null && String(ttlRaw).trim() !== "") {
+    const parsed = parseInt(ttlRaw, 10);
+    ttlHoras = Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  }
+
+  return {
+    esperarRespuesta: esperarRespuesta !== false,
+    correccionOrtografica: base.correccionOrtografica !== false,
+    ttlHoras,
+    session: {
+      ...session,
+      esperarRespuesta: esperarRespuesta !== false,
+      ttlHoras,
+    },
+  };
+}
+
+function preservarCamposRouterExtra(cfg) {
+  const src = cfg && typeof cfg === "object" ? cfg : {};
+  const extras = {};
+  Object.keys(src).forEach((key) => {
+    if (!CAMPOS_ROUTER_TOP_CONOCIDOS.has(key)) extras[key] = src[key];
+  });
+  return { ...normalizarOpcionesSesionRouter(src), ...extras };
+}
+
+function preservarCaminosExtra(cfg, normalizado) {
+  const srcRoutes = Array.isArray(cfg?.caminos)
+    ? cfg.caminos
+    : Array.isArray(cfg?.routes)
+      ? cfg.routes
+      : [];
+  if (!srcRoutes.length) return normalizado;
+
+  const caminos = (normalizado.caminos || []).map((ruta) => {
+    const origen =
+      srcRoutes.find((r) => String(r?.id || "").trim() === String(ruta.id || "").trim()) ||
+      {};
+    const conocidos = new Set([
+      "id",
+      "nombre",
+      "text",
+      "name",
+      "synonyms",
+      "priority",
+      "mediaId",
+      "enabled",
+    ]);
+    const extras = {};
+    Object.keys(origen).forEach((key) => {
+      if (!conocidos.has(key)) extras[key] = origen[key];
+    });
+    return { ...extras, ...ruta };
+  });
+
+  return {
+    ...normalizado,
+    caminos,
+    routes: caminos,
+  };
+}
+
 function crearConfigPorDefecto() {
   return {
     version: 3,
     nombreNodo: "🤖 IA",
     scoreMinimo: 40,
+    esperarRespuesta: true,
+    correccionOrtografica: true,
+    ttlHoras: null,
+    session: {
+      esperarRespuesta: true,
+      ttlHoras: null,
+    },
     caminos: [],
     comportamiento: {
       responderSiNoCoincide: true,
@@ -279,7 +368,12 @@ function normalizarConfig(cfg) {
   const config = { ...crearConfigPorDefecto(), ...(cfg || {}) };
 
   if (esConfigRouterLocal(config)) {
-    return normalizarConfigRouter(config);
+    const preservados = preservarCamposRouterExtra(config);
+    const normalizado = normalizarConfigRouter(config);
+    return preservarCaminosExtra(config, {
+      ...normalizado,
+      ...preservados,
+    });
   }
 
   config.nombreNodo = sanitizeInput(config.nombreNodo || "🤖 IA", 120);
