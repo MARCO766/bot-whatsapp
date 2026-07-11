@@ -67,6 +67,13 @@ window.MacBotIA = (function () {
   const FALLBACK_LIMITE_MIN = 1;
   const FALLBACK_LIMITE_MAX = 100;
 
+  const MENSAJE_FALLBACK_TEXTO_NUEVO =
+    "No encontré esa opción 😅\nPor favor elige una de las opciones disponibles.";
+  const MENSAJE_FALLBACK_PAYMENT_NUEVO =
+    "No pude validar tu comprobante 😕\nPor favor envía una captura donde se vea claramente el nombre del titular, el monto correcto y los datos del pago.\nLuego vuelve a enviar el comprobante.";
+  const MENSAJE_FALLBACK_TEXTO_LEGACY =
+    "No entendí bien 😊\n¿Buscas QR, depósito o Tigo Money?";
+
   function crearFallbackLimitePorDefecto() {
     return {
       ilimitado: true,
@@ -77,11 +84,18 @@ window.MacBotIA = (function () {
     };
   }
 
-  function crearFallbackPaymentReaderPorDefecto() {
+  function crearFallbackPaymentReaderLegacy() {
     return {
       ...crearFallbackLimitePorDefecto(),
       responderSiNoCoincide: true,
       mensajeFallback: "",
+    };
+  }
+
+  function crearFallbackPaymentReaderPorDefecto() {
+    return {
+      ...crearFallbackPaymentReaderLegacy(),
+      mensajeFallback: MENSAJE_FALLBACK_PAYMENT_NUEVO,
     };
   }
 
@@ -426,7 +440,7 @@ window.MacBotIA = (function () {
     refrescarFallbackLimiteUI(prefix);
   }
 
-  function crearConfigPorDefecto() {
+  function crearConfigPlantillaLegacy() {
     return {
       version: 3,
       nombreNodo: "Agente Rápido",
@@ -441,14 +455,23 @@ window.MacBotIA = (function () {
       caminos: [],
       comportamiento: {
         responderSiNoCoincide: true,
-        mensajeFallback:
-          "No entendí bien 😊\n¿Buscas QR, depósito o Tigo Money?",
+        mensajeFallback: MENSAJE_FALLBACK_TEXTO_LEGACY,
         activarOtrosFlujos: false,
         responderConAudio: false,
       },
       fallbackTexto: crearFallbackLimitePorDefecto(),
-      fallbackPaymentReader: crearFallbackPaymentReaderPorDefecto(),
+      fallbackPaymentReader: crearFallbackPaymentReaderLegacy(),
     };
+  }
+
+  function crearConfigPorDefecto() {
+    const cfg = crearConfigPlantillaLegacy();
+    cfg.comportamiento = {
+      ...cfg.comportamiento,
+      mensajeFallback: MENSAJE_FALLBACK_TEXTO_NUEVO,
+    };
+    cfg.fallbackPaymentReader = crearFallbackPaymentReaderPorDefecto();
+    return cfg;
   }
 
   function preservarCamposExtraTop(src, conocidos) {
@@ -485,7 +508,7 @@ window.MacBotIA = (function () {
   }
 
   function migrarConfigLegacy(data) {
-    const cfg = crearConfigPorDefecto();
+    const cfg = crearConfigPlantillaLegacy();
     if (!data || typeof data !== "object") return cfg;
 
     Object.assign(cfg, data);
@@ -561,16 +584,16 @@ window.MacBotIA = (function () {
         mensajeFallback: String(
           comp.mensajeFallback ||
             comp.fallbackMessage ||
-            crearConfigPorDefecto().comportamiento.mensajeFallback
+            MENSAJE_FALLBACK_TEXTO_LEGACY
         ).trim(),
         activarOtrosFlujos: !!comp.activarOtrosFlujos,
         responderConAudio: !!(comp.responderConAudio ?? comp.responderAudio),
       },
       fallbackTexto: normalizarFallbackLimiteBuilder(
-        src.fallbackTexto || crearConfigPorDefecto().fallbackTexto
+        src.fallbackTexto || crearConfigPlantillaLegacy().fallbackTexto
       ),
       fallbackPaymentReader: normalizarFallbackPaymentReaderBuilder(
-        src.fallbackPaymentReader || crearConfigPorDefecto().fallbackPaymentReader
+        src.fallbackPaymentReader || crearConfigPlantillaLegacy().fallbackPaymentReader
       ),
       ...extrasTop,
     };
@@ -1035,7 +1058,7 @@ window.MacBotIA = (function () {
       responderSiNoCoincide: !!document.getElementById("iaResponderFallback")?.checked,
       mensajeFallback:
         document.getElementById("iaMensajeFallback")?.value.trim() ||
-        crearConfigPorDefecto().comportamiento.mensajeFallback,
+        MENSAJE_FALLBACK_TEXTO_LEGACY,
       activarOtrosFlujos: !!document.getElementById("iaActivarFlujos")?.checked,
       responderConAudio: !!document.getElementById("iaResponderAudio")?.checked,
     };
