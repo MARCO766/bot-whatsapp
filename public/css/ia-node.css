@@ -469,6 +469,29 @@
   border: 1px solid rgba(251, 191, 36, 0.35);
 }
 
+.node.ia-node .ia-radio {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0;
+  font-size: 13px;
+  color: #e2e8f0;
+  cursor: pointer;
+}
+
+.node.ia-node .ia-radio input {
+  accent-color: #22c55e;
+}
+
+.node.ia-node .ia-fallback-max-wrap--hidden,
+.node.ia-node .ia-fallback-soporte-wrap--hidden {
+  display: none;
+}
+
+.node.ia-node .ia-card--fallback-limit {
+  margin-top: 12px;
+}
+
 .node.ia-node:hover .ia-circle {
   box-shadow:
     0 0 0 1px rgba(34, 211, 238, 0.28),

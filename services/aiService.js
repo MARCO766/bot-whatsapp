@@ -54,6 +54,150 @@ const INTENT_PRIORITY = [
 
 const SCORES_VALIDOS = new Set(["caliente", "medio", "frio"]);
 
+const FALLBACK_LIMITE_MIN = 1;
+const FALLBACK_LIMITE_MAX = 100;
+
+function crearFallbackLimitePorDefecto() {
+  return {
+    ilimitado: true,
+    maximo: 3,
+    alSuperarLimite: "nada",
+    soporteNombre: "",
+    soporteNumero: "",
+  };
+}
+
+function clampFallbackMaximo(valor) {
+  const n = parseInt(valor, 10);
+  if (!Number.isFinite(n)) return 3;
+  return Math.min(FALLBACK_LIMITE_MAX, Math.max(FALLBACK_LIMITE_MIN, n));
+}
+
+function normalizarFallbackLimite(raw) {
+  const base = raw && typeof raw === "object" ? raw : {};
+  const ilimitado = base.ilimitado !== false;
+  return {
+    ilimitado,
+    maximo: clampFallbackMaximo(base.maximo),
+    alSuperarLimite: base.alSuperarLimite === "soporte" ? "soporte" : "nada",
+    soporteNombre: String(base.soporteNombre || "")
+      .trim()
+      .slice(0, 120),
+    soporteNumero: String(base.soporteNumero || "")
+      .trim()
+      .slice(0, 32),
+  };
+}
+
+function normalizarFallbacksIA(config) {
+  const base = config && typeof config === "object" ? config : {};
+  return {
+    fallbackTexto: normalizarFallbackLimite(
+      base.fallbackTexto || crearFallbackLimitePorDefecto()
+    ),
+    fallbackPaymentReader: normalizarFallbackLimite(
+      base.fallbackPaymentReader || crearFallbackLimitePorDefecto()
+    ),
+  };
+}
+
+function crearEstadoFallbackContadores() {
+  return {
+    texto: { usados: 0, soporteEnviado: false },
+    paymentReader: { usados: 0, soporteEnviado: false },
+  };
+}
+
+function leerEstadoFallbackContadores(flowContext) {
+  const estado = crearEstadoFallbackContadores();
+  const raw = flowContext?.iaFallbackContadores;
+  if (!raw || typeof raw !== "object") return estado;
+
+  for (const key of ["texto", "paymentReader"]) {
+    const parcial = raw[key];
+    if (!parcial || typeof parcial !== "object") continue;
+    estado[key].usados = Math.max(0, parseInt(parcial.usados, 10) || 0);
+    estado[key].soporteEnviado = !!parcial.soporteEnviado;
+  }
+  return estado;
+}
+
+function reiniciarContadorFallbackTexto(estado) {
+  estado.texto.usados = 0;
+  estado.texto.soporteEnviado = false;
+}
+
+function reiniciarContadorFallbackPayment(estado) {
+  estado.paymentReader.usados = 0;
+  estado.paymentReader.soporteEnviado = false;
+}
+
+function construirMensajeSoporteFallback(nombre, numero) {
+  const nombreSoporte = String(nombre || "").trim() || "Soporte";
+  const numeroSoporte = String(numero || "").trim();
+  return (
+    "No estoy pudiendo ayudarte.\n" +
+    "Por favor comunícate con nuestro asesor.\n" +
+    `👤 ${nombreSoporte}\n` +
+    `📲 ${numeroSoporte}`
+  );
+}
+
+function resolverAccionFallbackLimite({ configLimite, estadoParcial, mensajeNormal }) {
+  const cfg = normalizarFallbackLimite(configLimite);
+  const mensaje = String(mensajeNormal || "").trim();
+  const estado = {
+    usados: Math.max(0, parseInt(estadoParcial?.usados, 10) || 0),
+    soporteEnviado: !!estadoParcial?.soporteEnviado,
+  };
+
+  if (cfg.ilimitado) {
+    return {
+      enviar: !!mensaje,
+      mensaje,
+      nuevoEstado: estado,
+    };
+  }
+
+  if (estado.usados < cfg.maximo) {
+    return {
+      enviar: !!mensaje,
+      mensaje,
+      nuevoEstado: {
+        ...estado,
+        usados: estado.usados + (mensaje ? 1 : 0),
+      },
+    };
+  }
+
+  if (cfg.alSuperarLimite === "soporte" && !estado.soporteEnviado) {
+    return {
+      enviar: true,
+      mensaje: construirMensajeSoporteFallback(cfg.soporteNombre, cfg.soporteNumero),
+      nuevoEstado: {
+        ...estado,
+        soporteEnviado: true,
+      },
+    };
+  }
+
+  return {
+    enviar: false,
+    mensaje: "",
+    nuevoEstado: estado,
+  };
+}
+
+function aplicarEstadoFallbackAContexto(contexto, estado) {
+  return {
+    ...contexto,
+    iaFallbackContadores: {
+      texto: { ...estado.texto },
+      paymentReader: { ...estado.paymentReader },
+    },
+  };
+}
+
 const MSG_COMPROBANTE_INVALIDO =
   "No pude validar el comprobante. Por favor envía una captura clara donde se vea el monto, moneda y nombre.";
 const MSG_ARCHIVO_NO_LEGIBLE =
@@ -383,6 +527,8 @@ const CAMPOS_ROUTER_TOP_CONOCIDOS = new Set([
   "correccionOrtografica",
   "ttlHoras",
   "session",
+  "fallbackTexto",
+  "fallbackPaymentReader",
 ]);
 
 function normalizarOpcionesSesionRouter(src) {
@@ -474,6 +620,8 @@ function crearConfigPorDefecto() {
       activarOtrosFlujos: false,
       responderConAudio: false,
     },
+    fallbackTexto: crearFallbackLimitePorDefecto(),
+    fallbackPaymentReader: crearFallbackLimitePorDefecto(),
     modo: "detectar_intencion",
     proveedorIA: "local",
     reglas: { ...REGLAS_POR_DEFECTO },
@@ -585,9 +733,11 @@ function normalizarConfig(cfg) {
   if (esConfigRouterLocal(config)) {
     const preservados = preservarCamposRouterExtra(config);
     const normalizado = normalizarConfigRouter(config);
+    const fallbacks = normalizarFallbacksIA(config);
     return preservarCaminosExtra(config, {
       ...normalizado,
       ...preservados,
+      ...fallbacks,
     });
   }
 
@@ -1079,18 +1229,24 @@ async function ejecutarNodoIARouter(nodo, contexto, opts = {}) {
   const numero = contexto?.numero || contexto?.from || contexto?.telefono;
   const usuarioId = contexto?.usuarioId || null;
   const conexionWhatsappId = contexto?.conexionWhatsappId || null;
-  const config = normalizarConfigRouter(parseIAFromNodo(nodo));
+  const config = parseIAFromNodo(nodo);
   const chatScope = { usuarioId, conexionWhatsappId, numero };
+  let fallbackEstado = leerEstadoFallbackContadores(contexto);
 
   if (!opts.resume) {
     const esperandoPaymentReader = rutasPaymentReaderActivas(config).length > 0;
     console.log("🤖 IA LOCAL — modo silencioso: esperando respuesta del lead");
-    return limpiarMediaEntranteContextoIA({
-      ...contexto,
-      iaPausar: true,
-      iaEjecutada: false,
-      ...(esperandoPaymentReader ? { iaPaymentReaderEsperando: true } : {}),
-    });
+    return limpiarMediaEntranteContextoIA(
+      aplicarEstadoFallbackAContexto(
+        {
+          ...contexto,
+          iaPausar: true,
+          iaEjecutada: false,
+          ...(esperandoPaymentReader ? { iaPaymentReaderEsperando: true } : {}),
+        },
+        fallbackEstado
+      )
+    );
   }
 
   const mensajeLead = sanitizeInput(
@@ -1112,12 +1268,17 @@ async function ejecutarNodoIARouter(nodo, contexto, opts = {}) {
       texto: mensajeLead,
     })
   ) {
-    return limpiarMediaEntranteContextoIA({
-      ...contexto,
-      iaPausar: true,
-      iaPaymentReaderEsperando: true,
-      iaEjecutada: false,
-    });
+    return limpiarMediaEntranteContextoIA(
+      aplicarEstadoFallbackAContexto(
+        {
+          ...contexto,
+          iaPausar: true,
+          iaPaymentReaderEsperando: true,
+          iaEjecutada: false,
+        },
+        fallbackEstado
+      )
+    );
   }
 
   const imagenPaymentReader =
@@ -1138,35 +1299,59 @@ async function ejecutarNodoIARouter(nodo, contexto, opts = {}) {
   }
 
   if (resultadoPayment?.action === "route" && resultadoPayment.routeId) {
-    return limpiarMediaEntranteContextoIA({
-      ...contexto,
-      iaPausar: false,
-      iaRouteId: resultadoPayment.routeId,
-      iaEjecutada: true,
-      intent: resultadoPayment.intent,
-      score: resultadoPayment.score,
-      route: resultadoPayment.routeId,
-      iaPaymentReaderEsperando: false,
-    });
+    reiniciarContadorFallbackPayment(fallbackEstado);
+    return limpiarMediaEntranteContextoIA(
+      aplicarEstadoFallbackAContexto(
+        {
+          ...contexto,
+          iaPausar: false,
+          iaRouteId: resultadoPayment.routeId,
+          iaEjecutada: true,
+          intent: resultadoPayment.intent,
+          score: resultadoPayment.score,
+          route: resultadoPayment.routeId,
+          iaPaymentReaderEsperando: false,
+        },
+        fallbackEstado
+      )
+    );
   }
 
   if (resultadoPayment?.action === "reply") {
+    const accionPayment = resolverAccionFallbackLimite({
+      configLimite: config.fallbackPaymentReader,
+      estadoParcial: fallbackEstado.paymentReader,
+      mensajeNormal: resultadoPayment.reply,
+    });
+    fallbackEstado.paymentReader = accionPayment.nuevoEstado;
+
     console.log(
       "[IA_PAYMENT_READER_WAITING]",
       JSON.stringify({
         rutasEvaluadas: rutasPaymentReaderActivas(config).length,
         motivo: resultadoPayment.paymentReaderMotivo || null,
+        fallbackEnviar: accionPayment.enviar,
+        fallbackUsados: fallbackEstado.paymentReader.usados,
       })
     );
-    return limpiarMediaEntranteContextoIA({
-      ...contexto,
-      iaPausar: true,
-      iaPaymentReaderEsperando: true,
-      iaPaymentReaderReply: resultadoPayment.reply,
-      iaEjecutada: true,
-      intent: resultadoPayment.intent || "payment_reader_invalido",
-      score: resultadoPayment.score,
-    });
+
+    const salidaPayment = aplicarEstadoFallbackAContexto(
+      {
+        ...contexto,
+        iaPausar: true,
+        iaPaymentReaderEsperando: true,
+        iaEjecutada: true,
+        intent: resultadoPayment.intent || "payment_reader_invalido",
+        score: resultadoPayment.score,
+      },
+      fallbackEstado
+    );
+
+    if (accionPayment.enviar && accionPayment.mensaje) {
+      salidaPayment.iaPaymentReaderReply = accionPayment.mensaje;
+    }
+
+    return limpiarMediaEntranteContextoIA(salidaPayment);
   }
 
   const memoria = contexto.memoriaIA || {
@@ -1183,69 +1368,99 @@ async function ejecutarNodoIARouter(nodo, contexto, opts = {}) {
   contexto.ultimo_mensaje = mensajeLead;
 
   if (!analisis.matched) {
-    if (contexto.iaPaymentReaderEsperando) {
-      return limpiarMediaEntranteContextoIA({
-        ...contexto,
-        iaPausar: true,
-        iaPaymentReaderEsperando: true,
-        iaEjecutada: true,
-        intent: contexto.intent,
-        score: contexto.score,
-      });
+    const tieneRutasTextoActivas = config.caminos.some(
+      (c) => c.enabled !== false && !esCaminoPaymentReader(c)
+    );
+
+    if (contexto.iaPaymentReaderEsperando && !tieneRutasTextoActivas) {
+      return limpiarMediaEntranteContextoIA(
+        aplicarEstadoFallbackAContexto(
+          {
+            ...contexto,
+            iaPausar: true,
+            iaPaymentReaderEsperando: true,
+            iaEjecutada: true,
+            intent: contexto.intent,
+            score: contexto.score,
+          },
+          fallbackEstado
+        )
+      );
     }
 
     if (config.comportamiento.activarOtrosFlujos && contexto._buscarActivadores) {
       const activado = await contexto._buscarActivadores();
       if (activado) {
-        return {
-          ...contexto,
-          iaPausar: false,
-          iaActivadorGlobal: true,
-          iaEjecutada: true,
-        };
+        return aplicarEstadoFallbackAContexto(
+          {
+            ...contexto,
+            iaPausar: false,
+            iaActivadorGlobal: true,
+            iaEjecutada: true,
+          },
+          fallbackEstado
+        );
       }
     }
 
     if (config.comportamiento.responderSiNoCoincide) {
       const fb = interpolarVariables(config.comportamiento.mensajeFallback, contexto).trim();
+      const accionTexto = resolverAccionFallbackLimite({
+        configLimite: config.fallbackTexto,
+        estadoParcial: fallbackEstado.texto,
+        mensajeNormal: fb,
+      });
+      fallbackEstado.texto = accionTexto.nuevoEstado;
+
       const opEnvio = opcionesEnvioIA(contexto, usuarioId);
-      if (fb && numero && opEnvio) {
-        await enviarTextoWhatsApp(numero, fb, opEnvio);
-        contexto.ultimaRespuestaIA = fb;
-      } else if (fb && numero && !opEnvio) {
+      if (accionTexto.enviar && accionTexto.mensaje && numero && opEnvio) {
+        await enviarTextoWhatsApp(numero, accionTexto.mensaje, opEnvio);
+        contexto.ultimaRespuestaIA = accionTexto.mensaje;
+      } else if (accionTexto.enviar && accionTexto.mensaje && numero && !opEnvio) {
         console.log("[IA_MULTI] envío omitido sin conexionWhatsappId", {
           numero,
           usuarioId,
         });
       }
-      return {
-        ...contexto,
-        iaPausar: true,
-        iaFallback: true,
-        iaEjecutada: true,
-        intent: contexto.intent,
-        score: contexto.score,
-      };
+
+      return aplicarEstadoFallbackAContexto(
+        {
+          ...contexto,
+          iaPausar: true,
+          iaFallback: accionTexto.enviar,
+          iaEjecutada: true,
+          intent: contexto.intent,
+          score: contexto.score,
+        },
+        fallbackEstado
+      );
     }
 
-    return {
-      ...contexto,
-      iaPausar: false,
-      iaSinCoincidencia: true,
-      iaEjecutada: true,
-    };
+    return aplicarEstadoFallbackAContexto(
+      {
+        ...contexto,
+        iaPausar: false,
+        iaSinCoincidencia: true,
+        iaEjecutada: true,
+      },
+      fallbackEstado
+    );
   }
 
-  return {
-    ...contexto,
-    iaPausar: false,
-    iaRouteId: analisis.routeId,
-    iaEjecutada: true,
-    intent: analisis.intent,
-    score: analisis.score,
-    route: analisis.route,
-    iaPaymentReaderEsperando: false,
-  };
+  reiniciarContadorFallbackTexto(fallbackEstado);
+  return aplicarEstadoFallbackAContexto(
+    {
+      ...contexto,
+      iaPausar: false,
+      iaRouteId: analisis.routeId,
+      iaEjecutada: true,
+      intent: analisis.intent,
+      score: analisis.score,
+      route: analisis.route,
+      iaPaymentReaderEsperando: false,
+    },
+    fallbackEstado
+  );
 }
 
 async function ejecutarNodoIA(nodo, contexto, opts = {}) {
@@ -1543,6 +1758,14 @@ module.exports = {
   absorberMensajeIAPaymentReaderValidating,
   limpiarIAPaymentReaderStatus,
   getIAPaymentReaderStatus,
+  normalizarFallbackLimite,
+  resolverAccionFallbackLimite,
+  leerEstadoFallbackContadores,
+  reiniciarContadorFallbackTexto,
+  reiniciarContadorFallbackPayment,
+  crearFallbackLimitePorDefecto,
+  FALLBACK_LIMITE_MIN,
+  FALLBACK_LIMITE_MAX,
   runAI,
   testIALocal,
   getIAStatus,

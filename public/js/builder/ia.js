@@ -34,6 +34,8 @@ window.MacBotIA = (function () {
     "correccionOrtografica",
     "ttlHoras",
     "session",
+    "fallbackTexto",
+    "fallbackPaymentReader",
   ]);
 
   const ROUTE_TYPE_TEXTO = "texto";
@@ -62,6 +64,172 @@ window.MacBotIA = (function () {
   const IA_PAYMENT_BUILDER_NOTE =
     "Esta fase solo prepara el Builder y el JSON de la ruta. El procesamiento de comprobantes (OCR) se implementará en una fase posterior.";
 
+  const FALLBACK_LIMITE_MIN = 1;
+  const FALLBACK_LIMITE_MAX = 100;
+
+  function crearFallbackLimitePorDefecto() {
+    return {
+      ilimitado: true,
+      maximo: 3,
+      alSuperarLimite: "nada",
+      soporteNombre: "",
+      soporteNumero: "",
+    };
+  }
+
+  function clampFallbackMaximoBuilder(valor) {
+    const n = parseInt(valor, 10);
+    if (!Number.isFinite(n)) return 3;
+    return Math.min(FALLBACK_LIMITE_MAX, Math.max(FALLBACK_LIMITE_MIN, n));
+  }
+
+  function normalizarFallbackLimiteBuilder(raw) {
+    const base = raw && typeof raw === "object" ? raw : {};
+    return {
+      ilimitado: base.ilimitado !== false,
+      maximo: clampFallbackMaximoBuilder(base.maximo),
+      alSuperarLimite: base.alSuperarLimite === "soporte" ? "soporte" : "nada",
+      soporteNombre: String(base.soporteNombre || "").trim().slice(0, 120),
+      soporteNumero: String(base.soporteNumero || "").trim().slice(0, 32),
+    };
+  }
+
+  function leerFallbackLimiteDesdeDom(prefix) {
+    const ilimitado = !!document.getElementById("iaFallback" + prefix + "Ilimitado")?.checked;
+    const maximo = clampFallbackMaximoBuilder(
+      document.getElementById("iaFallback" + prefix + "Maximo")?.value
+    );
+    const soporte = !!document.getElementById("iaFallback" + prefix + "Soporte")?.checked;
+    return normalizarFallbackLimiteBuilder({
+      ilimitado: ilimitado,
+      maximo: maximo,
+      alSuperarLimite: soporte ? "soporte" : "nada",
+      soporteNombre: document.getElementById("iaFallback" + prefix + "SoporteNombre")?.value || "",
+      soporteNumero: document.getElementById("iaFallback" + prefix + "SoporteNumero")?.value || "",
+    });
+  }
+
+  function renderFallbackLimiteCard(prefix, titulo, cfg) {
+    const limite = normalizarFallbackLimiteBuilder(cfg);
+    const maxAttrs =
+      ' min="' +
+      FALLBACK_LIMITE_MIN +
+      '" max="' +
+      FALLBACK_LIMITE_MAX +
+      '" step="1"';
+    return (
+      '<section class="ia-card oai-card ia-card--fallback-limit" data-fallback-prefix="' +
+      esc(prefix) +
+      '">' +
+      '<h5 class="ia-card__title oai-card__title">' +
+      esc(titulo) +
+      "</h5>" +
+      '<p class="ia-card__hint oai-card__hint">Cantidad de fallbacks</p>' +
+      '<label class="ia-radio ia-radio-premium"><input type="radio" name="iaFallback' +
+      prefix +
+      'Cantidad" id="iaFallback' +
+      prefix +
+      'Ilimitado" value="ilimitado"' +
+      (limite.ilimitado ? " checked" : "") +
+      '><span>Ilimitados</span></label>' +
+      '<label class="ia-radio ia-radio-premium"><input type="radio" name="iaFallback' +
+      prefix +
+      'Cantidad" id="iaFallback' +
+      prefix +
+      'Limitar" value="limitar"' +
+      (!limite.ilimitado ? " checked" : "") +
+      '><span>Limitar cantidad</span></label>' +
+      '<div class="panel-campo ia-field oai-field ia-fallback-max-wrap' +
+      (limite.ilimitado ? " ia-fallback-max-wrap--hidden" : "") +
+      '" id="iaFallback' +
+      prefix +
+      'MaxWrap">' +
+      '<label>Cantidad máxima</label>' +
+      '<input type="number" id="iaFallback' +
+      prefix +
+      'Maximo" class="ia-input oai-input"' +
+      maxAttrs +
+      ' value="' +
+      esc(String(limite.maximo)) +
+      '"></div>' +
+      '<p class="ia-card__hint oai-card__hint">Al superar el límite</p>' +
+      '<label class="ia-radio ia-radio-premium"><input type="radio" name="iaFallback' +
+      prefix +
+      'Superar" id="iaFallback' +
+      prefix +
+      'Nada" value="nada"' +
+      (limite.alSuperarLimite !== "soporte" ? " checked" : "") +
+      '><span>No hacer nada</span></label>' +
+      '<label class="ia-radio ia-radio-premium"><input type="radio" name="iaFallback' +
+      prefix +
+      'Superar" id="iaFallback' +
+      prefix +
+      'Soporte" value="soporte"' +
+      (limite.alSuperarLimite === "soporte" ? " checked" : "") +
+      '><span>Enviar contacto de soporte</span></label>' +
+      '<div class="ia-fallback-soporte-wrap' +
+      (limite.alSuperarLimite === "soporte" ? "" : " ia-fallback-soporte-wrap--hidden") +
+      '" id="iaFallback' +
+      prefix +
+      'SoporteWrap">' +
+      '<div class="panel-campo ia-field oai-field"><label>Nombre del soporte</label>' +
+      '<input type="text" id="iaFallback' +
+      prefix +
+      'SoporteNombre" class="ia-input oai-input" value="' +
+      esc(limite.soporteNombre) +
+      '"></div>' +
+      '<div class="panel-campo ia-field oai-field"><label>Número WhatsApp</label>' +
+      '<input type="text" id="iaFallback' +
+      prefix +
+      'SoporteNumero" class="ia-input oai-input" value="' +
+      esc(limite.soporteNumero) +
+      '"></div></div></section>'
+    );
+  }
+
+  function actualizarVisibilidadFallbackLimite(prefix) {
+    const ilimitado = !!document.getElementById("iaFallback" + prefix + "Ilimitado")?.checked;
+    const soporte = !!document.getElementById("iaFallback" + prefix + "Soporte")?.checked;
+    document
+      .getElementById("iaFallback" + prefix + "MaxWrap")
+      ?.classList.toggle("ia-fallback-max-wrap--hidden", ilimitado);
+    document
+      .getElementById("iaFallback" + prefix + "SoporteWrap")
+      ?.classList.toggle("ia-fallback-soporte-wrap--hidden", !soporte);
+  }
+
+  function enlazarFallbackLimiteUI(prefix) {
+    [
+      "iaFallback" + prefix + "Ilimitado",
+      "iaFallback" + prefix + "Limitar",
+      "iaFallback" + prefix + "Soporte",
+      "iaFallback" + prefix + "Nada",
+    ].forEach(function (id) {
+      document.getElementById(id)?.addEventListener("change", function () {
+        actualizarVisibilidadFallbackLimite(prefix);
+        onFormChange();
+      });
+    });
+
+    const maxInput = document.getElementById("iaFallback" + prefix + "Maximo");
+    if (maxInput) {
+      maxInput.addEventListener("input", onFormChange);
+      maxInput.addEventListener("change", function () {
+        maxInput.value = String(clampFallbackMaximoBuilder(maxInput.value));
+        onFormChange();
+      });
+    }
+
+    ["iaFallback" + prefix + "SoporteNombre", "iaFallback" + prefix + "SoporteNumero"].forEach(
+      function (id) {
+        document.getElementById(id)?.addEventListener("input", onFormChange);
+        document.getElementById(id)?.addEventListener("change", onFormChange);
+      }
+    );
+
+    actualizarVisibilidadFallbackLimite(prefix);
+  }
+
   function crearConfigPorDefecto() {
     return {
       version: 3,
@@ -82,6 +250,8 @@ window.MacBotIA = (function () {
         activarOtrosFlujos: false,
         responderConAudio: false,
       },
+      fallbackTexto: crearFallbackLimitePorDefecto(),
+      fallbackPaymentReader: crearFallbackLimitePorDefecto(),
     };
   }
 
@@ -158,6 +328,12 @@ window.MacBotIA = (function () {
         data.comportamiento?.responderConAudio || data.responderConAudio
       ),
     };
+    cfg.fallbackTexto = normalizarFallbackLimiteBuilder(
+      data.fallbackTexto || cfg.fallbackTexto
+    );
+    cfg.fallbackPaymentReader = normalizarFallbackLimiteBuilder(
+      data.fallbackPaymentReader || cfg.fallbackPaymentReader
+    );
 
     cfg.scoreMinimo = parseInt(cfg.scoreMinimo, 10) || 40;
     Object.assign(cfg, normalizarOpcionesSesion(cfg));
@@ -194,6 +370,12 @@ window.MacBotIA = (function () {
         activarOtrosFlujos: !!comp.activarOtrosFlujos,
         responderConAudio: !!(comp.responderConAudio ?? comp.responderAudio),
       },
+      fallbackTexto: normalizarFallbackLimiteBuilder(
+        src.fallbackTexto || crearConfigPorDefecto().fallbackTexto
+      ),
+      fallbackPaymentReader: normalizarFallbackLimiteBuilder(
+        src.fallbackPaymentReader || crearConfigPorDefecto().fallbackPaymentReader
+      ),
       ...extrasTop,
     };
   }
@@ -661,6 +843,8 @@ window.MacBotIA = (function () {
       activarOtrosFlujos: !!document.getElementById("iaActivarFlujos")?.checked,
       responderConAudio: !!document.getElementById("iaResponderAudio")?.checked,
     };
+    configActiva.fallbackTexto = leerFallbackLimiteDesdeDom("Texto");
+    configActiva.fallbackPaymentReader = leerFallbackLimiteDesdeDom("Payment");
     asegurarArraysCaminos(configActiva);
     return configActiva;
   }
@@ -1082,6 +1266,12 @@ window.MacBotIA = (function () {
       '<label class="ia-toggle ia-toggle-premium oai-toggle"><input type="checkbox" id="iaResponderAudio"' +
       (configActiva.comportamiento.responderConAudio ? " checked" : "") +
       '><span class="ia-toggle__track oai-toggle__track" aria-hidden="true"></span><span class="ia-toggle__label oai-toggle__label">Responder con audio (usa transcripción si existe)</span></label></section>' +
+      renderFallbackLimiteCard("Texto", "Límite fallback de texto", configActiva.fallbackTexto) +
+      renderFallbackLimiteCard(
+        "Payment",
+        "Límite fallback de lectura de pago",
+        configActiva.fallbackPaymentReader
+      ) +
       '<section class="ia-card oai-card ia-card--test ia-prueba-block">' +
       '<h5 class="ia-card__title oai-card__title">Prueba interna</h5>' +
       '<div class="panel-campo ia-field oai-field"><label>Contexto</label>' +
@@ -1117,6 +1307,9 @@ window.MacBotIA = (function () {
       };
     }
     document.getElementById("iaBtnPrueba")?.addEventListener("click", ejecutarPruebaInterna);
+
+    enlazarFallbackLimiteUI("Texto");
+    enlazarFallbackLimiteUI("Payment");
 
     [
       "iaNombreNodo",
