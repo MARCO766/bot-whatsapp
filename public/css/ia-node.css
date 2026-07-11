@@ -551,6 +551,33 @@
   margin-top: 0;
 }
 
+.ia-accordion-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(52, 211, 153, 0.14);
+}
+
+.ia-accordion--nested {
+  margin: 0;
+  padding: 10px 10px 8px;
+  border-radius: 10px;
+  background: rgba(8, 16, 14, 0.55);
+  border: 1px solid rgba(52, 211, 153, 0.16);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.ia-accordion--nested .ia-accordion__title {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+}
+
+.ia-accordion--nested.ia-accordion--open > .ia-accordion__body > .ia-accordion__inner {
+  padding-top: 8px;
+}
+
 .ia-accordion.ia-card--fallback-limit,
 .ia-card--fallback-limit {
   margin-top: 0;

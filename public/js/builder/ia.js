@@ -176,13 +176,18 @@ window.MacBotIA = (function () {
     );
   }
 
-  function renderAccordionSection(accordionId, titulo, contenidoHtml, abierto) {
+  function renderAccordionSection(accordionId, titulo, contenidoHtml, abierto, opciones) {
+    const opts = opciones || {};
     const openClass = abierto ? " ia-accordion--open" : " ia-accordion--closed";
     const expanded = abierto ? "true" : "false";
     const chevron = abierto ? "▼" : "▶";
+    const anidadoClass = opts.anidado ? " ia-accordion--nested" : "";
+    const cardClass = opts.anidado ? "" : " ia-card oai-card";
     return (
-      '<section class="ia-card oai-card ia-accordion' +
+      '<div class="ia-accordion' +
+      cardClass +
       openClass +
+      anidadoClass +
       '" data-ia-accordion="' +
       esc(accordionId) +
       '">' +
@@ -197,7 +202,7 @@ window.MacBotIA = (function () {
       "</span></button>" +
       '<div class="ia-accordion__body"><div class="ia-accordion__inner">' +
       contenidoHtml +
-      "</div></div></section>"
+      "</div></div></div>"
     );
   }
 
@@ -1405,30 +1410,33 @@ window.MacBotIA = (function () {
       renderAccordionSection(
         "comportamiento",
         "Comportamiento",
-        '<p class="ia-card__hint oai-card__hint">Opciones legacy del router — se conservan al guardar.</p>' +
-          '<label class="ia-toggle ia-toggle-premium oai-toggle"><input type="checkbox" id="iaActivarFlujos"' +
+        '<label class="ia-toggle ia-toggle-premium oai-toggle"><input type="checkbox" id="iaActivarFlujos"' +
           (configActiva.comportamiento.activarOtrosFlujos ? " checked" : "") +
           '><span class="ia-toggle__track oai-toggle__track" aria-hidden="true"></span><span class="ia-toggle__label oai-toggle__label">Activar otros flujos (antes del fallback)</span></label>' +
           '<label class="ia-toggle ia-toggle-premium oai-toggle"><input type="checkbox" id="iaResponderAudio"' +
           (configActiva.comportamiento.responderConAudio ? " checked" : "") +
-          '><span class="ia-toggle__track oai-toggle__track" aria-hidden="true"></span><span class="ia-toggle__label oai-toggle__label">Responder con audio (usa transcripción si existe)</span></label>',
-        false
-      ) +
-      renderAccordionSection(
-        "fallback-texto",
-        "Límite fallback de texto",
-        renderFallbackTextoActivacion(configActiva.comportamiento) +
-          renderFallbackLimiteCard("Texto", "", configActiva.fallbackTexto, {
-            sinEnvoltorio: true,
-          }),
-        false
-      ) +
-      renderAccordionSection(
-        "fallback-payment",
-        "Límite fallback de lectura de pago",
-        renderFallbackLimiteCard("Payment", "", configActiva.fallbackPaymentReader, {
-          sinEnvoltorio: true,
-        }),
+          '><span class="ia-toggle__track oai-toggle__track" aria-hidden="true"></span><span class="ia-toggle__label oai-toggle__label">Responder con audio (usa transcripción si existe)</span></label>' +
+          '<div class="ia-accordion-group">' +
+          renderAccordionSection(
+            "fallback-texto",
+            "Límite fallback de texto",
+            renderFallbackTextoActivacion(configActiva.comportamiento) +
+              renderFallbackLimiteCard("Texto", "", configActiva.fallbackTexto, {
+                sinEnvoltorio: true,
+              }),
+            false,
+            { anidado: true }
+          ) +
+          renderAccordionSection(
+            "fallback-payment",
+            "Límite fallback de lectura de pago",
+            renderFallbackLimiteCard("Payment", "", configActiva.fallbackPaymentReader, {
+              sinEnvoltorio: true,
+            }),
+            false,
+            { anidado: true }
+          ) +
+          "</div>",
         false
       ) +
       '<section class="ia-card oai-card ia-card--test ia-prueba-block">' +
