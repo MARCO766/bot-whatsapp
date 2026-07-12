@@ -601,31 +601,51 @@
   align-items: center;
   gap: 0;
   width: 100%;
-  min-height: 40px;
+  min-height: 44px;
   max-height: 48px;
 }
 
 .ia-route-header__activo {
+  display: inline-flex;
+  align-items: center;
   flex-shrink: 0;
   margin: 0;
-  padding: 0 6px 0 2px;
+  margin-bottom: 0;
+  padding: 0 4px 0 2px;
   cursor: pointer;
   position: relative;
   z-index: 2;
 }
 
+.ia-route-header__activo input[type="checkbox"].ia-ruta-enabled {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  pointer-events: none;
+}
+
 .ia-route-header__activo .ia-toggle__track {
-  width: 30px;
-  height: 17px;
+  width: 34px;
+  height: 18px;
 }
 
 .ia-route-header__activo .ia-toggle__track::after {
-  width: 13px;
-  height: 13px;
+  width: 14px;
+  height: 14px;
+}
+
+.ia-route-header__activo input:checked + .ia-toggle__track {
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.22);
 }
 
 .ia-route-header__activo input:checked + .ia-toggle__track::after {
-  transform: translateX(13px);
+  transform: translateX(16px);
 }
 
 .ia-route-header__activo-label {
@@ -646,12 +666,12 @@
   z-index: 1;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   min-width: 0;
   width: 100%;
   height: 100%;
   margin: 0;
-  padding: 0 36px 0 38px;
+  padding: 0 34px 0 42px;
   border: none;
   background: transparent;
   cursor: pointer;
@@ -668,65 +688,65 @@
 
 .ia-route-header__toggle .ia-accordion__chevron {
   flex-shrink: 0;
-  width: 12px;
+  width: 11px;
   margin: 0;
-}
-
-.ia-route-header__index.ia-accordion__title {
-  flex-shrink: 0;
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.03em;
-  text-transform: none;
-  color: #94a3b8;
-  line-height: 1;
-  white-space: nowrap;
+  font-size: 9px;
+  color: #64748b;
 }
 
 .ia-route-header__badge {
   display: inline-flex;
   align-items: center;
   flex-shrink: 0;
-  padding: 0 4px;
-  border-radius: 3px;
-  font-size: 6px;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-  line-height: 1.45;
+  padding: 3px 9px;
+  border-radius: 6px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  line-height: 1.25;
   text-transform: uppercase;
   white-space: nowrap;
-  opacity: 0.92;
 }
 
 .ia-route-header__badge--texto {
-  color: #99f6e4;
-  background: rgba(34, 211, 238, 0.1);
-  border: 1px solid rgba(45, 212, 191, 0.28);
+  color: #ffffff;
+  background: linear-gradient(135deg, #0e7490 0%, #06b6d4 100%);
+  border: 1px solid rgba(34, 211, 238, 0.55);
+  box-shadow: 0 1px 5px rgba(6, 182, 212, 0.28);
 }
 
 .ia-route-header__badge--payment_reader {
-  color: #86efac;
-  background: rgba(34, 197, 94, 0.12);
-  border: 1px solid rgba(74, 222, 128, 0.3);
+  color: #ffffff;
+  background: linear-gradient(135deg, #047857 0%, #10b981 100%);
+  border: 1px solid rgba(52, 211, 153, 0.55);
+  box-shadow: 0 1px 5px rgba(16, 185, 129, 0.28);
 }
 
 .ia-route-header__name {
   flex: 1;
   min-width: 0;
-  font-size: 13px;
-  font-weight: 700;
-  color: #ecfdf5;
-  line-height: 1.1;
+  font-size: 14px;
+  font-weight: 600;
+  color: #ffffff;
+  line-height: 1.15;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.ia-route-header__name.ia-accordion__title {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: #ffffff;
 }
 
 .ia-route-header__name--empty {
   color: #64748b;
   font-style: italic;
   font-weight: 500;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .ia-route-header__del {
@@ -765,13 +785,12 @@
   transform: scale(1.04);
 }
 
-.ia-route-header__toggle:hover .ia-route-header__index,
 .ia-route-header__toggle:hover .ia-accordion__chevron {
-  color: #cbd5e1;
+  color: #94a3b8;
 }
 
 .ia-route-header__toggle:hover .ia-route-header__name:not(.ia-route-header__name--empty) {
-  color: #6ee7b7;
+  color: #f8fafc;
 }
 
 .ia-accordion--nested .ia-accordion__title {
@@ -1607,14 +1626,6 @@
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.03),
     0 0 0 1px rgba(34, 197, 94, 0.1);
-}
-
-.ia-route-card--payment-reader .ia-route-header__name:not(.ia-route-header__name--empty) {
-  color: #d1fae5;
-}
-
-.ia-route-card--payment-reader .ia-route-header__toggle:hover .ia-route-header__name:not(.ia-route-header__name--empty) {
-  color: #86efac;
 }
 
 /* ── Panel: selector visual de tipo ── */

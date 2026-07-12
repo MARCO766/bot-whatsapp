@@ -1158,22 +1158,19 @@ window.MacBotIA = (function () {
     const nombre = label || "Sin nombre";
     return (
       '<div class="ia-route-header-row">' +
-      '<label class="ia-ruta-enabled-wrap ia-toggle ia-accordion__activo ia-route-header__activo" title="Activo">' +
+      '<label class="ia-ruta-enabled-wrap ia-toggle ia-toggle-premium oai-toggle ia-accordion__activo ia-route-header__activo" title="Activo">' +
       '<input type="checkbox" class="ia-ruta-enabled"' +
       (route.enabled !== false ? " checked" : "") +
-      '><span class="ia-toggle__track" aria-hidden="true"></span>' +
-      '<span class="ia-toggle__label ia-route-header__activo-label">Activo</span></label>' +
+      '><span class="ia-toggle__track oai-toggle__track" aria-hidden="true"></span>' +
+      '<span class="ia-toggle__label oai-toggle__label ia-route-header__activo-label">Activo</span></label>' +
       '<button type="button" class="ia-accordion__header ia-route-header__toggle" aria-expanded="false">' +
       '<span class="ia-accordion__chevron" aria-hidden="true">▶</span>' +
-      '<span class="ia-route-header__index ia-accordion__title">Ruta ' +
-      routeIndex +
-      "</span>" +
       '<span class="ia-route-header__badge ia-route-header__badge--' +
       esc(tipo) +
       '">' +
       esc(etiquetaTipoCaminoAccordion(tipo)) +
       "</span>" +
-      '<span class="ia-route-header__name' +
+      '<span class="ia-route-header__name ia-accordion__title' +
       (label ? "" : " ia-route-header__name--empty") +
       '">' +
       esc(nombre) +
