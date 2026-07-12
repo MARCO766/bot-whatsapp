@@ -773,6 +773,38 @@
   color: #f8fafc;
 }
 
+/* Camino desactivado — clase al renderizar (.ia-route--disabled).
+   :has() solo refuerza el estado si el switch cambia sin re-render del listado. */
+.ia-ruta-row.ia-route--disabled .ia-route-header-row,
+.ia-ruta-row:has(.ia-ruta-enabled:not(:checked)) .ia-route-header-row {
+  opacity: 0.55;
+}
+
+.ia-ruta-row.ia-route--disabled .ia-route-header__toggle .ia-accordion__chevron,
+.ia-ruta-row:has(.ia-ruta-enabled:not(:checked)) .ia-route-header__toggle .ia-accordion__chevron {
+  color: #475569;
+}
+
+.ia-ruta-row.ia-route--disabled .ia-route-header__badge--texto,
+.ia-ruta-row.ia-route--disabled .ia-route-header__badge--payment_reader,
+.ia-ruta-row:has(.ia-ruta-enabled:not(:checked)) .ia-route-header__badge--texto,
+.ia-ruta-row:has(.ia-ruta-enabled:not(:checked)) .ia-route-header__badge--payment_reader {
+  color: #94a3b8;
+  background: rgba(51, 65, 85, 0.55);
+  border-color: rgba(100, 116, 139, 0.45);
+  box-shadow: none;
+}
+
+.ia-ruta-row.ia-route--disabled .ia-route-header__name:not(.ia-route-header__name--empty),
+.ia-ruta-row:has(.ia-ruta-enabled:not(:checked)) .ia-route-header__name:not(.ia-route-header__name--empty) {
+  color: #64748b;
+}
+
+.ia-ruta-row.ia-route--disabled .ia-route-header__name--empty,
+.ia-ruta-row:has(.ia-ruta-enabled:not(:checked)) .ia-route-header__name--empty {
+  color: #475569;
+}
+
 .ia-accordion--nested .ia-accordion__title {
   font-size: 10px;
   letter-spacing: 0.06em;

@@ -1378,6 +1378,7 @@ window.MacBotIA = (function () {
           (tipo === ROUTE_TYPE_PAYMENT_READER
             ? " ia-route-card--payment-reader"
             : "") +
+          (route.enabled !== false ? "" : " ia-route--disabled") +
           '" data-route-id="' +
           esc(route.id) +
           '" data-route-index="' +
