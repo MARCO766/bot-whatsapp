@@ -70,6 +70,8 @@ window.MacBotIA = (function () {
 
   const FALLBACK_LIMITE_MIN = 1;
   const FALLBACK_LIMITE_MAX = 100;
+  /** Fase 1: ocultar UI de prueba interna sin eliminar implementación. */
+  const MOSTRAR_PRUEBA_INTERNA_EN_PANEL = false;
 
   function crearFallbackLimitePorDefecto() {
     return {
@@ -1428,6 +1430,21 @@ window.MacBotIA = (function () {
     enlazarAccordionsIA(wrap);
   }
 
+  function renderBloquePruebaInternaPanel() {
+    if (!MOSTRAR_PRUEBA_INTERNA_EN_PANEL) return "";
+    return (
+      '<section class="ia-card oai-card ia-card--test ia-prueba-block">' +
+      '<h5 class="ia-card__title oai-card__title">Prueba interna</h5>' +
+      '<div class="panel-campo ia-field oai-field"><label>Contexto</label>' +
+      '<input id="iaContextoPrueba" class="ia-input oai-input" placeholder="Última pregunta del bot" /></div>' +
+      '<div class="panel-campo ia-field oai-field"><label>Mensaje de prueba</label>' +
+      '<input id="iaMensajePrueba" class="ia-input oai-input" placeholder="Ej: quiero pagar por qr" /></div>' +
+      '<button type="button" class="panel-btn ia-btn-prueba oai-btn" id="iaBtnPrueba">Probar detección</button>' +
+      '<div id="iaResultadoPrueba" class="ia-resultado-prueba"></div></section>' +
+      '<p class="ia-vars-hint">Variables: {{intent}} {{score}} {{route}} {{ultimo_mensaje}}</p>'
+    );
+  }
+
   async function ejecutarPruebaInterna() {
     syncCamposPanelDraft();
     const mensaje = document.getElementById("iaMensajePrueba")?.value.trim() || "";
@@ -1595,15 +1612,7 @@ window.MacBotIA = (function () {
           "</div>",
         false
       ) +
-      '<section class="ia-card oai-card ia-card--test ia-prueba-block">' +
-      '<h5 class="ia-card__title oai-card__title">Prueba interna</h5>' +
-      '<div class="panel-campo ia-field oai-field"><label>Contexto</label>' +
-      '<input id="iaContextoPrueba" class="ia-input oai-input" placeholder="Última pregunta del bot" /></div>' +
-      '<div class="panel-campo ia-field oai-field"><label>Mensaje de prueba</label>' +
-      '<input id="iaMensajePrueba" class="ia-input oai-input" placeholder="Ej: quiero pagar por qr" /></div>' +
-      '<button type="button" class="panel-btn ia-btn-prueba oai-btn" id="iaBtnPrueba">Probar detección</button>' +
-      '<div id="iaResultadoPrueba" class="ia-resultado-prueba"></div></section>' +
-      '<p class="ia-vars-hint">Variables: {{intent}} {{score}} {{route}} {{ultimo_mensaje}}</p>' +
+      renderBloquePruebaInternaPanel() +
       '<section class="ia-card oai-card ia-card--actions">' +
       '<button type="button" class="panel-btn ia-btn-save oai-btn oai-btn--save" id="iaGuardarPanel">Guardar Agente Rápido</button>' +
       "</section></div></div>";
