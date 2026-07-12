@@ -259,17 +259,38 @@ window.MacBotIA = (function () {
     );
   }
 
+  function aplicarEstadoAccordionIA(section, abierto) {
+    if (!section) return;
+    section.classList.toggle("ia-accordion--open", abierto);
+    section.classList.toggle("ia-accordion--closed", !abierto);
+    const header = section.querySelector(":scope > .ia-accordion__header");
+    const body = section.querySelector(":scope > .ia-accordion__body");
+    if (header) {
+      header.setAttribute("aria-expanded", abierto ? "true" : "false");
+      const chevron = header.querySelector(".ia-accordion__chevron");
+      if (chevron) chevron.textContent = abierto ? "▼" : "▶";
+    }
+    if (body) {
+      body.style.gridTemplateRows = abierto ? "1fr" : "0fr";
+    }
+  }
+
   function enlazarAccordionsIA() {
+    document.querySelectorAll(".ia-accordion").forEach(function (section) {
+      aplicarEstadoAccordionIA(
+        section,
+        section.classList.contains("ia-accordion--open")
+      );
+    });
+
     document.querySelectorAll(".ia-accordion__header").forEach(function (btn) {
-      btn.addEventListener("click", function () {
-        const section = btn.closest(".ia-accordion");
-        if (!section) return;
+      btn.addEventListener("click", function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        const section = btn.parentElement;
+        if (!section || !section.classList.contains("ia-accordion")) return;
         const abierto = !section.classList.contains("ia-accordion--open");
-        section.classList.toggle("ia-accordion--open", abierto);
-        section.classList.toggle("ia-accordion--closed", !abierto);
-        btn.setAttribute("aria-expanded", abierto ? "true" : "false");
-        const chevron = btn.querySelector(".ia-accordion__chevron");
-        if (chevron) chevron.textContent = abierto ? "▼" : "▶";
+        aplicarEstadoAccordionIA(section, abierto);
       });
     });
   }
@@ -1059,8 +1080,8 @@ window.MacBotIA = (function () {
       mensajeFallback:
         document.getElementById("iaMensajeFallback")?.value.trim() ||
         MENSAJE_FALLBACK_TEXTO_LEGACY,
-      activarOtrosFlujos: !!document.getElementById("iaActivarFlujos")?.checked,
-      responderConAudio: !!document.getElementById("iaResponderAudio")?.checked,
+      activarOtrosFlujos: !!configActiva.comportamiento?.activarOtrosFlujos,
+      responderConAudio: !!configActiva.comportamiento?.responderConAudio,
     };
     configActiva.fallbackTexto = leerFallbackLimiteDesdeDom("Texto");
     configActiva.fallbackPaymentReader = leerFallbackLimiteDesdeDom("Payment");
@@ -1472,13 +1493,7 @@ window.MacBotIA = (function () {
       renderAccordionSection(
         "comportamiento",
         "Comportamiento",
-        '<label class="ia-toggle ia-toggle-premium oai-toggle"><input type="checkbox" id="iaActivarFlujos"' +
-          (configActiva.comportamiento.activarOtrosFlujos ? " checked" : "") +
-          '><span class="ia-toggle__track oai-toggle__track" aria-hidden="true"></span><span class="ia-toggle__label oai-toggle__label">Activar otros flujos (antes del fallback)</span></label>' +
-          '<label class="ia-toggle ia-toggle-premium oai-toggle"><input type="checkbox" id="iaResponderAudio"' +
-          (configActiva.comportamiento.responderConAudio ? " checked" : "") +
-          '><span class="ia-toggle__track oai-toggle__track" aria-hidden="true"></span><span class="ia-toggle__label oai-toggle__label">Responder con audio (usa transcripción si existe)</span></label>' +
-          '<div class="ia-accordion-group">' +
+        '<div class="ia-accordion-group">' +
           renderAccordionSection(
             "fallback-texto",
             "Límite fallback de texto",
@@ -1553,8 +1568,6 @@ window.MacBotIA = (function () {
       "iaResponderFallback",
       "iaResponderFallbackPayment",
       "iaMensajeFallbackPayment",
-      "iaActivarFlujos",
-      "iaResponderAudio",
     ].forEach(function (id) {
       document.getElementById(id)?.addEventListener("input", onFormChange);
       document.getElementById(id)?.addEventListener("change", onFormChange);
