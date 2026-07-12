@@ -233,6 +233,31 @@ window.MacBotIA = (function () {
     const chevron = abierto ? "▼" : "▶";
     const anidadoClass = opts.anidado ? " ia-accordion--nested" : "";
     const cardClass = opts.anidado ? "" : " ia-card oai-card";
+    const headerPrefix = opts.headerPrefixHtml || "";
+    const headerRowClass = headerPrefix ? " ia-accordion__header-row--with-prefix" : "";
+    const headerMarkup = headerPrefix
+      ? '<div class="ia-accordion__header-row' +
+        headerRowClass +
+        '">' +
+        headerPrefix +
+        '<button type="button" class="ia-accordion__header" aria-expanded="' +
+        expanded +
+        '">' +
+        '<span class="ia-accordion__chevron" aria-hidden="true">' +
+        chevron +
+        "</span>" +
+        '<span class="ia-accordion__title">' +
+        esc(titulo) +
+        "</span></button></div>"
+      : '<button type="button" class="ia-accordion__header" aria-expanded="' +
+        expanded +
+        '">' +
+        '<span class="ia-accordion__chevron" aria-hidden="true">' +
+        chevron +
+        "</span>" +
+        '<span class="ia-accordion__title">' +
+        esc(titulo) +
+        "</span></button>";
     return (
       '<div class="ia-accordion' +
       cardClass +
@@ -241,15 +266,7 @@ window.MacBotIA = (function () {
       '" data-ia-accordion="' +
       esc(accordionId) +
       '">' +
-      '<button type="button" class="ia-accordion__header" aria-expanded="' +
-      expanded +
-      '">' +
-      '<span class="ia-accordion__chevron" aria-hidden="true">' +
-      chevron +
-      "</span>" +
-      '<span class="ia-accordion__title">' +
-      esc(titulo) +
-      "</span></button>" +
+      headerMarkup +
       '<div class="ia-accordion__body"><div class="ia-accordion__inner">' +
       contenidoHtml +
       "</div></div></div>"
@@ -260,7 +277,11 @@ window.MacBotIA = (function () {
     if (!section) return;
     section.classList.toggle("ia-accordion--open", abierto);
     section.classList.toggle("ia-accordion--closed", !abierto);
-    const header = section.querySelector(":scope > .ia-accordion__header");
+    const header =
+      section.querySelector(":scope > .ia-accordion__header") ||
+      section.querySelector(":scope > .ia-accordion__header-row > .ia-accordion__header") ||
+      section.querySelector(":scope > .ia-route-header-row > .ia-accordion__header") ||
+      section.querySelector(":scope > .ia-route-header-row > .ia-route-header__center > .ia-accordion__header");
     const body = section.querySelector(":scope > .ia-accordion__body");
     if (header) {
       header.setAttribute("aria-expanded", abierto ? "true" : "false");
@@ -284,11 +305,13 @@ window.MacBotIA = (function () {
     });
 
     scope.querySelectorAll(".ia-accordion__header").forEach(function (btn) {
+      if (btn.dataset.iaAccordionBound === "1") return;
+      btn.dataset.iaAccordionBound = "1";
       btn.addEventListener("click", function (e) {
         e.preventDefault();
         e.stopPropagation();
-        const section = btn.parentElement;
-        if (!section || !section.classList.contains("ia-accordion")) return;
+        const section = btn.closest(".ia-accordion");
+        if (!section) return;
         const abierto = !section.classList.contains("ia-accordion--open");
         aplicarEstadoAccordionIA(section, abierto);
       });
@@ -1129,14 +1152,68 @@ window.MacBotIA = (function () {
     );
   }
 
+  function renderRutaAccordionHeader(route, routeIndex) {
+    const tipo = normalizarTipoCamino(route.type);
+    const label = textoCamino(route);
+    const nombre = label || "Sin nombre";
+    return (
+      '<div class="ia-route-header-row">' +
+      '<label class="ia-ruta-enabled-wrap ia-toggle ia-accordion__activo ia-route-header__activo" title="Activo">' +
+      '<input type="checkbox" class="ia-ruta-enabled"' +
+      (route.enabled !== false ? " checked" : "") +
+      '><span class="ia-toggle__track" aria-hidden="true"></span>' +
+      '<span class="ia-toggle__label ia-route-header__activo-label">Activo</span></label>' +
+      '<button type="button" class="ia-accordion__header ia-route-header__toggle" aria-expanded="false">' +
+      '<span class="ia-accordion__chevron" aria-hidden="true">▶</span>' +
+      '<span class="ia-route-header__index ia-accordion__title">Ruta ' +
+      routeIndex +
+      "</span>" +
+      '<span class="ia-route-header__badge ia-route-header__badge--' +
+      esc(tipo) +
+      '">' +
+      esc(etiquetaTipoCaminoAccordion(tipo)) +
+      "</span>" +
+      '<span class="ia-route-header__name' +
+      (label ? "" : " ia-route-header__name--empty") +
+      '">' +
+      esc(nombre) +
+      "</span></button>" +
+      '<button type="button" class="ia-ruta-del ia-route-header__del" data-action="del" title="Eliminar camino" aria-label="Eliminar camino">' +
+      '<span class="ia-route-header__del-icon" aria-hidden="true">🗑️</span></button>' +
+      "</div>"
+    );
+  }
+
+  function renderRutaAccordionSection(route, routeIndex) {
+    return (
+      '<div class="ia-accordion ia-accordion--nested ia-accordion--closed" data-ia-accordion="ruta-' +
+      esc(route.id) +
+      '">' +
+      renderRutaAccordionHeader(route, routeIndex) +
+      '<div class="ia-accordion__body"><div class="ia-accordion__inner">' +
+      renderCuerpoRutaEditor(route) +
+      "</div></div></div>"
+    );
+  }
+
   function actualizarTituloAccordionRuta(row) {
     if (!row) return;
-    const titleEl = row.querySelector(".ia-accordion__title");
-    if (!titleEl) return;
     const index = parseInt(row.dataset.routeIndex, 10) || 1;
     const tipo = normalizarTipoCamino(row.querySelector(".ia-ruta-tipo")?.value);
-    const label = row.querySelector(".ia-ruta-texto")?.value.trim() || "Sin nombre";
-    titleEl.textContent = tituloAccordionRuta(index, tipo, label);
+    const label = row.querySelector(".ia-ruta-texto")?.value.trim() || "";
+    const indexEl = row.querySelector(".ia-route-header__index");
+    const badgeEl = row.querySelector(".ia-route-header__badge");
+    const nameEl = row.querySelector(".ia-route-header__name");
+    if (indexEl) indexEl.textContent = "Ruta " + index;
+    if (badgeEl) {
+      badgeEl.textContent = etiquetaTipoCaminoAccordion(tipo);
+      badgeEl.className =
+        "ia-route-header__badge ia-route-header__badge--" + tipo;
+    }
+    if (nameEl) {
+      nameEl.textContent = label || "Sin nombre";
+      nameEl.classList.toggle("ia-route-header__name--empty", !label);
+    }
   }
 
   function renderSelectorTipoCamino(route) {
@@ -1253,12 +1330,6 @@ window.MacBotIA = (function () {
       ? route.synonyms.join(", ")
       : String(route.synonyms || "");
     return (
-      '<div class="ia-route-card__toolbar">' +
-      '<label class="ia-ruta-enabled-wrap ia-toggle"><input type="checkbox" class="ia-ruta-enabled"' +
-      (route.enabled !== false ? " checked" : "") +
-      '><span class="ia-toggle__track" aria-hidden="true"></span><span class="ia-toggle__label">Activo</span></label>' +
-      '<button type="button" class="ia-ruta-del ia-btn ia-btn--danger ia-btn--sm" data-action="del">Eliminar</button>' +
-      "</div>" +
       renderSelectorTipoCamino(route) +
       '<div class="panel-campo ia-field"><label>Texto del camino</label>' +
       '<input class="ia-ruta-texto ia-input" placeholder="Ej: qr, depósito, precio" value="' +
@@ -1272,10 +1343,7 @@ window.MacBotIA = (function () {
       '<div class="panel-campo ia-field ia-field--sm"><label>Prioridad</label>' +
       '<input type="number" class="ia-ruta-prioridad ia-input" min="0" max="100" value="' +
       (route.priority || 50) +
-      '"></div>' +
-      '<p class="ia-handle-hint oai-handle-hint">Handle conexión: <code>' +
-      esc(route.id) +
-      "</code></p>"
+      '"></div>'
     );
   }
 
@@ -1297,7 +1365,6 @@ window.MacBotIA = (function () {
 
     wrap.innerHTML = routes
       .map(function (route, index) {
-        const label = textoCamino(route) || "Sin nombre";
         const tipo = normalizarTipoCamino(route.type);
         const routeIndex = index + 1;
         return (
@@ -1310,13 +1377,7 @@ window.MacBotIA = (function () {
           '" data-route-index="' +
           routeIndex +
           '">' +
-          renderAccordionSection(
-            "ruta-" + route.id,
-            tituloAccordionRuta(routeIndex, tipo, label),
-            renderCuerpoRutaEditor(route),
-            false,
-            { anidado: true }
-          ) +
+          renderRutaAccordionSection(route, routeIndex) +
           "</div>"
         );
       })
