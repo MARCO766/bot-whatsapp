@@ -1152,17 +1152,25 @@ window.MacBotIA = (function () {
     );
   }
 
+  function renderActivoRutaContenido(route) {
+    return (
+      '<div class="panel-campo ia-field oai-field ia-route-activo-field">' +
+      '<label class="ia-route-activo-field__heading">Activo</label>' +
+      '<label class="ia-ruta-enabled-wrap ia-toggle ia-toggle-premium oai-toggle ia-route-body__activo">' +
+      '<input type="checkbox" class="ia-ruta-enabled"' +
+      (route.enabled !== false ? " checked" : "") +
+      '><span class="ia-toggle__track oai-toggle__track" aria-hidden="true"></span>' +
+      '<span class="ia-toggle__label oai-toggle__label ia-route-body__activo-label">Activo</span></label>' +
+      "</div>"
+    );
+  }
+
   function renderRutaAccordionHeader(route, routeIndex) {
     const tipo = normalizarTipoCamino(route.type);
     const label = textoCamino(route);
     const nombre = label || "Sin nombre";
     return (
       '<div class="ia-route-header-row">' +
-      '<label class="ia-ruta-enabled-wrap ia-toggle ia-toggle-premium oai-toggle ia-accordion__activo ia-route-header__activo" title="Activo">' +
-      '<input type="checkbox" class="ia-ruta-enabled"' +
-      (route.enabled !== false ? " checked" : "") +
-      '><span class="ia-toggle__track oai-toggle__track" aria-hidden="true"></span>' +
-      '<span class="ia-toggle__label oai-toggle__label ia-route-header__activo-label">Activo</span></label>' +
       '<button type="button" class="ia-accordion__header ia-route-header__toggle" aria-expanded="false">' +
       '<span class="ia-accordion__chevron" aria-hidden="true">▶</span>' +
       '<span class="ia-route-header__badge ia-route-header__badge--' +
@@ -1327,6 +1335,7 @@ window.MacBotIA = (function () {
       ? route.synonyms.join(", ")
       : String(route.synonyms || "");
     return (
+      renderActivoRutaContenido(route) +
       renderSelectorTipoCamino(route) +
       '<div class="panel-campo ia-field"><label>Texto del camino</label>' +
       '<input class="ia-ruta-texto ia-input" placeholder="Ej: qr, depósito, precio" value="' +
