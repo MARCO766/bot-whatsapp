@@ -1524,10 +1524,11 @@ async function ejecutarNodoIARouter(nodo, contexto, opts = {}) {
       );
     }
 
+    // Interruptor OFF: no enviar fallback, pero seguir esperando (igual que payment).
     return aplicarEstadoFallbackAContexto(
       limpiarStalePaymentReaderReplyIA({
         ...contexto,
-        iaPausar: false,
+        iaPausar: true,
         iaSinCoincidencia: true,
         iaEjecutada: true,
       }),
