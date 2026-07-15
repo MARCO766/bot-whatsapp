@@ -793,8 +793,9 @@ async function ejecutarFlujo(
   flujoData,
   usuarioId = null,
   flujoId = null,
-  opts = {}
+  optsEntrada = {}
 ) {
+  let opts = optsEntrada;
   if (!flujoData || !flujoData.nodos || !flujoData.conexiones) return;
 
   const nodos = flujoData.nodos;
@@ -899,6 +900,12 @@ async function ejecutarFlujo(
   }
 
   async function continuarASiguientes(nodoId, visitados, etiqueta, sourceHandle) {
+    // iaResume solo pertenece al nodo que reanudó la sesión; aguas abajo no lo hereda.
+    const nextOpts = {
+      ...opts,
+      iaResume: false,
+    };
+
     let siguientes = obtenerSiguientesNodos(conexiones, nodoId);
 
     if (etiqueta === "ia" || etiqueta === "ia_pro") {
@@ -1003,7 +1010,7 @@ async function ejecutarFlujo(
         });
       }
 
-      await ejecutarNodo(targetId, visitadosSiguiente);
+      await ejecutarNodo(targetId, visitadosSiguiente, nextOpts);
     }
   }
 
@@ -1049,9 +1056,12 @@ async function ejecutarFlujo(
     });
   }
 
-  async function ejecutarNodo(nodoId, visitados = new Set()) {
+  async function ejecutarNodo(nodoId, visitados = new Set(), runOpts) {
     if (!nodoId) return;
 
+    const optsDelCaller = opts;
+    if (runOpts) opts = runOpts;
+    try {
     if (visitados.has(nodoId)) {
       const nodoBucle = nodos.find((n) => n.id === nodoId);
       if (nodoBucle && esNodoIAReentrable(nodoBucle)) {
@@ -1918,6 +1928,9 @@ async function ejecutarFlujo(
     }
 
     await continuarASiguientes(nodoId, visitados, tipoEjecucion);
+    } finally {
+      if (runOpts) opts = optsDelCaller;
+    }
   }
 
   if (opts.lectorContinuarDesdeNodoId) {
