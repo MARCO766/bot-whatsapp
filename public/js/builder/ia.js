@@ -1401,6 +1401,7 @@ window.MacBotIA = (function () {
         configActiva.caminos = (configActiva.caminos || []).filter(function (r) {
           return r.id !== rid;
         });
+        configActiva.routes = configActiva.caminos;
         if (nodoActivo && typeof window.eliminarConexionesPorHandle === "function") {
           window.eliminarConexionesPorHandle(nodoActivo.id, rid);
         }
