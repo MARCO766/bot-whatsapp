@@ -17,6 +17,7 @@ const {
   cancelarEsperaLectorPagoPorResetbot,
 } = require("./lectorPagoService");
 const { reactivarBotConversacion } = require("./conversaciones/botPauseService");
+const { registrarCancelacionSesionFlujo } = require("./flowSessionService");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
@@ -125,6 +126,11 @@ async function finalizarFlujoLeadTrasRemarketing(
 
   if (conexionId) {
     limpiarSesionIAPendiente(uid, conexionId, num);
+    registrarCancelacionSesionFlujo({
+      usuarioId: uid,
+      conexionWhatsappId: conexionId,
+      clienteNumero: num,
+    });
   } else {
     console.log(
       "[RM24H_MULTI] finalizar flujo omitido sesión IA — sin conexion_whatsapp_id",
@@ -164,6 +170,11 @@ async function resetearFlujoLead(numero, usuarioId, conexionWhatsappId = null) {
     limpiarLastRepliesOpenAI(uid, conexionId, num);
     limpiarPaymentReaderStatus(uid, conexionId, num);
     limpiarIAPaymentReaderStatus(uid, conexionId, num);
+    registrarCancelacionSesionFlujo({
+      usuarioId: uid,
+      conexionWhatsappId: conexionId,
+      clienteNumero: num,
+    });
   } else {
     console.log(
       "[RM24H_MULTI] resetbot omitido sesión IA — sin conexion_whatsapp_id",

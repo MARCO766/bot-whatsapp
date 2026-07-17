@@ -82,6 +82,11 @@ const {
   estaBotPausado,
   reactivarBotConversacion,
 } = require("./conversaciones/botPauseService");
+const {
+  registrarInicioSesionFlujo,
+  registrarAvanceNodoFlujo,
+  registrarFinSesionFlujo,
+} = require("./flowSessionService");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
@@ -961,6 +966,15 @@ async function ejecutarFlujo(
       if (etiqueta === "ia" || etiqueta === "ia_pro") {
         console.warn("⚠️ Nodo IA sin conexión saliente");
       }
+      // Auditoría flow_sessions — no decide el runtime
+      registrarFinSesionFlujo({
+        usuarioId,
+        conexionWhatsappId:
+          flowContext.conexionWhatsappId ?? conexionLineaEntrante ?? null,
+        clienteNumero: numero,
+        flujoId,
+        currentNodeId: nodoId,
+      });
       return;
     }
 
@@ -1095,6 +1109,16 @@ async function ejecutarFlujo(
       console.log("[FLUJO] Nodo no encontrado:", nodoId);
       return;
     }
+
+    // Auditoría flow_sessions — no decide el runtime
+    registrarAvanceNodoFlujo({
+      usuarioId,
+      conexionWhatsappId:
+        flowContext.conexionWhatsappId ?? conexionLineaEntrante ?? null,
+      clienteNumero: numero,
+      flujoId,
+      currentNodeId: nodoId,
+    });
 
     const html = nodo.html || "";
     const tipoNodo = detectarTipoNodo(nodo);
@@ -1960,6 +1984,16 @@ async function ejecutarFlujo(
     await ejecutarNodo(opts.nodoResumeId, visitadosResume);
     return;
   }
+
+  // Auditoría flow_sessions — inicio desde activador / arranque fresco (no iaResume ni lector)
+  registrarInicioSesionFlujo({
+    usuarioId,
+    conexionWhatsappId:
+      flowContext.conexionWhatsappId ?? conexionLineaEntrante ?? null,
+    clienteNumero: numero,
+    flujoId,
+    currentNodeId: "nodo_inicio",
+  });
 
   await ejecutarNodo("nodo_inicio");
 }
