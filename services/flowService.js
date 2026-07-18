@@ -86,6 +86,8 @@ const {
   registrarInicioSesionFlujo,
   registrarAvanceNodoFlujo,
   registrarFinSesionFlujo,
+  evaluarCicloVidaSesionFlujo,
+  expirarSesion,
 } = require("./flowSessionService");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -2165,6 +2167,59 @@ async function procesarMensajeEntrante(
   }
 
   const conexionWhatsappIdEntrante = opts.conexionWhatsappId || null;
+
+  // Flow Sessions — dueño de la continuidad (Fase 7).
+  // Si la sesión active no puede continuar: marcar expired, limpiar IA y caer a activadores.
+  // Sin Flow Session active → comportamiento idéntico al actual.
+  if (conexionWhatsappIdEntrante) {
+    try {
+      const ciclo = await evaluarCicloVidaSesionFlujo({
+        usuarioId,
+        conexionWhatsappId: conexionWhatsappIdEntrante,
+        clienteNumero: numero,
+      });
+
+      if (ciclo.existe && ciclo.esActiva && !ciclo.puedeContinuar) {
+        console.log("[FLOW_SESSION_LIFECYCLE] no puede continuar — expirar y caer a activadores", {
+          usuarioId,
+          conexionWhatsappId: conexionWhatsappIdEntrante,
+          numero,
+          motivo: ciclo.motivo || null,
+          expirada: !!ciclo.expirada,
+          flujoId: ciclo.sesion?.flujo_id || null,
+        });
+
+        try {
+          await expirarSesion({
+            usuarioId,
+            conexionWhatsappId: conexionWhatsappIdEntrante,
+            clienteNumero: numero,
+            flujoId: ciclo.sesion?.flujo_id || null,
+            currentNodeId: ciclo.sesion?.current_node_id || undefined,
+          });
+        } catch (errExp) {
+          console.log(
+            "[FLOW_SESSION_LIFECYCLE] error al marcar expired",
+            errExp?.response?.data || errExp?.message || errExp
+          );
+        }
+
+        await cerrarSesionOpenAICompleta(
+          usuarioId,
+          conexionWhatsappIdEntrante,
+          numero,
+          "route"
+        );
+        // Fall through: sin reinicio automático; el runtime evalúa activadores como siempre.
+      }
+    } catch (errCiclo) {
+      console.log(
+        "[FLOW_SESSION_LIFECYCLE] error en evaluación — se continúa runtime normal",
+        errCiclo?.response?.data || errCiclo?.message || errCiclo
+      );
+    }
+  }
+
   const messageTypeEntrante = opts.messageType || null;
   const esMediaComprobanteEntrante =
     messageTypeEntrante === "image" || messageTypeEntrante === "document";

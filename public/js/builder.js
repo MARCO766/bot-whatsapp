@@ -289,11 +289,16 @@ function crearNodoInicioAutomatico(){
   nodo.innerHTML = `
     <h3 class="node-title node-title-start">▶ Inicio del Flujo</h3>
     <p class="node-desc node-desc-start">Aquí comienza tu flujo de conversación.</p>
+    <button type="button" class="edit-node" onclick="event.stopPropagation(); editarNodo('nodo_inicio')" title="Configurar" aria-label="Configurar Inicio">✎</button>
     <div class="port out" data-nodo="nodo_inicio" onmousedown="iniciarConexion(event, 'nodo_inicio', 'out')"></div>
   `;
 
   canvas.appendChild(nodo);
   hacerMovible(nodo);
+
+  if(window.MacBotInicioLifecycle && window.MacBotInicioLifecycle.refrescarNodoCargado){
+    window.MacBotInicioLifecycle.refrescarNodoCargado(nodo);
+  }
 }
 
 /* =========================
@@ -415,6 +420,18 @@ function cargarFlujoGuardado(){
       console.warn("IA: error al refrescar nodo cargado", e);
     }
   });
+
+  if(flujoCargado.nodos && window.MacBotInicioLifecycle){
+    flujoCargado.nodos.forEach((item) => {
+      if(item.id !== "nodo_inicio" && item.tipo !== "inicio") return;
+      const nodo = mapaNodos[item.id];
+      if(!nodo) return;
+      if(item.data && item.data.lifecycle){
+        window.MacBotInicioLifecycle.applyDataToNodo(nodo, item.data);
+      }
+      window.MacBotInicioLifecycle.refrescarNodoCargado(nodo);
+    });
+  }
 
   if(flujoCargado.nodos && window.MacBotLectorPago){
     flujoCargado.nodos.forEach((item) => {
@@ -2648,6 +2665,17 @@ async function guardarFlujo(){
       payload.data = extra.data;
     }
 
+    if(
+      (nodo.id === "nodo_inicio" || tipoNodo === "inicio") &&
+      window.MacBotInicioLifecycle &&
+      window.MacBotInicioLifecycle.getPersistPayload
+    ){
+      const extra = window.MacBotInicioLifecycle.getPersistPayload(nodo);
+      if(extra && extra.data){
+        payload.data = extra.data;
+      }
+    }
+
     nodos.push(payload);
   });
 
@@ -3424,6 +3452,10 @@ function abrirPanelNodo(nodo){
     if(window.MacBotSeguimientoV2 && window.MacBotSeguimientoV2.clearPanelActivo){
       window.MacBotSeguimientoV2.clearPanelActivo();
     }
+
+    if(window.MacBotInicioLifecycle && window.MacBotInicioLifecycle.clearPanelActivo){
+      window.MacBotInicioLifecycle.clearPanelActivo();
+    }
   }
 
   nodoSeleccionadoPanel = nodo;
@@ -3480,6 +3512,15 @@ function abrirPanelNodo(nodo){
 
   if(window.MacBotLectorPago && window.MacBotLectorPago.esNodoLectorPago(nodo)){
     window.MacBotLectorPago.renderPanel(nodo);
+    return;
+  }
+
+  if(
+    window.MacBotInicioLifecycle &&
+    window.MacBotInicioLifecycle.esNodoInicio &&
+    window.MacBotInicioLifecycle.esNodoInicio(nodo)
+  ){
+    window.MacBotInicioLifecycle.renderPanel(nodo);
     return;
   }
 
@@ -3808,6 +3849,15 @@ function guardarPanelNodo(){
     return;
   }
 
+  if(
+    window.MacBotInicioLifecycle &&
+    window.MacBotInicioLifecycle.esNodoInicio &&
+    window.MacBotInicioLifecycle.esNodoInicio(nodoSeleccionadoPanel)
+  ){
+    window.MacBotInicioLifecycle.guardarPanelInicio();
+    return;
+  }
+
   const nuevoTitulo = document.getElementById("panelTituloNodo")?.value.trim();
 
   const h3 = nodoSeleccionadoPanel.querySelector("h3");
@@ -3865,6 +3915,10 @@ function cerrarPanelNodo(opts){
     window.MacBotSeguimientoV2.clearPanelActivo();
   }
 
+  if(window.MacBotInicioLifecycle && window.MacBotInicioLifecycle.clearPanelActivo){
+    window.MacBotInicioLifecycle.clearPanelActivo();
+  }
+
   configPanelOpen = false;
   nodoSeleccionadoPanel = null;
 
@@ -3916,6 +3970,10 @@ function sincronizarPanelAntesDeSnapshot(opts){
 
   if(window.MacBotSeguimientoV2 && window.MacBotSeguimientoV2.flushPanelToNode){
     window.MacBotSeguimientoV2.flushPanelToNode();
+  }
+
+  if(window.MacBotInicioLifecycle && window.MacBotInicioLifecycle.flushPanelToNode){
+    window.MacBotInicioLifecycle.flushPanelToNode();
   }
 }
 
@@ -3989,6 +4047,13 @@ function restaurarSnapshotBuilder(snapshot){
     if(item.id === "nodo_inicio"){
       nodo.classList.add("node-start");
       nodo.dataset.tipo = "inicio";
+      try{
+        if(window.MacBotInicioLifecycle){
+          window.MacBotInicioLifecycle.refrescarNodoCargado(nodo);
+        }
+      } catch (err) {
+        console.warn("Inicio lifecycle: error al restaurar nodo", err.message);
+      }
     }
 
     canvas.appendChild(nodo);

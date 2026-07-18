@@ -5327,3 +5327,86 @@ body:has(#builderArea.builder-theme-light) .menu-nodo-btn.active {
     display: none;
   }
 }
+
+/* ===== Nodo Inicio — Ciclo de Vida (Fase 5) ===== */
+.inicio-lifecycle-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.inicio-lifecycle-section {
+  padding: 14px 14px 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.inicio-lifecycle-section-title {
+  margin: 0 0 12px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #9fb0c3;
+}
+
+.inicio-lifecycle-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.inicio-lifecycle-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.2);
+  color: #e8eef5;
+  cursor: pointer;
+  user-select: none;
+}
+
+.inicio-lifecycle-option--active {
+  border-color: rgba(57, 255, 20, 0.45);
+  background: rgba(57, 255, 20, 0.08);
+}
+
+.inicio-lifecycle-option input[type="radio"] {
+  margin: 0;
+  accent-color: #39ff14;
+}
+
+.inicio-lifecycle-duration {
+  margin-top: 12px;
+}
+
+.inicio-lifecycle-duration-grid {
+  display: grid;
+  grid-template-columns: 1fr 1.2fr;
+  gap: 10px;
+}
+
+.inicio-lifecycle-valor,
+.inicio-lifecycle-unidad {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.35);
+  color: #e8eef5;
+  font-size: 14px;
+}
+
+.inicio-lifecycle-data {
+  display: none !important;
+}
+
+.node-start .edit-node {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+}
