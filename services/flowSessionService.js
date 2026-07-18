@@ -332,6 +332,18 @@ async function evaluarCicloVidaSesionFlujo({
   });
 
   if (!sesionActiva) {
+    // TEMP DIAG
+    console.log("[FLOW_SESSION_EVAL_DIAG] flow_id=", null);
+    console.log("[FLOW_SESSION_EVAL_DIAG] lifecycle_raw=", null);
+    console.log("[FLOW_SESSION_EVAL_DIAG] lifecycle.enabled=", null);
+    console.log("[FLOW_SESSION_EVAL_DIAG] resultado=", {
+      existe: false,
+      status: null,
+      esActiva: false,
+      puedeContinuar: false,
+      expirada: false,
+      motivo: MOTIVO_NO_ACTIVE_SESSION,
+    });
     return {
       existe: false,
       sesion: null,
@@ -349,6 +361,18 @@ async function evaluarCicloVidaSesionFlujo({
 
   // Sesión encontrada pero no "active" en DB: reportar tal cual, sin mutar.
   if (!esActiva) {
+    // TEMP DIAG
+    console.log("[FLOW_SESSION_EVAL_DIAG] flow_id=", sesionActiva.flujo_id || null);
+    console.log("[FLOW_SESSION_EVAL_DIAG] lifecycle_raw=", null);
+    console.log("[FLOW_SESSION_EVAL_DIAG] lifecycle.enabled=", null);
+    console.log("[FLOW_SESSION_EVAL_DIAG] resultado=", {
+      existe: true,
+      status: statusAlmacenado,
+      esActiva: false,
+      puedeContinuar: false,
+      expirada: false,
+      motivo: null,
+    });
     return {
       existe: true,
       sesion: sesionActiva,
@@ -364,6 +388,16 @@ async function evaluarCicloVidaSesionFlujo({
 
   // Caso 2: lifecycle deshabilitado / ausente → puede continuar, no expirada.
   if (!lifecycle.enabled) {
+    // TEMP DIAG
+    console.log("[FLOW_SESSION_EVAL_DIAG] lifecycle_normalizado=", lifecycle);
+    console.log("[FLOW_SESSION_EVAL_DIAG] resultado=", {
+      existe: true,
+      status: statusAlmacenado,
+      esActiva: true,
+      puedeContinuar: true,
+      expirada: false,
+      motivo: null,
+    });
     return {
       existe: true,
       sesion: sesionActiva,
@@ -378,6 +412,16 @@ async function evaluarCicloVidaSesionFlujo({
   // Caso 3: lifecycle habilitado → evaluar ventana temporal (sin escribir DB).
   const evalExp = evaluarExpiracionTemporal(sesionActiva, lifecycle);
 
+  // TEMP DIAG
+  console.log("[FLOW_SESSION_EVAL_DIAG] lifecycle_normalizado=", lifecycle);
+  console.log("[FLOW_SESSION_EVAL_DIAG] resultado=", {
+    existe: true,
+    status: statusAlmacenado,
+    esActiva: true,
+    puedeContinuar: evalExp.puedeContinuar,
+    expirada: evalExp.expirada,
+    motivo: evalExp.motivo,
+  });
   return {
     existe: true,
     sesion: sesionActiva,
@@ -401,7 +445,12 @@ function textoStatusAlmacenado(valor) {
  */
 async function resolverLifecycleDeSesion(sesion, usuarioId) {
   const flujoId = sesion?.flujo_id;
+  // TEMP DIAG
+  console.log("[FLOW_SESSION_EVAL_DIAG] flow_id=", flujoId || null);
   if (!flujoId || !usuarioId) {
+    // TEMP DIAG
+    console.log("[FLOW_SESSION_EVAL_DIAG] lifecycle_raw=", null);
+    console.log("[FLOW_SESSION_EVAL_DIAG] lifecycle.enabled=", null);
     return { enabled: false };
   }
 
@@ -445,6 +494,9 @@ async function obtenerDataFlujoBuilder(usuarioId, flujoId) {
 
 function leerLifecycleDesdeFlujoData(flujoData) {
   if (!flujoData || typeof flujoData !== "object") {
+    // TEMP DIAG
+    console.log("[FLOW_SESSION_EVAL_DIAG] lifecycle_raw=", null);
+    console.log("[FLOW_SESSION_EVAL_DIAG] lifecycle.enabled=", null);
     return { enabled: false };
   }
 
@@ -455,6 +507,25 @@ function leerLifecycleDesdeFlujoData(flujoData) {
     null;
 
   const raw = nodoInicio?.data?.lifecycle;
+  // TEMP DIAG — distinguir undefined / null / boolean sin cambiar lógica
+  console.log(
+    "[FLOW_SESSION_EVAL_DIAG] lifecycle_raw=",
+    raw === undefined ? "undefined" : raw
+  );
+  console.log(
+    "[FLOW_SESSION_EVAL_DIAG] lifecycle.enabled=",
+    raw === undefined
+      ? "undefined"
+      : raw === null
+        ? "null"
+        : typeof raw !== "object"
+          ? "undefined"
+          : raw.enabled === undefined
+            ? "undefined"
+            : raw.enabled === null
+              ? "null"
+              : raw.enabled
+  );
   if (!raw || typeof raw !== "object" || raw.enabled !== true) {
     return { enabled: false };
   }
