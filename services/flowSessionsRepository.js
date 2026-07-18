@@ -1,6 +1,7 @@
 /**
- * Persistencia Supabase para flow_sessions (Fase 2 — auditoría).
- * Independiente de ia_sessions. No decide el runtime.
+ * Persistencia Supabase para flow_sessions.
+ * Solo acceso a datos: HTTP + mapeo de filas + filtros técnicos.
+ * Sin reglas de negocio (status, defaults de nodo, cancelación, etc.).
  */
 
 const axios = require("axios");
@@ -12,9 +13,8 @@ const FLOW_SESSION_TIMEOUT_MS = 2000;
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-const STATUS_DEFAULT = "active";
-const STATUS_FINISHED = "finished";
-const STATUS_CANCELLED = "cancelled";
+/** Filtro técnico para filas con status=active (usado por lecturas/updates "activa"). */
+const STATUS_ACTIVE = "active";
 
 const SELECT_COLUMNS =
   "id,usuario_id,conexion_whatsapp_id,cliente_numero,flujo_id,current_node_id,status,started_at,last_activity_at,created_at,updated_at";
@@ -38,11 +38,6 @@ function textoONull(valor) {
   if (valor == null) return null;
   const s = String(valor).trim();
   return s !== "" ? s : null;
-}
-
-function statusValido(valor) {
-  const s = textoONull(valor);
-  return s || STATUS_DEFAULT;
 }
 
 function mapRow(row) {
@@ -80,7 +75,7 @@ function filtroClaveActiva(clave, { flujoId = undefined } = {}) {
     `?usuario_id=eq.${encodeURIComponent(clave.usuario_id)}` +
     `&conexion_whatsapp_id=eq.${encodeURIComponent(clave.conexion_whatsapp_id)}` +
     `&cliente_numero=eq.${encodeURIComponent(clave.cliente_numero)}` +
-    `&status=eq.${encodeURIComponent(STATUS_DEFAULT)}`;
+    `&status=eq.${encodeURIComponent(STATUS_ACTIVE)}`;
 
   const flujo = uuidValido(flujoId);
   if (flujo) {
@@ -90,8 +85,32 @@ function filtroClaveActiva(clave, { flujoId = undefined } = {}) {
   return url;
 }
 
+function construirPatch(fields = {}) {
+  const ahora = new Date().toISOString();
+  const patch = { updated_at: ahora };
+
+  if (fields.flujoId !== undefined) {
+    patch.flujo_id = uuidValido(fields.flujoId);
+  }
+  if (fields.currentNodeId !== undefined) {
+    patch.current_node_id = textoONull(fields.currentNodeId);
+  }
+  if (fields.status !== undefined) {
+    patch.status = textoONull(fields.status);
+  }
+  if (fields.startedAt !== undefined) {
+    patch.started_at = fields.startedAt || null;
+  }
+  if (fields.lastActivityAt !== undefined) {
+    patch.last_activity_at = fields.lastActivityAt || ahora;
+  }
+
+  return { patch, ahora };
+}
+
 /**
  * Inserta una nueva fila (sin upsert: no hay unique por lead).
+ * El caller debe enviar status / nodos ya resueltos.
  */
 async function crearFlowSession({
   usuarioId,
@@ -99,7 +118,7 @@ async function crearFlowSession({
   clienteNumero,
   flujoId = null,
   currentNodeId = null,
-  status = STATUS_DEFAULT,
+  status,
   startedAt = null,
   lastActivityAt = null,
 }) {
@@ -117,7 +136,7 @@ async function crearFlowSession({
     ...clave,
     flujo_id: uuidValido(flujoId),
     current_node_id: textoONull(currentNodeId),
-    status: statusValido(status),
+    status: textoONull(status),
     started_at: startedAt || ahora,
     last_activity_at: lastActivityAt || ahora,
     updated_at: ahora,
@@ -198,6 +217,7 @@ async function obtenerFlowSession({ usuarioId, conexionWhatsappId, clienteNumero
 
 /**
  * Actualiza la sesión active más reciente del lead (y flujo si se indica).
+ * Campos a escribir: responsibility del caller (servicio).
  */
 async function actualizarFlowSessionActiva({
   usuarioId,
@@ -217,22 +237,16 @@ async function actualizarFlowSessionActiva({
     throw new Error("Clave de flow_session inválida para Supabase");
   }
 
-  const ahora = new Date().toISOString();
-  const patch = {
-    updated_at: ahora,
-  };
-
-  if (currentNodeId !== undefined) {
-    patch.current_node_id = textoONull(currentNodeId);
-  }
-  if (status !== undefined) {
-    patch.status = statusValido(status);
-  }
+  const fields = {};
+  if (currentNodeId !== undefined) fields.currentNodeId = currentNodeId;
+  if (status !== undefined) fields.status = status;
   if (lastActivityAt !== undefined) {
-    patch.last_activity_at = lastActivityAt || ahora;
+    fields.lastActivityAt = lastActivityAt;
   } else {
-    patch.last_activity_at = ahora;
+    fields.lastActivityAt = null; // → construirPatch usa "ahora"
   }
+
+  const { patch } = construirPatch(fields);
 
   const res = await axios.patch(
     filtroClaveActiva(clave, { flujoId }) + "&order=started_at.desc&limit=1",
@@ -250,13 +264,17 @@ async function actualizarFlowSessionActiva({
 }
 
 /**
- * Marca como cancelled todas las sesiones active del lead/línea.
+ * Actualiza todas las sesiones active del lead/línea con los campos indicados.
+ * (Antes: cancelarFlowSessionsActivas — el status lo decide el servicio.)
  */
-async function cancelarFlowSessionsActivas({
+async function actualizarFlowSessionsActivas({
   usuarioId,
   conexionWhatsappId,
   clienteNumero,
   flujoId = null,
+  currentNodeId,
+  status,
+  lastActivityAt,
 }) {
   if (!SUPABASE_URL || !SUPABASE_KEY) {
     throw new Error("Supabase no configurado");
@@ -267,21 +285,23 @@ async function cancelarFlowSessionsActivas({
     throw new Error("Clave de flow_session inválida para Supabase");
   }
 
-  const ahora = new Date().toISOString();
-  const res = await axios.patch(
-    filtroClaveActiva(clave, { flujoId }),
-    {
-      status: STATUS_CANCELLED,
-      last_activity_at: ahora,
-      updated_at: ahora,
-    },
-    {
-      headers: supabaseHeaders({
-        Prefer: "return=representation",
-      }),
-      timeout: FLOW_SESSION_TIMEOUT_MS,
-    }
-  );
+  const fields = {};
+  if (currentNodeId !== undefined) fields.currentNodeId = currentNodeId;
+  if (status !== undefined) fields.status = status;
+  if (lastActivityAt !== undefined) {
+    fields.lastActivityAt = lastActivityAt;
+  } else {
+    fields.lastActivityAt = null;
+  }
+
+  const { patch } = construirPatch(fields);
+
+  const res = await axios.patch(filtroClaveActiva(clave, { flujoId }), patch, {
+    headers: supabaseHeaders({
+      Prefer: "return=representation",
+    }),
+    timeout: FLOW_SESSION_TIMEOUT_MS,
+  });
 
   return Array.isArray(res.data) ? res.data.map(mapRow) : [];
 }
@@ -299,24 +319,7 @@ async function actualizarFlowSessionPorId(id, fields = {}) {
     throw new Error("id de flow_session inválido");
   }
 
-  const ahora = new Date().toISOString();
-  const patch = { updated_at: ahora };
-
-  if (fields.flujoId !== undefined) {
-    patch.flujo_id = uuidValido(fields.flujoId);
-  }
-  if (fields.currentNodeId !== undefined) {
-    patch.current_node_id = textoONull(fields.currentNodeId);
-  }
-  if (fields.status !== undefined) {
-    patch.status = statusValido(fields.status);
-  }
-  if (fields.startedAt !== undefined) {
-    patch.started_at = fields.startedAt || null;
-  }
-  if (fields.lastActivityAt !== undefined) {
-    patch.last_activity_at = fields.lastActivityAt || ahora;
-  }
+  const { patch } = construirPatch(fields);
 
   const res = await axios.patch(
     `${SUPABASE_URL}/rest/v1/flow_sessions?id=eq.${encodeURIComponent(sessionId)}`,
@@ -365,11 +368,8 @@ module.exports = {
   obtenerFlowSession,
   obtenerFlowSessionActiva,
   actualizarFlowSessionActiva,
+  actualizarFlowSessionsActivas,
   actualizarFlowSessionPorId,
-  cancelarFlowSessionsActivas,
   eliminarFlowSession,
   uuidValido,
-  STATUS_DEFAULT,
-  STATUS_FINISHED,
-  STATUS_CANCELLED,
 };
