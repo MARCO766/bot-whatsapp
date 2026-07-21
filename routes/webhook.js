@@ -33,6 +33,37 @@ const PHONE_ID = process.env.PHONE_ID;
 
 const mensajesProcesados = new Set();
 
+/**
+ * Filtros PostgREST para PATCH monotónico de estado_envio (un solo request, sin SELECT previo).
+ * sent: solo si la fila aún no tiene estado (p.ej. webhook antes del INSERT).
+ * delivered/read: avance permitido sin regresiones.
+ * failed: misma política que antes (puede sobrescribir sent/delivered/read; no reescribe failed).
+ */
+function filtrosMonotoniaEstadoEnvio(estado) {
+  switch (estado) {
+    case "sent":
+      return "estado_envio=is.null";
+    case "delivered":
+      return "or=(estado_envio.eq.sent,estado_envio.is.null)";
+    case "read":
+      return "estado_envio=in.(sent,delivered)";
+    case "failed":
+      return "or=(estado_envio.is.null,estado_envio.eq.sent,estado_envio.eq.delivered,estado_envio.eq.read)";
+    default:
+      return null;
+  }
+}
+
+function urlPatchEstadoEnvio(whatsappMessageId, estado) {
+  const wamidEnc = encodeURIComponent(whatsappMessageId);
+  let url = `${SUPABASE_URL}/rest/v1/mensajes?whatsapp_message_id=eq.${wamidEnc}`;
+  const filtros = filtrosMonotoniaEstadoEnvio(estado);
+  if (filtros) {
+    url += `&${filtros}`;
+  }
+  return url;
+}
+
 setInterval(() => {
   mensajesProcesados.clear();
 }, 1000 * 60 * 10);
@@ -123,17 +154,26 @@ if (value?.statuses) {
     if (!whatsappMessageId || !estado) continue;
 
     try {
-      await axios.patch(
-        `${SUPABASE_URL}/rest/v1/mensajes?whatsapp_message_id=eq.${whatsappMessageId}`,
+      const patchRes = await axios.patch(
+        urlPatchEstadoEnvio(whatsappMessageId, estado),
         { estado_envio: estado },
         {
           headers: {
             apikey: SUPABASE_KEY,
             Authorization: `Bearer ${SUPABASE_KEY}`,
             "Content-Type": "application/json",
+            Prefer: "return=representation",
           },
         }
       );
+
+      const filasActualizadas = Array.isArray(patchRes.data) ? patchRes.data : [];
+      if (filasActualizadas.length > 0) {
+        rt.mensajeEstado(req, usuarioIdWebhook, {
+          whatsapp_message_id: whatsappMessageId,
+          estado_envio: estado,
+        });
+      }
     } catch (patchErr) {
       console.error(
         "❌ ERROR ACTUALIZANDO estado_envio EN BD:",
@@ -141,11 +181,6 @@ if (value?.statuses) {
         patchErr.response?.data || patchErr.message
       );
     }
-
-    rt.mensajeEstado(req, usuarioIdWebhook, {
-      whatsapp_message_id: whatsappMessageId,
-      estado_envio: estado,
-    });
   }
 
   return res.sendStatus(200);
