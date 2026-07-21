@@ -238,8 +238,21 @@ async function analizarComprobanteConVision({ imageDataUrl, imagePublicUrl }) {
   }
 
   const content = data?.choices?.[0]?.message?.content || "";
+  // TEMP LOG — respuesta RAW de Vision (antes de parse)
+  console.log("[RAW_OPENAI_VISION_RESPONSE]", content);
   const parsed = extractJson(content);
   if (!parsed) throw new Error("No se pudo extraer JSON del comprobante");
+
+  // TEMP LOG — valores originales post-JSON.parse (sin String/trim/|| "")
+  console.log("[PARSED_OPENAI_VISION]", {
+    monto: parsed.monto,
+    moneda: parsed.moneda,
+    nombre: parsed.nombre,
+    montoType: typeof parsed.monto,
+    monedaType: typeof parsed.moneda,
+    nombreType: typeof parsed.nombre,
+    nombreIsNull: parsed.nombre === null,
+  });
 
   return {
     monto: toNumber(parsed.monto, 0),
