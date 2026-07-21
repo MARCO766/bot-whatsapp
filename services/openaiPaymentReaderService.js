@@ -307,9 +307,20 @@ function compararPagoOpenAI(esperado, lectura) {
     };
   }
 
+  // TEMP LOG — comparar nombre
+  console.log("[TEMP_PAYMENT_READER_NOMBRE_COMPARE_INPUT]", {
+    nombreEsperado: esperado.nombreEsperado || null,
+    lecturaNombre: lectura?.nombre ?? null,
+  });
   const nombreOk = esperado.nombreEsperado
     ? compararNombreFlexible(esperado.nombreEsperado, lectura.nombre)
     : true;
+  console.log("[TEMP_PAYMENT_READER_NOMBRE_COMPARE_RESULT]", {
+    nombreEsperado: esperado.nombreEsperado || null,
+    lecturaNombre: lectura?.nombre ?? null,
+    nombreOk,
+    seComparo: !!esperado.nombreEsperado,
+  });
   if (!nombreOk) {
     return {
       valido: false,
@@ -424,11 +435,18 @@ async function extraerLecturaComprobanteOpenAI({
     return invalido;
   }
 
+  const lecturaSalida = formatearLecturaSalida(lectura);
+  // TEMP LOG — OCR Vision exacto
+  console.log("[TEMP_PAYMENT_READER_OCR_LECTURA]", {
+    monto: lecturaSalida?.monto ?? null,
+    moneda: lecturaSalida?.moneda ?? null,
+    nombre: lecturaSalida?.nombre ?? null,
+  });
   return {
     ok: true,
     valido: true,
     motivo: null,
-    lectura: formatearLecturaSalida(lectura),
+    lectura: lecturaSalida,
   };
 }
 
