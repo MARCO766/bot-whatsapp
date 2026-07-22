@@ -17,7 +17,7 @@ const UUID_RE =
 const STATUS_ACTIVE = "active";
 
 const SELECT_COLUMNS =
-  "id,usuario_id,conexion_whatsapp_id,cliente_numero,flujo_id,current_node_id,status,started_at,last_activity_at,created_at,updated_at";
+  "id,usuario_id,conexion_whatsapp_id,cliente_numero,flujo_id,current_node_id,status,started_at,last_activity_at,expires_at,finished_at,created_at,updated_at";
 
 function supabaseHeaders(extra = {}) {
   return {
@@ -52,6 +52,8 @@ function mapRow(row) {
     status: row.status,
     started_at: row.started_at,
     last_activity_at: row.last_activity_at,
+    expires_at: row.expires_at ?? null,
+    finished_at: row.finished_at ?? null,
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
@@ -104,6 +106,13 @@ function construirPatch(fields = {}) {
   if (fields.lastActivityAt !== undefined) {
     patch.last_activity_at = fields.lastActivityAt || ahora;
   }
+  // Solo escribe si el caller lo pasa explícitamente (Fase 1: nadie calcula aún).
+  if (fields.expiresAt !== undefined) {
+    patch.expires_at = fields.expiresAt || null;
+  }
+  if (fields.finishedAt !== undefined) {
+    patch.finished_at = fields.finishedAt || null;
+  }
 
   return { patch, ahora };
 }
@@ -121,6 +130,8 @@ async function crearFlowSession({
   status,
   startedAt = null,
   lastActivityAt = null,
+  expiresAt = null,
+  finishedAt = null,
 }) {
   if (!SUPABASE_URL || !SUPABASE_KEY) {
     throw new Error("Supabase no configurado");
@@ -139,6 +150,8 @@ async function crearFlowSession({
     status: textoONull(status),
     started_at: startedAt || ahora,
     last_activity_at: lastActivityAt || ahora,
+    expires_at: expiresAt || null,
+    finished_at: finishedAt || null,
     updated_at: ahora,
   };
 
@@ -227,6 +240,8 @@ async function actualizarFlowSessionActiva({
   currentNodeId,
   status,
   lastActivityAt,
+  expiresAt,
+  finishedAt,
 }) {
   if (!SUPABASE_URL || !SUPABASE_KEY) {
     throw new Error("Supabase no configurado");
@@ -245,6 +260,8 @@ async function actualizarFlowSessionActiva({
   } else {
     fields.lastActivityAt = null; // → construirPatch usa "ahora"
   }
+  if (expiresAt !== undefined) fields.expiresAt = expiresAt;
+  if (finishedAt !== undefined) fields.finishedAt = finishedAt;
 
   const { patch } = construirPatch(fields);
 
@@ -275,6 +292,8 @@ async function actualizarFlowSessionsActivas({
   currentNodeId,
   status,
   lastActivityAt,
+  expiresAt,
+  finishedAt,
 }) {
   if (!SUPABASE_URL || !SUPABASE_KEY) {
     throw new Error("Supabase no configurado");
@@ -293,6 +312,8 @@ async function actualizarFlowSessionsActivas({
   } else {
     fields.lastActivityAt = null;
   }
+  if (expiresAt !== undefined) fields.expiresAt = expiresAt;
+  if (finishedAt !== undefined) fields.finishedAt = finishedAt;
 
   const { patch } = construirPatch(fields);
 
