@@ -13,6 +13,7 @@ const {
   obtenerFlowSessionActiva,
   actualizarFlowSessionActiva,
   actualizarFlowSessionsActivas,
+  actualizarFlowSessionPorId,
   eliminarFlowSession,
 } = require("./flowSessionsRepository");
 
@@ -69,6 +70,10 @@ function normalizarNodoInicio(currentNodeId) {
 
 /**
  * Crea una sesión de flujo (status=active, nodo por defecto Inicio).
+ * expires_at = ahora + lifecycle si está habilitado; si no, NULL.
+ *
+ * Fase 4.5: antes de insertar, cancela cualquier sesión active del mismo
+ * lead/línea (no toca finished / expired / cancelled).
  */
 async function crearSesion({
   usuarioId,
@@ -80,6 +85,25 @@ async function crearSesion({
   startedAt = null,
   lastActivityAt = null,
 } = {}) {
+  const ahora = new Date();
+  const ahoraIso = ahora.toISOString();
+  const lifecycle = await resolverLifecyclePorFlujo(usuarioId, flujoId);
+  const expiresAt = calcularExpiresAtIso(lifecycle, ahora.getTime());
+
+  // Una sola active por (usuario, línea, lead). Sin flujoId → todas las active.
+  try {
+    await cancelarSesion({
+      usuarioId,
+      conexionWhatsappId,
+      clienteNumero,
+    });
+  } catch (err) {
+    console.log(
+      "[FLOW_SESSION] no se pudieron cancelar active previas antes de crear",
+      err?.response?.data || err?.message || err
+    );
+  }
+
   return crearFlowSession({
     usuarioId,
     conexionWhatsappId,
@@ -87,13 +111,16 @@ async function crearSesion({
     flujoId,
     currentNodeId: normalizarNodoInicio(currentNodeId),
     status: normalizarStatus(status, STATUS_DEFAULT),
-    startedAt,
-    lastActivityAt,
+    startedAt: startedAt || ahoraIso,
+    lastActivityAt: lastActivityAt || ahoraIso,
+    expiresAt,
+    finishedAt: null,
   });
 }
 
 /**
  * Actualiza current_node_id (+ last_activity_at) de la sesión active más reciente.
+ * Si lifecycle habilitado, recalcula expires_at = ahora + lifecycle.
  */
 async function actualizarNodo({
   usuarioId,
@@ -102,17 +129,25 @@ async function actualizarNodo({
   flujoId = null,
   currentNodeId,
 } = {}) {
-  return actualizarFlowSessionActiva({
+  const lifecycle = await resolverLifecyclePorFlujo(usuarioId, flujoId);
+  const payload = {
     usuarioId,
     conexionWhatsappId,
     clienteNumero,
     flujoId,
     currentNodeId,
-  });
+  };
+
+  if (lifecycle.enabled) {
+    payload.expiresAt = calcularExpiresAtIso(lifecycle, Date.now());
+  }
+
+  return actualizarFlowSessionActiva(payload);
 }
 
 /**
  * Marca la sesión active más reciente como finished (no elimina la fila).
+ * finished_at = ahora; expires_at = finished_at + lifecycle (o NULL si deshabilitado).
  */
 async function finalizarSesion({
   usuarioId,
@@ -121,6 +156,10 @@ async function finalizarSesion({
   flujoId = null,
   currentNodeId,
 } = {}) {
+  const ahora = new Date();
+  const ahoraIso = ahora.toISOString();
+  const lifecycle = await resolverLifecyclePorFlujo(usuarioId, flujoId);
+
   return actualizarFlowSessionActiva({
     usuarioId,
     conexionWhatsappId,
@@ -128,6 +167,8 @@ async function finalizarSesion({
     flujoId,
     currentNodeId,
     status: STATUS_FINISHED,
+    finishedAt: ahoraIso,
+    expiresAt: calcularExpiresAtIso(lifecycle, ahora.getTime()),
   });
 }
 
@@ -210,26 +251,33 @@ async function eliminarSesionFlujo(payload) {
 /* --- Auditoría fire-and-forget (runtime Fase 2; comportamiento idéntico) --- */
 
 /**
- * Auditoría: nuevo inicio de flujo (status=active, nodo Inicio).
- * Fire-and-forget — no bloquea ni altera el runtime.
+ * Inicio de flujo (status=active, nodo Inicio).
+ * Fase 4.5: await de la creación (cancel active previas + insert) para reducir
+ * doble active por concurrencia. Avances/fin siguen fire-and-forget.
+ * Errores se registran y no rompen el runtime del flujo.
  */
-function registrarInicioSesionFlujo({
+async function registrarInicioSesionFlujo({
   usuarioId,
   conexionWhatsappId,
   clienteNumero,
   flujoId,
   currentNodeId = NODO_INICIO_DEFAULT,
 }) {
-  auditarEnBackground("inicio", () =>
-    crearSesion({
+  try {
+    await crearSesion({
       usuarioId,
       conexionWhatsappId,
       clienteNumero,
       flujoId,
       currentNodeId,
       status: STATUS_DEFAULT,
-    })
-  );
+    });
+  } catch (err) {
+    console.log(
+      "[FLOW_SESSION_AUDIT] inicio",
+      err?.response?.data || err?.message || err
+    );
+  }
 }
 
 /**
@@ -297,10 +345,10 @@ function registrarCancelacionSesionFlujo({
 }
 
 /**
- * Motor de evaluación de ciclo de vida (Fase 6) — SOLO LECTURA.
- * Punto único de evaluación del estado de una flow_session.
- * No crea, actualiza, cancela ni finaliza sesiones.
- * No es llamado por el runtime todavía (firma estable para fases futuras).
+ * Motor de evaluación de ciclo de vida (Fase 3).
+ * Fuente de verdad temporal: expires_at persistido.
+ * Puede marcar status=expired (active|finished) y limpiar expires_at
+ * si el lifecycle del flujo quedó deshabilitado.
  *
  * Entrada: solo identidad de conversación.
  * @param {{ usuarioId: string, conexionWhatsappId: string, clienteNumero: string }} payload
@@ -314,24 +362,25 @@ function registrarCancelacionSesionFlujo({
  *   motivo: string | null
  * }>}
  *
- * Contratos de campos (estables):
- * - status: estado almacenado en DB (sin reinterpretar ni mutar).
- * - esActiva: únicamente status === "active" (independiente de expiración).
- * - expirada: resultado del motor (puede ser true con status === "active").
- * - renewOnActivity: por ahora true (documentado); reloj = last_activity_at || started_at.
+ * Contratos:
+ * - status: estado en DB tras la evaluación (puede haber mutado a expired).
+ * - esActiva: true si la sesión era/es active y el runtime debe cortar continuidad
+ *   (incluye el caso active→expired en este mismo tick, para no romper limpieza IA).
+ * - expirada: true solo cuando esta evaluación detectó vencimiento por expires_at.
+ * - expires_at NULL → nunca expirar automáticamente.
  */
 async function evaluarCicloVidaSesionFlujo({
   usuarioId,
   conexionWhatsappId,
   clienteNumero,
 } = {}) {
-  const sesionActiva = await obtenerSesionActiva({
+  const sesion = await obtenerSesion({
     usuarioId,
     conexionWhatsappId,
     clienteNumero,
   });
 
-  if (!sesionActiva) {
+  if (!sesion) {
     return {
       existe: false,
       sesion: null,
@@ -343,15 +392,16 @@ async function evaluarCicloVidaSesionFlujo({
     };
   }
 
-  // status = valor en DB; no se muta.
-  const statusAlmacenado = textoStatusAlmacenado(sesionActiva.status);
-  const esActiva = statusAlmacenado === STATUS_DEFAULT;
+  let sesionActual = sesion;
+  const statusAlmacenado = textoStatusAlmacenado(sesionActual.status);
 
-  // Sesión encontrada pero no "active" en DB: reportar tal cual, sin mutar.
-  if (!esActiva) {
+  if (
+    statusAlmacenado === STATUS_CANCELLED ||
+    statusAlmacenado === STATUS_EXPIRED
+  ) {
     return {
       existe: true,
-      sesion: sesionActiva,
+      sesion: sesionActual,
       status: statusAlmacenado,
       esActiva: false,
       puedeContinuar: false,
@@ -360,32 +410,90 @@ async function evaluarCicloVidaSesionFlujo({
     };
   }
 
-  const lifecycle = await resolverLifecycleDeSesion(sesionActiva, usuarioId);
-
-  // Caso 2: lifecycle deshabilitado / ausente → puede continuar, no expirada.
-  if (!lifecycle.enabled) {
+  if (
+    statusAlmacenado !== STATUS_DEFAULT &&
+    statusAlmacenado !== STATUS_FINISHED
+  ) {
     return {
       existe: true,
-      sesion: sesionActiva,
+      sesion: sesionActual,
       status: statusAlmacenado,
-      esActiva: true,
-      puedeContinuar: true,
+      esActiva: false,
+      puedeContinuar: false,
       expirada: false,
       motivo: null,
     };
   }
 
-  // Caso 3: lifecycle habilitado → evaluar ventana temporal (sin escribir DB).
-  const evalExp = evaluarExpiracionTemporal(sesionActiva, lifecycle);
+  const eraActiva = statusAlmacenado === STATUS_DEFAULT;
+  const lifecycle = await resolverLifecycleDeSesion(sesionActual, usuarioId);
+
+  // Lifecycle deshabilitado: limpiar expires_at residual y nunca expirar.
+  if (!lifecycle.enabled) {
+    if (sesionActual.expires_at != null) {
+      try {
+        const limpiada = await actualizarFlowSessionPorId(sesionActual.id, {
+          expiresAt: null,
+        });
+        if (limpiada) sesionActual = limpiada;
+        else sesionActual = { ...sesionActual, expires_at: null };
+      } catch (err) {
+        console.log(
+          "[FLOW_SESSION_EVAL] no se pudo limpiar expires_at",
+          err?.response?.data || err?.message || err
+        );
+      }
+    }
+
+    return {
+      existe: true,
+      sesion: sesionActual,
+      status: statusAlmacenado,
+      esActiva: eraActiva,
+      puedeContinuar: eraActiva,
+      expirada: false,
+      motivo: null,
+    };
+  }
+
+  // Lifecycle habilitado: expires_at es la única fuente de verdad temporal.
+  const evalExp = evaluarExpiracionPorExpiresAt(sesionActual);
+
+  if (!evalExp.expirada) {
+    return {
+      existe: true,
+      sesion: sesionActual,
+      status: statusAlmacenado,
+      esActiva: eraActiva,
+      puedeContinuar: eraActiva,
+      expirada: false,
+      motivo: null,
+    };
+  }
+
+  // active|finished + expires_at <= now → expired
+  try {
+    const actualizada = await actualizarFlowSessionPorId(sesionActual.id, {
+      status: STATUS_EXPIRED,
+    });
+    if (actualizada) sesionActual = actualizada;
+    else sesionActual = { ...sesionActual, status: STATUS_EXPIRED };
+  } catch (err) {
+    console.log(
+      "[FLOW_SESSION_EVAL] no se pudo marcar expired",
+      err?.response?.data || err?.message || err
+    );
+  }
 
   return {
     existe: true,
-    sesion: sesionActiva,
-    status: statusAlmacenado,
-    esActiva: true,
-    puedeContinuar: evalExp.puedeContinuar,
-    expirada: evalExp.expirada,
-    motivo: evalExp.motivo,
+    sesion: sesionActual,
+    status: STATUS_EXPIRED,
+    // eraActiva=true permite que flowService limpie IA como antes (expirarSesion queda no-op).
+    esActiva: eraActiva,
+    puedeContinuar: false,
+    expirada: true,
+    motivo: MOTIVO_SESSION_EXPIRED,
   };
 }
 
@@ -396,17 +504,24 @@ function textoStatusAlmacenado(valor) {
 }
 
 /**
- * Lee data.lifecycle del nodo Inicio del flujo asociado a la sesión.
+ * Lee data.lifecycle del nodo Inicio del flujo.
  * Sin lifecycle / flujo / nodo → { enabled: false }.
  */
-async function resolverLifecycleDeSesion(sesion, usuarioId) {
-  const flujoId = sesion?.flujo_id;
+async function resolverLifecyclePorFlujo(usuarioId, flujoId) {
   if (!flujoId || !usuarioId) {
     return { enabled: false };
   }
 
   const flujoData = await obtenerDataFlujoBuilder(usuarioId, flujoId);
   return leerLifecycleDesdeFlujoData(flujoData);
+}
+
+/**
+ * Lee data.lifecycle del nodo Inicio del flujo asociado a la sesión.
+ * Sin lifecycle / flujo / nodo → { enabled: false }.
+ */
+async function resolverLifecycleDeSesion(sesion, usuarioId) {
+  return resolverLifecyclePorFlujo(usuarioId, sesion?.flujo_id);
 }
 
 async function obtenerDataFlujoBuilder(usuarioId, flujoId) {
@@ -504,29 +619,35 @@ function lifecycleValueToMs(value, unit) {
 }
 
 /**
- * Calcula expiración temporal sin mutar la sesión.
- * Reloj (renewOnActivity=true): last_activity_at || started_at.
+ * Punto único de cálculo de expires_at.
+ * @returns {string|null} ISO timestamptz, o null si lifecycle deshabilitado/inválido.
  */
-function evaluarExpiracionTemporal(sesion, lifecycle) {
-  const momentoBaseRaw =
-    sesion.last_activity_at || sesion.started_at || null;
-
-  if (!momentoBaseRaw) {
-    return { expirada: false, puedeContinuar: true, motivo: null };
-  }
-
-  const momentoBaseMs = new Date(momentoBaseRaw).getTime();
-  if (!Number.isFinite(momentoBaseMs)) {
-    return { expirada: false, puedeContinuar: true, motivo: null };
-  }
+function calcularExpiresAtIso(lifecycle, baseMs = Date.now()) {
+  if (!lifecycle || lifecycle.enabled !== true) return null;
+  if (!Number.isFinite(baseMs)) return null;
 
   const ventanaMs = lifecycleValueToMs(lifecycle.value, lifecycle.unit);
-  if (ventanaMs == null) {
+  if (ventanaMs == null) return null;
+
+  return new Date(baseMs + ventanaMs).toISOString();
+}
+
+/**
+ * Expira solo según expires_at persistido (única fuente de verdad temporal).
+ * expires_at NULL / inválido → no expirar.
+ */
+function evaluarExpiracionPorExpiresAt(sesion) {
+  const raw = sesion?.expires_at;
+  if (raw == null || String(raw).trim() === "") {
     return { expirada: false, puedeContinuar: true, motivo: null };
   }
 
-  const limiteMs = momentoBaseMs + ventanaMs;
-  if (Date.now() > limiteMs) {
+  const expiresAtMs = new Date(raw).getTime();
+  if (!Number.isFinite(expiresAtMs)) {
+    return { expirada: false, puedeContinuar: true, motivo: null };
+  }
+
+  if (expiresAtMs <= Date.now()) {
     return {
       expirada: true,
       puedeContinuar: false,

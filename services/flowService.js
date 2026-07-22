@@ -1987,8 +1987,9 @@ async function ejecutarFlujo(
     return;
   }
 
-  // Auditoría flow_sessions — inicio desde activador / arranque fresco (no iaResume ni lector)
-  registrarInicioSesionFlujo({
+  // Flow sessions — inicio await (Fase 4.5: cancel active + create antes del grafo).
+  // Avances/fin siguen fire-and-forget vía registrarAvance/registrarFin.
+  await registrarInicioSesionFlujo({
     usuarioId,
     conexionWhatsappId:
       flowContext.conexionWhatsappId ?? conexionLineaEntrante ?? null,
