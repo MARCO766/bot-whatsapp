@@ -132,7 +132,7 @@ async function fetchConexionesActivasUsuario(usuarioId) {
   if (!SUPABASE_URL || !SUPABASE_KEY || !usuarioId) return [];
   try {
     const res = await axios.get(
-      `${SUPABASE_URL}/rest/v1/conexiones_whatsapp?usuario_id=eq.${encodeURIComponent(usuarioId)}&activo=eq.true&select=id&order=creado_en.asc`,
+      `${SUPABASE_URL}/rest/v1/conexiones_whatsapp?usuario_id=eq.${encodeURIComponent(usuarioId)}&select=id&order=creado_en.asc`,
       { headers: headers() }
     );
     return Array.isArray(res.data) ? res.data : [];
