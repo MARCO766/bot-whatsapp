@@ -51,6 +51,27 @@ export function formatHora(fecha) {
   return d.toLocaleTimeString("es-BO", HORA_BO_OPTIONS);
 }
 
+/** Fecha+hora para meta de burbujas: hoy → hora; ayer → Ayer · hora; resto → dd/mm/aaaa · hora. */
+export function formatFechaHoraMensaje(fecha) {
+  const d = parseFechaUtc(fecha);
+  if (!d) return "";
+  const hora = d.toLocaleTimeString("es-BO", HORA_BO_OPTIONS);
+  const tz = { timeZone: "America/La_Paz" };
+  const msgYmd = d.toLocaleDateString("en-CA", tz);
+  const hoyYmd = new Date().toLocaleDateString("en-CA", tz);
+  if (msgYmd === hoyYmd) return hora;
+  const [y, m, day] = hoyYmd.split("-").map(Number);
+  const ayerYmd = new Date(Date.UTC(y, m - 1, day - 1)).toISOString().slice(0, 10);
+  if (msgYmd === ayerYmd) return `Ayer · ${hora}`;
+  const fechaStr = d.toLocaleDateString("es-BO", {
+    ...tz,
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+  return `${fechaStr} · ${hora}`;
+}
+
 /** Orden cronológico ASC para render del chat (desempate estable por id). */
 export function sortMensajesPorCreadoEn(mensajes) {
   return [...(mensajes || [])].sort((a, b) => {

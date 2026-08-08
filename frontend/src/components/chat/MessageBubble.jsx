@@ -1,5 +1,5 @@
 import React from "react";
-import { formatHora, messageChecks } from "../../utils/chatFormat";
+import { formatFechaHoraMensaje, messageChecks } from "../../utils/chatFormat";
 import {
   resolveMediaKind,
   mediaUrl,
@@ -35,7 +35,7 @@ export default function MessageBubble({ msg, uploadProgress, onMediaLayout }) {
   const timeLabel =
     uploadProgress != null && uploadProgress < 100
       ? `${uploadProgress}%`
-      : formatHora(msg.creado_en) || "ahora";
+      : formatFechaHoraMensaje(msg.creado_en) || "ahora";
 
   const caption = visibleCaption(msg, kind);
   const textOnly = caption && !kind && !msg._localPreview;
