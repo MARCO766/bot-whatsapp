@@ -1,5 +1,5 @@
 import React from "react";
-import { formatHora } from "../../utils/chatFormat";
+import { formatFechaListaChat } from "../../utils/chatFormat";
 
 export default function ChatListItem({
   chat,
@@ -47,7 +47,7 @@ export default function ChatListItem({
         <div className="chatTop">
           <strong className="chatName">{chat.nombre || chat.numero}</strong>
           <div className="chatMeta">
-            <small className="chatTime">{formatHora(chat.ultimoMensajeEn)}</small>
+            <small className="chatTime">{formatFechaListaChat(chat.ultimoMensajeEn)}</small>
             {chat.noLeidos > 0 && (
               <span className="unreadBadge" aria-label={`${chat.noLeidos} sin leer`}>
                 {chat.noLeidos > 99 ? "99+" : chat.noLeidos}

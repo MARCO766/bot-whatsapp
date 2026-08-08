@@ -51,6 +51,33 @@ export function formatHora(fecha) {
   return d.toLocaleTimeString("es-BO", HORA_BO_OPTIONS);
 }
 
+/** Lista lateral: hoy → hora 12h; ayer → Ayer; mismo año → 07 ago.; otro año → 07 ago. 2025. */
+export function formatFechaListaChat(fecha) {
+  const d = parseFechaUtc(fecha);
+  if (!d) return "";
+  const tz = { timeZone: "America/La_Paz" };
+  const msgYmd = d.toLocaleDateString("en-CA", tz);
+  const hoyYmd = new Date().toLocaleDateString("en-CA", tz);
+  if (msgYmd === hoyYmd) {
+    return d.toLocaleTimeString("es-BO", {
+      ...tz,
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    });
+  }
+  const [y, m, day] = hoyYmd.split("-").map(Number);
+  const ayerYmd = new Date(Date.UTC(y, m - 1, day - 1)).toISOString().slice(0, 10);
+  if (msgYmd === ayerYmd) return "Ayer";
+  const mismoAnio = msgYmd.slice(0, 4) === hoyYmd.slice(0, 4);
+  return d.toLocaleDateString("es-BO", {
+    ...tz,
+    day: "2-digit",
+    month: "short",
+    ...(mismoAnio ? {} : { year: "numeric" }),
+  });
+}
+
 /** Fecha+hora para meta de burbujas: hoy → hora; ayer → Ayer · hora; resto → dd/mm/aaaa · hora. */
 export function formatFechaHoraMensaje(fecha) {
   const d = parseFechaUtc(fecha);
