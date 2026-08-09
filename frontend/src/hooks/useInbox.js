@@ -687,17 +687,31 @@ export function useInbox({ onUnreadChange } = {}) {
   const toggleBloqueo = useCallback(
     async (chatItem, bloqueado) => {
       const numero = chatItem.numero || chatItem.cliente_numero;
-      if (bloqueado) await desbloquearChat(numero);
-      else await bloquearChat(numero);
-      setChats((prev) =>
-        prev.map((c) =>
-          sameChat(c, chatItem) ? { ...c, bloqueado: !bloqueado } : c
-        )
-      );
-      if (selectedChat && sameChat(selectedChat, chatItem)) {
-        setChatMeta((m) => (m ? { ...m, bloqueado: !bloqueado } : m));
+      if (!numero) {
+        setError("Número de contacto no válido");
+        setMenuChatKey(null);
+        return;
       }
-      setMenuChatKey(null);
+      try {
+        setError(null);
+        if (bloqueado) await desbloquearChat(numero);
+        else await bloquearChat(numero);
+        setChats((prev) =>
+          prev.map((c) =>
+            sameChat(c, chatItem) ? { ...c, bloqueado: !bloqueado } : c
+          )
+        );
+        if (selectedChat && sameChat(selectedChat, chatItem)) {
+          setChatMeta((m) => (m ? { ...m, bloqueado: !bloqueado } : m));
+        }
+        setMenuChatKey(null);
+      } catch (err) {
+        setError(
+          err.message ||
+            (bloqueado ? "Error desbloqueando contacto" : "Error bloqueando contacto")
+        );
+        setMenuChatKey(null);
+      }
     },
     [selectedChat]
   );

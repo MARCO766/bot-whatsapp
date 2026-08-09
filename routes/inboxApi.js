@@ -271,19 +271,26 @@ router.post("/api/inbox/quitar-etiqueta", protegerApi, async (req, res) => {
   }
 });
 
-// POST /api/inbox/bloquear
-router.post("/api/inbox/bloquear", protegerApi, async (req, res) => {
+// PATCH clientes.estado por usuario_id + numero; exige ≥1 fila afectada.
+async function patchClienteEstadoBloqueo(usuarioId, numero, estado) {
+  const numeroEnc = encodeURIComponent(String(numero).trim());
+  const usuarioEnc = encodeURIComponent(usuarioId);
+  const response = await axios.patch(
+    `${SUPABASE_URL}/rest/v1/clientes?numero=eq.${numeroEnc}&usuario_id=eq.${usuarioEnc}`,
+    { estado },
+    {
+      headers: supabaseHeaders({
+        "Content-Type": "application/json",
+        Prefer: "return=representation",
+      }),
+    }
+  );
+  const rows = Array.isArray(response.data) ? response.data : [];
+  return rows.length > 0;
+}
+
+async function insertMensajeSistemaBloqueo(usuarioId, numero, contenido) {
   try {
-    const { numero } = req.body || {};
-    if (!numero) return res.status(400).json({ ok: false });
-    const usuarioId = req.session.usuario.id;
-
-    await axios.patch(
-      `${SUPABASE_URL}/rest/v1/clientes?numero=eq.${numero}&usuario_id=eq.${usuarioId}`,
-      { estado: "bloqueado" },
-      { headers: supabaseHeaders({ "Content-Type": "application/json" }) }
-    );
-
     await axios.post(
       `${SUPABASE_URL}/rest/v1/mensajes`,
       {
@@ -291,51 +298,75 @@ router.post("/api/inbox/bloquear", protegerApi, async (req, res) => {
         usuario_id: usuarioId,
         direccion: "sistema",
         tipo: "texto",
-        contenido: "🚫 Chat bloqueado",
+        contenido,
         imagen_url: null,
       },
       { headers: supabaseHeaders({ "Content-Type": "application/json" }) }
     );
+  } catch (error) {
+    log("mensaje sistema bloqueo WARN", error.response?.data || error.message);
+  }
+}
+
+// POST /api/inbox/bloquear
+router.post("/api/inbox/bloquear", protegerApi, async (req, res) => {
+  try {
+    const numero = String(req.body?.numero || "").trim();
+    if (!numero) {
+      return res.status(400).json({ ok: false, error: "Número requerido" });
+    }
+    const usuarioId = req.session.usuario.id;
+
+    const updated = await patchClienteEstadoBloqueo(
+      usuarioId,
+      numero,
+      "bloqueado"
+    );
+    if (!updated) {
+      return res.status(404).json({
+        ok: false,
+        error: "No se encontró el contacto para bloquear",
+      });
+    }
+
+    await insertMensajeSistemaBloqueo(usuarioId, numero, "🚫 Chat bloqueado");
 
     rt.chatBloqueado(req, usuarioId, { cliente_numero: numero, numero });
     res.json({ ok: true, bloqueado: true });
   } catch (error) {
     log("bloquear ERROR", error.response?.data || error.message);
-    res.status(500).json({ ok: false });
+    res.status(500).json({ ok: false, error: "Error bloqueando contacto" });
   }
 });
 
 // POST /api/inbox/desbloquear
 router.post("/api/inbox/desbloquear", protegerApi, async (req, res) => {
   try {
-    const { numero } = req.body || {};
-    if (!numero) return res.status(400).json({ ok: false });
+    const numero = String(req.body?.numero || "").trim();
+    if (!numero) {
+      return res.status(400).json({ ok: false, error: "Número requerido" });
+    }
     const usuarioId = req.session.usuario.id;
 
-    await axios.patch(
-      `${SUPABASE_URL}/rest/v1/clientes?numero=eq.${numero}&usuario_id=eq.${usuarioId}`,
-      { estado: "nuevo" },
-      { headers: supabaseHeaders({ "Content-Type": "application/json" }) }
-    );
+    const updated = await patchClienteEstadoBloqueo(usuarioId, numero, "nuevo");
+    if (!updated) {
+      return res.status(404).json({
+        ok: false,
+        error: "No se encontró el contacto para desbloquear",
+      });
+    }
 
-    await axios.post(
-      `${SUPABASE_URL}/rest/v1/mensajes`,
-      {
-        cliente_numero: numero,
-        usuario_id: usuarioId,
-        direccion: "sistema",
-        tipo: "texto",
-        contenido: "✅ Chat desbloqueado",
-        imagen_url: null,
-      },
-      { headers: supabaseHeaders({ "Content-Type": "application/json" }) }
+    await insertMensajeSistemaBloqueo(
+      usuarioId,
+      numero,
+      "✅ Chat desbloqueado"
     );
 
     rt.chatDesbloqueado(req, usuarioId, { cliente_numero: numero, numero });
     res.json({ ok: true, bloqueado: false });
   } catch (error) {
     log("desbloquear ERROR", error.response?.data || error.message);
-    res.status(500).json({ ok: false });
+    res.status(500).json({ ok: false, error: "Error desbloqueando contacto" });
   }
 });
 
