@@ -13,6 +13,7 @@ const {
   obtenerFlowSessionActiva,
   actualizarFlowSessionActiva,
   actualizarFlowSessionsActivas,
+  actualizarFlowSessionsActiveOFinished,
   actualizarFlowSessionPorId,
   eliminarFlowSession,
 } = require("./flowSessionsRepository");
@@ -186,6 +187,24 @@ async function cancelarSesion({
     conexionWhatsappId,
     clienteNumero,
     flujoId,
+    status: STATUS_CANCELLED,
+  });
+}
+
+/**
+ * RESETBOT: libera reingreso de "Primer mensaje".
+ * Cancela active|finished del lead/línea. No toca expired ni cancelled.
+ * No usar fuera del camino resetbot.
+ */
+async function cancelarSesionPorResetbot({
+  usuarioId,
+  conexionWhatsappId,
+  clienteNumero,
+} = {}) {
+  return actualizarFlowSessionsActiveOFinished({
+    usuarioId,
+    conexionWhatsappId,
+    clienteNumero,
     status: STATUS_CANCELLED,
   });
 }
@@ -664,6 +683,7 @@ module.exports = {
   actualizarNodo,
   finalizarSesion,
   cancelarSesion,
+  cancelarSesionPorResetbot,
   expirarSesion,
   obtenerSesionActiva,
   obtenerSesion,

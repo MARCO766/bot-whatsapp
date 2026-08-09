@@ -87,6 +87,17 @@ function filtroClaveActiva(clave, { flujoId = undefined } = {}) {
   return url;
 }
 
+/** Filtro técnico: status active|finished (solo camino RESETBOT). */
+function filtroClaveActiveOFinished(clave) {
+  return (
+    `${SUPABASE_URL}/rest/v1/flow_sessions` +
+    `?usuario_id=eq.${encodeURIComponent(clave.usuario_id)}` +
+    `&conexion_whatsapp_id=eq.${encodeURIComponent(clave.conexion_whatsapp_id)}` +
+    `&cliente_numero=eq.${encodeURIComponent(clave.cliente_numero)}` +
+    `&status=in.(${STATUS_ACTIVE},finished)`
+  );
+}
+
 function construirPatch(fields = {}) {
   const ahora = new Date().toISOString();
   const patch = { updated_at: ahora };
@@ -328,6 +339,46 @@ async function actualizarFlowSessionsActivas({
 }
 
 /**
+ * Actualiza sesiones active|finished del lead/línea (camino RESETBOT).
+ * No toca expired ni cancelled.
+ */
+async function actualizarFlowSessionsActiveOFinished({
+  usuarioId,
+  conexionWhatsappId,
+  clienteNumero,
+  status,
+  lastActivityAt,
+}) {
+  if (!SUPABASE_URL || !SUPABASE_KEY) {
+    throw new Error("Supabase no configurado");
+  }
+
+  const clave = resolverClave({ usuarioId, conexionWhatsappId, clienteNumero });
+  if (!clave) {
+    throw new Error("Clave de flow_session inválida para Supabase");
+  }
+
+  const fields = {};
+  if (status !== undefined) fields.status = status;
+  if (lastActivityAt !== undefined) {
+    fields.lastActivityAt = lastActivityAt;
+  } else {
+    fields.lastActivityAt = null;
+  }
+
+  const { patch } = construirPatch(fields);
+
+  const res = await axios.patch(filtroClaveActiveOFinished(clave), patch, {
+    headers: supabaseHeaders({
+      Prefer: "return=representation",
+    }),
+    timeout: FLOW_SESSION_TIMEOUT_MS,
+  });
+
+  return Array.isArray(res.data) ? res.data.map(mapRow) : [];
+}
+
+/**
  * Actualiza por id de fila.
  */
 async function actualizarFlowSessionPorId(id, fields = {}) {
@@ -390,6 +441,7 @@ module.exports = {
   obtenerFlowSessionActiva,
   actualizarFlowSessionActiva,
   actualizarFlowSessionsActivas,
+  actualizarFlowSessionsActiveOFinished,
   actualizarFlowSessionPorId,
   eliminarFlowSession,
   uuidValido,
