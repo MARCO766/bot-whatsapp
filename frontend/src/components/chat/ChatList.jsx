@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import ChatListItem from "./ChatListItem";
 import { sameChat } from "../../utils/chatFormat";
 
@@ -23,10 +23,37 @@ export default function ChatList({
   onLoadMore,
 }) {
   const scrollRef = useRef(null);
+  const contentRef = useRef(null);
   const sentinelRef = useRef(null);
+  const [listFillsContainer, setListFillsContainer] = useState(false);
+
+  const filtroEtiquetaActivo = Boolean(String(etiquetaFiltro || "").trim());
+  const autoLoadEnabled = Boolean(
+    onLoadMore && hasMore && !filtroEtiquetaActivo && listFillsContainer
+  );
+  const showManualLoadMore = Boolean(
+    onLoadMore && hasMore && (filtroEtiquetaActivo || !listFillsContainer)
+  );
+
+  useLayoutEffect(() => {
+    const root = scrollRef.current;
+    const content = contentRef.current;
+    if (!root || !content) return undefined;
+
+    const measure = () => {
+      setListFillsContainer(content.scrollHeight > root.clientHeight + 8);
+    };
+
+    measure();
+    if (typeof ResizeObserver === "undefined") return undefined;
+    const observer = new ResizeObserver(measure);
+    observer.observe(root);
+    observer.observe(content);
+    return () => observer.disconnect();
+  }, [chats.length, loadingMore, etiquetaFiltro, hasMore]);
 
   useEffect(() => {
-    if (!onLoadMore || !hasMore || loadingMore) return;
+    if (!autoLoadEnabled || loadingMore) return;
     const root = scrollRef.current;
     const sentinel = sentinelRef.current;
     if (!root || !sentinel) return;
@@ -42,7 +69,7 @@ export default function ChatList({
 
     observer.observe(sentinel);
     return () => observer.disconnect();
-  }, [onLoadMore, hasMore, loadingMore, chats.length]);
+  }, [autoLoadEnabled, onLoadMore, loadingMore]);
 
   return (
     <aside className="chatSidebar">
@@ -75,33 +102,49 @@ export default function ChatList({
       </div>
 
       <div className="chatListScroll" ref={scrollRef}>
-        {chats.length === 0 && (
-          <p className="emptyList">Sin conversaciones</p>
+        <div ref={contentRef}>
+          {chats.length === 0 && (
+            <p className="emptyList">Sin conversaciones</p>
+          )}
+          {chats.map((c) => (
+            <ChatListItem
+              key={c.chatKey}
+              chat={c}
+              activo={Boolean(selectedChat && sameChat(c, selectedChat))}
+              menuAbierto={menuChatKey === c.chatKey}
+              lineaLabel={
+                mostrarBadgeLinea
+                  ? c.conexion_nombre ||
+                    mapaNombreConexion[
+                      c.conexion_whatsapp_id || c.conexionWhatsappId
+                    ]
+                  : null
+              }
+              onSelect={onSelect}
+              onToggleMenu={onToggleMenu}
+              onEtiqueta={onEtiqueta}
+              onBloquear={onBloquear}
+              onEliminar={onEliminar}
+            />
+          ))}
+        </div>
+        {autoLoadEnabled && (
+          <div ref={sentinelRef} className="chatListSentinel" aria-hidden />
         )}
-        {chats.map((c) => (
-          <ChatListItem
-            key={c.chatKey}
-            chat={c}
-            activo={Boolean(selectedChat && sameChat(c, selectedChat))}
-            menuAbierto={menuChatKey === c.chatKey}
-            lineaLabel={
-              mostrarBadgeLinea
-                ? c.conexion_nombre ||
-                  mapaNombreConexion[
-                    c.conexion_whatsapp_id || c.conexionWhatsappId
-                  ]
-                : null
-            }
-            onSelect={onSelect}
-            onToggleMenu={onToggleMenu}
-            onEtiqueta={onEtiqueta}
-            onBloquear={onBloquear}
-            onEliminar={onEliminar}
-          />
-        ))}
-        {hasMore && <div ref={sentinelRef} className="chatListSentinel" aria-hidden />}
-        {loadingMore && (
+        {autoLoadEnabled && loadingMore && (
           <p className="chatListLoadingMore">Cargando más conversaciones...</p>
+        )}
+        {showManualLoadMore && (
+          <button
+            type="button"
+            className="chatListLoadMoreBtn"
+            onClick={() => onLoadMore()}
+            disabled={loadingMore}
+          >
+            {loadingMore
+              ? "Cargando más conversaciones..."
+              : "Cargar más conversaciones"}
+          </button>
         )}
       </div>
     </aside>
