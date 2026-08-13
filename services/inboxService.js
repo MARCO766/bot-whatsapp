@@ -138,13 +138,6 @@ async function loadInboxData(
     offset = 0,
   } = {}
 ) {
-  const tTotalStart = performance.now();
-  let msConversaciones = 0;
-  let msClientes = 0;
-  let msEtiquetas = 0;
-  let msMapaConversaciones = 0;
-  let msConstruccionTags = 0;
-
   const filtroConexion = filtroConexionQuery(conexionWhatsappId);
   const pageLimit =
     Number.isFinite(Number(limit)) && Number(limit) > 0
@@ -155,27 +148,15 @@ async function loadInboxData(
       ? Math.floor(Number(offset))
       : 0;
 
-  const tConversacionesStart = performance.now();
-  const conversacionesPromise = axios
-    .get(
-      `${SUPABASE_URL}/rest/v1/conversaciones?usuario_id=eq.${usuarioId}${filtroConexion}&select=*&order=ultimo_mensaje_en.desc&limit=${pageLimit}&offset=${pageOffset}`,
-      { headers: supabaseHeaders() }
-    )
-    .then((res) => {
-      msConversaciones = performance.now() - tConversacionesStart;
-      return res;
-    });
+  const conversacionesPromise = axios.get(
+    `${SUPABASE_URL}/rest/v1/conversaciones?usuario_id=eq.${usuarioId}${filtroConexion}&select=*&order=ultimo_mensaje_en.desc&limit=${pageLimit}&offset=${pageOffset}`,
+    { headers: supabaseHeaders() }
+  );
 
-  const tClientesStart = performance.now();
-  const clientesPromise = axios
-    .get(
-      `${SUPABASE_URL}/rest/v1/clientes?usuario_id=eq.${usuarioId}&select=*`,
-      { headers: supabaseHeaders() }
-    )
-    .then((res) => {
-      msClientes = performance.now() - tClientesStart;
-      return res;
-    });
+  const clientesPromise = axios.get(
+    `${SUPABASE_URL}/rest/v1/clientes?usuario_id=eq.${usuarioId}&select=*`,
+    { headers: supabaseHeaders() }
+  );
 
   const [
     responseMensajes,
@@ -198,58 +179,6 @@ async function loadInboxData(
     loadConexionesInbox(usuarioId),
     countConversacionesInbox(usuarioId, conexionWhatsappId),
   ]);
-
-  // --- FASE 1: instrumentación diagnóstica (temporal) ---
-  const conversacionesDataLength = (responseConversaciones.data || []).length;
-  const mensajesDataLength = (responseMensajes.data || []).length;
-
-  const contentRangeConversaciones =
-    responseConversaciones.headers?.["content-range"] ??
-    responseConversaciones.headers?.["Content-Range"] ??
-    null;
-  const contentRangeMensajes =
-    responseMensajes.headers?.["content-range"] ??
-    responseMensajes.headers?.["Content-Range"] ??
-    null;
-
-  console.log(
-    "[inbox] responseConversaciones.data.length:",
-    conversacionesDataLength
-  );
-  console.log("[inbox] conversaciones cargadas:", conversacionesDataLength);
-  console.log("[inbox] responseMensajes.data.length:", mensajesDataLength);
-
-  if (contentRangeConversaciones != null) {
-    console.log(
-      "[inbox] conversaciones Content-Range:",
-      contentRangeConversaciones
-    );
-  } else {
-    console.log("[inbox] conversaciones Content-Range: (no presente)");
-  }
-  if (contentRangeMensajes != null) {
-    console.log("[inbox] mensajes Content-Range:", contentRangeMensajes);
-  } else {
-    console.log("[inbox] mensajes Content-Range: (no presente)");
-  }
-
-  console.log("=============================");
-  console.log("INBOX LOAD");
-  console.log("=============================");
-  console.log("Conversaciones:");
-  console.log("- data.length:", conversacionesDataLength);
-  console.log(
-    "- Content-Range:",
-    contentRangeConversaciones != null ? contentRangeConversaciones : "(no presente)"
-  );
-  console.log("Mensajes:");
-  console.log("- data.length:", mensajesDataLength);
-  console.log(
-    "- Content-Range:",
-    contentRangeMensajes != null ? contentRangeMensajes : "(no presente)"
-  );
-  console.log("=============================");
-  // --- fin instrumentación FASE 1 ---
 
   const mapaNombreConexion = {};
   (conexionesInbox || []).forEach((c) => {
@@ -277,7 +206,6 @@ async function loadInboxData(
   const conversacionesDB = responseConversaciones.data || [];
   const mapaUnread = {};
   const mapaConversaciones = {};
-  const tMapaConversacionesStart = performance.now();
   conversacionesDB.forEach((c) => {
     const numero = c.cliente_numero;
     const connId = c.conexion_whatsapp_id;
@@ -286,36 +214,12 @@ async function loadInboxData(
     mapaUnread[key] = c.unread_count || 0;
     mapaConversaciones[key] = c;
   });
-  msMapaConversaciones = performance.now() - tMapaConversacionesStart;
 
-  const tEtiquetasStart = performance.now();
   const responseEtiquetas = await loadEtiquetasParaConversacionesVisibles(
     usuarioId,
     conversacionesDB
   );
-  msEtiquetas = performance.now() - tEtiquetasStart;
   const etiquetasClientes = responseEtiquetas.data || [];
-  console.log(
-    "[inbox] etiquetas cargadas para conversaciones visibles:",
-    etiquetasClientes.length
-  );
-
-  const contentRangeEtiquetas =
-    responseEtiquetas.headers?.["content-range"] ??
-    responseEtiquetas.headers?.["Content-Range"] ??
-    null;
-  console.log("[inbox] responseEtiquetas.data.length:", etiquetasClientes.length);
-  if (contentRangeEtiquetas != null) {
-    console.log("[inbox] clientes_etiquetas Content-Range:", contentRangeEtiquetas);
-  } else {
-    console.log("[inbox] clientes_etiquetas Content-Range: (no presente)");
-  }
-  console.log("Etiquetas:");
-  console.log("- data.length:", etiquetasClientes.length);
-  console.log(
-    "- Content-Range:",
-    contentRangeEtiquetas != null ? contentRangeEtiquetas : "(no presente)"
-  );
 
   const etiquetasParaFiltro = conexionWhatsappId
     ? etiquetasDisponibles.filter((e) =>
@@ -396,7 +300,6 @@ async function loadInboxData(
       lastMsg?.contenido ||
       lastMsg?.tipo ||
       "";
-    const tTagsFilterStart = performance.now();
     const tags = etiquetasClientes
       .filter(
         (e) =>
@@ -407,7 +310,6 @@ async function loadInboxData(
         nombre: e.etiqueta,
         color: mapaColoresEtiquetas[e.etiqueta] || "#25d366",
       }));
-    msConstruccionTags += performance.now() - tTagsFilterStart;
 
     return {
       chatKey: chatCompositeKey(numero, connId),
@@ -435,18 +337,6 @@ async function loadInboxData(
     totalConversations != null
       ? pageOffset + loadedConversacionesCount < totalConversations
       : loadedConversacionesCount === pageLimit;
-
-  const msTotal = performance.now() - tTotalStart;
-  console.log("==========================");
-  console.log("INBOX PERFORMANCE");
-  console.log("==========================");
-  console.log(`Conversaciones: ${msConversaciones.toFixed(2)} ms`);
-  console.log(`Clientes: ${msClientes.toFixed(2)} ms`);
-  console.log(`Etiquetas: ${msEtiquetas.toFixed(2)} ms`);
-  console.log(`Mapa conversaciones: ${msMapaConversaciones.toFixed(2)} ms`);
-  console.log(`Construcción tags: ${msConstruccionTags.toFixed(2)} ms`);
-  console.log(`Total inbox: ${msTotal.toFixed(2)} ms`);
-  console.log("==========================");
 
   return {
     conexionWhatsappId,

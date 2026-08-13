@@ -32,6 +32,10 @@ const STORAGE_INBOX_NUMERO = "macbot_inbox_numero";
 const STORAGE_INBOX_NUMERO_CONEXION = "macbot_inbox_numero_conexion_id";
 const INBOX_PAGE_LIMIT = 20;
 
+function isAbortError(err) {
+  return err?.name === "AbortError";
+}
+
 function mergeChatsByKey(prev, nuevos) {
   if (!nuevos?.length) return prev;
   const keys = new Set(prev.map((c) => c.chatKey).filter(Boolean));
@@ -114,6 +118,7 @@ export function useInbox({ onUnreadChange } = {}) {
   const nextOffsetRef = useRef(0);
   const pageLimitRef = useRef(INBOX_PAGE_LIMIT);
   const inboxLoadSeqRef = useRef(0);
+  const inboxAbortRef = useRef(null);
 
   useEffect(() => {
     conexionSeleccionadaIdRef.current = conexionSeleccionadaId;
@@ -149,9 +154,16 @@ export function useInbox({ onUnreadChange } = {}) {
 
   const loadInbox = useCallback(
     async (filtro = etiquetaFiltro, conexionId = conexionSeleccionadaId) => {
+      inboxLoadSeqRef.current += 1;
+      const requestSeq = inboxLoadSeqRef.current;
+      inboxAbortRef.current?.abort();
+      const ac = new AbortController();
+      inboxAbortRef.current = ac;
+
+      const isStale = () => requestSeq !== inboxLoadSeqRef.current;
+
       setLoading(true);
       setError(null);
-      inboxLoadSeqRef.current += 1;
       hasMoreRef.current = false;
       loadingMoreRef.current = false;
       nextOffsetRef.current = 0;
@@ -163,7 +175,9 @@ export function useInbox({ onUnreadChange } = {}) {
         const data = await fetchInbox(filtro, apiConexion, {
           limit: INBOX_PAGE_LIMIT,
           offset: 0,
+          signal: ac.signal,
         });
+        if (isStale()) return;
         if (filtro && !(data.etiquetasUnicas || []).includes(filtro)) {
           setEtiquetaFiltro("");
           return;
@@ -179,9 +193,10 @@ export function useInbox({ onUnreadChange } = {}) {
         setEtiquetasDisponibles(data.etiquetasDisponibles || []);
         setMapaColores(data.mapaColoresEtiquetas || {});
       } catch (err) {
+        if (isAbortError(err) || isStale()) return;
         setError(err.message || "Error cargando bandeja");
       } finally {
-        setLoading(false);
+        if (!isStale()) setLoading(false);
       }
     },
     [etiquetaFiltro, conexionSeleccionadaId]
@@ -219,26 +234,30 @@ export function useInbox({ onUnreadChange } = {}) {
       setHasMore(more);
       nextOffsetRef.current = offset + limit;
     } catch (err) {
+      if (isAbortError(err) || loadSeq !== inboxLoadSeqRef.current) return;
       setError(err.message || "Error cargando más conversaciones");
     } finally {
-      loadingMoreRef.current = false;
-      setLoadingMore(false);
+      if (loadSeq === inboxLoadSeqRef.current) {
+        loadingMoreRef.current = false;
+        setLoadingMore(false);
+      }
     }
   }, [loading, conexionSeleccionadaId, etiquetaFiltro]);
 
   useEffect(() => {
+    const ac = new AbortController();
     let cancelled = false;
 
     async function init() {
       setLoading(true);
       setError(null);
       try {
-        const session = await fetchSession();
-        if (cancelled) return;
+        const session = await fetchSession(ac.signal);
+        if (cancelled || ac.signal.aborted) return;
         setUsuarioId(session.usuarioId);
 
-        const { conexiones: lista } = await fetchConexiones();
-        if (cancelled) return;
+        const { conexiones: lista } = await fetchConexiones(ac.signal);
+        if (cancelled || ac.signal.aborted) return;
 
         const normalizadas = normalizeConexionesInbox(lista);
         setConexionesInbox(normalizadas);
@@ -252,17 +271,19 @@ export function useInbox({ onUnreadChange } = {}) {
 
         setConexionSeleccionadaId(CONEXION_TODAS);
       } catch (err) {
-        if (!cancelled) {
-          setError(err.message || "Error cargando bandeja");
-        }
+        if (cancelled || isAbortError(err)) return;
+        setError(err.message || "Error cargando bandeja");
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled && !ac.signal.aborted) setLoading(false);
       }
     }
 
     init();
     return () => {
       cancelled = true;
+      inboxLoadSeqRef.current += 1;
+      inboxAbortRef.current?.abort();
+      ac.abort();
     };
   }, []);
 
@@ -641,16 +662,12 @@ export function useInbox({ onUnreadChange } = {}) {
     setTagModalTarget(null);
   }, []);
 
-  const cambiarFiltroEtiqueta = useCallback(
-    (etiqueta) => {
-      setEtiquetaFiltro(etiqueta);
-      setSelectedChat(null);
-      setMensajes([]);
-      setChatMeta(null);
-      loadInbox(etiqueta, conexionSeleccionadaId);
-    },
-    [loadInbox, conexionSeleccionadaId]
-  );
+  const cambiarFiltroEtiqueta = useCallback((etiqueta) => {
+    setEtiquetaFiltro(etiqueta);
+    setSelectedChat(null);
+    setMensajes([]);
+    setChatMeta(null);
+  }, []);
 
   const aplicarEtiqueta = useCallback(
     async (numero, etiqueta) => {

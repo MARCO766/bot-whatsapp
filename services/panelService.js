@@ -5,7 +5,7 @@ const axios = require("axios");
 const { computeHeaderStats, countFlujosActivos } = require("./flujosMetricsService");
 const { isSchemaMissingError, logSchemaFallback } = require("./supabaseSafe");
 const { computeResumen, fetchFlujosList } = require("./metricasService");
-const { loadInboxData, formatPreview } = require("./inboxService");
+const { formatPreview } = require("./inboxService");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
@@ -237,8 +237,53 @@ async function fetchActividadReciente(usuarioId, flujos, conexionWhatsappId = nu
 }
 
 async function buildLeadsSinRespuesta(usuarioId, conexionWhatsappId = null) {
-  const inbox = await loadInboxData(usuarioId, { conexionWhatsappId });
-  const pendientes = (inbox.chats || [])
+  const uid = encodeURIComponent(usuarioId);
+  const connF = buildConexionFilter(conexionWhatsappId);
+
+  const convs = await supabaseSelect(
+    "conversaciones",
+    `usuario_id=eq.${uid}${connF}&order=ultimo_mensaje_en.desc`,
+    "cliente_numero,unread_count,ultimo_mensaje,ultimo_mensaje_en",
+    20
+  );
+
+  if (!Array.isArray(convs) || convs.length === 0) {
+    return { total: 0, items: [] };
+  }
+
+  const numeros = [
+    ...new Set(convs.map((c) => c.cliente_numero).filter(Boolean)),
+  ];
+  let clientes = [];
+  if (numeros.length) {
+    const inList = numeros.map((n) => encodeURIComponent(n)).join(",");
+    const rows = await supabaseSelect(
+      "clientes",
+      `usuario_id=eq.${uid}&numero=in.(${inList})`,
+      "numero,nombre,estado",
+      numeros.length
+    );
+    clientes = Array.isArray(rows) ? rows : [];
+  }
+
+  const mapaClientes = {};
+  clientes.forEach((c) => {
+    if (c?.numero) mapaClientes[c.numero] = c;
+  });
+
+  const pendientes = convs
+    .map((c) => {
+      const numero = c.cliente_numero;
+      const cliente = mapaClientes[numero];
+      return {
+        numero,
+        nombre: cliente?.nombre || numero,
+        ultimoMensaje: formatPreview(c.ultimo_mensaje || ""),
+        ultimoMensajeEn: c.ultimo_mensaje_en || null,
+        noLeidos: c.unread_count || 0,
+        bloqueado: cliente?.estado === "bloqueado",
+      };
+    })
     .filter((c) => !c.bloqueado && (c.noLeidos || 0) > 0)
     .sort((a, b) => {
       const ta = new Date(a.ultimoMensajeEn || 0).getTime();

@@ -36,18 +36,18 @@ async function request(path, options = {}) {
   return parseJson(res, url);
 }
 
-export async function fetchSession() {
-  return request("/api/inbox/session");
+export async function fetchSession(signal) {
+  return request("/api/inbox/session", signal ? { signal } : {});
 }
 
-export async function fetchConexiones() {
-  return request("/api/inbox/conexiones");
+export async function fetchConexiones(signal) {
+  return request("/api/inbox/conexiones", signal ? { signal } : {});
 }
 
 export async function fetchInbox(
   etiquetaFiltro = "",
   conexionWhatsappId = null,
-  { limit, offset } = {}
+  { limit, offset, signal } = {}
 ) {
   const params = new URLSearchParams();
   if (conexionWhatsappId) params.set("conexion_whatsapp_id", conexionWhatsappId);
@@ -55,7 +55,7 @@ export async function fetchInbox(
   if (limit != null) params.set("limit", String(limit));
   if (offset != null) params.set("offset", String(offset));
   const q = params.toString();
-  return request(q ? `/api/inbox?${q}` : "/api/inbox");
+  return request(q ? `/api/inbox?${q}` : "/api/inbox", signal ? { signal } : {});
 }
 
 export async function fetchChat(numero, conexionWhatsappId) {

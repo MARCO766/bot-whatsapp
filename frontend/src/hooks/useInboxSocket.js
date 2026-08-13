@@ -35,14 +35,6 @@ export function useInboxSocket({
       const sel = selectedChatRef.current;
       const selectedChatKey = resolveChatKey(sel);
 
-      console.log("SOCKET NUEVO MENSAJE", {
-        cliente_numero,
-        conexion_whatsapp_id,
-        conversacion_id,
-        chatKey,
-        selectedChatKey,
-      });
-
       if (!chatKey) return;
 
       const isActive = Boolean(
