@@ -80,6 +80,7 @@ router.get("/api/inbox", protegerApi, async (req, res) => {
       conexionWhatsappId,
       limit: req.query.limit,
       offset: req.query.offset,
+      includeMensajes: false,
     });
     res.json({
       ok: true,

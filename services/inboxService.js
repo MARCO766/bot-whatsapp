@@ -136,6 +136,7 @@ async function loadInboxData(
     conexionWhatsappId = null,
     limit = 20,
     offset = 0,
+    includeMensajes = true,
   } = {}
 ) {
   const filtroConexion = filtroConexionQuery(conexionWhatsappId);
@@ -158,6 +159,13 @@ async function loadInboxData(
     { headers: supabaseHeaders() }
   );
 
+  const mensajesPromise = includeMensajes
+    ? axios.get(
+        `${SUPABASE_URL}/rest/v1/mensajes?usuario_id=eq.${usuarioId}${filtroConexion}&select=*&order=creado_en.desc&limit=200`,
+        { headers: supabaseHeaders() }
+      )
+    : Promise.resolve({ data: [] });
+
   const [
     responseMensajes,
     responseColoresEtiquetas,
@@ -166,10 +174,7 @@ async function loadInboxData(
     conexionesInbox,
     totalConversations,
   ] = await Promise.all([
-    axios.get(
-      `${SUPABASE_URL}/rest/v1/mensajes?usuario_id=eq.${usuarioId}${filtroConexion}&select=*&order=creado_en.desc&limit=200`,
-      { headers: supabaseHeaders() }
-    ),
+    mensajesPromise,
     axios.get(
       `${SUPABASE_URL}/rest/v1/etiquetas?usuario_id=eq.${usuarioId}&select=nombre,color,conexion_whatsapp_id`,
       { headers: supabaseHeaders() }
