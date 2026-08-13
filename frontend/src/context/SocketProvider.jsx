@@ -23,13 +23,18 @@ function socketOrigin() {
   return undefined;
 }
 
-export function SocketProvider({ children }) {
-  const [usuarioId, setUsuarioId] = useState(null);
+export function SocketProvider({ children, initialUsuarioId = null }) {
+  const [usuarioId, setUsuarioId] = useState(initialUsuarioId || null);
   const [connected, setConnected] = useState(false);
   const socketRef = useRef(null);
   const handlersRef = useRef(new Map());
 
   useEffect(() => {
+    if (initialUsuarioId) {
+      setUsuarioId(initialUsuarioId);
+      return undefined;
+    }
+
     let cancelled = false;
     (async () => {
       try {
@@ -46,7 +51,7 @@ export function SocketProvider({ children }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [initialUsuarioId]);
 
   useEffect(() => {
     if (!usuarioId) return undefined;

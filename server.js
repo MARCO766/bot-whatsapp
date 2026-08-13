@@ -14,6 +14,8 @@ const path = require('path');
 const fs = require('fs');
 const bodyParser = require('body-parser');
 const session = require('express-session');
+const { RedisStore } = require("connect-redis");
+const { createClient } = require("redis");
 const multer = require('multer');
 const upload = multer({ storage: multer.memoryStorage() });
 const { enviarTextoWhatsApp, enviarMediaWhatsApp } = require("./services/whatsappService");
@@ -77,185 +79,244 @@ if (process.env.CORS_ORIGIN) {
   console.log("🌐 CORS API habilitado para:", origins.join(", "));
 }
 
-app.use(session({
-  secret: process.env.SESSION_SECRET || "macbot-secreto-cambiar",
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    maxAge: 1000 * 60 * 60 * 24 * 7,
-    httpOnly: true,
-    sameSite: "lax",
-    secure: isProduction,
-  },
-}));
+const SESSION_MAX_AGE_MS = 1000 * 60 * 60 * 24 * 7;
+const SESSION_TTL_SEC = 60 * 60 * 24 * 7;
 
-app.use(webhookRoutes);
-app.use(adminRoutes);
-app.use(adminUsuariosApiRoutes);
-console.log("✅ Panel admin: GET /admin + /api/admin/usuarios + /api/admin/logs (ADMIN_EMAILS)");
-app.use("/", inboxRoutes);
-app.use("/", builderRoutes);
-app.use(flowsRoutes);
-app.use(flujosApiRoutes);
-app.use(flujosCarpetasApiRoutes);
-app.use(inboxApiRoutes);
-app.use(metricasApiRoutes);
-app.use(metaAdsApiRoutes);
-app.use(activadoresApiRoutes);
-app.use(panelApiRoutes);
-app.use(planesApiRoutes);
-app.use(onboardingApiRoutes);
-app.use(ajustesApiRoutes);
-app.use(etiquetasApiRoutes);
-app.use("/api/clientes", clientesApiRouter);
-app.use(aiApiRoutes);
-app.use("/api/internal/cron", internalCronApi);
-app.use(seguimientoV2ApiRoutes);
-const legacySeguimientoCronDisabled = require("./routes/legacySeguimientoCronDisabled");
-app.use(legacySeguimientoCronDisabled);
-console.log("✅ API Planes montada en GET /api/planes/mi-plan");
-console.log("✅ API Onboarding montada en GET /api/onboarding/estado y POST /api/onboarding/bienvenida");
-console.log("✅ API Clientes montada en /api/clientes");
-console.log("✅ API IA montada en POST /api/ai/run");
-console.log("✅ Cron interno montado en POST /api/internal/cron/rm24h (seguimientos HTTP deshabilitado)");
-console.log("✅ API Seguimiento V2 montada en POST /api/seguimiento-v2/upload-media");
+async function createRedisSessionStore() {
+  const redisUrl = process.env.REDIS_URL;
 
-/** Rutas de auth backend — deben ir antes del fallback React (Express, no SPA). */
-const AUTH_BACKEND_PATHS = new Set([
-  "/login",
-  "/register",
-  "/register/start",
-  "/register/verify",
-  "/register/resend",
-  "/pricing",
-  "/logout",
-  "/forgot-password",
-  "/reset-password",
-]);
+  if (isProduction && !redisUrl) {
+    console.error(
+      "❌ REDIS_URL no definido en producción. Las sesiones requieren Redis persistente (sin MemoryStore)."
+    );
+    process.exit(1);
+  }
 
-function normalizePathname(req) {
-  const raw = req.originalUrl || req.url || req.path || "/";
-  const pathname = String(raw).split("?")[0].split("#")[0];
-  const trimmed = pathname.replace(/\/+$/, "");
-  return trimmed || "/";
-}
+  if (!redisUrl) {
+    console.warn(
+      "⚠️ REDIS_URL no definido — MemoryStore solo para desarrollo local. Las sesiones no sobreviven reinicios."
+    );
+    return null;
+  }
 
-function isAuthBackendPath(req) {
-  return AUTH_BACKEND_PATHS.has(normalizePathname(req));
-}
-
-function isBackendOnlyPath(req) {
-  const pathname = normalizePathname(req);
-  if (isAuthBackendPath(req)) return true;
-
-  const backendOnlyPrefixes = [
-    "/api",
-    "/admin",
-    "/inbox",
-    "/builder",
-    "/webhook",
-    "/crear-",
-    "/guardar-",
-    "/eliminar-",
-    "/duplicar-",
-    "/exportar-",
-    "/editar-",
-    "/subir-",
-    "/bloquear-",
-    "/desbloquear-",
-    "/chat-",
-    "/debug-",
-    "/reset-",
-    "/forgot-",
-  ];
-
-  return backendOnlyPrefixes.some(
-    (prefix) => pathname === prefix || pathname.startsWith(prefix)
-  );
-}
-
-// ─── CRM React (frontend/dist) — mismo origen que /api en producción ───
-const frontendDist = path.join(__dirname, "frontend", "dist");
-const frontendIndex = path.join(frontendDist, "index.html");
-const hasFrontendBuild = fs.existsSync(frontendIndex);
-
-if (hasFrontendBuild) {
-  console.log("✅ Sirviendo CRM React desde", frontendDist);
-
-  // Login / reset password: Express backend (routes/auth.js), nunca index.html del SPA.
-  app.use(authRoutes);
-
-  app.use((req, res, next) => {
-    if (isBackendOnlyPath(req)) return next();
-    return express.static(frontendDist, { index: false })(req, res, next);
+  const client = createClient({ url: redisUrl });
+  client.on("error", (err) => {
+    console.error("[redis] error:", err.message);
   });
 
-  app.get("/{*splat}", (req, res, next) => {
-    if (req.method !== "GET") return next();
-    if (isBackendOnlyPath(req)) return next();
-    if (req.path.includes(".") && !req.path.endsWith(".html")) return next();
-    return res.sendFile(frontendIndex);
+  try {
+    await client.connect();
+  } catch (err) {
+    console.error("❌ No se pudo conectar a Redis (REDIS_URL):", err.message);
+    process.exit(1);
+  }
+
+  console.log("✅ Redis conectado — store de sesiones activo");
+  return new RedisStore({
+    client,
+    prefix: "macbot:sess:",
+    ttl: SESSION_TTL_SEC,
   });
-} else {
-  console.log("⚠️ frontend/dist no encontrado — ejecuta: npm run build:frontend");
-  app.use(authRoutes);
 }
 
-app.use((err, req, res, next) => {
-  if (err.type === "entity.too.large") {
-    return res.status(413).json({
-      ok: false,
-      error: "PAYLOAD_TOO_LARGE",
-      message: "El flujo es demasiado grande para guardar.",
+async function startServer() {
+  const store = await createRedisSessionStore();
+
+  if (isProduction && !store) {
+    console.error("❌ Producción sin RedisStore — abortando (no se usa MemoryStore).");
+    process.exit(1);
+  }
+
+  const sessionOptions = {
+    secret: process.env.SESSION_SECRET || "macbot-secreto-cambiar",
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      maxAge: SESSION_MAX_AGE_MS,
+      httpOnly: true,
+      sameSite: "lax",
+      secure: isProduction,
+    },
+  };
+  if (store) {
+    sessionOptions.store = store;
+  }
+
+  app.use(session(sessionOptions));
+
+  app.use(webhookRoutes);
+  app.use(adminRoutes);
+  app.use(adminUsuariosApiRoutes);
+  console.log("✅ Panel admin: GET /admin + /api/admin/usuarios + /api/admin/logs (ADMIN_EMAILS)");
+  app.use("/", inboxRoutes);
+  app.use("/", builderRoutes);
+  app.use(flowsRoutes);
+  app.use(flujosApiRoutes);
+  app.use(flujosCarpetasApiRoutes);
+  app.use(inboxApiRoutes);
+  app.use(metricasApiRoutes);
+  app.use(metaAdsApiRoutes);
+  app.use(activadoresApiRoutes);
+  app.use(panelApiRoutes);
+  app.use(planesApiRoutes);
+  app.use(onboardingApiRoutes);
+  app.use(ajustesApiRoutes);
+  app.use(etiquetasApiRoutes);
+  app.use("/api/clientes", clientesApiRouter);
+  app.use(aiApiRoutes);
+  app.use("/api/internal/cron", internalCronApi);
+  app.use(seguimientoV2ApiRoutes);
+  const legacySeguimientoCronDisabled = require("./routes/legacySeguimientoCronDisabled");
+  app.use(legacySeguimientoCronDisabled);
+  console.log("✅ API Planes montada en GET /api/planes/mi-plan");
+  console.log("✅ API Onboarding montada en GET /api/onboarding/estado y POST /api/onboarding/bienvenida");
+  console.log("✅ API Clientes montada en /api/clientes");
+  console.log("✅ API IA montada en POST /api/ai/run");
+  console.log("✅ Cron interno montado en POST /api/internal/cron/rm24h (seguimientos HTTP deshabilitado)");
+  console.log("✅ API Seguimiento V2 montada en POST /api/seguimiento-v2/upload-media");
+
+  /** Rutas de auth backend — deben ir antes del fallback React (Express, no SPA). */
+  const AUTH_BACKEND_PATHS = new Set([
+    "/login",
+    "/register",
+    "/register/start",
+    "/register/verify",
+    "/register/resend",
+    "/pricing",
+    "/logout",
+    "/forgot-password",
+    "/reset-password",
+  ]);
+
+  function normalizePathname(req) {
+    const raw = req.originalUrl || req.url || req.path || "/";
+    const pathname = String(raw).split("?")[0].split("#")[0];
+    const trimmed = pathname.replace(/\/+$/, "");
+    return trimmed || "/";
+  }
+
+  function isAuthBackendPath(req) {
+    return AUTH_BACKEND_PATHS.has(normalizePathname(req));
+  }
+
+  function isBackendOnlyPath(req) {
+    const pathname = normalizePathname(req);
+    if (isAuthBackendPath(req)) return true;
+
+    const backendOnlyPrefixes = [
+      "/api",
+      "/admin",
+      "/inbox",
+      "/builder",
+      "/webhook",
+      "/crear-",
+      "/guardar-",
+      "/eliminar-",
+      "/duplicar-",
+      "/exportar-",
+      "/editar-",
+      "/subir-",
+      "/bloquear-",
+      "/desbloquear-",
+      "/chat-",
+      "/debug-",
+      "/reset-",
+      "/forgot-",
+    ];
+
+    return backendOnlyPrefixes.some(
+      (prefix) => pathname === prefix || pathname.startsWith(prefix)
+    );
+  }
+
+  // ─── CRM React (frontend/dist) — mismo origen que /api en producción ───
+  const frontendDist = path.join(__dirname, "frontend", "dist");
+  const frontendIndex = path.join(frontendDist, "index.html");
+  const hasFrontendBuild = fs.existsSync(frontendIndex);
+
+  if (hasFrontendBuild) {
+    console.log("✅ Sirviendo CRM React desde", frontendDist);
+
+    // Login / reset password: Express backend (routes/auth.js), nunca index.html del SPA.
+    app.use(authRoutes);
+
+    app.use((req, res, next) => {
+      if (isBackendOnlyPath(req)) return next();
+      return express.static(frontendDist, { index: false })(req, res, next);
     });
+
+    app.get("/{*splat}", (req, res, next) => {
+      if (req.method !== "GET") return next();
+      if (isBackendOnlyPath(req)) return next();
+      if (req.path.includes(".") && !req.path.endsWith(".html")) return next();
+      return res.sendFile(frontendIndex);
+    });
+  } else {
+    console.log("⚠️ frontend/dist no encontrado — ejecuta: npm run build:frontend");
+    app.use(authRoutes);
   }
-  next(err);
-});
 
-// 🔑 VARIABLES (Railway)
-const TOKEN = process.env.TOKEN;
-const PHONE_ID = process.env.PHONE_ID;
-
-const PORT = process.env.PORT || 3000;
-const http = require("http");
-const { Server } = require("socket.io");
-
-const server = http.createServer(app);
-
-const io = new Server(server, {
-  cors: {
-    origin: "*"
-  }
-});
-
-app.set("io", io);
-
-const { setApp: setRealtimeApp } = require("./services/realtimeService");
-setRealtimeApp(app);
-
-io.on("connection", (socket) => {
-  console.log("🟢 Cliente conectado al inbox:", socket.id);
-
-  socket.on("join-user", (usuarioId) => {
-    socket.join("user_" + usuarioId);
-    console.log("📡 Usuario unido a sala:", usuarioId);
+  app.use((err, req, res, next) => {
+    if (err.type === "entity.too.large") {
+      return res.status(413).json({
+        ok: false,
+        error: "PAYLOAD_TOO_LARGE",
+        message: "El flujo es demasiado grande para guardar.",
+      });
+    }
+    next(err);
   });
 
-  socket.on("disconnect", () => {
-    console.log("🔴 Cliente desconectado:", socket.id);
-  });
-});
+  // 🔑 VARIABLES (Railway)
+  const TOKEN = process.env.TOKEN;
+  const PHONE_ID = process.env.PHONE_ID;
 
-server.listen(PORT, () => {
-  const { startSeguimientoWorker } = require("./jobs/seguimientoWorker");
-  startSeguimientoWorker(app).catch((err) => {
-    console.error("[SEGUIMIENTO_WORKER] error al arrancar:", err.message);
+  const PORT = process.env.PORT || 3000;
+  const http = require("http");
+  const { Server } = require("socket.io");
+
+  const server = http.createServer(app);
+
+  const io = new Server(server, {
+    cors: {
+      origin: "*"
+    }
   });
-  const { startSeguimientoV2Worker } = require("./jobs/seguimientoV2Worker");
-  startSeguimientoV2Worker(app).catch((err) => {
-    console.error("[SEG_V2_WORKER] error al arrancar:", err.message);
+
+  app.set("io", io);
+
+  const { setApp: setRealtimeApp } = require("./services/realtimeService");
+  setRealtimeApp(app);
+
+  io.on("connection", (socket) => {
+    console.log("🟢 Cliente conectado al inbox:", socket.id);
+
+    socket.on("join-user", (usuarioId) => {
+      socket.join("user_" + usuarioId);
+      console.log("📡 Usuario unido a sala:", usuarioId);
+    });
+
+    socket.on("disconnect", () => {
+      console.log("🔴 Cliente desconectado:", socket.id);
+    });
   });
-  const { startRemarketing24hWorker } = require("./jobs/remarketing24hWorker");
-  startRemarketing24hWorker();
-  console.log("🚀 Servidor corriendo en puerto", PORT);
+
+  server.listen(PORT, () => {
+    const { startSeguimientoWorker } = require("./jobs/seguimientoWorker");
+    startSeguimientoWorker(app).catch((err) => {
+      console.error("[SEGUIMIENTO_WORKER] error al arrancar:", err.message);
+    });
+    const { startSeguimientoV2Worker } = require("./jobs/seguimientoV2Worker");
+    startSeguimientoV2Worker(app).catch((err) => {
+      console.error("[SEG_V2_WORKER] error al arrancar:", err.message);
+    });
+    const { startRemarketing24hWorker } = require("./jobs/remarketing24hWorker");
+    startRemarketing24hWorker();
+    console.log("🚀 Servidor corriendo en puerto", PORT);
+  });
+}
+
+startServer().catch((err) => {
+  console.error("❌ Error fatal al arrancar el servidor:", err);
+  process.exit(1);
 });
