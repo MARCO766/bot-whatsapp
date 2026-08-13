@@ -129,6 +129,307 @@ async function countConversacionesInbox(usuarioId, conexionWhatsappId = null) {
   }
 }
 
+/** Páginas de clientes_etiquetas por usuario + etiqueta (+ línea opcional). */
+async function fetchClientesEtiquetasPorFiltro(
+  usuarioId,
+  etiquetaFiltro,
+  conexionWhatsappId = null
+) {
+  const filtroConexion = filtroConexionQuery(conexionWhatsappId);
+  const pageSize = 1000;
+  let offset = 0;
+  const all = [];
+  while (true) {
+    const url =
+      `${SUPABASE_URL}/rest/v1/clientes_etiquetas?usuario_id=eq.${encodeURIComponent(usuarioId)}` +
+      `&etiqueta=eq.${encodeURIComponent(etiquetaFiltro)}${filtroConexion}` +
+      `&select=*&limit=${pageSize}&offset=${offset}`;
+    const res = await axios.get(url, { headers: supabaseHeaders() });
+    const rows = Array.isArray(res.data) ? res.data : [];
+    all.push(...rows);
+    if (rows.length < pageSize) break;
+    offset += pageSize;
+    if (offset > 100000) break;
+  }
+  return all;
+}
+
+/**
+ * Conversaciones de pares (cliente_numero + conexion_whatsapp_id).
+ * Lotes OR acotados para no generar URLs enormes ni traer toda la bandeja.
+ */
+async function fetchConversacionesPorPares(
+  usuarioId,
+  pares,
+  conexionWhatsappId = null
+) {
+  if (!pares.length) return [];
+  const filtroConexion = filtroConexionQuery(conexionWhatsappId);
+  const BATCH = 40;
+  const byKey = new Map();
+  for (let i = 0; i < pares.length; i += BATCH) {
+    const chunk = pares.slice(i, i + BATCH);
+    const orClause = chunk
+      .map(
+        (p) =>
+          `and(cliente_numero.eq.${encodeURIComponent(p.cliente_numero)},conexion_whatsapp_id.eq.${encodeURIComponent(p.conexion_whatsapp_id)})`
+      )
+      .join(",");
+    const url =
+      `${SUPABASE_URL}/rest/v1/conversaciones?usuario_id=eq.${encodeURIComponent(usuarioId)}` +
+      `${filtroConexion}&or=(${orClause})&select=*`;
+    const res = await axios.get(url, { headers: supabaseHeaders() });
+    for (const c of res.data || []) {
+      if (!c?.cliente_numero || !c?.conexion_whatsapp_id) continue;
+      byKey.set(
+        chatCompositeKey(c.cliente_numero, c.conexion_whatsapp_id),
+        c
+      );
+    }
+  }
+  return [...byKey.values()];
+}
+
+/**
+ * Camino con etiquetaFiltro: filtra antes de paginar.
+ * No se usa cuando no hay filtro (ese camino permanece en loadInboxData).
+ */
+async function loadInboxDataPorEtiqueta(
+  usuarioId,
+  {
+    etiquetaFiltro,
+    conexionWhatsappId = null,
+    pageLimit,
+    pageOffset,
+    includeMensajes = true,
+  }
+) {
+  const filtroConexion = filtroConexionQuery(conexionWhatsappId);
+
+  const [
+    responseMensajes,
+    responseColoresEtiquetas,
+    responseClientes,
+    etiquetasDeFiltro,
+    conexionesInbox,
+  ] = await Promise.all([
+    includeMensajes
+      ? axios.get(
+          `${SUPABASE_URL}/rest/v1/mensajes?usuario_id=eq.${usuarioId}${filtroConexion}&select=*&order=creado_en.desc&limit=200`,
+          { headers: supabaseHeaders() }
+        )
+      : Promise.resolve({ data: [] }),
+    axios.get(
+      `${SUPABASE_URL}/rest/v1/etiquetas?usuario_id=eq.${usuarioId}&select=nombre,color,conexion_whatsapp_id`,
+      { headers: supabaseHeaders() }
+    ),
+    axios.get(
+      `${SUPABASE_URL}/rest/v1/clientes?usuario_id=eq.${usuarioId}&select=*`,
+      { headers: supabaseHeaders() }
+    ),
+    fetchClientesEtiquetasPorFiltro(
+      usuarioId,
+      etiquetaFiltro,
+      conexionWhatsappId
+    ),
+    loadConexionesInbox(usuarioId),
+  ]);
+
+  const paresMap = new Map();
+  for (const e of etiquetasDeFiltro) {
+    if (e.etiqueta !== etiquetaFiltro || !e.cliente_numero) continue;
+    if (!e.conexion_whatsapp_id) continue;
+    if (
+      conexionWhatsappId &&
+      !sameConexionId(e.conexion_whatsapp_id, conexionWhatsappId)
+    ) {
+      continue;
+    }
+    const key = chatCompositeKey(e.cliente_numero, e.conexion_whatsapp_id);
+    const parsed = parseChatCompositeKey(key);
+    if (!parsed.numero || !parsed.conexionWhatsappId) continue;
+    paresMap.set(key, {
+      cliente_numero: parsed.numero,
+      conexion_whatsapp_id: parsed.conexionWhatsappId,
+    });
+  }
+
+  const conversacionesFiltradas = await fetchConversacionesPorPares(
+    usuarioId,
+    [...paresMap.values()],
+    conexionWhatsappId
+  );
+
+  conversacionesFiltradas.sort((a, b) => {
+    const fechaA = new Date(a?.ultimo_mensaje_en || 0).getTime();
+    const fechaB = new Date(b?.ultimo_mensaje_en || 0).getTime();
+    return fechaB - fechaA;
+  });
+
+  const totalConversations = conversacionesFiltradas.length;
+  const conversacionesDB = conversacionesFiltradas.slice(
+    pageOffset,
+    pageOffset + pageLimit
+  );
+
+  const mapaNombreConexion = {};
+  (conexionesInbox || []).forEach((c) => {
+    if (c?.id != null) {
+      mapaNombreConexion[String(c.id)] =
+        (c.nombre && String(c.nombre).trim()) ||
+        (c.numero && String(c.numero).trim()) ||
+        "";
+    }
+  });
+
+  const mapaColoresEtiquetas = {};
+  (responseColoresEtiquetas.data || []).forEach((e) => {
+    mapaColoresEtiquetas[e.nombre] = e.color || "#25d366";
+  });
+
+  const etiquetasDisponibles = responseColoresEtiquetas.data || [];
+  const etiquetasParaFiltro = conexionWhatsappId
+    ? etiquetasDisponibles.filter((e) =>
+        sameConexionId(e.conexion_whatsapp_id, conexionWhatsappId)
+      )
+    : etiquetasDisponibles;
+  const etiquetasUnicas = [
+    ...new Set(etiquetasParaFiltro.map((e) => e.nombre).filter(Boolean)),
+  ];
+
+  const clientes = responseClientes.data || [];
+  const mapaClientes = {};
+  clientes.forEach((c) => {
+    mapaClientes[c.numero] = c;
+  });
+
+  const mapaUnread = {};
+  const mapaConversaciones = {};
+  conversacionesDB.forEach((c) => {
+    const numero = c.cliente_numero;
+    const connId = c.conexion_whatsapp_id;
+    if (!numero || !connId) return;
+    const key = chatCompositeKey(numero, connId);
+    mapaUnread[key] = c.unread_count || 0;
+    mapaConversaciones[key] = c;
+  });
+
+  const responseEtiquetas = await loadEtiquetasParaConversacionesVisibles(
+    usuarioId,
+    conversacionesDB
+  );
+  const etiquetasClientes = responseEtiquetas.data || [];
+
+  const conversaciones = {};
+  const mensajes = responseMensajes.data || [];
+  mensajes.sort((a, b) => new Date(a.creado_en) - new Date(b.creado_en));
+
+  mensajes.forEach((msg) => {
+    const numero =
+      msg.cliente_numero ||
+      msg.numero_de_cliente ||
+      msg["número_de_cliente"];
+    const connId = msg.conexion_whatsapp_id;
+    if (!numero || !connId) return;
+    const key = chatCompositeKey(numero, connId);
+    if (!conversaciones[key]) conversaciones[key] = [];
+    conversaciones[key].push(msg);
+  });
+
+  let chatKeys = Object.keys(mapaConversaciones).filter((key) => {
+    const { numero, conexionWhatsappId: conn } = parseChatCompositeKey(key);
+    return numero && conn;
+  });
+
+  chatKeys.sort((keyA, keyB) => {
+    const convA = mapaConversaciones[keyA];
+    const convB = mapaConversaciones[keyB];
+    const fechaA =
+      convA?.ultimo_mensaje_en ||
+      conversaciones[keyA]?.[conversaciones[keyA].length - 1]?.creado_en ||
+      0;
+    const fechaB =
+      convB?.ultimo_mensaje_en ||
+      conversaciones[keyB]?.[conversaciones[keyB].length - 1]?.creado_en ||
+      0;
+    return new Date(fechaB).getTime() - new Date(fechaA).getTime();
+  });
+
+  const chats = chatKeys.map((key) => {
+    const conv = mapaConversaciones[key];
+    const msgs = conversaciones[key] || [];
+    const lastMsg = msgs[msgs.length - 1];
+    const parsed = parseChatCompositeKey(key);
+    const numero =
+      conv?.cliente_numero || lastMsg?.cliente_numero || parsed.numero;
+    const connId =
+      conv?.conexion_whatsapp_id ||
+      lastMsg?.conexion_whatsapp_id ||
+      parsed.conexionWhatsappId;
+    const cliente = mapaClientes[numero];
+    const previewRaw =
+      conv?.ultimo_mensaje ||
+      lastMsg?.contenido ||
+      lastMsg?.tipo ||
+      "";
+    const tags = etiquetasClientes
+      .filter(
+        (e) =>
+          e.cliente_numero === numero &&
+          sameConexionId(e.conexion_whatsapp_id, connId)
+      )
+      .map((e) => ({
+        nombre: e.etiqueta,
+        color: mapaColoresEtiquetas[e.etiqueta] || "#25d366",
+      }));
+
+    return {
+      chatKey: chatCompositeKey(numero, connId),
+      numero,
+      cliente_numero: numero,
+      conexion_whatsapp_id: connId,
+      conexionWhatsappId: connId,
+      conexion_nombre: mapaNombreConexion[String(connId)] || "",
+      conversacion_id: conv?.id || null,
+      conversacionId: conv?.id || null,
+      nombre: cliente?.nombre || numero,
+      bloqueado: cliente?.estado === "bloqueado",
+      online: true,
+      noLeidos: mapaUnread[key] || 0,
+      ultimoMensaje: formatPreview(previewRaw),
+      ultimoMensajeEn: conv?.ultimo_mensaje_en || lastMsg?.creado_en || null,
+      etiquetas: tags,
+      ...botPauseFieldsFromConv(conv),
+    };
+  });
+
+  const totalNoLeidos = chats.reduce((sum, c) => sum + (c.noLeidos || 0), 0);
+  const loadedConversacionesCount = conversacionesDB.length;
+  const hasMore =
+    pageOffset + loadedConversacionesCount < totalConversations;
+
+  return {
+    conexionWhatsappId,
+    etiquetaFiltro,
+    etiquetasUnicas,
+    etiquetasDisponibles,
+    mapaColoresEtiquetas,
+    etiquetasClientes,
+    conversaciones,
+    mapaConversaciones,
+    mapaClientes,
+    mapaUnread,
+    chatKeys,
+    chats,
+    totalNoLeidos,
+    horaBolivia,
+    limit: pageLimit,
+    offset: pageOffset,
+    totalConversations,
+    hasMore,
+  };
+}
+
 async function loadInboxData(
   usuarioId,
   {
@@ -148,6 +449,16 @@ async function loadInboxData(
     Number.isFinite(Number(offset)) && Number(offset) >= 0
       ? Math.floor(Number(offset))
       : 0;
+
+  if (etiquetaFiltro) {
+    return loadInboxDataPorEtiqueta(usuarioId, {
+      etiquetaFiltro,
+      conexionWhatsappId,
+      pageLimit,
+      pageOffset,
+      includeMensajes,
+    });
+  }
 
   const conversacionesPromise = axios.get(
     `${SUPABASE_URL}/rest/v1/conversaciones?usuario_id=eq.${usuarioId}${filtroConexion}&select=*&order=ultimo_mensaje_en.desc&limit=${pageLimit}&offset=${pageOffset}`,
