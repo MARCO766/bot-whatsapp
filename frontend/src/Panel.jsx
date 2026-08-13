@@ -5,7 +5,6 @@ import { formatNum, formatTendencia } from "./metricas/format";
 import ConexionLineaTabs from "./components/conexion/ConexionLineaTabs";
 import { useMetricasConexion } from "./hooks/useMetricasConexion";
 import { CONEXION_TODAS } from "./utils/conexionesInbox";
-import { useOnboardingEstado } from "./onboarding/useOnboardingEstado";
 import OnboardingChecklist from "./onboarding/OnboardingChecklist";
 
 function Skel({ className = "" }) {
@@ -61,7 +60,7 @@ function PanelSkeleton() {
   );
 }
 
-export default function Panel({ cambiarVista }) {
+export default function Panel({ cambiarVista, onboarding = null }) {
   const {
     conexionesInbox,
     conexionSeleccionadaId,
@@ -73,7 +72,6 @@ export default function Panel({ cambiarVista }) {
     conexionSeleccionadaId,
     conexionesLoading
   );
-  const { onboarding } = useOnboardingEstado({ manageWelcomeModal: false });
   const showChecklist =
     onboarding?.progreso?.porcentaje != null && onboarding.progreso.porcentaje < 100;
 

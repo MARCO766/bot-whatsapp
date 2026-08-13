@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   fetchInbox,
-  fetchSession,
   fetchConexiones,
   fetchChat,
   marcarLeido,
@@ -11,6 +10,7 @@ import {
   desbloquearChat,
   eliminarChat,
 } from "../services/chatService";
+import { useSocket } from "../context/SocketProvider";
 import {
   formatPreview,
   sameChat,
@@ -89,6 +89,7 @@ function findChatInList(chats, selected) {
 }
 
 export function useInbox({ onUnreadChange } = {}) {
+  const { usuarioId: sessionUsuarioId } = useSocket() || {};
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [usuarioId, setUsuarioId] = useState(null);
@@ -245,17 +246,16 @@ export function useInbox({ onUnreadChange } = {}) {
   }, [loading, conexionSeleccionadaId, etiquetaFiltro]);
 
   useEffect(() => {
+    if (!sessionUsuarioId) return undefined;
+
     const ac = new AbortController();
     let cancelled = false;
 
     async function init() {
       setLoading(true);
       setError(null);
+      setUsuarioId(sessionUsuarioId);
       try {
-        const session = await fetchSession(ac.signal);
-        if (cancelled || ac.signal.aborted) return;
-        setUsuarioId(session.usuarioId);
-
         const { conexiones: lista } = await fetchConexiones(ac.signal);
         if (cancelled || ac.signal.aborted) return;
 
@@ -285,7 +285,7 @@ export function useInbox({ onUnreadChange } = {}) {
       inboxAbortRef.current?.abort();
       ac.abort();
     };
-  }, []);
+  }, [sessionUsuarioId]);
 
   const refreshConexiones = useCallback(async () => {
     try {

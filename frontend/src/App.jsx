@@ -19,11 +19,28 @@ import { titleForVista } from "./constants/pageTitle";
 const NAV_BLOCKED_SIN_WHATSAPP = new Set(["inbox", "flujos", "clientes"]);
 const VISTAS_SIN_ONBOARDING = new Set(["ajustes", "mi-plan"]);
 
+function TopbarClock() {
+  const [now, setNow] = useState(() => new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  return (
+    <div className="clock">
+      <strong>
+        {now.toLocaleTimeString("es-BO", { hour: "2-digit", minute: "2-digit" })}
+      </strong>
+      <span>{now.toLocaleDateString("es-BO", { day: "2-digit", month: "short" })}</span>
+    </div>
+  );
+}
+
 export default function App() {
   const [vista, setVista] = useState(() => localStorage.getItem("macbot_vista") || "panel");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [search, setSearch] = useState("");
-  const [now, setNow] = useState(new Date());
   const [showActivity, setShowActivity] = useState(false);
   const [inboxUnread, setInboxUnread] = useState(null);
   const [activities, setActivities] = useState([]);
@@ -83,11 +100,6 @@ export default function App() {
   useEffect(() => {
     document.title = titleForVista(vista);
   }, [vista]);
-
-  useEffect(() => {
-    const timer = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, []);
 
   const menu = [
     { id: "panel", nombre: "Panel", icono: "🏠", badge: null, color: "cyan" },
@@ -164,7 +176,8 @@ export default function App() {
       );
     }
 
-    if (vista === "panel") return <Panel cambiarVista={setVista} />;
+    if (vista === "panel")
+      return <Panel cambiarVista={setVista} onboarding={onboarding} />;
     if (vista === "inbox")
       return <Bandeja onUnreadChange={setInboxUnread} />;
     if (vista === "flujos") return <Flujos cambiarVista={setVista} />;
@@ -175,7 +188,7 @@ export default function App() {
     if (vista === "clientes") return <Clientes cambiarVista={setVista} />;
     if (vista === "ajustes" || vista === "mi-plan")
       return <Ajustes cambiarVista={setVista} seccionInicial={vista === "mi-plan" ? "plan" : undefined} />;
-    return <Panel cambiarVista={setVista} />;
+    return <Panel cambiarVista={setVista} onboarding={onboarding} />;
   }
 
   function handleWelcomeStart() {
@@ -321,12 +334,7 @@ export default function App() {
           </div>
 
           <div className="topActions">
-            <div className="clock">
-              <strong>
-                {now.toLocaleTimeString("es-BO", { hour: "2-digit", minute: "2-digit" })}
-              </strong>
-              <span>{now.toLocaleDateString("es-BO", { day: "2-digit", month: "short" })}</span>
-            </div>
+            <TopbarClock />
 
             <button className="iconBtn" onClick={() => setShowActivity(!showActivity)}>
               🔔

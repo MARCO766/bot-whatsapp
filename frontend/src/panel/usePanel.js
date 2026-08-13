@@ -32,12 +32,13 @@ export function usePanel(conexionWhatsappId = null, conexionesLoading = false) {
   }, [conexionWhatsappId, conexionesLoading]);
 
   const reloadLive = useDebouncedCallback(reload, 500);
+  const reloadLiveMensajes = useDebouncedCallback(reload, 8000);
 
   useEffect(() => {
     reload();
   }, [reload]);
 
-  useSocketEvent(RT.NUEVO_MENSAJE, reloadLive);
+  useSocketEvent(RT.NUEVO_MENSAJE, reloadLiveMensajes);
   useSocketEvent(RT.CLIENTE_ACTUALIZADO, reloadLive);
   useSocketEvent(RT.CONVERSION_REGISTRADA, reloadLive);
   useSocketEvent(RT.METRICA_ACTUALIZADA, reloadLive);

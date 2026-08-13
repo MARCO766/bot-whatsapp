@@ -65,9 +65,11 @@ export function SocketProvider({ children, initialUsuarioId = null }) {
     });
 
     socketRef.current = socket;
-    socket.emit("join-user", usuarioId);
 
-    const onConnect = () => setConnected(true);
+    const onConnect = () => {
+      socket.emit("join-user", usuarioId);
+      setConnected(true);
+    };
     const onDisconnect = () => setConnected(false);
 
     const dispatch = (rawEvent, payload) => {
@@ -85,6 +87,7 @@ export function SocketProvider({ children, initialUsuarioId = null }) {
 
     socket.on("connect", onConnect);
     socket.on("disconnect", onDisconnect);
+    if (socket.connected) onConnect();
 
     CANONICAL_SOCKET_EVENTS.forEach((ev) => {
       socket.on(ev, (payload) => dispatch(ev, payload));
