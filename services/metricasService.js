@@ -1190,22 +1190,28 @@ async function loadResumenBase(usuarioId, query = {}) {
         metaAdsConectado,
       };
     }
-    const bases = await Promise.all(
-      ids.map((id) =>
-        loadResumenBase(usuarioId, {
-          ...query,
-          conexion_whatsapp_id: id,
-          conexionWhatsappId: id,
-        })
-      )
-    );
-    return mergeResumenPorLineas(bases);
+    // Meta Ads es por usuario (no por línea): 1 check ≡ N checks + .some()
+    const [metaAdsConectado, bases] = await Promise.all([
+      checkMetaAdsConectado(usuarioId),
+      Promise.all(
+        ids.map((id) =>
+          loadResumenBase(usuarioId, {
+            ...query,
+            conexion_whatsapp_id: id,
+            conexionWhatsappId: id,
+            _skipMetaAdsCheck: true,
+          })
+        )
+      ),
+    ]);
+    return { ...mergeResumenPorLineas(bases), metaAdsConectado };
   }
 
   const rango = parseRango(query);
   const flujoId = query.flujo_id || query.flujoId || null;
   logMetricasMulti(conexionWhatsappId, "loadResumenBase");
   const anterior = rangoAnterior(rango.desde, rango.hasta, rango.periodo);
+  const skipMetaAdsCheck = query._skipMetaAdsCheck === true;
 
   const [
     leads,
@@ -1270,7 +1276,7 @@ async function loadResumenBase(usuarioId, query = {}) {
       flujoId,
       conexionWhatsappId
     ),
-    checkMetaAdsConectado(usuarioId),
+    skipMetaAdsCheck ? Promise.resolve(false) : checkMetaAdsConectado(usuarioId),
   ]);
 
   const tasaCierre = pct(ventas, conversaciones);
