@@ -1073,9 +1073,8 @@ async function loadMetricasBase(usuarioId, query = {}) {
     checkMetaAdsConectado(usuarioId),
   ]);
 
-  const [clientesAnt, mensajesAnt, conversionesAnt, conversaciones, conversacionesAnt] = await Promise.all([
+  const [clientesAnt, conversionesAnt, conversaciones, conversacionesAnt] = await Promise.all([
     fetchClientesEnRango(usuarioId, anterior.desde, anterior.hasta, flujoId),
-    fetchMensajesEnRango(usuarioId, anterior.desde, anterior.hasta, flujoId, conexionWhatsappId),
     fetchConversionesEnRango(usuarioId, anterior.desde, anterior.hasta, flujoId, conexionWhatsappId),
     fetchConversacionesEnRango(usuarioId, rango.desde, rango.hasta, flujoId, conexionWhatsappId),
     fetchConversacionesEnRango(usuarioId, anterior.desde, anterior.hasta, flujoId, conexionWhatsappId),
