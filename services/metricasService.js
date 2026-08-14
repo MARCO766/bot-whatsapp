@@ -509,7 +509,14 @@ async function fetchMensajesEnRango(usuarioId, desdeIso, hastaIso, flujoId, cone
   return rows.filter((m) => numeros.has(m.cliente_numero));
 }
 
-async function fetchConversacionesEnRango(usuarioId, desdeIso, hastaIso, flujoId, conexionWhatsappId = null) {
+async function fetchConversacionesEnRango(
+  usuarioId,
+  desdeIso,
+  hastaIso,
+  flujoId,
+  conexionWhatsappId = null,
+  mensajesPreload = null
+) {
   const uid = encodeURIComponent(usuarioId);
   const dateF = buildDateFilter(desdeIso, hastaIso);
   const connF = buildConexionFilter(conexionWhatsappId);
@@ -518,11 +525,15 @@ async function fetchConversacionesEnRango(usuarioId, desdeIso, hastaIso, flujoId
     const count = await supabaseCount("conversaciones", `usuario_id=eq.${uid}${connF}&${dateF}`);
     if (count !== null && count > 0) return count;
 
-    const msgs = await fetchMensajesEnRango(usuarioId, desdeIso, hastaIso, null, conexionWhatsappId);
+    const msgs =
+      mensajesPreload ??
+      (await fetchMensajesEnRango(usuarioId, desdeIso, hastaIso, null, conexionWhatsappId));
     return new Set(msgs.map((m) => m.cliente_numero).filter(Boolean)).size;
   }
 
-  const msgs = await fetchMensajesEnRango(usuarioId, desdeIso, hastaIso, flujoId, conexionWhatsappId);
+  const msgs =
+    mensajesPreload ??
+    (await fetchMensajesEnRango(usuarioId, desdeIso, hastaIso, flujoId, conexionWhatsappId));
   return new Set(msgs.map((m) => m.cliente_numero).filter(Boolean)).size;
 }
 
@@ -1076,7 +1087,14 @@ async function loadMetricasBase(usuarioId, query = {}) {
   const [clientesAnt, conversionesAnt, conversaciones, conversacionesAnt] = await Promise.all([
     fetchClientesEnRango(usuarioId, anterior.desde, anterior.hasta, flujoId),
     fetchConversionesEnRango(usuarioId, anterior.desde, anterior.hasta, flujoId, conexionWhatsappId),
-    fetchConversacionesEnRango(usuarioId, rango.desde, rango.hasta, flujoId, conexionWhatsappId),
+    fetchConversacionesEnRango(
+      usuarioId,
+      rango.desde,
+      rango.hasta,
+      flujoId,
+      conexionWhatsappId,
+      mensajes
+    ),
     fetchConversacionesEnRango(usuarioId, anterior.desde, anterior.hasta, flujoId, conexionWhatsappId),
   ]);
 
