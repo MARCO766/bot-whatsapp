@@ -21,10 +21,12 @@ create table if not exists public.macbot_contactos_bloques (
   metadata jsonb,
   created_at timestamptz not null default now(),
   paid_at timestamptz,
-  constraint macbot_contactos_bloques_sku_check
-    check (sku in ('blk_1000', 'blk_2000')),
-  constraint macbot_contactos_bloques_cantidad_check
-    check (cantidad in (1000, 2000)),
+  constraint macbot_contactos_bloques_catalogo_check
+    check (
+      (sku = 'blk_1000' and cantidad = 1000 and precio_usd = 12)
+      or
+      (sku = 'blk_2000' and cantidad = 2000 and precio_usd = 20)
+    ),
   constraint macbot_contactos_bloques_estado_check
     check (estado in ('pendiente', 'pagado', 'anulado', 'reembolsado')),
   constraint macbot_contactos_bloques_origen_check
