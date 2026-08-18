@@ -3,6 +3,7 @@ import { useMiPlan } from "./useMiPlan";
 import { miPlanStyles } from "./styles";
 import { goToPricing } from "./goToPricing";
 import { getPlanBenefits, PLAN_TAGLINES, canonizarPlanUi, getPlanNombreUi } from "./planCatalog";
+import ComprarContactosSection from "./ComprarContactosSection";
 
 const ESTADO_LABELS = {
   activo: "Activo",
@@ -116,7 +117,7 @@ function maxUsoPorcentaje(uso, limites) {
 }
 
 export default function MiPlanSection() {
-  const { plan, loading, error, reload } = useMiPlan(true);
+  const { plan, data, loading, error, reload } = useMiPlan(true);
 
   function handleUpgrade() {
     goToPricing();
@@ -248,6 +249,8 @@ export default function MiPlanSection() {
           limite={limites.flujos}
         />
       </div>
+
+      <ComprarContactosSection contactosBloques={data?.contactos_bloques} />
 
       <div className="miPlanBenefitsCard miPlanGlass">
         <h3>Tu plan incluye</h3>

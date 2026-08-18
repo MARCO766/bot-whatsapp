@@ -10,8 +10,13 @@ const {
 const {
   registrarLogsCambioPlan,
   registrarLogEstadoUsuario,
+  registrarAdminLog,
   listarAdminLogs,
 } = require("../services/adminLogsService");
+const {
+  obtenerPanelAdminContactos,
+  acreditarBloqueManual,
+} = require("../services/macbotContactosService");
 
 router.get("/api/admin/usuarios", protegerAdmin, async (req, res) => {
   try {
@@ -41,6 +46,57 @@ router.get("/api/admin/logs", protegerAdmin, async (req, res) => {
   } catch (error) {
     console.log("[adminUsuariosApi] GET logs:", error.response?.data || error.message);
     res.status(500).json({ ok: false, error: "No se pudo cargar el historial" });
+  }
+});
+
+router.get("/api/admin/usuarios/:id/contactos-bloques", protegerAdmin, async (req, res) => {
+  try {
+    const result = await obtenerPanelAdminContactos(req.params.id);
+    if (!result.ok) {
+      return res.status(result.status).json({ ok: false, error: result.error });
+    }
+    res.json(result);
+  } catch (error) {
+    console.log("[adminUsuariosApi] GET contactos-bloques:", error.response?.data || error.message);
+    res.status(500).json({ ok: false, error: "No se pudo cargar los bloques de contactos" });
+  }
+});
+
+router.post("/api/admin/usuarios/:id/contactos-bloques", protegerAdmin, async (req, res) => {
+  try {
+    const result = await acreditarBloqueManual(req.params.id, {
+      sku: req.body?.sku,
+      cantidad: req.body?.cantidad,
+      adminEmail: req.session.usuario?.email || null,
+    });
+    if (!result.ok) {
+      return res.status(result.status).json({
+        ok: false,
+        error: result.error,
+        plan: result.plan,
+      });
+    }
+    await registrarAdminLog({
+      adminUsuario: req.session.usuario,
+      usuarioAfectado: result.usuario,
+      accion: "acreditar_bloque_contactos",
+      detalle: {
+        sku: result.bloque?.sku,
+        cantidad: result.bloque?.cantidad,
+        precio_usd: result.bloque?.precio_usd,
+        origen: result.bloque?.origen,
+        capacidad_comprada: result.capacidad_comprada,
+        max_contactos_sin_cambio: true,
+      },
+    });
+    res.json({
+      ok: true,
+      bloque: result.bloque,
+      capacidad_comprada: result.capacidad_comprada,
+    });
+  } catch (error) {
+    console.log("[adminUsuariosApi] POST contactos-bloques:", error.response?.data || error.message);
+    res.status(500).json({ ok: false, error: "No se pudo acreditar el bloque" });
   }
 });
 

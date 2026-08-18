@@ -110,6 +110,22 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
 .mb-admin__btn--save{background:#39ff14;color:#0a0f14}
 .mb-admin__btn--save:hover{filter:brightness(1.08)}
 .mb-admin__btn--save:disabled{opacity:.5;cursor:not-allowed}
+.mb-admin__btn--ghost{background:rgba(148,163,184,.12);color:#cbd5e1;border:1px solid rgba(148,163,184,.28)}
+.mb-admin__btn--ghost:hover{border-color:rgba(57,255,20,.35);color:#f1f5f9}
+.mb-admin__btn--block{background:rgba(34,197,94,.16);color:#86efac;border:1px solid rgba(34,197,94,.35);margin:0 6px 8px 0}
+.mb-admin__btn--block:hover{filter:brightness(1.08)}
+.mb-admin__btn--block:disabled{opacity:.5;cursor:not-allowed}
+.mb-admin__contactos-row td{background:rgba(8,15,28,.92)!important;padding:0;border-bottom:1px solid rgba(51,65,85,.7)}
+.mb-admin__contactos-panel{padding:16px 18px 20px}
+.mb-admin__contactos-title{margin:0 0 10px;font-size:.95rem;font-weight:700;color:#f1f5f9}
+.mb-admin__contactos-stats{display:flex;flex-wrap:wrap;gap:16px;margin:0 0 14px;font-size:.85rem;color:#cbd5e1}
+.mb-admin__contactos-stats strong{color:#f8fafc}
+.mb-admin__contactos-note{margin:0 0 14px;font-size:.75rem;color:#64748b;line-height:1.45}
+.mb-admin__contactos-sub{margin:14px 0 8px;font-size:.78rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:#94a3b8}
+.mb-admin__hist{width:100%;border-collapse:collapse;font-size:.78rem}
+.mb-admin__hist th{text-align:left;padding:8px 10px;color:#94a3b8;border-bottom:1px solid #334155;font-weight:600}
+.mb-admin__hist td{padding:8px 10px;border-bottom:1px solid rgba(51,65,85,.35);color:#e2e8f0}
+.mb-admin__hist-empty{color:#64748b;font-size:.8rem;padding:8px 0}
 .mb-admin__btn--toggle{background:rgba(239,68,68,.2);color:#fca5a5;border:1px solid rgba(239,68,68,.4)}
 .mb-admin__btn--toggle.is-active{background:rgba(57,255,20,.15);color:#86efac;border-color:rgba(57,255,20,.35)}
 .mb-admin__btn--toggle:disabled{opacity:.35;cursor:not-allowed}
@@ -161,6 +177,7 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
 .mb-admin__log-badge--cambio_estado_plan{background:rgba(34,211,238,.15);color:#67e8f9}
 .mb-admin__log-badge--activar_usuario{background:rgba(57,255,20,.15);color:#86efac}
 .mb-admin__log-badge--suspender_usuario{background:rgba(239,68,68,.2);color:#fca5a5}
+.mb-admin__log-badge--acreditar_bloque_contactos{background:rgba(34,197,94,.18);color:#86efac}
 .mb-admin__logs-empty,.mb-admin__logs-loading{color:#64748b;font-size:.875rem;padding:12px 0}
 </style>
 </head>
@@ -307,7 +324,8 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
       cambio_plan: "Cambio plan",
       cambio_estado_plan: "Estado plan",
       activar_usuario: "Activación",
-      suspender_usuario: "Suspensión"
+      suspender_usuario: "Suspensión",
+      acreditar_bloque_contactos: "Bloque contactos"
     };
     return labels[accion] || accion;
   }
@@ -325,6 +343,8 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
         return admin + " activó la cuenta de " + target + ".";
       case "suspender_usuario":
         return admin + " suspendió la cuenta de " + target + ".";
+      case "acreditar_bloque_contactos":
+        return admin + " acreditó " + (d.sku === "blk_2000" ? "+2.000" : "+1.000") + " contactos a " + target + ".";
       default:
         return admin + " realizó " + (log.accion || "acción") + " sobre " + target + ".";
     }
@@ -457,7 +477,11 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
       '<td style="white-space:nowrap">' +
         '<button type="button" class="mb-admin__btn mb-admin__btn--save" data-action="save">Guardar</button> ' +
         toggleHtml +
-      '</td></tr>';
+        ' <button type="button" class="mb-admin__btn mb-admin__btn--ghost" data-action="contactos">Contactos</button>' +
+      '</td></tr>' +
+      '<tr class="mb-admin__contactos-row" data-contactos-for="'+escapeHtml(String(u.id))+'" hidden>' +
+        '<td colspan="10"><div class="mb-admin__contactos-panel" data-contactos-panel>Cargando…</div></td>' +
+      '</tr>';
   }
 
   function escapeHtml(s){
@@ -520,10 +544,102 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
     await reloadLogs();
   }
 
+  function fmtBloqueCantidad(n){
+    const x = Number(n);
+    if (!Number.isFinite(x)) return "—";
+    return "+" + x.toLocaleString("es-BO");
+  }
+
+  function fmtPrecioUsd(n){
+    const x = Number(n);
+    if (!Number.isFinite(x)) return "—";
+    return "$" + x;
+  }
+
+  function labelEstadoBloque(estado){
+    const map = { pendiente: "Pendiente", pagado: "Pagado", anulado: "Anulado", reembolsado: "Reembolsado" };
+    return map[estado] || estado || "—";
+  }
+
+  function labelOrigenBloque(origen){
+    const map = { admin: "Admin", checkout: "Checkout", migracion_legacy: "Migración" };
+    return map[origen] || origen || "—";
+  }
+
+  function fmtDateBloque(iso){
+    if (!iso) return "—";
+    try {
+      const d = new Date(iso);
+      return d.toLocaleDateString("es-BO", { day:"2-digit", month:"2-digit", year:"numeric" });
+    } catch { return "—"; }
+  }
+
+  function renderContactosPanel(panel, data){
+    const puede = Boolean(data.puede_acreditar);
+    const stats =
+      '<div class="mb-admin__contactos-stats">' +
+        '<span>Capacidad por bloques: <strong>' + fmtNum(data.capacidad_comprada) + '</strong></span>' +
+        '<span>Contactos usados: <strong>' + fmtNum(data.contactos_usados) + '</strong></span>' +
+        '<span>Límite actual (sin cambio): <strong>' + (data.max_contactos_actual == null || data.max_contactos_actual === -1 ? "∞" : fmtNum(data.max_contactos_actual)) + '</strong></span>' +
+      '</div>' +
+      '<p class="mb-admin__contactos-note">La acreditación registra el bloque. Todavía no modifica max_contactos ni el límite en vigor.</p>';
+
+    let acciones = "";
+    if (puede) {
+      acciones =
+        '<h4 class="mb-admin__contactos-sub">Agregar bloque de contactos</h4>' +
+        '<button type="button" class="mb-admin__btn mb-admin__btn--block" data-acreditar-sku="blk_1000">+1.000 contactos — $12</button>' +
+        '<button type="button" class="mb-admin__btn mb-admin__btn--block" data-acreditar-sku="blk_2000">+2.000 contactos — $20</button>';
+    } else if (data.plan === "agency") {
+      acciones = '<p class="mb-admin__contactos-note">Agency no usa bloques de contactos.</p>';
+    } else {
+      acciones = '<p class="mb-admin__contactos-note">El plan Free no puede recibir bloques de contactos.</p>';
+    }
+
+    if (data.tabla_disponible === false) {
+      acciones += '<p class="mb-admin__contactos-note">La tabla macbot_contactos_bloques aún no está migrada.</p>';
+    }
+
+    const bloques = data.bloques || [];
+    let hist = '<h4 class="mb-admin__contactos-sub">Historial</h4>';
+    if (bloques.length === 0) {
+      hist += '<div class="mb-admin__hist-empty">Sin bloques registrados.</div>';
+    } else {
+      hist += '<table class="mb-admin__hist"><thead><tr><th>Fecha</th><th>Bloque</th><th>Precio</th><th>Estado</th><th>Origen</th></tr></thead><tbody>' +
+        bloques.map(function(b){
+          return '<tr>' +
+            '<td>' + escapeHtml(fmtDateBloque(b.paid_at || b.created_at)) + '</td>' +
+            '<td>' + escapeHtml(fmtBloqueCantidad(b.cantidad)) + '</td>' +
+            '<td>' + escapeHtml(fmtPrecioUsd(b.precio_usd)) + '</td>' +
+            '<td>' + escapeHtml(labelEstadoBloque(b.estado)) + '</td>' +
+            '<td>' + escapeHtml(labelOrigenBloque(b.origen)) + '</td>' +
+          '</tr>';
+        }).join("") +
+      '</tbody></table>';
+    }
+
+    panel.innerHTML =
+      '<h3 class="mb-admin__contactos-title">Contactos</h3>' +
+      stats + acciones + hist;
+  }
+
+  async function loadContactosPanel(id, panel){
+    panel.innerHTML = "Cargando…";
+    const res = await fetch("/api/admin/usuarios/" + encodeURIComponent(id) + "/contactos-bloques", {
+      credentials: "same-origin"
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.error || "Error " + res.status);
+    renderContactosPanel(panel, data);
+  }
+
   function bindRowActions(){
-    $tbody.querySelectorAll("tr").forEach(tr => {
+    $tbody.querySelectorAll("tr[data-id]").forEach(tr => {
       const id = String(tr.getAttribute("data-id") || "").trim();
-      tr.querySelector('[data-action="save"]').addEventListener("click", async function(){
+      const saveBtn = tr.querySelector('[data-action="save"]');
+      const toggleBtn = tr.querySelector('[data-action="toggle"]');
+      if (!saveBtn || !toggleBtn) return;
+      saveBtn.addEventListener("click", async function(){
         const btn = this;
         btn.disabled = true;
         const plan = tr.querySelector('[data-field="plan"]').value;
@@ -546,7 +662,7 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
           btn.disabled = false;
         }
       });
-      tr.querySelector('[data-action="toggle"]').addEventListener("click", async function(){
+      toggleBtn.addEventListener("click", async function(){
         const btn = this;
         if (btn.disabled) return;
         const u = usuarios.find(x => sameId(x.id, id));
@@ -574,6 +690,24 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
           btn.disabled = false;
         }
       });
+      const contactosBtn = tr.querySelector('[data-action="contactos"]');
+      if (contactosBtn) {
+        contactosBtn.addEventListener("click", async function(){
+          const detail = tr.nextElementSibling;
+          if (!detail || !detail.classList.contains("mb-admin__contactos-row")) return;
+          const opening = detail.hidden;
+          detail.hidden = !opening;
+          if (!opening) return;
+          const panel = detail.querySelector("[data-contactos-panel]");
+          if (!panel) return;
+          try {
+            await loadContactosPanel(id, panel);
+          } catch (e) {
+            panel.textContent = e.message || "No se pudo cargar contactos";
+            toast(e.message || "Error al cargar contactos", true);
+          }
+        });
+      }
     });
   }
 
@@ -591,6 +725,36 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
 
   $search.addEventListener("input", applyFilters);
   $filterPlan.addEventListener("change", applyFilters);
+  $tbody.addEventListener("click", async function(e){
+    const btn = e.target.closest("[data-acreditar-sku]");
+    if (!btn || !$tbody.contains(btn)) return;
+    const sku = btn.getAttribute("data-acreditar-sku");
+    const detail = btn.closest("tr.mb-admin__contactos-row");
+    const id = detail ? String(detail.getAttribute("data-contactos-for") || "").trim() : "";
+    const u = usuarios.find(x => sameId(x.id, id));
+    if (!id || !u) return;
+    const label = sku === "blk_2000" ? "+2.000 contactos ($20 USD)" : "+1.000 contactos ($12 USD)";
+    if (!confirm("¿Acreditar " + label + " a " + u.email + "?\n\nSe registrará como pagado. No modifica max_contactos.")) return;
+    btn.disabled = true;
+    try {
+      const res = await fetch("/api/admin/usuarios/" + encodeURIComponent(id) + "/contactos-bloques", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ sku })
+      });
+      const body = await res.json();
+      if (!res.ok || !body.ok) throw new Error(body.error || "Error " + res.status);
+      const panel = detail.querySelector("[data-contactos-panel]");
+      if (panel) await loadContactosPanel(id, panel);
+      toast("Bloque acreditado");
+      await reloadLogs();
+    } catch (err) {
+      toast(err.message || "No se pudo acreditar", true);
+    } finally {
+      btn.disabled = false;
+    }
+  });
   load();
 })();
 </script>

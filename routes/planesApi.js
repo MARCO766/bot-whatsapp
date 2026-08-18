@@ -9,6 +9,7 @@ const {
   obtenerUsoUsuario,
   buildMiPlanResponse,
 } = require("../services/planesService");
+const { obtenerVistaCompraUsuario } = require("../services/macbotContactosService");
 
 function log(msg, extra) {
   if (extra !== undefined) console.log(`[planesApi] ${msg}`, extra);
@@ -19,11 +20,15 @@ function log(msg, extra) {
 router.get("/api/planes/mi-plan", protegerApi, async (req, res) => {
   try {
     const usuarioId = req.session.usuario.id;
-    const [planData, uso] = await Promise.all([
+    const email = req.session.usuario.email;
+    const [planData, uso, contactosBloques] = await Promise.all([
       obtenerPlanUsuario(usuarioId),
       obtenerUsoUsuario(usuarioId),
+      obtenerVistaCompraUsuario(usuarioId, { email }),
     ]);
-    res.status(200).json(buildMiPlanResponse(planData, uso));
+    const body = buildMiPlanResponse(planData, uso);
+    body.contactos_bloques = contactosBloques;
+    res.status(200).json(body);
   } catch (error) {
     log("GET /api/planes/mi-plan:", error.message);
     res.status(500).json({

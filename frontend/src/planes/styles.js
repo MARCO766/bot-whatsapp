@@ -332,6 +332,75 @@ export const miPlanStyles = `
   font-weight: 900;
 }
 
+.miPlanBuyCard {
+  border-radius: 24px;
+  padding: 22px 20px;
+  border: 1px solid rgba(148, 163, 184, .16);
+  background: rgba(15, 23, 42, .58);
+  margin-bottom: 16px;
+}
+.miPlanBuyCard h3 {
+  margin: 0 0 6px;
+  font-size: 18px;
+}
+.miPlanBuyCard > p {
+  margin: 0 0 16px;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.miPlanLedgerHint {
+  margin: 0 0 16px !important;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(6, 182, 212, .08);
+  border: 1px solid rgba(34, 211, 238, .16);
+  color: #cbd5e1 !important;
+  font-size: 13px !important;
+}
+.miPlanLedgerHint span {
+  color: #64748b;
+  font-weight: 500;
+}
+.miPlanBuyGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.miPlanBuyOption {
+  border-radius: 18px;
+  padding: 18px 16px;
+  border: 1px solid rgba(148, 163, 184, .16);
+  background: rgba(8, 14, 32, .55);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.miPlanBuyOption strong {
+  font-size: 16px;
+}
+.miPlanBuyPrice {
+  color: #67e8f9;
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -.3px;
+}
+.miPlanBuyBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 40px;
+  margin-top: 6px;
+  border-radius: 12px;
+  text-decoration: none;
+  font-weight: 900;
+  font-size: 14px;
+  color: #052e16;
+  background: linear-gradient(135deg, #22c55e 0%, #06b6d4 100%);
+  box-shadow: 0 8px 24px rgba(6, 182, 212, .22);
+}
+.miPlanBuyBtn:hover { filter: brightness(1.06); }
+
 .miPlanUpgradeBtn {
   height: 44px;
   padding: 0 22px;
@@ -367,6 +436,7 @@ export const miPlanStyles = `
 @media (max-width: 900px) {
   .miPlanQuickGrid { grid-template-columns: 1fr; }
   .miPlanBenefitsList { grid-template-columns: 1fr; }
+  .miPlanBuyGrid { grid-template-columns: 1fr; }
   .miPlanHero { flex-direction: column; }
   .miPlanHeroActions { align-items: flex-start; }
 }
