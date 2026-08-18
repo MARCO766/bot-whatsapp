@@ -1,8 +1,9 @@
 /**
- * Ledger de bloques de contactos MacBot (Fase 2.1).
+ * Ledger de bloques de contactos MacBot.
  *
- * Aislado: NO modifica max_contactos, clientes, campañas, webhook ni planLimits.
- * La acreditación manual solo inserta una fila pagada con origen=admin.
+ * Fase 2.1: acreditación (inserta fila pagada). NO escribe max_contactos.
+ * Fase 2.2: planesService suma bloques pagados para la capacidad efectiva.
+ * Este servicio no crea/borra contactos ni cambia campañas, webhook o planLimits.
  */
 const axios = require("axios");
 const {
@@ -127,7 +128,7 @@ async function obtenerCapacidadPagada(usuarioId) {
 
 /**
  * Capacidad comprada = suma de bloques pagados.
- * En Fase 2.1 NO reemplaza max_contactos ni el enforcement.
+ * No escribe max_contactos; la suma con el tope del plan vive en planesService.
  */
 async function obtenerCapacidadComprada(usuarioId) {
   return obtenerCapacidadPagada(usuarioId);

@@ -250,7 +250,10 @@ export default function MiPlanSection() {
         />
       </div>
 
-      <ComprarContactosSection contactosBloques={data?.contactos_bloques} />
+      <ComprarContactosSection
+        contactosBloques={data?.contactos_bloques}
+        limiteContactos={limites.contactos}
+      />
 
       <div className="miPlanBenefitsCard miPlanGlass">
         <h3>Tu plan incluye</h3>

@@ -576,13 +576,19 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
 
   function renderContactosPanel(panel, data){
     const puede = Boolean(data.puede_acreditar);
+    const baseIlimitada = data.max_contactos_actual == null || data.max_contactos_actual === -1;
+    const capacidadBaseLabel = baseIlimitada ? "∞" : fmtNum(data.max_contactos_actual);
+    const capacidadBloquesLabel = fmtNum(data.capacidad_comprada);
+    const limiteEfectivoLabel = baseIlimitada
+      ? "∞"
+      : fmtNum((Number(data.max_contactos_actual) || 0) + (Number(data.capacidad_comprada) || 0));
     const stats =
       '<div class="mb-admin__contactos-stats">' +
-        '<span>Capacidad por bloques: <strong>' + fmtNum(data.capacidad_comprada) + '</strong></span>' +
-        '<span>Contactos usados: <strong>' + fmtNum(data.contactos_usados) + '</strong></span>' +
-        '<span>Límite actual (sin cambio): <strong>' + (data.max_contactos_actual == null || data.max_contactos_actual === -1 ? "∞" : fmtNum(data.max_contactos_actual)) + '</strong></span>' +
+        '<span>Capacidad base: <strong>' + capacidadBaseLabel + '</strong></span>' +
+        '<span>Capacidad por bloques: <strong>' + capacidadBloquesLabel + '</strong></span>' +
+        '<span>Límite efectivo actual: <strong>' + limiteEfectivoLabel + '</strong></span>' +
       '</div>' +
-      '<p class="mb-admin__contactos-note">La acreditación registra el bloque. Todavía no modifica max_contactos ni el límite en vigor.</p>';
+      '<p class="mb-admin__contactos-note">La acreditación registra el bloque y aumenta el límite efectivo. No modifica max_contactos.</p>';
 
     let acciones = "";
     if (puede) {

@@ -7,6 +7,9 @@
  *   starter → macbot
  *   pro → macbot
  *
+ * Fase 2.2: capacidad efectiva de contactos = max_contactos + bloques pagados
+ * (solo MACBOT). No escribe crm_usuarios.max_contactos.
+ *
  * El CHECK de Supabase todavía necesita una migración antes de poder guardar macbot.
  * crm_usuarios_plan_check sigue permitiendo solo: free, starter, pro, agency.
  */
@@ -273,23 +276,63 @@ async function obtenerPlanUsuario(usuarioId) {
 }
 
 /**
- * Límites numéricos del plan (solo lectura; no se aplican en Fase 1).
+ * Capacidad efectiva de contactos. No escribe max_contactos.
+ *
+ * - Ilimitado (null / -1, p.ej. Agency): se conserva ilimitado.
+ * - MACBOT (incl. starter/pro): max_contactos + SUM(bloques estado=pagado).
+ * - Free u otro: solo max_contactos (no suma bloques).
+ * - Tabla de bloques ausente o error de ledger: extra = 0 (nunca ilimita).
+ */
+async function obtenerCapacidadEfectivaContactos(usuarioId, planPreloaded = null) {
+  const plan = planPreloaded
+    ? normalizarPlanUsuario(planPreloaded)
+    : await obtenerPlanUsuario(usuarioId);
+  const base = plan.max_contactos;
+
+  if (esContactosIlimitado(base)) {
+    return base;
+  }
+
+  const baseNum = toInt(base, DEFAULTS_PLAN.max_contactos);
+
+  if (!esPlanMacbot(plan.plan)) {
+    return baseNum;
+  }
+
+  let extra = 0;
+  try {
+    const { obtenerCapacidadPagada } = require("./macbotContactosService");
+    extra = await obtenerCapacidadPagada(usuarioId);
+  } catch (error) {
+    log("obtenerCapacidadEfectivaContactos ledger:", error.response?.data || error.message);
+    extra = 0;
+  }
+
+  return baseNum + toInt(extra, 0);
+}
+
+/**
+ * Límites numéricos del plan. contactos = capacidad efectiva (Fase 2.2).
  */
 async function obtenerLimitesUsuario(usuarioId) {
   const plan = await obtenerPlanUsuario(usuarioId);
+  const contactos = await obtenerCapacidadEfectivaContactos(usuarioId, plan);
   return {
     whatsapp: plan.max_whatsapp,
-    contactos: plan.max_contactos,
+    contactos,
     flujos: plan.max_flujos,
   };
 }
 
 /**
  * Respuesta API GET /api/planes/mi-plan
+ * extras.contactos, si se pasa, es la capacidad efectiva (no max_contactos).
  */
-function buildMiPlanResponse(planData, uso = null) {
+function buildMiPlanResponse(planData, uso = null, extras = null) {
   const u = normalizarPlanUsuario(planData);
   const usoNorm = uso && typeof uso === "object" ? uso : {};
+  const contactosLimite =
+    extras && extras.contactos !== undefined ? extras.contactos : u.max_contactos;
   return {
     ok: true,
     plan: {
@@ -298,7 +341,7 @@ function buildMiPlanResponse(planData, uso = null) {
       fecha_vencimiento: u.fecha_vencimiento,
       limites: {
         whatsapp: u.max_whatsapp,
-        contactos: u.max_contactos,
+        contactos: contactosLimite,
         flujos: u.max_flujos,
       },
       uso: {
@@ -333,6 +376,7 @@ module.exports = {
   esFlujosIlimitado,
   esPlanActivo,
   obtenerPlanUsuario,
+  obtenerCapacidadEfectivaContactos,
   obtenerLimitesUsuario,
   obtenerUsoUsuario,
   buildMiPlanResponse,

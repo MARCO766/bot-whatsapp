@@ -4,8 +4,8 @@
  * Fase 3B: creación de flujos nuevos.
  *
  * Los cupos de WhatsApp/flujos salen de planesService (starter/pro → MACBOT:
- * 2 WhatsApp y 20 flujos). El tope de contactos sigue siendo el max_contactos
- * almacenado del usuario; no se implementa compra de paquetes aquí.
+ * 2 WhatsApp y 20 flujos). El tope de contactos es la capacidad efectiva
+ * (max_contactos + bloques pagados en MACBOT). No se escribe max_contactos.
  */
 const axios = require("axios");
 const { getConexionesUsuario } = require("../services/conexionesWhatsappService");
@@ -121,6 +121,7 @@ async function puedeCrearContacto(usuarioId, clienteNumero) {
     };
   }
 
+  // limites.contactos ya es capacidad efectiva (planesService, Fase 2.2).
   const limite = limites.contactos;
 
   if (esContactosIlimitado(limite)) {
@@ -140,7 +141,7 @@ async function puedeCrearContacto(usuarioId, clienteNumero) {
 }
 
 /**
- * Webhook: contactos existentes siempre pasan; nuevos respetan max_contactos.
+ * Webhook: contactos existentes siempre pasan; nuevos respetan la capacidad efectiva.
  * @returns {Promise<{ permitir: boolean, existente?: boolean, code?: string, limite?: number, usados?: number }>}
  */
 async function evaluarLimiteContactoEntrante(usuarioId, clienteNumero, opts = {}) {

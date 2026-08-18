@@ -4,7 +4,7 @@ import React from "react";
  * Compra manual de bloques: abre WhatsApp con mensaje prellenado.
  * No envía el mensaje. No hay checkout ni cobro en MacBot.
  */
-export default function ComprarContactosSection({ contactosBloques }) {
+export default function ComprarContactosSection({ contactosBloques, limiteContactos }) {
   const puedeComprar = Boolean(contactosBloques?.puede_comprar);
   const opciones = Array.isArray(contactosBloques?.opciones)
     ? contactosBloques.opciones.filter((op) => op?.whatsapp_url)
@@ -13,7 +13,9 @@ export default function ComprarContactosSection({ contactosBloques }) {
   if (!puedeComprar || opciones.length === 0) return null;
 
   const capacidad = Number(contactosBloques.capacidad_comprada);
-  const mostrarLedger = Number.isFinite(capacidad);
+  const mostrarLedger = Number.isFinite(capacidad) && capacidad > 0;
+  const limiteNum = Number(limiteContactos);
+  const mostrarCapacidadEfectiva = Number.isFinite(limiteNum) && limiteNum >= 0;
 
   return (
     <div className="miPlanBuyCard miPlanGlass">
@@ -24,8 +26,15 @@ export default function ComprarContactosSection({ contactosBloques }) {
       </p>
       {mostrarLedger && (
         <p className="miPlanLedgerHint">
-          Capacidad registrada por bloques: {capacidad.toLocaleString("es-BO")}
-          <span> — informativo; tu límite actual sigue siendo el de Uso de recursos.</span>
+          Bloques pagados: +{capacidad.toLocaleString("es-BO")}
+          {mostrarCapacidadEfectiva ? (
+            <span>
+              {" "}
+              — ya incluidos en tu capacidad de {limiteNum.toLocaleString("es-BO")} contactos.
+            </span>
+          ) : (
+            <span> — se suman a la capacidad de contactos de tu plan.</span>
+          )}
         </p>
       )}
       <div className="miPlanBuyGrid">

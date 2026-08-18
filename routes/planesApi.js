@@ -7,6 +7,7 @@ const { protegerApi } = require("../middlewares/auth");
 const {
   obtenerPlanUsuario,
   obtenerUsoUsuario,
+  obtenerCapacidadEfectivaContactos,
   buildMiPlanResponse,
 } = require("../services/planesService");
 const { obtenerVistaCompraUsuario } = require("../services/macbotContactosService");
@@ -26,7 +27,8 @@ router.get("/api/planes/mi-plan", protegerApi, async (req, res) => {
       obtenerUsoUsuario(usuarioId),
       obtenerVistaCompraUsuario(usuarioId, { email }),
     ]);
-    const body = buildMiPlanResponse(planData, uso);
+    const contactosEfectivos = await obtenerCapacidadEfectivaContactos(usuarioId, planData);
+    const body = buildMiPlanResponse(planData, uso, { contactos: contactosEfectivos });
     body.contactos_bloques = contactosBloques;
     res.status(200).json(body);
   } catch (error) {
