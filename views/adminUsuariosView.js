@@ -734,7 +734,7 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
     const u = usuarios.find(x => sameId(x.id, id));
     if (!id || !u) return;
     const label = sku === "blk_2000" ? "+2.000 contactos ($20 USD)" : "+1.000 contactos ($12 USD)";
-    if (!confirm("¿Acreditar " + label + " a " + u.email + "?\n\nSe registrará como pagado. No modifica max_contactos.")) return;
+    if (!confirm("¿Acreditar " + label + " a " + u.email + "?\\n\\nSe registrará como pagado. No modifica max_contactos.")) return;
     btn.disabled = true;
     try {
       const res = await fetch("/api/admin/usuarios/" + encodeURIComponent(id) + "/contactos-bloques", {
