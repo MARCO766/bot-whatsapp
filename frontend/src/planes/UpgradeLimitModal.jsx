@@ -5,14 +5,8 @@ import {
   getUpgradeAction,
   getUpgradeRecommendation,
   shouldShowPlanUpgrade,
+  getPlanNombreUi,
 } from "./planCatalog";
-
-const PLAN_LABELS = {
-  free: "Free",
-  starter: "Starter",
-  pro: "Pro",
-  agency: "Agency",
-};
 
 export default function UpgradeLimitModal({ data, onClose, onUpgrade }) {
   const { plan } = useMiPlan(Boolean(data));
@@ -29,7 +23,7 @@ export default function UpgradeLimitModal({ data, onClose, onUpgrade }) {
   if (!data) return null;
 
   const planKey = (plan?.nombre || data.planKey || "free").toLowerCase();
-  const planNombre = PLAN_LABELS[planKey] || planKey;
+  const planNombre = getPlanNombreUi(planKey);
   const recommendation = getUpgradeRecommendation(planKey) || data.recommendation;
   const showUpgrade = shouldShowPlanUpgrade(planKey);
   const action = getUpgradeAction(planKey);

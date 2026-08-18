@@ -5,7 +5,12 @@ const axios = require("axios");
 const {
   PLANES_VALIDOS,
   ESTADOS_VALIDOS,
+  LIMITES_MACBOT,
   normalizarPlanUsuario,
+  canonizarPlan,
+  esPlanMacbot,
+  planPersistibleParaDb,
+  planesEquivalentes,
 } = require("./planesService");
 const { isSchemaMissingError, logSchemaFallback } = require("./supabaseSafe");
 const { esAdminProtegido } = require("../middlewares/adminAuth");
@@ -21,8 +26,9 @@ const SELECT_USUARIO_ADMIN =
 
 const LIMITES_POR_PLAN = {
   free: { max_whatsapp: 1, max_contactos: 100, max_flujos: 1 },
-  starter: { max_whatsapp: 2, max_contactos: 2000, max_flujos: 10 },
-  pro: { max_whatsapp: 2, max_contactos: 2000, max_flujos: 20 },
+  macbot: { max_whatsapp: LIMITES_MACBOT.max_whatsapp, max_flujos: LIMITES_MACBOT.max_flujos },
+  starter: { max_whatsapp: LIMITES_MACBOT.max_whatsapp, max_flujos: LIMITES_MACBOT.max_flujos },
+  pro: { max_whatsapp: LIMITES_MACBOT.max_whatsapp, max_flujos: LIMITES_MACBOT.max_flujos },
   agency: { max_whatsapp: -1, max_contactos: -1, max_flujos: -1 },
 };
 
@@ -41,6 +47,7 @@ function mapUsuarioRow(row) {
     nombre: row.nombre ?? "",
     email: row.email ?? "",
     plan: plan.plan,
+    plan_almacenado: plan.plan_almacenado || row.plan || plan.plan,
     estado_plan: plan.estado_plan,
     fecha_vencimiento: plan.fecha_vencimiento,
     max_whatsapp: plan.max_whatsapp,
@@ -189,16 +196,25 @@ async function actualizarPlanUsuario(id, body) {
     return { ok: false, status: 404, error: "Usuario no encontrado" };
   }
 
-  const limites = LIMITES_POR_PLAN[plan];
+  const planCanonico = canonizarPlan(plan);
+  const limites = LIMITES_POR_PLAN[planCanonico] || LIMITES_POR_PLAN[plan];
+  if (!limites) {
+    return { ok: false, status: 400, error: "plan inválido" };
+  }
+
+  const planDb = planPersistibleParaDb(plan, anterior.plan_almacenado);
   const payload = {
-    plan,
+    plan: planDb,
     estado_plan,
     fecha_vencimiento: fechaParsed.value,
     max_whatsapp: limites.max_whatsapp,
-    max_contactos: limites.max_contactos,
     max_flujos: limites.max_flujos,
     updated_plan_at: new Date().toISOString(),
   };
+
+  if (!esPlanMacbot(plan) && limites.max_contactos !== undefined) {
+    payload.max_contactos = limites.max_contactos;
+  }
 
   try {
     const patchRes = await axios.patch(
@@ -224,11 +240,12 @@ async function actualizarPlanUsuario(id, body) {
     const row = rows[0];
     const usuario = mapUsuarioRow(row);
 
-    if (usuario.plan !== plan) {
+    if (!planesEquivalentes(usuario.plan, plan)) {
       console.log("[ADMIN_PLAN_UPDATE] error", {
         message: "plan en respuesta no coincide con el solicitado",
         id: usuarioId,
         esperado: plan,
+        persistido: planDb,
         recibido: usuario.plan,
       });
       return { ok: false, status: 500, error: "El plan no se guardó correctamente en Supabase" };

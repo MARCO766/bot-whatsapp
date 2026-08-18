@@ -1,12 +1,24 @@
 /**
- * Planes SaaS MacBot — lectura desde crm_usuarios (Fase 1: sin aplicar límites).
+ * Planes SaaS MacBot — lectura desde crm_usuarios.
+ *
+ * Fase 1 (unificación conceptual):
+ *   free | macbot | agency
+ * Compatibilidad temporal (sin migrar datos):
+ *   starter → macbot
+ *   pro → macbot
+ *
+ * El CHECK de Supabase todavía necesita una migración antes de poder guardar macbot.
+ * crm_usuarios_plan_check sigue permitiendo solo: free, starter, pro, agency.
  */
 const axios = require("axios");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
 
-const PLANES_VALIDOS = new Set(["free", "starter", "pro", "agency"]);
+const PLANES_CANONICOS = new Set(["free", "macbot", "agency"]);
+const PLANES_LEGACY_MACBOT = new Set(["starter", "pro"]);
+const PLANES_VALIDOS = new Set(["free", "macbot", "agency", "starter", "pro"]);
+const PLANES_PERSISTIBLES_DB = new Set(["free", "starter", "pro", "agency"]);
 const ESTADOS_VALIDOS = new Set(["activo", "vencido", "suspendido", "trial"]);
 
 const DEFAULTS_PLAN = {
@@ -16,6 +28,12 @@ const DEFAULTS_PLAN = {
   max_whatsapp: 1,
   max_contactos: 100,
   max_flujos: 1,
+};
+
+/** Límites de catálogo MACBOT. max_contactos NO se define: se conserva el del usuario. */
+const LIMITES_MACBOT = {
+  max_whatsapp: 2,
+  max_flujos: 20,
 };
 
 const SELECT_PLAN =
@@ -79,14 +97,68 @@ function esFlujosIlimitado(maxFlujos) {
 }
 
 /**
+ * Modelo canónico: starter/pro se tratan como macbot.
+ * Planes desconocidos sí caen a free; starter/pro NUNCA.
+ */
+function canonizarPlan(plan) {
+  const p = String(plan || "").trim().toLowerCase();
+  if (PLANES_LEGACY_MACBOT.has(p) || p === "macbot") return "macbot";
+  if (p === "agency") return "agency";
+  if (p === "free") return "free";
+  return DEFAULTS_PLAN.plan;
+}
+
+function esPlanMacbot(plan) {
+  return canonizarPlan(plan) === "macbot";
+}
+
+function esPlanAgency(plan) {
+  return canonizarPlan(plan) === "agency";
+}
+
+/**
+ * Valor que se puede escribir en crm_usuarios sin romper el CHECK actual.
+ * Si el admin elige macbot y el usuario ya era starter/pro, se conserva ese valor legacy.
+ * Usuarios nuevos a macbot se persisten como pro (equivalente CHECK-compatible).
+ *
+ * El CHECK de Supabase todavía necesita una migración antes de poder guardar macbot.
+ */
+function planPersistibleParaDb(planSolicitado, planAlmacenadoAnterior) {
+  const solicitado = String(planSolicitado || "").trim().toLowerCase();
+  if (PLANES_PERSISTIBLES_DB.has(solicitado)) return solicitado;
+  if (solicitado === "macbot") {
+    const prev = String(planAlmacenadoAnterior || "").trim().toLowerCase();
+    if (prev === "starter" || prev === "pro") return prev;
+    return "pro";
+  }
+  return DEFAULTS_PLAN.plan;
+}
+
+function planesEquivalentes(a, b) {
+  return canonizarPlan(a) === canonizarPlan(b);
+}
+
+function nombrePlanUi(plan) {
+  const c = canonizarPlan(plan);
+  if (c === "macbot") return "MACBOT";
+  if (c === "agency") return "Agency";
+  return "Free";
+}
+
+/**
  * Asegura valores válidos y defaults si faltan columnas o datos legacy.
+ * starter/pro → macbot (no se degradan a free).
+ * MACBOT aplica 2 WhatsApp y 20 flujos en memoria; max_contactos no se toca.
  */
 function normalizarPlanUsuario(usuario) {
   if (!usuario || typeof usuario !== "object") {
     return { ...DEFAULTS_PLAN };
   }
 
-  const plan = PLANES_VALIDOS.has(usuario.plan) ? usuario.plan : DEFAULTS_PLAN.plan;
+  const planAlmacenado = String(usuario.plan || "").trim().toLowerCase();
+  const plan = PLANES_VALIDOS.has(planAlmacenado)
+    ? canonizarPlan(planAlmacenado)
+    : DEFAULTS_PLAN.plan;
   const estado_plan = ESTADOS_VALIDOS.has(usuario.estado_plan)
     ? usuario.estado_plan
     : DEFAULTS_PLAN.estado_plan;
@@ -99,20 +171,32 @@ function normalizarPlanUsuario(usuario) {
     fecha_vencimiento = null;
   }
 
+  let max_whatsapp = normalizarMaxWhatsapp(usuario.max_whatsapp);
+  const max_contactos = normalizarMaxContactos(usuario.max_contactos);
+  let max_flujos = normalizarMaxFlujos(usuario.max_flujos);
+
+  if (plan === "macbot") {
+    max_whatsapp = LIMITES_MACBOT.max_whatsapp;
+    max_flujos = LIMITES_MACBOT.max_flujos;
+  }
+
   return {
     plan,
+    plan_almacenado: PLANES_VALIDOS.has(planAlmacenado) ? planAlmacenado : plan,
     estado_plan,
     fecha_vencimiento,
-    max_whatsapp: normalizarMaxWhatsapp(usuario.max_whatsapp),
-    max_contactos: normalizarMaxContactos(usuario.max_contactos),
-    max_flujos: normalizarMaxFlujos(usuario.max_flujos),
+    max_whatsapp,
+    max_contactos,
+    max_flujos,
     created_plan_at: usuario.created_plan_at ?? null,
     updated_plan_at: usuario.updated_plan_at ?? null,
   };
 }
 
 /**
- * Plan activo: estado activo o trial, y sin vencimiento pasado.
+ * Plan activo: estado activo o trial.
+ * MACBOT (incl. starter/pro) no depende de fecha de vencimiento mensual.
+ * FREE y AGENCY conservan el chequeo de vencimiento.
  */
 function esPlanActivo(usuario) {
   const u = normalizarPlanUsuario(usuario);
@@ -121,6 +205,9 @@ function esPlanActivo(usuario) {
   }
   if (u.estado_plan !== "activo" && u.estado_plan !== "trial") {
     return false;
+  }
+  if (u.plan === "macbot") {
+    return true;
   }
   if (u.fecha_vencimiento) {
     const vence = new Date(u.fecha_vencimiento);
@@ -225,8 +312,18 @@ function buildMiPlanResponse(planData, uso = null) {
 
 module.exports = {
   PLANES_VALIDOS,
+  PLANES_CANONICOS,
+  PLANES_LEGACY_MACBOT,
+  PLANES_PERSISTIBLES_DB,
   ESTADOS_VALIDOS,
   DEFAULTS_PLAN,
+  LIMITES_MACBOT,
+  canonizarPlan,
+  esPlanMacbot,
+  esPlanAgency,
+  planPersistibleParaDb,
+  planesEquivalentes,
+  nombrePlanUi,
   normalizarPlanUsuario,
   normalizarMaxWhatsapp,
   esWhatsappIlimitado,

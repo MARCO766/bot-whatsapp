@@ -94,6 +94,7 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
 .mb-plan--free{background:rgba(100,116,139,.25);color:#cbd5e1}
 .mb-plan--starter{background:rgba(34,211,238,.15);color:#22d3ee}
 .mb-plan--pro{background:rgba(167,139,250,.2);color:#a78bfa}
+.mb-plan--macbot{background:rgba(34,197,94,.18);color:#86efac}
 .mb-plan--agency{background:rgba(57,255,20,.15);color:#39ff14}
 .mb-admin__select,.mb-admin__date{
   padding:6px 8px;border-radius:8px;border:1px solid #475569;
@@ -203,8 +204,9 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
     <select class="mb-admin__filter" id="filterPlan">
       <option value="">Todos los planes</option>
       <option value="free">Free</option>
-      <option value="starter">Starter</option>
-      <option value="pro">Pro</option>
+      <option value="macbot">MacBot</option>
+      <option value="starter">Starter (legacy)</option>
+      <option value="pro">Pro (legacy)</option>
       <option value="agency">Agency</option>
     </select>
   </div>
@@ -241,7 +243,7 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
 <div class="mb-admin__toast" id="toast" role="status"></div>
 <script>
 (function(){
-  const PLANES = ["free","starter","pro","agency"];
+  const PLANES = ["free","macbot","agency","starter","pro"];
   const ESTADOS = ["activo","trial","vencido","suspendido"];
   let usuarios = [];
   let filtered = [];
@@ -257,7 +259,13 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
   const $logsList = document.getElementById("logsList");
   const $logsEmpty = document.getElementById("logsEmpty");
 
-  const PLAN_LABELS = { free: "Free", starter: "Starter", pro: "Pro", agency: "Agency" };
+  const PLAN_LABELS = {
+    free: "Free",
+    macbot: "MacBot",
+    starter: "Starter (legacy)",
+    pro: "Pro (legacy)",
+    agency: "Agency",
+  };
 
   function toast(msg, isErr){
     $toast.textContent = msg;
@@ -396,11 +404,21 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
     });
   }
 
+  function planCoincideFiltro(u, planF) {
+    if (!planF) return true;
+    const canon = String(u.plan || "").toLowerCase();
+    const almacenado = String(u.plan_almacenado || "").toLowerCase();
+    if (planF === "macbot") {
+      return canon === "macbot" || almacenado === "starter" || almacenado === "pro" || almacenado === "macbot";
+    }
+    return canon === planF || almacenado === planF;
+  }
+
   function applyFilters(){
     const q = ($search.value || "").trim().toLowerCase();
     const planF = $filterPlan.value;
     filtered = usuarios.filter(u => {
-      if (planF && u.plan !== planF) return false;
+      if (planF && !planCoincideFiltro(u, planF)) return false;
       if (q && !(u.email || "").toLowerCase().includes(q)) return false;
       return true;
     });
@@ -409,7 +427,7 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
 
   function rowHtml(u){
     const venceVal = u.fecha_vencimiento ? u.fecha_vencimiento.slice(0, 16) : "";
-    const planOpts = PLANES.map(p => '<option value="'+p+'"'+(p===u.plan?' selected':'')+'>'+p+'</option>').join("");
+    const planOpts = PLANES.map(p => '<option value="'+p+'"'+(p===u.plan?' selected':'')+'>'+(PLAN_LABELS[p]||p)+'</option>').join("");
     const estOpts = ESTADOS.map(e => '<option value="'+e+'"'+(e===u.estado_plan?' selected':'')+'>'+e+'</option>').join("");
     const activoCls = u.activo ? "mb-admin__activo--si" : "mb-admin__activo--no";
     const activoTxt = u.activo ? "Sí" : "No";

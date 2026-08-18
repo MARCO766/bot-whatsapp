@@ -2,14 +2,7 @@ import React from "react";
 import { useMiPlan } from "./useMiPlan";
 import { miPlanStyles } from "./styles";
 import { goToPricing } from "./goToPricing";
-import { getPlanBenefits, PLAN_TAGLINES } from "./planCatalog";
-
-const PLAN_LABELS = {
-  free: "Free",
-  starter: "Starter",
-  pro: "Pro",
-  agency: "Agency",
-};
+import { getPlanBenefits, PLAN_TAGLINES, canonizarPlanUi, getPlanNombreUi } from "./planCatalog";
 
 const ESTADO_LABELS = {
   activo: "Activo",
@@ -57,8 +50,8 @@ function formatUsoCount(value) {
 }
 
 function PlanBadge({ nombre }) {
-  const key = (nombre || "free").toLowerCase();
-  const label = PLAN_LABELS[key] || nombre || "Free";
+  const key = canonizarPlanUi(nombre);
+  const label = getPlanNombreUi(nombre);
   return <span className={`miPlanBadge miPlanBadge--${key}`}>{label}</span>;
 }
 
@@ -160,6 +153,8 @@ export default function MiPlanSection() {
   }
 
   const nombre = plan?.nombre || "free";
+  const nombreUi = getPlanNombreUi(nombre);
+  const nombreCanon = canonizarPlanUi(nombre);
   const estado = plan?.estado || "activo";
   const limites = plan?.limites || {};
   const uso = plan?.uso || {};
@@ -167,7 +162,7 @@ export default function MiPlanSection() {
   const cercaLimite = pctMax >= 80 && pctMax < 100;
   const enLimite = pctMax >= 100;
   const beneficios = getPlanBenefits(nombre);
-  const tagline = PLAN_TAGLINES[nombre] || PLAN_TAGLINES.free;
+  const tagline = PLAN_TAGLINES[nombreCanon] || PLAN_TAGLINES.free;
 
   return (
     <div className="miPlanWrap">
@@ -180,7 +175,7 @@ export default function MiPlanSection() {
           <h2>Plan actual</h2>
           <p>{tagline}</p>
           <p className="miPlanHeroSub">
-            Uso real de WhatsApp, contactos y flujos según tu plan {PLAN_LABELS[nombre] || nombre}.
+            Uso real de WhatsApp, contactos y flujos según tu plan {nombreUi}.
           </p>
           <div className="miPlanHeroMeta">
             <span>
@@ -266,7 +261,7 @@ export default function MiPlanSection() {
       </div>
 
       <p className="miPlanFootNote">
-        Plan {PLAN_LABELS[nombre] || nombre} · estado {ESTADO_LABELS[estado] || estado}. Los conteos
+        Plan {nombreUi} · estado {ESTADO_LABELS[estado] || estado}. Los conteos
         reflejan tus conexiones, clientes CRM y flujos en MacBot.
       </p>
     </div>

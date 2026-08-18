@@ -2,6 +2,10 @@
  * Límites de plan — Fase 3A: conexiones WhatsApp.
  * Fase 3C: contactos nuevos vía webhook.
  * Fase 3B: creación de flujos nuevos.
+ *
+ * Los cupos de WhatsApp/flujos salen de planesService (starter/pro → MACBOT:
+ * 2 WhatsApp y 20 flujos). El tope de contactos sigue siendo el max_contactos
+ * almacenado del usuario; no se implementa compra de paquetes aquí.
  */
 const axios = require("axios");
 const { getConexionesUsuario } = require("../services/conexionesWhatsappService");

@@ -122,6 +122,12 @@ export const miPlanStyles = `
   border-color: rgba(74, 222, 128, .4);
   box-shadow: 0 0 28px rgba(34, 197, 94, .16);
 }
+.miPlanBadge--macbot {
+  color: #bbf7d0;
+  background: rgba(34, 197, 94, .18);
+  border-color: rgba(74, 222, 128, .4);
+  box-shadow: 0 0 28px rgba(34, 197, 94, .16);
+}
 .miPlanBadge--agency {
   color: #ddd6fe;
   background: rgba(139, 92, 246, .22);
