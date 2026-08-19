@@ -5,10 +5,12 @@ const {
   obtenerDashboardAdmin,
   obtenerResumenAdmin,
   actualizarPlanUsuario,
+  actualizarLimitesUsuario,
   actualizarEstadoUsuario,
 } = require("../services/adminUsuariosService");
 const {
   registrarLogsCambioPlan,
+  registrarLogCambioLimites,
   registrarLogEstadoUsuario,
   registrarAdminLog,
   listarAdminLogs,
@@ -112,6 +114,21 @@ router.patch("/api/admin/usuarios/:id/plan", protegerAdmin, async (req, res) => 
     const msg = error.response?.data?.message || error.message;
     console.log("[ADMIN_PLAN_UPDATE] error", { message: msg });
     res.status(500).json({ ok: false, error: "No se pudo actualizar el plan" });
+  }
+});
+
+router.patch("/api/admin/usuarios/:id/limites", protegerAdmin, async (req, res) => {
+  try {
+    const result = await actualizarLimitesUsuario(req.params.id, req.body);
+    if (!result.ok) {
+      return res.status(result.status).json({ ok: false, error: result.error });
+    }
+    await registrarLogCambioLimites(req.session.usuario, result.anterior, result.usuario);
+    res.json({ ok: true, usuario: result.usuario });
+  } catch (error) {
+    const msg = error.response?.data?.message || error.message;
+    console.log("[ADMIN_LIMITES_UPDATE] error", { message: msg });
+    res.status(500).json({ ok: false, error: "No se pudieron actualizar los límites" });
   }
 });
 

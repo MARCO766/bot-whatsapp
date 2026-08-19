@@ -176,6 +176,21 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
 .mb-admin__log-badge--activar_usuario{background:rgba(57,255,20,.15);color:#86efac}
 .mb-admin__log-badge--suspender_usuario{background:rgba(239,68,68,.2);color:#fca5a5}
 .mb-admin__log-badge--acreditar_bloque_contactos{background:rgba(34,197,94,.18);color:#86efac}
+.mb-admin__log-badge--cambio_limites_usuario{background:rgba(251,191,36,.18);color:#fcd34d}
+.mb-admin__limites-row td{background:rgba(8,15,28,.88)!important;padding:0;border-bottom:1px solid rgba(51,65,85,.7)}
+.mb-admin__limites-panel{padding:16px 18px 20px}
+.mb-admin__limites-title{margin:0 0 12px;font-size:.95rem;font-weight:700;color:#f1f5f9}
+.mb-admin__limites-form{display:flex;flex-wrap:wrap;gap:12px 16px;align-items:flex-end;margin-bottom:12px}
+.mb-admin__limites-field{display:flex;flex-direction:column;gap:4px;min-width:120px}
+.mb-admin__limites-field label{font-size:.72rem;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#94a3b8}
+.mb-admin__limites-input{
+  padding:8px 10px;border-radius:8px;border:1px solid #475569;
+  background:#0f172a;color:#f1f5f9;font-size:.85rem;font-family:"JetBrains Mono",monospace;max-width:140px;
+}
+.mb-admin__limites-input:focus{outline:none;border-color:#39ff14;box-shadow:0 0 0 2px rgba(57,255,20,.2)}
+.mb-admin__limites-hint{margin:0 0 10px;font-size:.75rem;color:#64748b;line-height:1.45}
+.mb-admin__limites-ok{margin:8px 0 0;font-size:.78rem;color:#86efac}
+.mb-admin__limites-err{margin:8px 0 0;font-size:.78rem;color:#fca5a5}
 .mb-admin__logs-empty,.mb-admin__logs-loading{color:#64748b;font-size:.875rem;padding:12px 0}
 </style>
 </head>
@@ -328,7 +343,8 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
       cambio_estado_plan: "Estado plan",
       activar_usuario: "Activación",
       suspender_usuario: "Suspensión",
-      acreditar_bloque_contactos: "Bloque contactos"
+      acreditar_bloque_contactos: "Bloque contactos",
+      cambio_limites_usuario: "Límites usuario"
     };
     return labels[accion] || accion;
   }
@@ -348,6 +364,11 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
         return admin + " suspendió la cuenta de " + target + ".";
       case "acreditar_bloque_contactos":
         return admin + " acreditó " + (d.sku === "blk_2000" ? "+2.000" : "+1.000") + " contactos a " + target + ".";
+      case "cambio_limites_usuario":
+        return admin + " cambió límites de " + target + ": " +
+          (d.max_whatsapp_anterior ?? "—") + "/" + (d.max_contactos_anterior ?? "—") + "/" + (d.max_flujos_anterior ?? "—") +
+          " → " +
+          (d.max_whatsapp_nuevo ?? "—") + "/" + (d.max_contactos_nuevo ?? "—") + "/" + (d.max_flujos_nuevo ?? "—") + ".";
       default:
         return admin + " realizó " + (log.accion || "acción") + " sobre " + target + ".";
     }
@@ -447,6 +468,16 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
     renderRows();
   }
 
+  function esMacbotEditable(u){
+    return String(u.plan || "").toLowerCase() === "macbot";
+  }
+
+  function limiteInputValue(n){
+    if (n === null || n === undefined || n === -1) return "";
+    const x = Number(n);
+    return Number.isFinite(x) ? String(x) : "";
+  }
+
   function rowHtml(u){
     const venceVal = u.fecha_vencimiento ? u.fecha_vencimiento.slice(0, 16) : "";
     const planOpts = PLANES.map(p => '<option value="'+p+'"'+(p===u.plan?' selected':'')+'>'+(PLAN_LABELS[p]||p)+'</option>').join("");
@@ -466,6 +497,14 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
     const badgePrincipal = protegido
       ? ' <span class="mb-admin__badge-principal">🛡️ ADMIN PRINCIPAL</span>'
       : "";
+    const limitesBtn = esMacbotEditable(u)
+      ? ' <button type="button" class="mb-admin__btn mb-admin__btn--ghost" data-action="limites">Límites</button>'
+      : "";
+    const limitesRow = esMacbotEditable(u)
+      ? '<tr class="mb-admin__limites-row" data-limites-for="'+escapeHtml(String(u.id))+'" hidden>' +
+          '<td colspan="10"><div class="mb-admin__limites-panel" data-limites-panel>Cargando…</div></td>' +
+        '</tr>'
+      : "";
     return '<tr data-id="'+escapeHtml(String(u.id))+'"'+(protegido?' data-protegido="1"':'')+'>' +
       '<td class="mb-admin__email">'+escapeHtml(u.email)+badgePrincipal+'</td>' +
       '<td>'+escapeHtml(u.nombre)+'</td>' +
@@ -480,10 +519,12 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
         '<button type="button" class="mb-admin__btn mb-admin__btn--save" data-action="save">Guardar</button> ' +
         toggleHtml +
         ' <button type="button" class="mb-admin__btn mb-admin__btn--ghost" data-action="contactos">Contactos</button>' +
+        limitesBtn +
       '</td></tr>' +
       '<tr class="mb-admin__contactos-row" data-contactos-for="'+escapeHtml(String(u.id))+'" hidden>' +
         '<td colspan="10"><div class="mb-admin__contactos-panel" data-contactos-panel>Cargando…</div></td>' +
-      '</tr>';
+      '</tr>' +
+      limitesRow;
   }
 
   function escapeHtml(s){
@@ -526,6 +567,95 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
       credentials: "same-origin",
       body: JSON.stringify({ activo })
     }).then(r => r.json().then(j => ({ status: r.status, body: j })));
+  }
+
+  function patchEstado(id, activo){
+    return fetch("/api/admin/usuarios/" + encodeURIComponent(id) + "/estado", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ activo })
+    }).then(r => r.json().then(j => ({ status: r.status, body: j })));
+  }
+
+  function patchLimites(id, limites){
+    return fetch("/api/admin/usuarios/" + encodeURIComponent(id) + "/limites", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify(limites)
+    }).then(async function(r){
+      const body = await r.json();
+      return { status: r.status, body };
+    });
+  }
+
+  function parseLimiteInput(raw, label){
+    const s = String(raw ?? "").trim();
+    if (!s) return { error: label + " es obligatorio" };
+    if (!/^\\d+$/.test(s)) return { error: label + " debe ser un entero >= 0" };
+    return { value: parseInt(s, 10) };
+  }
+
+  function findContactosRow(id){
+    return $tbody.querySelector('tr.mb-admin__contactos-row[data-contactos-for="'+String(id).trim()+'"]');
+  }
+
+  function findLimitesRow(id){
+    return $tbody.querySelector('tr.mb-admin__limites-row[data-limites-for="'+String(id).trim()+'"]');
+  }
+
+  function renderLimitesPanel(panel, u, bloquesData){
+    const bloques = bloquesData && Number.isFinite(Number(bloquesData.capacidad_comprada))
+      ? Number(bloquesData.capacidad_comprada)
+      : 0;
+    const base = Number(u.max_contactos);
+    const baseOk = Number.isFinite(base) && base >= 0;
+    let hint = '<p class="mb-admin__limites-hint">Edita la capacidad base de contactos. Los bloques pagados son independientes y se suman en runtime.</p>';
+    if (baseOk && bloques > 0) {
+      hint +=
+        '<p class="mb-admin__limites-hint">Contactos base: <strong>' + fmtNum(base) + '</strong> · ' +
+        'Bloques pagados: <strong>+' + fmtNum(bloques) + '</strong> · ' +
+        'Capacidad efectiva: <strong>' + fmtNum(base + bloques) + '</strong></p>';
+    }
+
+    panel.innerHTML =
+      '<h3 class="mb-admin__limites-title">Límites personalizados</h3>' +
+      hint +
+      '<form class="mb-admin__limites-form" data-limites-form novalidate>' +
+        '<div class="mb-admin__limites-field">' +
+          '<label for="lim-wa-'+escapeHtml(String(u.id))+'">APIs WhatsApp</label>' +
+          '<input type="number" min="0" step="1" class="mb-admin__limites-input" id="lim-wa-'+escapeHtml(String(u.id))+'" data-limite="max_whatsapp" value="'+escapeHtml(limiteInputValue(u.max_whatsapp))+'">' +
+        '</div>' +
+        '<div class="mb-admin__limites-field">' +
+          '<label for="lim-ct-'+escapeHtml(String(u.id))+'">Contactos base</label>' +
+          '<input type="number" min="0" step="1" class="mb-admin__limites-input" id="lim-ct-'+escapeHtml(String(u.id))+'" data-limite="max_contactos" value="'+escapeHtml(limiteInputValue(u.max_contactos))+'">' +
+        '</div>' +
+        '<div class="mb-admin__limites-field">' +
+          '<label for="lim-fl-'+escapeHtml(String(u.id))+'">Flujos</label>' +
+          '<input type="number" min="0" step="1" class="mb-admin__limites-input" id="lim-fl-'+escapeHtml(String(u.id))+'" data-limite="max_flujos" value="'+escapeHtml(limiteInputValue(u.max_flujos))+'">' +
+        '</div>' +
+        '<button type="submit" class="mb-admin__btn mb-admin__btn--save">Guardar límites</button>' +
+      '</form>' +
+      '<p class="mb-admin__limites-err" data-limites-err hidden></p>' +
+      '<p class="mb-admin__limites-ok" data-limites-ok hidden></p>';
+  }
+
+  async function loadLimitesPanel(id, panel){
+    const u = usuarios.find(function(x){ return sameId(x.id, id); });
+    if (!u) throw new Error("Usuario no encontrado");
+    panel.innerHTML = "Cargando…";
+    let bloquesData = null;
+    try {
+      const res = await fetch("/api/admin/usuarios/" + encodeURIComponent(id) + "/contactos-bloques", {
+        credentials: "same-origin"
+      });
+      const data = await res.json();
+      if (res.ok && data.ok) bloquesData = data;
+    } catch (e) {
+      console.warn("limites panel bloques", e);
+    }
+    renderLimitesPanel(panel, u, bloquesData);
   }
 
   function mergeUsuario(updated){
@@ -701,8 +831,8 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
       const contactosBtn = tr.querySelector('[data-action="contactos"]');
       if (contactosBtn) {
         contactosBtn.addEventListener("click", async function(){
-          const detail = tr.nextElementSibling;
-          if (!detail || !detail.classList.contains("mb-admin__contactos-row")) return;
+          const detail = findContactosRow(id);
+          if (!detail) return;
           const opening = detail.hidden;
           detail.hidden = !opening;
           if (!opening) return;
@@ -716,8 +846,80 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
           }
         });
       }
+      const limitesBtn = tr.querySelector('[data-action="limites"]');
+      if (limitesBtn) {
+        limitesBtn.addEventListener("click", async function(){
+          const detail = findLimitesRow(id);
+          if (!detail) return;
+          const opening = detail.hidden;
+          detail.hidden = !opening;
+          if (!opening) return;
+          const panel = detail.querySelector("[data-limites-panel]");
+          if (!panel) return;
+          try {
+            await loadLimitesPanel(id, panel);
+          } catch (e) {
+            panel.textContent = e.message || "No se pudo cargar límites";
+            toast(e.message || "Error al cargar límites", true);
+          }
+        });
+      }
     });
   }
+
+  $tbody.addEventListener("submit", async function(e){
+    const form = e.target.closest("[data-limites-form]");
+    if (!form || !$tbody.contains(form)) return;
+    e.preventDefault();
+    const detail = form.closest("tr.mb-admin__limites-row");
+    const id = detail ? String(detail.getAttribute("data-limites-for") || "").trim() : "";
+    if (!id) return;
+
+    const errEl = detail.querySelector("[data-limites-err]");
+    const okEl = detail.querySelector("[data-limites-ok]");
+    if (errEl) { errEl.hidden = true; errEl.textContent = ""; }
+    if (okEl) { okEl.hidden = true; okEl.textContent = ""; }
+
+    const wa = parseLimiteInput(form.querySelector('[data-limite="max_whatsapp"]')?.value, "APIs WhatsApp");
+    if (wa.error) {
+      if (errEl) { errEl.textContent = wa.error; errEl.hidden = false; }
+      return;
+    }
+    const ct = parseLimiteInput(form.querySelector('[data-limite="max_contactos"]')?.value, "Contactos");
+    if (ct.error) {
+      if (errEl) { errEl.textContent = ct.error; errEl.hidden = false; }
+      return;
+    }
+    const fl = parseLimiteInput(form.querySelector('[data-limite="max_flujos"]')?.value, "Flujos");
+    if (fl.error) {
+      if (errEl) { errEl.textContent = fl.error; errEl.hidden = false; }
+      return;
+    }
+
+    const submitBtn = form.querySelector('button[type="submit"]');
+    if (submitBtn) submitBtn.disabled = true;
+    try {
+      const { status, body } = await patchLimites(id, {
+        max_whatsapp: wa.value,
+        max_contactos: ct.value,
+        max_flujos: fl.value
+      });
+      if (!body.ok) throw new Error(body.error || "Error " + status);
+      mergeUsuario(body.usuario);
+      if (okEl) {
+        okEl.textContent = "✓ Límites actualizados correctamente";
+        okEl.hidden = false;
+      }
+      toast("✓ Límites actualizados correctamente");
+      await reloadLogs();
+    } catch (err) {
+      const msg = err.message || "No se pudieron guardar los límites";
+      if (errEl) { errEl.textContent = msg; errEl.hidden = false; }
+      toast(msg, true);
+    } finally {
+      if (submitBtn) submitBtn.disabled = false;
+    }
+  });
 
   async function load(){
     try {

@@ -103,6 +103,28 @@ async function registrarAdminLog({ adminUsuario, usuarioAfectado, accion, detall
   }
 }
 
+function detalleCambioLimites(anterior, nuevo) {
+  return sanitizarDetalle({
+    max_whatsapp_anterior: anterior?.max_whatsapp ?? null,
+    max_whatsapp_nuevo: nuevo?.max_whatsapp ?? null,
+    max_contactos_anterior: anterior?.max_contactos ?? null,
+    max_contactos_nuevo: nuevo?.max_contactos ?? null,
+    max_flujos_anterior: anterior?.max_flujos ?? null,
+    max_flujos_nuevo: nuevo?.max_flujos ?? null,
+  });
+}
+
+async function registrarLogCambioLimites(adminUsuario, anterior, nuevo) {
+  if (!anterior || !nuevo) return;
+
+  await registrarAdminLog({
+    adminUsuario,
+    usuarioAfectado: nuevo,
+    accion: "cambio_limites_usuario",
+    detalle: detalleCambioLimites(anterior, nuevo),
+  });
+}
+
 async function registrarLogsCambioPlan(adminUsuario, anterior, nuevo) {
   if (!anterior || !nuevo) return;
 
@@ -175,7 +197,9 @@ async function listarAdminLogs({ limit = 50 } = {}) {
 module.exports = {
   registrarAdminLog,
   registrarLogsCambioPlan,
+  registrarLogCambioLimites,
   registrarLogEstadoUsuario,
   listarAdminLogs,
   detalleCambioPlan,
+  detalleCambioLimites,
 };

@@ -6,9 +6,12 @@ const {
   PLANES_VALIDOS,
   ESTADOS_VALIDOS,
   LIMITES_MACBOT,
+  DEFAULTS_MACBOT,
+  resolverLimiteMacbot,
   normalizarPlanUsuario,
   canonizarPlan,
   esPlanMacbot,
+  esPlanAgency,
   planPersistibleParaDb,
   planesEquivalentes,
 } = require("./planesService");
@@ -26,11 +29,93 @@ const SELECT_USUARIO_ADMIN =
 
 const LIMITES_POR_PLAN = {
   free: { max_whatsapp: 1, max_contactos: 100, max_flujos: 1 },
-  macbot: { max_whatsapp: LIMITES_MACBOT.max_whatsapp, max_flujos: LIMITES_MACBOT.max_flujos },
-  starter: { max_whatsapp: LIMITES_MACBOT.max_whatsapp, max_flujos: LIMITES_MACBOT.max_flujos },
-  pro: { max_whatsapp: LIMITES_MACBOT.max_whatsapp, max_flujos: LIMITES_MACBOT.max_flujos },
+  macbot: { ...DEFAULTS_MACBOT },
+  starter: { ...DEFAULTS_MACBOT },
+  pro: { ...DEFAULTS_MACBOT },
   agency: { max_whatsapp: -1, max_contactos: -1, max_flujos: -1 },
 };
+
+const DEFAULTS_FREE = LIMITES_POR_PLAN.free;
+const DEFAULTS_AGENCY = LIMITES_POR_PLAN.agency;
+
+/** Estrategia de límites al cambiar plan (canonizado anterior → nuevo). */
+const ESTRATEGIA_LIMITES = {
+  PRESERVAR: "preservar",
+  FREE: "free",
+  MACBOT: "macbot",
+  AGENCY: "agency",
+};
+
+function resolverContactoMacbotPreservar(value) {
+  if (value === null || value === undefined || value === "") {
+    return DEFAULTS_MACBOT.max_contactos;
+  }
+  const n = Number(value);
+  if (n === -1 || !Number.isFinite(n) || n < 0) {
+    return DEFAULTS_MACBOT.max_contactos;
+  }
+  return Math.floor(n);
+}
+
+/**
+ * Decide qué hacer con max_whatsapp / max_contactos / max_flujos según transición canónica.
+ * starter/pro → macbot cuenta como macbot → macbot (preservar).
+ */
+function resolverEstrategiaLimitesTransicion(planAnteriorCanon, planNuevoCanon) {
+  const prev = canonizarPlan(planAnteriorCanon);
+  const next = canonizarPlan(planNuevoCanon);
+
+  if (prev === next) {
+    if (next === "macbot") return ESTRATEGIA_LIMITES.PRESERVAR;
+    if (next === "free") return ESTRATEGIA_LIMITES.FREE;
+    if (next === "agency") return ESTRATEGIA_LIMITES.AGENCY;
+  }
+
+  if (next === "free") return ESTRATEGIA_LIMITES.FREE;
+  if (next === "agency") return ESTRATEGIA_LIMITES.AGENCY;
+  if (next === "macbot") {
+    if (prev === "macbot") return ESTRATEGIA_LIMITES.PRESERVAR;
+    return ESTRATEGIA_LIMITES.MACBOT;
+  }
+
+  return ESTRATEGIA_LIMITES.PRESERVAR;
+}
+
+function limitesDesdeEstrategia(estrategia, limitesRaw = null) {
+  switch (estrategia) {
+    case ESTRATEGIA_LIMITES.PRESERVAR:
+      return null;
+    case ESTRATEGIA_LIMITES.FREE:
+      return { ...DEFAULTS_FREE };
+    case ESTRATEGIA_LIMITES.MACBOT:
+      return { ...DEFAULTS_MACBOT };
+    case ESTRATEGIA_LIMITES.AGENCY:
+      return { ...DEFAULTS_AGENCY };
+    default:
+      return null;
+  }
+}
+
+/**
+ * Límites a persistir cuando la estrategia es preservar (macbot → macbot).
+ * Valores inválidos en BD se completan con defaults MacBot sin resetear personalizaciones válidas.
+ */
+function limitesMacbotPreservados(limitesRaw) {
+  const raw = limitesRaw && typeof limitesRaw === "object" ? limitesRaw : {};
+  return {
+    max_whatsapp: resolverLimiteMacbot(raw.max_whatsapp, DEFAULTS_MACBOT.max_whatsapp),
+    max_contactos: resolverContactoMacbotPreservar(raw.max_contactos),
+    max_flujos: resolverLimiteMacbot(raw.max_flujos, DEFAULTS_MACBOT.max_flujos),
+  };
+}
+
+function resolverLimitesCambioPlan(planAnteriorCanon, planNuevoCanon, limitesRaw = null) {
+  const estrategia = resolverEstrategiaLimitesTransicion(planAnteriorCanon, planNuevoCanon);
+  if (estrategia === ESTRATEGIA_LIMITES.PRESERVAR) {
+    return { estrategia, limites: null, omitir: true };
+  }
+  return { estrategia, limites: limitesDesdeEstrategia(estrategia), omitir: false };
+}
 
 function headers(extra = {}) {
   return {
@@ -152,7 +237,7 @@ async function obtenerDashboardAdmin() {
   return { resumen, usuarios };
 }
 
-async function fetchUsuarioPorId(id) {
+async function fetchUsuarioRowPorId(id) {
   const idFilter = filtroIdEq(id);
   if (!idFilter) return null;
 
@@ -160,8 +245,130 @@ async function fetchUsuarioPorId(id) {
     `${SUPABASE_URL}/rest/v1/crm_usuarios?${idFilter}&select=${SELECT_USUARIO_ADMIN}`,
     { headers: headers() }
   );
-  const row = res.data?.[0];
+  return res.data?.[0] || null;
+}
+
+async function fetchUsuarioPorId(id) {
+  const row = await fetchUsuarioRowPorId(id);
   return row ? mapUsuarioRow(row) : null;
+}
+
+const LIMITES_MACBOT_CAMPOS = ["max_whatsapp", "max_contactos", "max_flujos"];
+
+function parseEnteroLimiteMacbot(value, fieldName) {
+  if (typeof value !== "number") {
+    return { error: `${fieldName} debe ser un entero >= 0` };
+  }
+  if (!Number.isFinite(value) || value < 0 || !Number.isInteger(value)) {
+    return { error: `${fieldName} debe ser un entero >= 0` };
+  }
+  return { value };
+}
+
+function parseLimitesMacbotBody(body) {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return { error: "body inválido" };
+  }
+
+  const parsed = {};
+  for (const key of LIMITES_MACBOT_CAMPOS) {
+    if (!(key in body)) {
+      return { error: `${key} es obligatorio` };
+    }
+    const result = parseEnteroLimiteMacbot(body[key], key);
+    if (result.error) return result;
+    parsed[key] = result.value;
+  }
+
+  return { value: parsed };
+}
+
+async function actualizarLimitesUsuario(id, body) {
+  const usuarioId = normalizarUsuarioId(id);
+  if (!usuarioId) {
+    return { ok: false, status: 400, error: "id de usuario inválido" };
+  }
+
+  const limitesParsed = parseLimitesMacbotBody(body);
+  if (limitesParsed.error) {
+    return { ok: false, status: 400, error: limitesParsed.error };
+  }
+
+  const idFilter = filtroIdEq(usuarioId);
+  if (!idFilter) {
+    return { ok: false, status: 400, error: "id de usuario inválido" };
+  }
+
+  const anterior = await fetchUsuarioPorId(usuarioId);
+  if (!anterior) {
+    return { ok: false, status: 404, error: "Usuario no encontrado" };
+  }
+
+  if (esPlanAgency(anterior.plan)) {
+    return {
+      ok: false,
+      status: 403,
+      error: "Los límites de Agency no se pueden modificar desde esta función.",
+    };
+  }
+
+  if (!esPlanMacbot(anterior.plan)) {
+    return {
+      ok: false,
+      status: 403,
+      error: "Los límites personalizados solo están disponibles para usuarios MacBot.",
+    };
+  }
+
+  const limites = limitesParsed.value;
+  const payload = {
+    max_whatsapp: limites.max_whatsapp,
+    max_contactos: limites.max_contactos,
+    max_flujos: limites.max_flujos,
+    updated_plan_at: new Date().toISOString(),
+  };
+
+  console.log("[ADMIN_LIMITES_UPDATE] start", {
+    id: usuarioId,
+    max_whatsapp: limites.max_whatsapp,
+    max_contactos: limites.max_contactos,
+    max_flujos: limites.max_flujos,
+  });
+
+  try {
+    const patchRes = await axios.patch(
+      `${SUPABASE_URL}/rest/v1/crm_usuarios?${idFilter}`,
+      payload,
+      {
+        headers: headers({
+          "Content-Type": "application/json",
+          Prefer: "return=representation",
+        }),
+      }
+    );
+
+    const rows = Array.isArray(patchRes.data) ? patchRes.data : patchRes.data ? [patchRes.data] : [];
+    if (rows.length === 0) {
+      return { ok: false, status: 404, error: "Usuario no encontrado o sin cambios en base de datos" };
+    }
+
+    const usuario = mapUsuarioRow(rows[0]);
+
+    console.log("[ADMIN_LIMITES_UPDATE] updated", {
+      id: usuario.id,
+      max_whatsapp: usuario.max_whatsapp,
+      max_contactos: usuario.max_contactos,
+      max_flujos: usuario.max_flujos,
+    });
+
+    return { ok: true, usuario, anterior };
+  } catch (error) {
+    console.log("[ADMIN_LIMITES_UPDATE] error", {
+      message: error.response?.data?.message || error.response?.data?.hint || error.message,
+      id: usuarioId,
+    });
+    throw error;
+  }
 }
 
 async function actualizarPlanUsuario(id, body) {
@@ -191,30 +398,37 @@ async function actualizarPlanUsuario(id, body) {
     return { ok: false, status: 400, error: "id de usuario inválido" };
   }
 
-  const anterior = await fetchUsuarioPorId(usuarioId);
-  if (!anterior) {
+  const rowAnterior = await fetchUsuarioRowPorId(usuarioId);
+  if (!rowAnterior) {
     return { ok: false, status: 404, error: "Usuario no encontrado" };
   }
 
-  const planCanonico = canonizarPlan(plan);
-  const limites = LIMITES_POR_PLAN[planCanonico] || LIMITES_POR_PLAN[plan];
-  if (!limites) {
-    return { ok: false, status: 400, error: "plan inválido" };
-  }
+  const anterior = mapUsuarioRow(rowAnterior);
+  const planAnteriorCanon = anterior.plan;
+  const planNuevoCanon = canonizarPlan(plan);
+  const resolucionLimites = resolverLimitesCambioPlan(planAnteriorCanon, planNuevoCanon);
 
   const planDb = planPersistibleParaDb(plan, anterior.plan_almacenado);
   const payload = {
     plan: planDb,
     estado_plan,
     fecha_vencimiento: fechaParsed.value,
-    max_whatsapp: limites.max_whatsapp,
-    max_flujos: limites.max_flujos,
     updated_plan_at: new Date().toISOString(),
   };
 
-  if (!esPlanMacbot(plan) && limites.max_contactos !== undefined) {
-    payload.max_contactos = limites.max_contactos;
+  if (!resolucionLimites.omitir && resolucionLimites.limites) {
+    payload.max_whatsapp = resolucionLimites.limites.max_whatsapp;
+    payload.max_contactos = resolucionLimites.limites.max_contactos;
+    payload.max_flujos = resolucionLimites.limites.max_flujos;
   }
+
+  console.log("[ADMIN_PLAN_UPDATE] limites", {
+    id: usuarioId,
+    transicion: planAnteriorCanon + " -> " + planNuevoCanon,
+    estrategia: resolucionLimites.estrategia,
+    omitir: resolucionLimites.omitir,
+    limites: resolucionLimites.limites,
+  });
 
   try {
     const patchRes = await axios.patch(
@@ -317,9 +531,16 @@ async function actualizarEstadoUsuario(id, activo) {
 
 module.exports = {
   LIMITES_POR_PLAN,
+  ESTRATEGIA_LIMITES,
+  resolverEstrategiaLimitesTransicion,
+  resolverLimitesCambioPlan,
+  limitesMacbotPreservados,
+  LIMITES_MACBOT_CAMPOS,
+  parseLimitesMacbotBody,
   obtenerResumenAdmin,
   obtenerDashboardAdmin,
   listarUsuarios,
   actualizarPlanUsuario,
+  actualizarLimitesUsuario,
   actualizarEstadoUsuario,
 };

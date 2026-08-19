@@ -33,11 +33,15 @@ const DEFAULTS_PLAN = {
   max_flujos: 1,
 };
 
-/** Límites de catálogo MACBOT. max_contactos NO se define: se conserva el del usuario. */
-const LIMITES_MACBOT = {
+/** Defaults de catálogo MACBOT (Fase A). No sobrescriben valores válidos en crm_usuarios. */
+const DEFAULTS_MACBOT = {
   max_whatsapp: 2,
+  max_contactos: 1000,
   max_flujos: 20,
 };
+
+/** Alias histórico — adminUsuariosService importa LIMITES_MACBOT para cambios de plan (Fase C). */
+const LIMITES_MACBOT = { ...DEFAULTS_MACBOT };
 
 const SELECT_PLAN =
   "id,plan,estado_plan,fecha_vencimiento,max_whatsapp,max_contactos,max_flujos,created_plan_at,updated_plan_at";
@@ -100,6 +104,21 @@ function esFlujosIlimitado(maxFlujos) {
 }
 
 /**
+ * Límite MacBot desde BD con fallback seguro. null/undefined/inválido → default MacBot.
+ * -1 no aplica ilimitado en MacBot (solo Agency).
+ */
+function resolverLimiteMacbot(value, defaultVal) {
+  if (value === null || value === undefined || value === "") {
+    return defaultVal;
+  }
+  const n = Number(value);
+  if (n === -1 || !Number.isFinite(n) || n < 0) {
+    return defaultVal;
+  }
+  return Math.floor(n);
+}
+
+/**
  * Modelo canónico: starter/pro se tratan como macbot.
  * Planes desconocidos sí caen a free; starter/pro NUNCA.
  */
@@ -151,7 +170,8 @@ function nombrePlanUi(plan) {
 /**
  * Asegura valores válidos y defaults si faltan columnas o datos legacy.
  * starter/pro → macbot (no se degradan a free).
- * MACBOT aplica 2 WhatsApp y 20 flujos en memoria; max_contactos no se toca.
+ * MACBOT lee max_whatsapp/max_flujos de crm_usuarios (defaults 2/20 si faltan).
+ * max_contactos se conserva desde BD; capacidad efectiva suma bloques en Fase 2.2.
  */
 function normalizarPlanUsuario(usuario) {
   if (!usuario || typeof usuario !== "object") {
@@ -179,8 +199,11 @@ function normalizarPlanUsuario(usuario) {
   let max_flujos = normalizarMaxFlujos(usuario.max_flujos);
 
   if (plan === "macbot") {
-    max_whatsapp = LIMITES_MACBOT.max_whatsapp;
-    max_flujos = LIMITES_MACBOT.max_flujos;
+    max_whatsapp = resolverLimiteMacbot(
+      usuario.max_whatsapp,
+      DEFAULTS_MACBOT.max_whatsapp
+    );
+    max_flujos = resolverLimiteMacbot(usuario.max_flujos, DEFAULTS_MACBOT.max_flujos);
   }
 
   return {
@@ -360,7 +383,9 @@ module.exports = {
   PLANES_PERSISTIBLES_DB,
   ESTADOS_VALIDOS,
   DEFAULTS_PLAN,
+  DEFAULTS_MACBOT,
   LIMITES_MACBOT,
+  resolverLimiteMacbot,
   canonizarPlan,
   esPlanMacbot,
   esPlanAgency,
