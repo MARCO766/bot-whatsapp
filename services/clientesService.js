@@ -6,6 +6,7 @@ const axios = require("axios");
 const { ejecutarFlujo } = require("./flowService");
 const { registrarConversion } = require("./conversionService");
 const { isSchemaMissingError, logSchemaFallback } = require("./supabaseSafe");
+const { puedeCrearContacto } = require("../middlewares/planLimits");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
@@ -766,6 +767,24 @@ async function createCliente(usuarioId, body) {
     const err = new Error("Número obligatorio");
     err.status = 400;
     throw err;
+  }
+
+  const existente = await fetchClienteRow(usuarioId, numero);
+  if (!existente) {
+    const check = await puedeCrearContacto(usuarioId, numero);
+    if (!check.ok) {
+      const err = new Error(
+        check.error ||
+          (check.code === "PLAN_INACTIVE"
+            ? "Tu plan no está activo. No puedes crear nuevos contactos."
+            : "Límite de contactos alcanzado")
+      );
+      err.status = 403;
+      err.code = check.code || "PLAN_LIMIT_CONTACTOS";
+      err.limite = check.limite;
+      err.usados = check.usados;
+      throw err;
+    }
   }
 
   const payload = {

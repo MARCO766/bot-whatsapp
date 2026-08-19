@@ -37,10 +37,16 @@ function uid(req) {
 function handleError(res, error, label) {
   const status = error.status || error.response?.status || 500;
   console.log(`[clientesApi] ${label}:`, error.response?.data || error.message);
-  res.status(status >= 400 && status < 600 ? status : 500).json({
+  const body = {
     ok: false,
     error: error.message || "Error del servidor",
-  });
+  };
+  if (error.code === "PLAN_LIMIT_CONTACTOS" || error.code === "PLAN_INACTIVE") {
+    body.code = error.code;
+    if (error.limite !== undefined) body.limite = error.limite;
+    if (error.usados !== undefined) body.usados = error.usados;
+  }
+  res.status(status >= 400 && status < 600 ? status : 500).json(body);
 }
 
 // Rutas fijas primero (evitar que :numero capture "dashboard", "meta", etc.)
