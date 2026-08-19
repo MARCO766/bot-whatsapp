@@ -150,115 +150,173 @@ const PRICING_EXTRA_STYLES = `
   margin:0 0 20px;font-size:1.125rem;color:#e2e8f0;line-height:1.5;
 }
 .mb-pricing__nav-pricing .mb-premium__nav-link--active{color:#39ff14}
+.mb-pricing__card--free{
+  border-color:rgba(57,255,20,.25);
+  background:rgba(15,23,42,.6);
+}
+.mb-pricing__card--starter{
+  border-color:rgba(34,211,238,.3);
+  box-shadow:0 0 32px rgba(34,211,238,.08);
+}
+.mb-pricing__card--starter:hover{
+  border-color:rgba(34,211,238,.45);
+  box-shadow:0 0 40px rgba(34,211,238,.14);
+}
+.mb-pricing__card--agency{
+  border-color:rgba(167,139,250,.28);
+  background:linear-gradient(180deg,rgba(15,23,42,.65) 0%,rgba(30,20,50,.45) 100%);
+}
+.mb-pricing__card--agency:hover{
+  border-color:rgba(167,139,250,.42);
+}
+.mb-pricing__features-note{
+  margin:0 0 20px;padding:10px 12px;border-radius:10px;
+  background:rgba(57,255,20,.06);border:1px solid rgba(57,255,20,.18);
+  font-size:.8125rem;color:#86efac;line-height:1.45;text-align:center;
+}
+.mb-pricing__features-note strong{color:#bbf7d0;font-weight:600}
+.mb-pricing__btn--whatsapp{
+  background:linear-gradient(135deg,#25d366,#128c7e);color:#fff;
+  box-shadow:0 0 20px rgba(37,211,102,.25);
+}
+.mb-pricing__btn--whatsapp:hover{
+  transform:translateY(-1px);box-shadow:0 0 28px rgba(37,211,102,.35);
+}
+.mb-pricing__all-features{
+  max-width:1200px;margin:0 auto;padding:16px 24px 48px;
+}
+.mb-pricing__all-features h2{
+  margin:0 0 8px;font-size:1.5rem;font-weight:700;text-align:center;
+}
+.mb-pricing__all-features > p{
+  margin:0 auto 28px;max-width:560px;text-align:center;
+  font-size:.9375rem;color:#94a3b8;line-height:1.5;
+}
+.mb-pricing__features-table .mb-pricing__table th:first-child,
+.mb-pricing__features-table .mb-pricing__table td:first-child{
+  min-width:200px;
+}
+.mb-pricing__footnote{
+  margin:20px auto 0;max-width:640px;text-align:center;
+  font-size:.9375rem;color:#86efac;line-height:1.5;
+}
 `;
+
+const WHATSAPP_SALES_URL = "https://wa.me/59176187797";
+
+function buildWhatsappHref(message) {
+  return `${WHATSAPP_SALES_URL}?text=${encodeURIComponent(message)}`;
+}
+
+const MACBOT_ALL_FEATURES = [
+  "Agente Rápido",
+  "CRM básico",
+  "Bandeja WhatsApp",
+  "IA Python básica",
+  "Seguimientos CRM",
+  "Remarketing 24h",
+  "Lector de pagos",
+  "Conversiones",
+  "Etiquetas",
+  "Métricas básicas",
+  "IA avanzada",
+  "Agente IA Pro",
+  "OpenAI Node",
+  "Métricas avanzadas",
+  "Dashboard de ventas",
+  "Embudos de conversión",
+  "Estadísticas de remarketing",
+  "Versionado de flujos",
+  "Carpetas de flujos",
+  "Exportar / Importar flujos",
+  "Mini embudos RM24H",
+  "OCR avanzado lector de pagos",
+  "Historial de conversiones",
+  "Prioridad en procesamiento",
+  "Acceso anticipado a nuevas funciones",
+  "Soporte prioritario",
+  "Multi cuenta futura",
+  "Marca blanca futura",
+  "Implementación personalizada",
+  "Soporte VIP",
+  "Asesoría directa",
+  "Funciones empresariales futuras",
+];
 
 const PRICING_PLANS = [
   {
     id: "free",
-    name: "Free",
+    name: "FREE",
+    cardClass: " mb-pricing__card--free",
     price: "Gratis",
     priceSub: "",
-    tagline: "Ideal para probar MacBot.",
-    limits: ["1 WhatsApp", "100 contactos", "1 flujo"],
+    tagline: "Ideal para probar MacBot sin costo.",
+    limits: ["1 API / WhatsApp", "100 contactos", "1 flujo"],
     popular: false,
-    features: ["Agente Rápido", "CRM básico", "Bandeja WhatsApp"],
     cta: "Crear cuenta gratis",
     href: "/register",
     soon: false,
+    whatsapp: false,
+    contact: false,
   },
   {
     id: "starter",
-    name: "Starter",
-    price: "$18",
-    priceSub: "/mes",
+    name: "STARTER",
+    cardClass: " mb-pricing__card--starter",
+    price: "$12 USD",
+    priceSub: "Pago único",
     tagline: "Ideal para emprendedores, afiliados e infoproductores.",
-    limits: ["1 WhatsApp", "1.000 contactos", "10 flujos"],
+    limits: ["2 APIs / WhatsApp", "1.000 contactos", "20 flujos"],
     popular: false,
-    features: [
-      "Agente Rápido",
-      "IA Python básica",
-      "Seguimientos CRM",
-      "Remarketing 24h",
-      "Lector de pagos",
-      "Conversiones",
-      "Etiquetas",
-      "Métricas básicas",
-    ],
-    cta: "Próximamente",
-    soon: true,
+    cta: "Comprar Starter",
+    href: buildWhatsappHref("Hola, quiero comprar el plan Starter de MacBot por $12 USD."),
+    soon: false,
+    whatsapp: true,
+    contact: false,
   },
   {
     id: "pro",
-    name: "Pro",
-    price: "$35",
-    priceSub: "/mes",
+    name: "PRO",
+    cardClass: "",
+    price: "$20 USD",
+    priceSub: "Pago único",
     tagline: "Ideal para negocios que ya venden y quieren escalar.",
-    limits: ["2 WhatsApp", "2.000 contactos", "20 flujos"],
+    limits: ["2 APIs / WhatsApp", "2.000 contactos", "20 flujos"],
     popular: true,
-    features: [
-      "Todo Starter",
-      "IA avanzada",
-      "Agente IA Pro",
-      "OpenAI Node",
-      "Métricas avanzadas",
-      "Dashboard de ventas",
-      "Embudos de conversión",
-      "Estadísticas de remarketing",
-      "Versionado de flujos",
-      "Carpetas de flujos",
-      "Exportar / Importar flujos",
-      "Mini embudos RM24H",
-      "OCR avanzado lector de pagos",
-      "Historial de conversiones",
-      "Prioridad en procesamiento",
-      "Acceso anticipado a nuevas funciones",
-      "Soporte prioritario",
-    ],
-    cta: "Próximamente",
-    soon: true,
+    cta: "Comprar Pro",
+    href: buildWhatsappHref("Hola, quiero comprar el plan Pro de MacBot por $20 USD."),
+    soon: false,
+    whatsapp: true,
+    contact: false,
   },
   {
     id: "agency",
-    name: "Agency",
-    price: "Contactar ventas",
+    name: "AGENCY",
+    cardClass: " mb-pricing__card--agency",
+    price: "Personalizado",
     priceSub: "",
-    tagline: "Para agencias y empresas.",
+    tagline: "Para agencias y empresas con necesidades a medida.",
     limits: [
-      "WhatsApps personalizados",
+      "APIs / WhatsApp personalizados",
       "Contactos personalizados",
       "Flujos personalizados",
     ],
     popular: false,
-    features: [
-      "Todo Pro",
-      "Multi cuenta futura",
-      "Marca blanca futura",
-      "Implementación personalizada",
-      "Soporte VIP",
-      "Asesoría directa",
-      "Funciones empresariales futuras",
-    ],
     cta: "Contactar ventas",
-    href: "mailto:ventas@macbot.app?subject=Plan%20Agency%20MacBot",
+    href: buildWhatsappHref("Hola, quiero información sobre el plan Agency de MacBot."),
     soon: false,
+    whatsapp: false,
     contact: true,
   },
 ];
 
 const COMPARE_ROWS = [
-  { label: "Precio", free: "Gratis", starter: "$18/mes", pro: "$35/mes", agency: "Contactar ventas" },
-  { label: "WhatsApp", free: "1", starter: "1", pro: "2", agency: "Personalizado" },
-  { label: "Contactos", free: "100", starter: "1.000", pro: "2.000", agency: "Personalizado" },
-  { label: "Flujos", free: "1", starter: "10", pro: "20", agency: "Personalizado" },
-  { label: "Agente Rápido", free: "yes", starter: "yes", pro: "yes", agency: "yes" },
-  { label: "CRM / Bandeja", free: "Básico", starter: "yes", pro: "yes", agency: "yes" },
-  { label: "IA Python básica", free: "no", starter: "yes", pro: "yes", agency: "yes" },
-  { label: "Remarketing 24h", free: "no", starter: "yes", pro: "yes", agency: "yes" },
-  { label: "Lector de pagos", free: "no", starter: "yes", pro: "OCR avanzado", agency: "yes" },
-  { label: "Conversiones", free: "no", starter: "yes", pro: "Historial", agency: "yes" },
-  { label: "Métricas", free: "no", starter: "Básicas", pro: "Avanzadas", agency: "yes" },
-  { label: "Versionado flujos", free: "no", starter: "no", pro: "yes", agency: "yes" },
-  { label: "Soporte", free: "—", starter: "—", pro: "Prioritario", agency: "VIP" },
+  { label: "Precio", free: "Gratis", starter: "$12 USD", pro: "$20 USD", agency: "Personalizado" },
+  { label: "Pago", free: "—", starter: "Pago único", pro: "Pago único", agency: "Personalizado" },
+  { label: "APIs / WhatsApp", free: "1", starter: "2", pro: "2", agency: "Personalizado" },
+  { label: "Contactos", free: "100", starter: "1.000", pro: "2.000", agency: "Personalizados" },
+  { label: "Flujos", free: "1", starter: "20", pro: "20", agency: "Personalizados" },
+  { label: "Funciones MacBot", free: "yes", starter: "yes", pro: "yes", agency: "yes" },
 ];
 
 function renderPricingNavbar() {
@@ -291,8 +349,9 @@ function formatCompareCell(value) {
 function renderPlanCards() {
   return PRICING_PLANS.map((plan) => {
     const popularClass = plan.popular ? " mb-pricing__card--popular" : "";
+    const cardClass = plan.cardClass || "";
     const badge = plan.popular
-      ? '<span class="mb-pricing__badge">MÁS POPULAR</span>'
+      ? '<span class="mb-pricing__badge">⭐ MÁS POPULAR</span>'
       : "";
     const priceSub = plan.priceSub
       ? `<small>${escapeHtml(plan.priceSub)}</small>`
@@ -301,29 +360,62 @@ function renderPlanCards() {
       ? `<p class="mb-pricing__tagline">${escapeHtml(plan.tagline)}</p>`
       : "";
     const limits = plan.limits?.length
-      ? `<div class="mb-pricing__limits"><strong>Límites</strong>${plan.limits.map((l) => escapeHtml(l)).join(" · ")}</div>`
+      ? `<div class="mb-pricing__limits"><strong>Capacidad</strong>${plan.limits.map((l) => escapeHtml(l)).join(" · ")}</div>`
       : "";
-    const list = plan.features
-      .map((f) => `<li>${escapeHtml(f)}</li>`)
-      .join("");
+    const featuresNote =
+      '<p class="mb-pricing__features-note"><strong>Todas las funciones de MacBot incluidas</strong></p>';
     let btnClass = "mb-pricing__btn--primary";
     if (plan.soon) btnClass = "mb-pricing__btn--soon";
+    else if (plan.whatsapp) btnClass = "mb-pricing__btn--whatsapp";
     else if (plan.contact) btnClass = "mb-pricing__btn--contact";
+    const btnAttrs = plan.whatsapp || plan.contact ? ' target="_blank" rel="noopener noreferrer"' : "";
     const btn = plan.soon
       ? `<span class="mb-pricing__btn ${btnClass}">${escapeHtml(plan.cta)}</span>`
-      : `<a href="${escapeHtml(plan.href)}" class="mb-pricing__btn ${btnClass}">${escapeHtml(plan.cta)}</a>`;
+      : `<a href="${escapeHtml(plan.href)}" class="mb-pricing__btn ${btnClass}"${btnAttrs}>${escapeHtml(plan.cta)}</a>`;
 
     return `
-    <article class="mb-pricing__card${popularClass}">
+    <article class="mb-pricing__card${popularClass}${cardClass}">
       ${badge}
       <h3 class="mb-pricing__name">${escapeHtml(plan.name)}</h3>
       <p class="mb-pricing__price">${escapeHtml(plan.price)}${priceSub}</p>
       ${tagline}
       ${limits}
-      <ul class="mb-pricing__list">${list}</ul>
+      ${featuresNote}
       ${btn}
     </article>`;
   }).join("");
+}
+
+function renderAllFeaturesSection() {
+  const body = MACBOT_ALL_FEATURES.map((feature) => {
+    const cols = ["free", "starter", "pro", "agency"]
+      .map((key) => {
+        const proClass = key === "pro" ? ' class="mb-pricing__col--pro"' : "";
+        return `<td${proClass}><span class="mb-pricing__yes">✓</span></td>`;
+      })
+      .join("");
+    return `<tr><th scope="row">${escapeHtml(feature)}</th>${cols}</tr>`;
+  }).join("");
+
+  return `
+<section class="mb-pricing__all-features" id="funciones">
+  <h2>Todo MacBot incluido en todos los planes</h2>
+  <p>Todos los planes incluyen todas las funciones de MacBot. La única diferencia entre planes es la capacidad: APIs, contactos y flujos.</p>
+  <div class="mb-pricing__table-wrap mb-pricing__features-table" role="region" aria-label="Funciones incluidas en todos los planes">
+    <table class="mb-pricing__table">
+      <thead>
+        <tr>
+          <th scope="col">Función</th>
+          <th scope="col">FREE</th>
+          <th scope="col">STARTER</th>
+          <th scope="col" class="mb-pricing__col--pro">PRO</th>
+          <th scope="col">AGENCY</th>
+        </tr>
+      </thead>
+      <tbody>${body}</tbody>
+    </table>
+  </div>
+</section>`;
 }
 
 function renderCompareTable() {
@@ -340,21 +432,22 @@ function renderCompareTable() {
   return `
 <section class="mb-pricing__compare" id="comparador">
   <h2>Comparar planes</h2>
-  <p>Elige el nivel que mejor se adapte a tu volumen de conversaciones y automatización.</p>
+  <p>Compara capacidad y precio. Todas las funciones de MacBot están incluidas en cada plan.</p>
   <div class="mb-pricing__table-wrap" role="region" aria-label="Tabla comparativa de planes">
     <table class="mb-pricing__table">
       <thead>
         <tr>
-          <th scope="col">Función</th>
-          <th scope="col">Free</th>
-          <th scope="col">Starter</th>
-          <th scope="col" class="mb-pricing__col--pro">Pro</th>
-          <th scope="col">Agency</th>
+          <th scope="col"></th>
+          <th scope="col">FREE</th>
+          <th scope="col">STARTER</th>
+          <th scope="col" class="mb-pricing__col--pro">PRO</th>
+          <th scope="col">AGENCY</th>
         </tr>
       </thead>
       <tbody>${body}</tbody>
     </table>
   </div>
+  <p class="mb-pricing__footnote">Todos los planes incluyen todas las funciones de MacBot.</p>
 </section>`;
 }
 
@@ -366,6 +459,7 @@ function renderPricingPage() {
     <p>MacBot combina CRM, IA, flujos visuales, remarketing, seguimiento automático y lector de pagos para convertir conversaciones en ventas.</p>
   </section>
   <div class="mb-pricing__plans">${renderPlanCards()}</div>
+  ${renderAllFeaturesSection()}
   ${renderCompareTable()}
   <section class="mb-pricing__cta">
     <p>Empieza gratis y actualiza cuando tu negocio crezca</p>

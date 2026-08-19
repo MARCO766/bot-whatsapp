@@ -290,7 +290,10 @@ body.mb-premium{
 .mb-premium__plan-price{
   margin:0 0 12px;font-size:1.125rem;font-weight:600;color:#22d3ee;
 }
-.mb-premium__plan-name{font-size:1.25rem;font-weight:700;margin:0 0 4px;text-transform:capitalize}
+.mb-premium__plan-price small{
+  display:block;margin-top:4px;font-size:.75rem;font-weight:500;color:#64748b;
+}
+.mb-premium__plan-name{font-size:1.25rem;font-weight:700;margin:0 0 4px;text-transform:uppercase;letter-spacing:.04em}
 .mb-premium__plan-tag{font-size:.75rem;color:#64748b;margin:0 0 18px}
 .mb-premium__plan-list{
   list-style:none;margin:0 0 22px;padding:0;flex:1;
@@ -490,61 +493,62 @@ function renderMetricsSection() {
 </section>`;
 }
 
+const WHATSAPP_SALES_URL = "https://wa.me/59176187797";
+
+function buildLandingWhatsappHref(message) {
+  return `${WHATSAPP_SALES_URL}?text=${encodeURIComponent(message)}`;
+}
+
 const PLANS = [
   {
     id: "free",
     popular: false,
     price: "Gratis",
-    items: ["1 WhatsApp · 100 contactos · 1 flujo", "Agente Rápido", "CRM básico", "Bandeja WhatsApp"],
-    tag: "Ideal para probar MacBot.",
+    items: ["1 API / WhatsApp · 100 contactos · 1 flujo", "Todas las funciones de MacBot"],
+    tag: "Ideal para probar MacBot sin costo.",
     cta: "Empezar gratis",
     href: "/register",
     soon: false,
     contact: false,
+    whatsapp: false,
   },
   {
     id: "starter",
     popular: false,
-    price: "$18/mes",
-    items: [
-      "1 WhatsApp · 1.000 contactos · 10 flujos",
-      "Remarketing 24h · Lector de pagos",
-      "Seguimientos CRM · Conversiones",
-    ],
+    price: "$12 USD",
+    priceSub: "Pago único",
+    items: ["2 APIs / WhatsApp · 1.000 contactos · 20 flujos", "Todas las funciones de MacBot"],
     tag: "Ideal para emprendedores, afiliados e infoproductores.",
-    cta: "Próximamente",
-    soon: true,
+    cta: "Comprar Starter",
+    href: buildLandingWhatsappHref("Hola, quiero comprar el plan Starter de MacBot por $12 USD."),
+    soon: false,
     contact: false,
+    whatsapp: true,
   },
   {
     id: "pro",
     popular: true,
-    price: "$35/mes",
-    items: [
-      "2 WhatsApp · 2.000 contactos · 20 flujos",
-      "Todo Starter + IA avanzada",
-      "Dashboard ventas · Versionado flujos",
-      "Soporte prioritario",
-    ],
+    price: "$20 USD",
+    priceSub: "Pago único",
+    items: ["2 APIs / WhatsApp · 2.000 contactos · 20 flujos", "Todas las funciones de MacBot"],
     tag: "Ideal para negocios que ya venden y quieren escalar.",
-    cta: "Próximamente",
-    soon: true,
+    cta: "Comprar Pro",
+    href: buildLandingWhatsappHref("Hola, quiero comprar el plan Pro de MacBot por $20 USD."),
+    soon: false,
     contact: false,
+    whatsapp: true,
   },
   {
     id: "agency",
     popular: false,
-    price: "Contactar ventas",
-    items: [
-      "Límites personalizados",
-      "Todo Pro + implementación a medida",
-      "Soporte VIP y asesoría directa",
-    ],
-    tag: "Para agencias y empresas.",
+    price: "Personalizado",
+    items: ["APIs, contactos y flujos personalizados", "Todas las funciones de MacBot"],
+    tag: "Para agencias y empresas con necesidades a medida.",
     cta: "Contactar ventas",
-    href: "mailto:ventas@macbot.app?subject=Plan%20Agency%20MacBot",
+    href: buildLandingWhatsappHref("Hola, quiero información sobre el plan Agency de MacBot."),
     soon: false,
     contact: true,
+    whatsapp: false,
   },
 ];
 
@@ -552,20 +556,24 @@ function renderPlansSection() {
   const plans = PLANS.map((p) => {
     let btnClass = "mb-premium__plan-btn--active";
     if (p.soon) btnClass = "mb-premium__plan-btn--soon";
+    else if (p.whatsapp) btnClass = "mb-premium__plan-btn--active";
     else if (p.contact) btnClass = "mb-premium__plan-btn--contact";
 
+    const btnAttrs = p.whatsapp || p.contact ? ' target="_blank" rel="noopener noreferrer"' : "";
     const btn = p.soon
       ? `<span class="mb-premium__plan-btn ${btnClass}">${escapeHtml(p.cta)}</span>`
-      : `<a href="${escapeHtml(p.href)}" class="mb-premium__plan-btn ${btnClass}">${escapeHtml(p.cta)}</a>`;
+      : `<a href="${escapeHtml(p.href)}" class="mb-premium__plan-btn ${btnClass}"${btnAttrs}>${escapeHtml(p.cta)}</a>`;
 
     const feat = p.popular ? " mb-premium__plan--popular" : "";
-    const badge = p.popular ? '<span class="mb-premium__plan-badge">MÁS POPULAR</span>' : "";
-    const priceHtml = p.price ? `<p class="mb-premium__plan-price">${escapeHtml(p.price)}</p>` : "";
+    const badge = p.popular ? '<span class="mb-premium__plan-badge">⭐ MÁS POPULAR</span>' : "";
+    const priceSub = p.priceSub ? `<small>${escapeHtml(p.priceSub)}</small>` : "";
+    const priceHtml = p.price ? `<p class="mb-premium__plan-price">${escapeHtml(p.price)}${priceSub}</p>` : "";
     const list = p.items.map((i) => `<li>${escapeHtml(i)}</li>`).join("");
+    const planName = p.id.toUpperCase();
     return `
     <article class="mb-premium__plan${feat}">
       ${badge}
-      <h3 class="mb-premium__plan-name">${escapeHtml(p.id.charAt(0).toUpperCase() + p.id.slice(1))}</h3>
+      <h3 class="mb-premium__plan-name">${escapeHtml(planName)}</h3>
       ${priceHtml}
       <p class="mb-premium__plan-tag">${escapeHtml(p.tag)}</p>
       <ul class="mb-premium__plan-list">${list}</ul>
