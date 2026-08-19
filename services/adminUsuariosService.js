@@ -129,7 +129,7 @@ async function obtenerResumenAdmin() {
     usuarios_total,
     usuarios_activos,
     usuarios_suspendidos,
-    planes: { free, starter, pro, agency },
+    planes: { free, macbot: starter + pro, agency },
     uso: {
       whatsapp_conectados,
       contactos_totales,

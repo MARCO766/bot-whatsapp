@@ -54,10 +54,8 @@ body.mb-admin{
 .mb-admin__card--suspendidos .mb-admin__card-value{color:#f87171}
 .mb-admin__card--free{border-color:rgba(100,116,139,.25)}
 .mb-admin__card--free .mb-admin__card-value{color:#cbd5e1}
-.mb-admin__card--starter{border-color:rgba(34,211,238,.2)}
-.mb-admin__card--starter .mb-admin__card-value{color:#22d3ee}
-.mb-admin__card--pro{border-color:rgba(167,139,250,.25)}
-.mb-admin__card--pro .mb-admin__card-value{color:#a78bfa}
+.mb-admin__card--macbot{border-color:rgba(34,197,94,.22)}
+.mb-admin__card--macbot .mb-admin__card-value{color:#86efac}
 .mb-admin__card--agency{border-color:rgba(57,255,20,.22)}
 .mb-admin__card--agency .mb-admin__card-value{color:#39ff14}
 .mb-admin__card--wa .mb-admin__card-value{color:#38bdf8}
@@ -202,8 +200,7 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
       <div class="mb-admin__card mb-admin__card--activos"><div class="mb-admin__card-icon">🟢</div><div class="mb-admin__card-label">Activos</div><div class="mb-admin__card-value" data-metric="usuarios_activos">—</div></div>
       <div class="mb-admin__card mb-admin__card--suspendidos"><div class="mb-admin__card-icon">🔴</div><div class="mb-admin__card-label">Suspendidos</div><div class="mb-admin__card-value" data-metric="usuarios_suspendidos">—</div></div>
       <div class="mb-admin__card mb-admin__card--free"><div class="mb-admin__card-icon">🆓</div><div class="mb-admin__card-label">Free</div><div class="mb-admin__card-value" data-metric="plan_free">—</div></div>
-      <div class="mb-admin__card mb-admin__card--starter"><div class="mb-admin__card-icon">🚀</div><div class="mb-admin__card-label">Starter</div><div class="mb-admin__card-value" data-metric="plan_starter">—</div></div>
-      <div class="mb-admin__card mb-admin__card--pro"><div class="mb-admin__card-icon">⭐</div><div class="mb-admin__card-label">Pro</div><div class="mb-admin__card-value" data-metric="plan_pro">—</div></div>
+      <div class="mb-admin__card mb-admin__card--macbot"><div class="mb-admin__card-icon">🤖</div><div class="mb-admin__card-label">MacBot</div><div class="mb-admin__card-value" data-metric="plan_macbot">—</div></div>
       <div class="mb-admin__card mb-admin__card--agency"><div class="mb-admin__card-icon">🏢</div><div class="mb-admin__card-label">Agency</div><div class="mb-admin__card-value" data-metric="plan_agency">—</div></div>
     </div>
     <h2 class="mb-admin__section-title">Uso de la plataforma</h2>
@@ -222,8 +219,6 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
       <option value="">Todos los planes</option>
       <option value="free">Free</option>
       <option value="macbot">MacBot</option>
-      <option value="starter">Starter (legacy)</option>
-      <option value="pro">Pro (legacy)</option>
       <option value="agency">Agency</option>
     </select>
   </div>
@@ -260,7 +255,7 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
 <div class="mb-admin__toast" id="toast" role="status"></div>
 <script>
 (function(){
-  const PLANES = ["free","macbot","agency","starter","pro"];
+  const PLANES = ["free","macbot","agency"];
   const ESTADOS = ["activo","trial","vencido","suspendido"];
   let usuarios = [];
   let filtered = [];
@@ -279,8 +274,6 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
   const PLAN_LABELS = {
     free: "Free",
     macbot: "MacBot",
-    starter: "Starter (legacy)",
-    pro: "Pro (legacy)",
     agency: "Agency",
   };
 
@@ -305,8 +298,16 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
     } catch { return "—"; }
   }
 
+  function planBadgeKey(plan){
+    const key = String(plan || "").toLowerCase();
+    if (key === "starter" || key === "pro" || key === "macbot") return "macbot";
+    if (key === "agency") return "agency";
+    return "free";
+  }
+
   function planBadge(plan){
-    return '<span class="mb-plan mb-plan--' + plan + '">' + plan + '</span>';
+    const badgeKey = planBadgeKey(plan);
+    return '<span class="mb-plan mb-plan--' + badgeKey + '">' + planLabel(plan) + '</span>';
   }
 
   function adminDisplayName(email){
@@ -316,7 +317,9 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
   }
 
   function planLabel(p){
-    return PLAN_LABELS[p] || (p ? String(p) : "—");
+    const key = String(p || "").toLowerCase();
+    if (key === "starter" || key === "pro") return PLAN_LABELS.macbot;
+    return PLAN_LABELS[key] || (p ? String(p) : "—");
   }
 
   function accionLabel(accion){
@@ -410,8 +413,7 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
       usuarios_activos: resumen.usuarios_activos,
       usuarios_suspendidos: resumen.usuarios_suspendidos,
       plan_free: resumen.planes?.free,
-      plan_starter: resumen.planes?.starter,
-      plan_pro: resumen.planes?.pro,
+      plan_macbot: resumen.planes?.macbot,
       plan_agency: resumen.planes?.agency,
       whatsapp_conectados: resumen.uso?.whatsapp_conectados,
       contactos_totales: resumen.uso?.contactos_totales,
