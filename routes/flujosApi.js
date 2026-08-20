@@ -45,7 +45,9 @@ function log(msg, extra) {
 }
 
 const { protegerApi } = require("../middlewares/auth");
-const { verificarLimiteNuevoFlujo } = require("../middlewares/planLimits");
+const {
+  verificarLimiteNuevoFlujoSiempre,
+} = require("../middlewares/planLimits");
 
 function supabaseHeaders(extra = {}) {
   return {
@@ -617,7 +619,7 @@ router.patch("/api/flujos/:id/nombre", protegerApi, async (req, res) => {
 });
 
 // POST /api/flujos — crear flujo nuevo (INSERT en flujos_builder)
-router.post("/api/flujos", protegerApi, verificarLimiteNuevoFlujo, async (req, res) => {
+router.post("/api/flujos", protegerApi, verificarLimiteNuevoFlujoSiempre, async (req, res) => {
   try {
     const nombre = (req.body?.nombre || "").trim() || "Nuevo flujo";
     const meta = req.body?.meta || {};
@@ -757,7 +759,7 @@ router.get("/api/flujos/:id/export", protegerApi, async (req, res) => {
 });
 
 // POST /api/flujos/import-json — importar archivo JSON exportado (nuevo flujo)
-router.post("/api/flujos/import-json", protegerApi, verificarLimiteNuevoFlujo, async (req, res) => {
+router.post("/api/flujos/import-json", protegerApi, verificarLimiteNuevoFlujoSiempre, async (req, res) => {
   try {
     const usuarioId = req.session.usuario.id;
     const scope = leerConexionScope(req);
@@ -804,7 +806,7 @@ router.post("/api/flujos/import-json", protegerApi, verificarLimiteNuevoFlujo, a
 });
 
 // POST /api/flujos/import — plantilla predefinida (nuevo flujo)
-router.post("/api/flujos/import", protegerApi, verificarLimiteNuevoFlujo, async (req, res) => {
+router.post("/api/flujos/import", protegerApi, verificarLimiteNuevoFlujoSiempre, async (req, res) => {
   try {
     const templateId = req.body?.templateId;
     const templates = {
@@ -866,7 +868,7 @@ router.post("/api/flujos/import", protegerApi, verificarLimiteNuevoFlujo, async 
 });
 
 // POST /api/flujos/:id/duplicate
-router.post("/api/flujos/:id/duplicate", protegerApi, async (req, res) => {
+router.post("/api/flujos/:id/duplicate", protegerApi, verificarLimiteNuevoFlujoSiempre, async (req, res) => {
   try {
     const { id } = req.params;
     const usuarioId = req.session.usuario.id;

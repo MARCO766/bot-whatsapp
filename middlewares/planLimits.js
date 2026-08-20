@@ -73,13 +73,7 @@ async function existeContactoUsuario(usuarioId, clienteNumero) {
       `${SUPABASE_URL}/rest/v1/clientes?usuario_id=eq.${encodeURIComponent(usuarioId)}&numero=eq.${encodeURIComponent(numero)}&select=id&limit=1`,
       { headers: supabaseHeaders() }
     );
-    if (resClientes.data?.[0]) return true;
-
-    const resConv = await axios.get(
-      `${SUPABASE_URL}/rest/v1/conversaciones?usuario_id=eq.${encodeURIComponent(usuarioId)}&cliente_numero=eq.${encodeURIComponent(numero)}&select=cliente_numero&limit=1`,
-      { headers: supabaseHeaders() }
-    );
-    return Boolean(resConv.data?.[0]);
+    return Boolean(resClientes.data?.[0]);
   } catch (error) {
     console.log("[planLimits] existeContactoUsuario:", error.response?.data || error.message);
     return false;
@@ -258,11 +252,9 @@ function esCreacionNuevoFlujo(req) {
   return !id;
 }
 
-/**
- * Solo bloquea INSERT (sin id en body). Guardar/editar flujo existente no se toca.
- */
-async function verificarLimiteNuevoFlujo(req, res, next) {
-  if (!esCreacionNuevoFlujo(req)) {
+async function responderVerificacionLimiteFlujo(req, res, next, opts = {}) {
+  const siempreCreacion = Boolean(opts.siempreCreacion);
+  if (!siempreCreacion && !esCreacionNuevoFlujo(req)) {
     return next();
   }
 
@@ -291,6 +283,18 @@ async function verificarLimiteNuevoFlujo(req, res, next) {
       error: "No se pudo validar el límite del plan",
     });
   }
+}
+
+/**
+ * Solo bloquea INSERT (sin id en body). Guardar/editar flujo existente no se toca.
+ */
+async function verificarLimiteNuevoFlujo(req, res, next) {
+  return responderVerificacionLimiteFlujo(req, res, next);
+}
+
+/** Rutas que siempre INSERT — ignoran body.id / flujoId / flujo_id. */
+async function verificarLimiteNuevoFlujoSiempre(req, res, next) {
+  return responderVerificacionLimiteFlujo(req, res, next, { siempreCreacion: true });
 }
 
 /**
@@ -343,11 +347,9 @@ function esCreacionNuevaConexion(req) {
   return !id;
 }
 
-/**
- * Solo bloquea INSERT (sin id en body). Updates y conexiones existentes no se tocan.
- */
-async function verificarLimiteNuevaConexionWhatsapp(req, res, next) {
-  if (!esCreacionNuevaConexion(req)) {
+async function responderVerificacionLimiteConexionWhatsapp(req, res, next, opts = {}) {
+  const siempreCreacion = Boolean(opts.siempreCreacion);
+  if (!siempreCreacion && !esCreacionNuevaConexion(req)) {
     return next();
   }
 
@@ -378,6 +380,18 @@ async function verificarLimiteNuevaConexionWhatsapp(req, res, next) {
   }
 }
 
+/**
+ * Solo bloquea INSERT (sin id en body). Updates y conexiones existentes no se tocan.
+ */
+async function verificarLimiteNuevaConexionWhatsapp(req, res, next) {
+  return responderVerificacionLimiteConexionWhatsapp(req, res, next);
+}
+
+/** Rutas que siempre INSERT — ignoran body.id / conexionId / conexion_id. */
+async function verificarLimiteNuevaConexionWhatsappSiempre(req, res, next) {
+  return responderVerificacionLimiteConexionWhatsapp(req, res, next, { siempreCreacion: true });
+}
+
 module.exports = {
   contarConexionesWhatsappUsuario,
   contarContactosUsuario,
@@ -387,6 +401,8 @@ module.exports = {
   evaluarLimiteContactoEntrante,
   puedeCrearFlujo,
   verificarLimiteNuevoFlujo,
+  verificarLimiteNuevoFlujoSiempre,
   puedeCrearConexionWhatsapp,
   verificarLimiteNuevaConexionWhatsapp,
+  verificarLimiteNuevaConexionWhatsappSiempre,
 };

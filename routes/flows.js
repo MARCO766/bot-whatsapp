@@ -15,7 +15,11 @@ const upload = multer({
 });
 
 const { protegerPanel } = require("../middlewares/auth");
-const { verificarLimiteNuevoFlujo } = require("../middlewares/planLimits");
+const {
+  verificarLimiteNuevoFlujo,
+  verificarLimiteNuevoFlujoSiempre,
+  verificarLimiteNuevaConexionWhatsappSiempre,
+} = require("../middlewares/planLimits");
 const {
   enviarTextoWhatsApp,
   enviarMediaWhatsApp,
@@ -243,7 +247,7 @@ router.post(
 );
 
 // ✅ CREAR FLUJO
-router.post("/crear-flujo", protegerPanel, async (req, res) => {
+router.post("/crear-flujo", protegerPanel, verificarLimiteNuevoFlujoSiempre, async (req, res) => {
   try {
     const { nombre } = req.body;
 
@@ -725,7 +729,7 @@ router.get("/eliminar-flujo/:id", protegerPanel, async (req, res) => {
   }
 });
 
-router.get("/duplicar-flujo/:id", protegerPanel, async (req, res) => {
+router.get("/duplicar-flujo/:id", protegerPanel, verificarLimiteNuevoFlujoSiempre, async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -975,7 +979,7 @@ router.post("/probar-whatsapp", protegerPanel, async (req, res) => {
     res.send("❌ Error enviando prueba. Revisa Railway logs.");
   }
 });
-router.post("/guardar-conexion", protegerPanel, async (req, res) => {
+router.post("/guardar-conexion", protegerPanel, verificarLimiteNuevaConexionWhatsappSiempre, async (req, res) => {
   try {
 
     const { 
