@@ -482,6 +482,7 @@ export function useFlujos() {
         showToast("Flujo duplicado en la línea seleccionada");
         await load();
       } catch (err) {
+        if (tryHandlePlanLimitError(err)) return;
         if (err instanceof ApiError && err.status === 403) {
           showToast(
             "Este flujo es de otra línea. Cambia a esa línea WhatsApp y vuelve a duplicar.",
@@ -493,7 +494,14 @@ export function useFlujos() {
         showToast(msg, "error");
       }
     },
-    [apiOnline, conexionSeleccionadaId, load, requireLineaParaEscribir, showToast]
+    [
+      apiOnline,
+      conexionSeleccionadaId,
+      load,
+      requireLineaParaEscribir,
+      showToast,
+      tryHandlePlanLimitError,
+    ]
   );
 
   const exportar = useCallback(

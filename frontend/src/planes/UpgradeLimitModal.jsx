@@ -26,11 +26,11 @@ export default function UpgradeLimitModal({ data, onClose, onUpgrade }) {
   const planNombre = getPlanNombreUi(planKey);
   const recommendation = getUpgradeRecommendation(planKey) || data.recommendation;
   const showUpgrade = shouldShowPlanUpgrade(planKey);
-  const action = getUpgradeAction(planKey);
+  const action = getUpgradeAction(planKey, data.code);
 
   function handleUpgrade() {
     if (action.type === "contact" && action.href) {
-      window.location.href = action.href;
+      window.open(action.href, "_blank", "noopener,noreferrer");
       return;
     }
     onUpgrade?.();

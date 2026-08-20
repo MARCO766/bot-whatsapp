@@ -101,14 +101,38 @@ export function shouldShowPlanUpgrade(planKey) {
   return canonizarPlanUi(planKey) !== "agency";
 }
 
-export function getUpgradeAction(planKey) {
+const VENTAS_WHATSAPP = "59176187797";
+
+const CONTACT_SALES_MESSAGES = {
+  PLAN_LIMIT_WHATSAPP:
+    "Hola, quiero ampliar mi plan de MacBot. Necesito más conexiones de WhatsApp.",
+  PLAN_LIMIT_FLUJOS:
+    "Hola, quiero ampliar mi plan de MacBot. Necesito más flujos.",
+  DEFAULT:
+    "Hola, quiero ampliar mi plan de MacBot. Necesito más capacidad para mi cuenta.",
+};
+
+/** Mensaje precargado para wa.me según el código de límite (WhatsApp / Flujos). */
+export function getContactSalesMessage(limitCode = null) {
+  if (limitCode && CONTACT_SALES_MESSAGES[limitCode]) {
+    return CONTACT_SALES_MESSAGES[limitCode];
+  }
+  return CONTACT_SALES_MESSAGES.DEFAULT;
+}
+
+export function buildContactSalesWhatsAppHref(limitCode = null) {
+  const text = getContactSalesMessage(limitCode);
+  return `https://wa.me/${VENTAS_WHATSAPP}?text=${encodeURIComponent(text)}`;
+}
+
+export function getUpgradeAction(planKey, limitCode = null) {
   const key = canonizarPlanUi(planKey);
   if (key === "agency") return { type: "none" };
   if (key === "macbot") {
     return {
       type: "contact",
       label: "Contactar ventas",
-      href: "mailto:ventas@macbot.app?subject=Plan%20Agency%20MacBot",
+      href: buildContactSalesWhatsAppHref(limitCode),
     };
   }
   return { type: "pricing", label: "Mejorar plan" };

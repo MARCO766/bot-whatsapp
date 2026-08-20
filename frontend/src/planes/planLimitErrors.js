@@ -26,11 +26,7 @@ export function formatPlanLimitValue(value) {
 
 /** Extrae payload de ApiError, fetch JSON o objeto plano */
 export function extractPlanLimitPayload(error) {
-  if (!error) return null;
-
-  if (typeof error === "object" && PLAN_LIMIT_CODES.has(error.code)) {
-    return error;
-  }
+  if (!error || typeof error !== "object") return null;
 
   const nested =
     error.payload ||
