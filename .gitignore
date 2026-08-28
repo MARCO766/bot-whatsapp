@@ -1,1 +1,5 @@
 .env
+macbot-android/.gradle/
+macbot-android/build/
+macbot-android/app/build/
+macbot-android/local.properties

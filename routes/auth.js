@@ -26,6 +26,7 @@ const {
   verifyRegistration,
   resendPin,
 } = require("../services/registerVerificationService");
+const { validarCredenciales } = require("../services/authService");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
@@ -285,37 +286,18 @@ router.post("/register/resend", async (req, res) => {
 router.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
+    const result = await validarCredenciales(email, password);
 
-    const response = await axios.get(
-      `${SUPABASE_URL}/rest/v1/crm_usuarios?email=eq.${encodeURIComponent(email)}&activo=eq.true&select=*`,
-      {
-        headers: {
-          apikey: SUPABASE_KEY,
-          Authorization: `Bearer ${SUPABASE_KEY}`
-        }
+    if (!result.ok) {
+      if (result.reason === "wrong_password") {
+        return res.send("Contraseña incorrecta");
       }
-    );
-
-    const usuario = response.data?.[0];
-
-    if (!usuario) {
       return res.send("Usuario no encontrado o inactivo");
     }
 
-    const passwordCorrecto = await bcrypt.compare(password, usuario.password_hash);
-
-    if (!passwordCorrecto) {
-      return res.send("Contraseña incorrecta");
-    }
-
-    req.session.usuario = {
-      id: usuario.id,
-      nombre: usuario.nombre,
-      email: usuario.email
-    };
+    req.session.usuario = result.usuario;
 
     res.redirect("/");
-
   } catch (error) {
     console.log("ERROR LOGIN:", error.response?.data || error.message);
     res.send("Error iniciando sesión");

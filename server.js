@@ -46,6 +46,7 @@ const clientesApiRouter = require("./routes/clientesApi");
 const aiApiRoutes = require("./routes/aiApi");
 const internalCronApi = require("./routes/internalCronApi");
 const seguimientoV2ApiRoutes = require("./routes/seguimientoV2Api");
+const authApiRoutes = require("./routes/authApi");
 
 const app = express();
 const isProduction = process.env.NODE_ENV === "production";
@@ -166,6 +167,7 @@ async function startServer() {
   app.use(aiApiRoutes);
   app.use("/api/internal/cron", internalCronApi);
   app.use(seguimientoV2ApiRoutes);
+  app.use(authApiRoutes);
   const legacySeguimientoCronDisabled = require("./routes/legacySeguimientoCronDisabled");
   app.use(legacySeguimientoCronDisabled);
   console.log("✅ API Planes montada en GET /api/planes/mi-plan");
@@ -174,6 +176,7 @@ async function startServer() {
   console.log("✅ API IA montada en POST /api/ai/run");
   console.log("✅ Cron interno montado en POST /api/internal/cron/rm24h (seguimientos HTTP deshabilitado)");
   console.log("✅ API Seguimiento V2 montada en POST /api/seguimiento-v2/upload-media");
+  console.log("✅ API Auth montada en POST /api/auth/login, GET /api/auth/me, POST /api/auth/logout");
 
   /** Rutas de auth backend — deben ir antes del fallback React (Express, no SPA). */
   const AUTH_BACKEND_PATHS = new Set([

@@ -1,0 +1,5 @@
+## Copia este archivo como `local.properties` en la raíz de macbot-android.
+## Android Studio añade sdk.dir automáticamente al abrir el proyecto.
+
+sdk.dir=C\:\\Users\\TU_USUARIO\\AppData\\Local\\Android\\Sdk
+API_BASE_URL=https://tu-app.onrender.com
