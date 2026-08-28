@@ -8,6 +8,9 @@ const ffmpegPath = require("ffmpeg-static");
 const fs = require("fs");
 const path = require("path");
 
+const TEMP_DIR = path.join(__dirname, "../temp");
+fs.mkdirSync(TEMP_DIR, { recursive: true });
+
 ffmpeg.setFfmpegPath(ffmpegPath);
 
 const upload = multer({
@@ -376,15 +379,13 @@ async function handleInboxResponder(req, res) {
 
       // video temporal original
       const tempInput = path.join(
-        __dirname,
-        "../temp",
+        TEMP_DIR,
         Date.now() + "-input.mp4"
       );
 
       // video comprimido
       const tempOutput = path.join(
-        __dirname,
-        "../temp",
+        TEMP_DIR,
         Date.now() + "-output.mp4"
       );
 
@@ -431,14 +432,12 @@ else if (mime.startsWith("audio/")) {
   tipoWhatsApp = "audio";
 
   const tempInput = path.join(
-    __dirname,
-    "../temp",
+    TEMP_DIR,
     Date.now() + "-input.webm"
   );
 
   const tempOutput = path.join(
-    __dirname,
-    "../temp",
+    TEMP_DIR,
     Date.now() + "-output.mp3"
   );
 
