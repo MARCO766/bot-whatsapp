@@ -35,9 +35,13 @@ FROM node:${NODE_VERSION}-alpine AS production
 WORKDIR /app
 
 ENV NODE_ENV=production \
-    PORT=3000
+    PORT=3000 \
+    FFMPEG_PATH=/usr/bin/ffmpeg
 
-RUN addgroup -g 1001 -S nodejs \
+# FFmpeg del sistema (musl/Alpine). ffmpeg-static no instala binario con --ignore-scripts
+# y sus builds glibc no son fiables en Alpine.
+RUN apk add --no-cache ffmpeg \
+ && addgroup -g 1001 -S nodejs \
  && adduser -S macbot -u 1001 -G nodejs
 
 COPY --from=backend-deps --chown=macbot:nodejs /app/node_modules ./node_modules

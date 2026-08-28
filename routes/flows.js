@@ -4,7 +4,6 @@ const router = express.Router();
 const axios = require("axios");
 const multer = require("multer");
 const ffmpeg = require("fluent-ffmpeg");
-const ffmpegPath = require("ffmpeg-static");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
@@ -12,7 +11,27 @@ const path = require("path");
 const TEMP_DIR = path.join(os.tmpdir(), "macbot-temp");
 fs.mkdirSync(TEMP_DIR, { recursive: true });
 
-ffmpeg.setFfmpegPath(ffmpegPath);
+function resolveFfmpegExecutable() {
+  const candidates = [
+    process.env.FFMPEG_PATH,
+    "/usr/bin/ffmpeg",
+    require("ffmpeg-static"),
+  ].filter(Boolean);
+
+  for (const candidate of candidates) {
+    try {
+      if (fs.existsSync(candidate)) {
+        return candidate;
+      }
+    } catch (_) {
+      // ignore invalid paths
+    }
+  }
+
+  return "ffmpeg";
+}
+
+ffmpeg.setFfmpegPath(resolveFfmpegExecutable());
 
 const upload = multer({
   storage: multer.memoryStorage()
