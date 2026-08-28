@@ -6,9 +6,10 @@ const multer = require("multer");
 const ffmpeg = require("fluent-ffmpeg");
 const ffmpegPath = require("ffmpeg-static");
 const fs = require("fs");
+const os = require("os");
 const path = require("path");
 
-const TEMP_DIR = path.join(__dirname, "../temp");
+const TEMP_DIR = path.join(os.tmpdir(), "macbot-temp");
 fs.mkdirSync(TEMP_DIR, { recursive: true });
 
 ffmpeg.setFfmpegPath(ffmpegPath);
