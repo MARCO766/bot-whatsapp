@@ -86,6 +86,15 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
 
+    implementation("io.socket:socket.io-client:2.1.1") {
+        exclude(group = "org.json", module = "json")
+    }
+
+    implementation("io.coil-kt:coil-compose:2.7.0")
+
+    implementation("androidx.media3:media3-exoplayer:1.5.1")
+    implementation("androidx.media3:media3-common:1.5.1")
+
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 }

@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
@@ -30,6 +31,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -37,6 +40,7 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -48,11 +52,12 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.macbot.app.data.api.model.ConexionWhatsapp
 import com.macbot.app.data.api.model.InboxChat
+import com.macbot.app.data.api.model.InboxChatEtiqueta
 import com.macbot.app.di.AppContainer
-import com.macbot.app.ui.theme.MacGreen
-import com.macbot.app.ui.theme.MacGreenLight
 import com.macbot.app.util.contactInitial
 import com.macbot.app.util.formatFechaListaChat
+import com.macbot.app.util.parseHexColor
+import com.macbot.app.util.readableOnColor
 import kotlinx.coroutines.flow.distinctUntilChanged
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -61,15 +66,35 @@ fun InboxScreen(
     appContainer: AppContainer,
     onUnauthorized: () -> Unit,
     onChatClick: (numero: String, conexionWhatsappId: String, nombre: String) -> Unit,
+    pendingDeletedChat: Pair<String, String>? = null,
+    onPendingDeletedChatHandled: () -> Unit = {},
+    snackbarMessage: String? = null,
+    onSnackbarShown: () -> Unit = {},
     viewModel: InboxViewModel = viewModel(
         factory = InboxViewModel.Factory(
             inboxRepository = appContainer.inboxRepository,
+            socketManager = appContainer.socketManager,
+            openChatTracker = appContainer.openChatTracker,
             onUnauthorized = onUnauthorized,
         ),
     ),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(pendingDeletedChat) {
+        pendingDeletedChat?.let { (numero, conexionId) ->
+            viewModel.onChatDeleted(numero, conexionId)
+            onPendingDeletedChatHandled()
+        }
+    }
+
+    LaunchedEffect(snackbarMessage) {
+        val message = snackbarMessage ?: return@LaunchedEffect
+        snackbarHostState.showSnackbar(message)
+        onSnackbarShown()
+    }
 
     LaunchedEffect(listState, uiState.chats.size, uiState.hasMore) {
         snapshotFlow {
@@ -86,6 +111,7 @@ fun InboxScreen(
     }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = {
@@ -128,7 +154,7 @@ fun InboxScreen(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center,
                     ) {
-                        CircularProgressIndicator(color = MacGreen)
+                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                     }
                 }
 
@@ -198,7 +224,7 @@ fun InboxScreen(
                                             CircularProgressIndicator(
                                                 modifier = Modifier.size(28.dp),
                                                 strokeWidth = 2.dp,
-                                                color = MacGreen,
+                                                color = MaterialTheme.colorScheme.primary,
                                             )
                                         }
                                     }
@@ -267,7 +293,7 @@ private fun ConversationItem(
             .fillMaxWidth()
             .clickable(onClick = onClick)
             .background(
-                if (hasUnread) MacGreenLight.copy(alpha = 0.35f)
+                if (hasUnread) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
                 else MaterialTheme.colorScheme.surface,
             )
             .padding(horizontal = 16.dp, vertical = 12.dp),
@@ -277,7 +303,7 @@ private fun ConversationItem(
             modifier = Modifier
                 .size(48.dp)
                 .clip(CircleShape)
-                .background(if (hasUnread) MacGreen else MaterialTheme.colorScheme.primaryContainer),
+                .background(if (hasUnread) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primaryContainer),
             contentAlignment = Alignment.Center,
         ) {
             Text(
@@ -312,7 +338,7 @@ private fun ConversationItem(
                 Text(
                     text = formatFechaListaChat(chat.ultimoMensajeEn),
                     style = MaterialTheme.typography.bodySmall,
-                    color = if (hasUnread) MacGreen else MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = if (hasUnread) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
 
@@ -336,7 +362,7 @@ private fun ConversationItem(
                     Spacer(modifier = Modifier.width(8.dp))
                     Box(
                         modifier = Modifier
-                            .background(MacGreen, CircleShape)
+                            .background(MaterialTheme.colorScheme.primary, CircleShape)
                             .padding(horizontal = 7.dp, vertical = 2.dp),
                         contentAlignment = Alignment.Center,
                     ) {
@@ -349,8 +375,68 @@ private fun ConversationItem(
                     }
                 }
             }
+
+            ConversationEtiquetasRow(etiquetas = chat.etiquetas.orEmpty())
         }
     }
+}
+
+private const val MAX_VISIBLE_INBOX_ETIQUETAS = 2
+
+@Composable
+private fun ConversationEtiquetasRow(etiquetas: List<InboxChatEtiqueta>) {
+    val validTags = etiquetas.filter { !it.nombre.isNullOrBlank() }
+    if (validTags.isEmpty()) return
+
+    val visible = validTags.take(MAX_VISIBLE_INBOX_ETIQUETAS)
+    val overflow = validTags.size - visible.size
+
+    Spacer(modifier = Modifier.height(4.dp))
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        visible.forEach { tag ->
+            InboxEtiquetaChip(tag = tag)
+        }
+        if (overflow > 0) {
+            InboxEtiquetaOverflowChip(count = overflow)
+        }
+    }
+}
+
+@Composable
+private fun InboxEtiquetaChip(tag: InboxChatEtiqueta) {
+    val nombre = tag.nombre.orEmpty()
+    val bgColor = parseHexColor(tag.color.orEmpty().ifBlank { "#25d366" }, MaterialTheme.colorScheme.primary)
+    val textColor = readableOnColor(bgColor)
+
+    Text(
+        text = nombre,
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(bgColor)
+            .padding(horizontal = 6.dp, vertical = 2.dp),
+        style = MaterialTheme.typography.labelSmall,
+        color = textColor,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+    )
+}
+
+@Composable
+private fun InboxEtiquetaOverflowChip(count: Int) {
+    Text(
+        text = "+$count",
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .padding(horizontal = 6.dp, vertical = 2.dp),
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        maxLines = 1,
+    )
 }
 
 @Composable

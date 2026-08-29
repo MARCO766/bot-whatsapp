@@ -43,6 +43,12 @@ class PersistentCookieJar(context: Context) : CookieJar {
         return prefs.all.keys.any { it.contains("connect.sid") }
     }
 
+    fun cookieHeaderFor(url: okhttp3.HttpUrl): String? {
+        val cookies = loadForRequest(url)
+        if (cookies.isEmpty()) return null
+        return cookies.joinToString("; ") { "${it.name}=${it.value}" }.takeIf { it.isNotBlank() }
+    }
+
     private fun cookieKey(url: HttpUrl, name: String): String {
         return "$KEY_PREFIX${url.host}_$name"
     }

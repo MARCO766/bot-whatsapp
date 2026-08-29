@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   MetricasApiError,
   fetchMetricasRevenueBreakdown,
@@ -19,6 +19,7 @@ export function useRevenueBreakdown(
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const requestSeqRef = useRef(0);
 
   const load = useCallback(async () => {
     if (conexionesLoading || conexionWhatsappId == null) return;
@@ -33,13 +34,16 @@ export function useRevenueBreakdown(
 
     if (params.periodo === "custom" && (!params.desde || !params.hasta)) return;
 
+    const requestSeq = ++requestSeqRef.current;
     setLoading(true);
     setError(null);
 
     try {
       const res = await fetchMetricasRevenueBreakdown(params);
+      if (requestSeq !== requestSeqRef.current) return;
       setData(res);
     } catch (err) {
+      if (requestSeq !== requestSeqRef.current) return;
       const msg =
         err instanceof MetricasApiError
           ? err.message
@@ -47,7 +51,9 @@ export function useRevenueBreakdown(
       setError(msg);
       setData(null);
     } finally {
-      setLoading(false);
+      if (requestSeq === requestSeqRef.current) {
+        setLoading(false);
+      }
     }
   }, [periodo, flujoId, conexionWhatsappId, conexionesLoading, customRange]);
 

@@ -16,7 +16,11 @@ import com.macbot.app.ui.main.MainShell
 @Composable
 fun MacBotApp(appContainer: AppContainer) {
     val appViewModel: AppViewModel = viewModel(
-        factory = AppViewModel.Factory(appContainer.authRepository),
+        factory = AppViewModel.Factory(
+            authRepository = appContainer.authRepository,
+            socketManager = appContainer.socketManager,
+            openChatTracker = appContainer.openChatTracker,
+        ),
     )
     val uiState by appViewModel.uiState.collectAsStateWithLifecycle()
 

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   MetricasApiError,
   fetchMetricasDiagnostico,
@@ -32,6 +32,7 @@ export function useMetricas(
   const [flujosLista, setFlujosLista] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const requestSeqRef = useRef(0);
 
   const loadFlujosLista = useCallback(async () => {
     if (conexionesLoading || conexionWhatsappId == null) return;
@@ -53,6 +54,7 @@ export function useMetricas(
       customRange
     );
     if (params.periodo === "custom" && (!params.desde || !params.hasta)) return;
+    const requestSeq = ++requestSeqRef.current;
     setLoading(true);
     setError(null);
     try {
@@ -64,6 +66,7 @@ export function useMetricas(
         fetchMetricasDiagnostico(params),
         uiOcultar.heatmapHorario ? Promise.resolve(null) : fetchMetricasHeatmap(params),
       ]);
+      if (requestSeq !== requestSeqRef.current) return;
       setResumen(r);
       setFunnel(f);
       setSeries(s);
@@ -71,6 +74,7 @@ export function useMetricas(
       setDiagnostico(d);
       setHeatmap(h);
     } catch (err) {
+      if (requestSeq !== requestSeqRef.current) return;
       const msg =
         err instanceof MetricasApiError ? err.message : "Error al cargar métricas";
       setError(msg);
@@ -81,7 +85,9 @@ export function useMetricas(
       setDiagnostico(null);
       setHeatmap(null);
     } finally {
-      setLoading(false);
+      if (requestSeq === requestSeqRef.current) {
+        setLoading(false);
+      }
     }
   }, [periodo, flujoId, conexionWhatsappId, conexionesLoading, uiOcultar, customRange]);
 

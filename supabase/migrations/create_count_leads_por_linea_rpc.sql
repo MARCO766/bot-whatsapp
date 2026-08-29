@@ -1,6 +1,6 @@
 -- MacBot — RPC escalable: contar leads (clientes) por línea WhatsApp.
 -- Un lead = registro en clientes. La línea se resuelve vía EXISTS en conversaciones.
--- p_flujo_id opcional: intersecta con seguimientos_programados (mismo criterio que countClientesEnRango).
+-- p_flujo_id opcional: intersecta con seguimientos_programados, crm_conversiones e ia_sessions.
 -- Pensado para >100.000 clientes: 1 round-trip HTTP, trabajo en PostgreSQL con índices.
 --
 -- EXPLAIN conceptual (PostgreSQL elegirá según estadísticas):
@@ -61,12 +61,29 @@ as $$
         where s.usuario_id = c.usuario_id
           and s.cliente_numero = c.numero
           and s.flujo_id = p_flujo_id
+          and s.conexion_whatsapp_id = p_conexion_whatsapp_id
+      )
+      or exists (
+        select 1
+        from public.crm_conversiones cv
+        where cv.usuario_id = c.usuario_id
+          and cv.cliente_numero = c.numero
+          and cv.flujo_id = p_flujo_id
+          and cv.conexion_whatsapp_id = p_conexion_whatsapp_id
+      )
+      or exists (
+        select 1
+        from public.ia_sessions ia
+        where ia.usuario_id = c.usuario_id
+          and ia.cliente_numero = c.numero
+          and ia.flujo_id = p_flujo_id
+          and ia.conexion_whatsapp_id = p_conexion_whatsapp_id
       )
     );
 $$;
 
 comment on function public.count_leads_por_linea(uuid, uuid, timestamptz, timestamptz, uuid) is
-  'Métricas CRM: cuenta clientes (leads) en un rango de fechas pertenecientes a una línea WhatsApp (vía conversaciones). p_flujo_id opcional filtra por flujo (seguimientos_programados).';
+  'Métricas CRM: cuenta clientes (leads) en un rango de fechas pertenecientes a una línea WhatsApp (vía conversaciones). p_flujo_id opcional filtra por seguimientos, conversiones o sesiones IA del flujo.';
 
 grant execute on function public.count_leads_por_linea(uuid, uuid, timestamptz, timestamptz, uuid)
   to service_role;
