@@ -390,56 +390,49 @@ async function handleInboxResponder(req, res) {
     }
 
     // =========================
-    // VIDEO
+    // VIDEO (sin ffmpeg: evita OOM en Render ≤512MB)
+    // Límite 15MB alineado con /subir-archivo, RM24H y Seguimiento V2.
     // =========================
 
     else if (mime.startsWith("video/")) {
 
+      const MAX_VIDEO_BYTES = 15 * 1024 * 1024;
+      const mimeVideo = String(mime || "").toLowerCase();
+      const extVideo = String(req.file.originalname || "")
+        .split(".")
+        .pop()
+        .toLowerCase();
+      const esMp4 =
+        mimeVideo === "video/mp4" ||
+        mimeVideo === "video/mpeg4" ||
+        extVideo === "mp4";
+
+      if (!esMp4) {
+        if (wantsInboxJson(req)) {
+          return res.status(400).json({
+            ok: false,
+            error: "El video debe ser MP4 (video/mp4)",
+          });
+        }
+        return res.send("❌ El video debe ser MP4 (video/mp4)");
+      }
+
+      if (req.file.size > MAX_VIDEO_BYTES) {
+        if (wantsInboxJson(req)) {
+          return res.status(400).json({
+            ok: false,
+            error: "El video debe ser menor a 15MB",
+          });
+        }
+        return res.send("❌ El video debe ser menor a 15MB");
+      }
+
+      // Conservar buffer y MIME originales — sin temps ni ffmpeg
+      req.file.mimetype = "video/mp4";
+      if (!String(req.file.originalname || "").toLowerCase().endsWith(".mp4")) {
+        req.file.originalname = "video.mp4";
+      }
       tipoWhatsApp = "video";
-
-      // video temporal original
-      const tempInput = path.join(
-        TEMP_DIR,
-        Date.now() + "-input.mp4"
-      );
-
-      // video comprimido
-      const tempOutput = path.join(
-        TEMP_DIR,
-        Date.now() + "-output.mp4"
-      );
-
-      fs.writeFileSync(tempInput, req.file.buffer);
-
-      // comprimir video
-      await new Promise((resolve, reject) => {
-
-        ffmpeg(tempInput)
-
-          .outputOptions([
-            "-vcodec libx264",
-            "-crf 32",
-            "-preset veryfast",
-            "-movflags +faststart",
-            "-acodec aac",
-            "-b:a 96k",
-            "-vf scale=720:-2"
-          ])
-
-          .save(tempOutput)
-
-          .on("end", resolve)
-
-          .on("error", reject);
-
-      });
-
-      const compressedBuffer = fs.readFileSync(tempOutput);
-
-      req.file.buffer = compressedBuffer;
-
-      fs.unlinkSync(tempInput);
-      fs.unlinkSync(tempOutput);
 
     }
 
