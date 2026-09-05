@@ -415,7 +415,8 @@ input {
     radial-gradient(circle at 100% 20%, rgba(168,85,247,.12), transparent 30%),
     #050816;
   background-size: 42px 42px, 42px 42px, auto, auto, auto;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: visible;
 }
 
 .noise {
