@@ -1975,10 +1975,10 @@ window.MacBotRemarketingGlobal = (function () {
       label: "MP3, OGG o M4A · máx 5 MB",
     },
     documento: {
-      maxBytes: 8 * 1024 * 1024,
+      maxBytes: 5 * 1024 * 1024,
       accept:
         ".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-      label: "PDF, DOC o DOCX · máx 8 MB",
+      label: "PDF, DOC o DOCX · máx 5 MB",
     },
   };
 
@@ -2001,7 +2001,7 @@ window.MacBotRemarketingGlobal = (function () {
     documento: {
       select: "📁 SELECCIONAR ARCHIVO",
       change: "📁 CAMBIAR ARCHIVO",
-      hint: "MÁX 8MB (PDF/DOC/DOCX)",
+      hint: "MÁX 5MB (PDF/DOC/DOCX)",
     },
   };
 

@@ -1247,6 +1247,17 @@ window.MacBotContenido = (function () {
       return;
     }
 
+    if (tipo === "audio" && file.size > 5 * 1024 * 1024) {
+      alert("El audio debe ser menor a 5MB");
+      if (fileInput) fileInput.value = "";
+      return;
+    }
+    if (tipo === "video" && file.size > 15 * 1024 * 1024) {
+      alert("El video debe ser menor a 15MB");
+      if (fileInput) fileInput.value = "";
+      return;
+    }
+
     const formData = new FormData();
     formData.append("archivo", file);
 

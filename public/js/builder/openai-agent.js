@@ -136,7 +136,7 @@ window.MacBotOpenAIAgent = (function () {
   const SEND_MODES_VALIDOS = ["random", "all", "first"];
   const CAPTION_MODES_VALIDOS = ["caption_item", "same_caption", "none"];
 
-  const MAX_FOTO_BIBLIOTECA_BYTES = 5 * 1024 * 1024;
+  const MAX_FOTO_BIBLIOTECA_BYTES = 2 * 1024 * 1024;
   const UPLOAD_BIBLIOTECA_ENDPOINT = "/api/seguimiento-v2/upload-media";
   const MIME_FOTOS_BIBLIOTECA = [
     "image/jpeg",
@@ -1567,7 +1567,7 @@ window.MacBotOpenAIAgent = (function () {
     }
 
     if (file.size >= MAX_FOTO_BIBLIOTECA_BYTES) {
-      mostrarToastBiblioteca("La imagen supera el límite de 5 MB.", "warn");
+      mostrarToastBiblioteca("La imagen supera el límite de 2 MB.", "warn");
       return;
     }
 

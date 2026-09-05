@@ -126,14 +126,30 @@ router.post("/subir-archivo", protegerPanel, upload.single("archivo"), async (re
       return res.status(400).json({ error: "No se recibió archivo" });
     }
 
-    const esVideo = (req.file.mimetype || "").startsWith("video/");
-    const maxBytes = esVideo ? 15 * 1024 * 1024 : 50 * 1024 * 1024;
+    const mime = String(req.file.mimetype || "").toLowerCase();
+    const esImagen = mime.startsWith("image/") || esArchivoImagen(req.file);
+    const esVideo = mime.startsWith("video/");
+    const esAudio = mime.startsWith("audio/");
+
+    let maxBytes;
+    let errorLimite;
+    if (esImagen) {
+      maxBytes = 2 * 1024 * 1024;
+      errorLimite = "La imagen debe ser menor a 2MB";
+    } else if (esVideo) {
+      maxBytes = 15 * 1024 * 1024;
+      errorLimite = "El video debe ser menor a 15MB";
+    } else if (esAudio) {
+      maxBytes = 5 * 1024 * 1024;
+      errorLimite = "El audio debe ser menor a 5MB";
+    } else {
+      maxBytes = 5 * 1024 * 1024;
+      errorLimite = "El documento debe ser menor a 5MB";
+    }
 
     if (req.file.size > maxBytes) {
       return res.status(400).json({
-        error: esVideo
-          ? "El video debe ser menor a 15MB"
-          : "Archivo demasiado grande",
+        error: errorLimite,
       });
     }
 

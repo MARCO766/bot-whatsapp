@@ -7,6 +7,9 @@ window.MacBotSeguimiento = (function () {
   const MAX_BOTONES = 3;
   const MAX_TEXTO_BOTON = 20;
   const MAX_VIDEO_MB = 15;
+  const MAX_IMAGEN_MB = 2;
+  const MAX_AUDIO_MB = 5;
+  const MAX_DOCUMENTO_MB = 5;
   function crearConfigVacia() {
     return {
       version: 2,
@@ -604,9 +607,24 @@ window.MacBotSeguimiento = (function () {
     if (!file) return;
 
     const paso = configActiva.pasos[pasoActivoIndex];
-    const esVideo = paso && paso.mensaje.tipo === "video";
-    if (esVideo && file.size > MAX_VIDEO_MB * 1024 * 1024) {
-      alert("El video debe ser menor a " + MAX_VIDEO_MB + "MB");
+    const tipoMedia = paso && paso.mensaje ? paso.mensaje.tipo : null;
+    let maxMb = null;
+    let labelLimite = null;
+    if (tipoMedia === "imagen") {
+      maxMb = MAX_IMAGEN_MB;
+      labelLimite = "La imagen debe ser menor a " + MAX_IMAGEN_MB + "MB";
+    } else if (tipoMedia === "video") {
+      maxMb = MAX_VIDEO_MB;
+      labelLimite = "El video debe ser menor a " + MAX_VIDEO_MB + "MB";
+    } else if (tipoMedia === "audio") {
+      maxMb = MAX_AUDIO_MB;
+      labelLimite = "El audio debe ser menor a " + MAX_AUDIO_MB + "MB";
+    } else if (tipoMedia === "pdf") {
+      maxMb = MAX_DOCUMENTO_MB;
+      labelLimite = "El documento debe ser menor a " + MAX_DOCUMENTO_MB + "MB";
+    }
+    if (maxMb != null && file.size > maxMb * 1024 * 1024) {
+      alert(labelLimite);
       e.target.value = "";
       return;
     }

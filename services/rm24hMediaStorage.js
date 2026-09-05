@@ -22,7 +22,7 @@ const LIMITES = {
     exts: [".mp3", ".ogg", ".m4a"],
   },
   documento: {
-    maxBytes: 8 * 1024 * 1024,
+    maxBytes: 5 * 1024 * 1024,
     mimes: [
       "application/pdf",
       "application/msword",

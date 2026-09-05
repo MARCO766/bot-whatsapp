@@ -7,10 +7,10 @@ const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
 const BUCKET = "seguimiento-v2-media";
 
 const LIMITES = {
-  imagen: { maxBytes: 5 * 1024 * 1024 },
+  imagen: { maxBytes: 2 * 1024 * 1024 },
   audio: { maxBytes: 5 * 1024 * 1024 },
   video: { maxBytes: 15 * 1024 * 1024 },
-  documento: { maxBytes: 10 * 1024 * 1024 },
+  documento: { maxBytes: 5 * 1024 * 1024 },
 };
 
 const EXT_BLOQUEADAS = [".exe", ".bat", ".cmd", ".js", ".sh"];

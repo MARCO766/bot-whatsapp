@@ -11,10 +11,10 @@ window.MacBotSeguimientoV2 = (function () {
   };
   const BLOQUES_TIPO = [
     { id: "texto", label: "Texto", labelCorto: "Texto", icon: "💬" },
-    { id: "imagen", label: "Imagen", labelCorto: "Imagen", icon: "🖼", maxMb: 5 },
+    { id: "imagen", label: "Imagen", labelCorto: "Imagen", icon: "🖼", maxMb: 2 },
     { id: "video", label: "Video", labelCorto: "Video", icon: "🎥", maxMb: 15, recomendado: true },
     { id: "audio", label: "Audio", labelCorto: "Audio", icon: "🎵", maxMb: 5, recomendado: true },
-    { id: "documento", label: "Archivo", labelCorto: "Archivo", icon: "📄", maxMb: 10 },
+    { id: "documento", label: "Archivo", labelCorto: "Archivo", icon: "📄", maxMb: 5 },
   ];
   const PRESETS_DELAY = [
     { key: "10s", label: "10 segundos", valor: 10, unidad: "segundos" },
