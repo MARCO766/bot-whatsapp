@@ -1832,6 +1832,71 @@ export const flujosStyles = `
   font-size: 0.95rem;
 }
 
+.flCountrySelect {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.flCountryLabel {
+  display: block;
+  margin: 0 0 6px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+
+.flCountrySearch {
+  margin-bottom: 0;
+}
+
+.flCountryDropdown {
+  margin-bottom: 0;
+}
+
+.flCountryPrefixRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.15);
+  background: rgba(2, 6, 23, 0.45);
+}
+
+.flCountryPrefixLabel {
+  font-size: 0.8rem;
+  color: #94a3b8;
+}
+
+.flCountryPrefixValue {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #e2e8f0;
+  font-variant-numeric: tabular-nums;
+}
+
+.flCountryHint {
+  margin: 0;
+  font-size: 0.8rem;
+  color: #64748b;
+}
+
+.flCountryFlowName {
+  margin: 0 0 14px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(34, 211, 238, 0.08);
+  border: 1px solid rgba(34, 211, 238, 0.2);
+  color: #e2e8f0;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
 @media (max-width: 768px) {
   .flStatsGrid { grid-template-columns: repeat(2, 1fr); }
   .flCard.listMode { flex-direction: column; }

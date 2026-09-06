@@ -13,6 +13,7 @@ export default function FlowActionsMenu({
   onDelete,
   onMoveFolder,
   onEditName,
+  onEditCountry,
   onShowHistory,
   carpetasMover = [],
   carpetas = [],
@@ -159,6 +160,28 @@ export default function FlowActionsMenu({
         <button type="button" role="menuitem" onClick={() => { onEditName?.(flow); close(); }}>
           <span className="flMenuIcon" aria-hidden>✎</span>
           <span>Renombrar</span>
+        </button>
+        <button
+          type="button"
+          role="menuitem"
+          className={!puedeEscribir ? "flMenuItemDisabled" : ""}
+          title={
+            puedeEscribir
+              ? undefined
+              : "Selecciona una línea WhatsApp (no «Todas las líneas»)"
+          }
+          onClick={() => {
+            if (!puedeEscribir) {
+              showMiniToast("Selecciona una línea WhatsApp");
+              close();
+              return;
+            }
+            onEditCountry?.(flow);
+            close();
+          }}
+        >
+          <span className="flMenuIcon" aria-hidden>🌎</span>
+          <span>País de venta</span>
         </button>
 
         <div className="flMenuDivider" />

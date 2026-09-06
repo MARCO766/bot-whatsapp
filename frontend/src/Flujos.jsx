@@ -7,6 +7,8 @@ import ConfirmModal from "./components/flujos/ConfirmModal";
 import CarpetaModal from "./components/flujos/CarpetaModal";
 import ImportFlowModal from "./components/flujos/ImportFlowModal";
 import FlowVersionsModal from "./components/flujos/FlowVersionsModal";
+import CountrySelect from "./components/flujos/CountrySelect";
+import FlowCountryModal from "./components/flujos/FlowCountryModal";
 import { FLOW_STATES } from "./flujos/constants";
 import { flujosStyles } from "./flujos/styles";
 import { SORT_OPTIONS } from "./flujos/constants";
@@ -15,6 +17,7 @@ import { loginUrl } from "./flujos/api";
 import UpgradeLimitModal from "./planes/UpgradeLimitModal";
 import { CONEXION_TODAS, sameConexionId } from "./utils/conexionesInbox";
 import { FLOW_DRAG_MIME, flowMatchesFolder } from "./flujos/utils";
+import { countryAllValue } from "./flujos/countries";
 
 const STORAGE_COLLAPSE = "macbot_flujos_collapse_sections";
 
@@ -102,6 +105,10 @@ export default function Flujos({ cambiarVista }) {
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [newFlowOpen, setNewFlowOpen] = useState(false);
   const [newFlowName, setNewFlowName] = useState("");
+  const [newFlowCountry, setNewFlowCountry] = useState(countryAllValue);
+  const [newFlowSaving, setNewFlowSaving] = useState(false);
+  const [countryEditFlow, setCountryEditFlow] = useState(null);
+  const [countryEditSaving, setCountryEditSaving] = useState(false);
   const [carpetaModal, setCarpetaModal] = useState(null);
   const [carpetaSaving, setCarpetaSaving] = useState(false);
   const [confirmDeleteCarpeta, setConfirmDeleteCarpeta] = useState(null);
@@ -212,11 +219,27 @@ export default function Flujos({ cambiarVista }) {
   );
 
   async function handleCreate() {
-    if (!newFlowName.trim()) return;
-    const flow = await crearFlujo(newFlowName.trim());
+    if (!newFlowName.trim() || newFlowSaving) return;
+    setNewFlowSaving(true);
+    const flow = await crearFlujo(newFlowName.trim(), { country: newFlowCountry });
+    setNewFlowSaving(false);
     if (!flow) return;
     setNewFlowName("");
+    setNewFlowCountry(countryAllValue());
     setNewFlowOpen(false);
+  }
+
+  function openNewFlowModal() {
+    setNewFlowName("");
+    setNewFlowCountry(countryAllValue());
+    setNewFlowOpen(true);
+  }
+
+  async function handleSaveCountry(flowId, country) {
+    setCountryEditSaving(true);
+    await updateMeta(flowId, { country });
+    setCountryEditSaving(false);
+    setCountryEditFlow(null);
   }
 
   function handleEditName(flow) {
@@ -265,7 +288,7 @@ export default function Flujos({ cambiarVista }) {
                 ? undefined
                 : "Selecciona una línea WhatsApp (no «Todas las líneas»)"
             }
-            onClick={() => setNewFlowOpen(true)}
+            onClick={openNewFlowModal}
           >
             + Nuevo flujo
           </button>
@@ -480,8 +503,9 @@ export default function Flujos({ cambiarVista }) {
         onDelete={(flow) => setConfirmDelete(flow)}
         onMoveFolder={moveToFolder}
         onEditName={handleEditName}
+        onEditCountry={(flow) => setCountryEditFlow(flow)}
         onShowHistory={(flow) => setHistoryFlow(flow)}
-        onCreate={() => setNewFlowOpen(true)}
+        onCreate={openNewFlowModal}
         onImport={() => setImportOpen(true)}
         carpetas={carpetas}
         carpetasMover={carpetasMoverMenu}
@@ -570,28 +594,61 @@ export default function Flujos({ cambiarVista }) {
       />
 
       {newFlowOpen && (
-        <div className="flModalOverlay" onClick={() => setNewFlowOpen(false)} role="presentation">
+        <div
+          className="flModalOverlay"
+          onClick={() => !newFlowSaving && setNewFlowOpen(false)}
+          role="presentation"
+        >
           <div className="flModal" onClick={(e) => e.stopPropagation()} role="dialog">
             <h2>Nuevo flujo</h2>
             <p className="sub">Crea un flujo vacío y ábrelo en el builder de producción.</p>
+            <label className="flCountryLabel" htmlFor="new-flow-name">
+              Nombre del flujo
+            </label>
             <input
+              id="new-flow-name"
               className="flInput"
               placeholder="Nombre del flujo"
               value={newFlowName}
+              disabled={newFlowSaving}
               onChange={(e) => setNewFlowName(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleCreate()}
             />
+            <CountrySelect
+              id="new-flow-country"
+              value={newFlowCountry}
+              onChange={setNewFlowCountry}
+              disabled={newFlowSaving}
+            />
             <div className="flModalActions">
-              <button type="button" className="flBtn flBtnGhost" onClick={() => setNewFlowOpen(false)}>
+              <button
+                type="button"
+                className="flBtn flBtnGhost"
+                disabled={newFlowSaving}
+                onClick={() => setNewFlowOpen(false)}
+              >
                 Cancelar
               </button>
-              <button type="button" className="flBtn flBtnPrimary" onClick={handleCreate}>
-                Crear
+              <button
+                type="button"
+                className="flBtn flBtnPrimary"
+                disabled={newFlowSaving || !newFlowName.trim()}
+                onClick={handleCreate}
+              >
+                {newFlowSaving ? "Creando…" : "Crear"}
               </button>
             </div>
           </div>
         </div>
       )}
+
+      <FlowCountryModal
+        open={!!countryEditFlow}
+        flow={countryEditFlow}
+        saving={countryEditSaving}
+        onClose={() => !countryEditSaving && setCountryEditFlow(null)}
+        onSave={handleSaveCountry}
+      />
 
       <UpgradeLimitModal
         data={limitModal}

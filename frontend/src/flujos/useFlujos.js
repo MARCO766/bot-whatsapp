@@ -436,14 +436,14 @@ export function useFlujos() {
   );
 
   const crearFlujo = useCallback(
-    async (nombre) => {
+    async (nombre, meta = {}) => {
       if (!requireLineaParaEscribir()) return null;
       if (!apiOnline) {
         showToast("Inicia sesión en el panel para crear flujos", "error");
         return null;
       }
       try {
-        const res = await createFlow(nombre, {}, conexionSeleccionadaId);
+        const res = await createFlow(nombre, meta, conexionSeleccionadaId);
         showToast("Flujo creado");
         await load();
         return res.flow;

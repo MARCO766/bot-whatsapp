@@ -13,6 +13,7 @@ import {
 import FlowActionsMenu from "./FlowActionsMenu";
 import FlowPreviewMini from "./FlowPreviewMini";
 import FlowTimeline from "./FlowTimeline";
+import { formatCountryLabel } from "../../flujos/countries";
 
 const PRIMARY_METRICS = [
   {
@@ -98,6 +99,7 @@ function FlowCard({
   onDelete,
   onMoveFolder,
   onEditName,
+  onEditCountry,
   onShowHistory,
   carpetas = [],
   carpetasMover = [],
@@ -168,6 +170,10 @@ function FlowCard({
                 {flow.conexion_nombre || (flow.conexion_whatsapp_id ? "Línea" : "Sin línea")}
               </span>
             )}
+            <span className="flMetaChip" title="País de venta del flujo">
+              <span className="flMetaChipIcon" aria-hidden>📍</span>
+              {formatCountryLabel(flow.meta?.country)}
+            </span>
             <span className="flMetaChip" title="Activadores del flujo">
               <span className="flMetaChipIcon" aria-hidden>⚡</span>
               {activos}/{totalActivadores} activadores
@@ -183,6 +189,7 @@ function FlowCard({
           onDelete={onDelete}
           onMoveFolder={onMoveFolder}
           onEditName={onEditName}
+          onEditCountry={onEditCountry}
           onShowHistory={onShowHistory}
           carpetasMover={carpetasMover}
           carpetas={carpetas}

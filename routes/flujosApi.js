@@ -21,6 +21,11 @@ const {
   metaFromCarpeta,
   isSlugCarpeta,
 } = require("../services/flujosCarpetasService");
+const {
+  normalizeCountryForRead,
+  normalizeCountryForWrite,
+  hasPersistedCountry,
+} = require("../services/flowCountryMeta");
 const rt = require("../services/realtimeService");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -150,6 +155,8 @@ function extractMeta(data) {
     campanas: Array.isArray(meta.campanas) ? meta.campanas : [],
     actualizado_en: meta.actualizado_en || null,
     ultima_ejecucion: meta.ultima_ejecucion || null,
+    // Compat: sin country en meta → Todos los países (solo lectura API; no migra filas).
+    country: normalizeCountryForRead(meta.country),
   };
 }
 
@@ -529,8 +536,13 @@ router.patch("/api/flujos/:id/meta", protegerApi, async (req, res) => {
       flujo.data && typeof flujo.data === "object"
         ? { ...flujo.data }
         : { nodos: [], conexiones: [] };
+    const rawMeta =
+      data.macbot_meta && typeof data.macbot_meta === "object" ? { ...data.macbot_meta } : {};
     const prev = extractMeta(data);
+    // Conservar claves existentes (p.ej. plantilla) y no inyectar country en flujos legacy
+    // salvo que el cliente lo envíe explícitamente.
     const nextMeta = {
+      ...rawMeta,
       estado: prev.estado,
       carpeta: prev.carpeta,
       carpeta_id: prev.carpeta_id,
@@ -562,6 +574,18 @@ router.patch("/api/flujos/:id/meta", protegerApi, async (req, res) => {
     if (Array.isArray(patch.etiquetas)) nextMeta.etiquetas = patch.etiquetas;
     if (Array.isArray(patch.campanas)) nextMeta.campanas = patch.campanas;
 
+    if (patch.country !== undefined) {
+      const countryWrite = normalizeCountryForWrite(patch.country);
+      if (!countryWrite.ok) {
+        return res.status(400).json({ ok: false, error: countryWrite.error });
+      }
+      nextMeta.country = countryWrite.value;
+    } else if (hasPersistedCountry(rawMeta)) {
+      nextMeta.country = normalizeCountryForRead(rawMeta.country);
+    } else {
+      delete nextMeta.country;
+    }
+
     data.macbot_meta = nextMeta;
 
     await axios.patch(
@@ -577,7 +601,13 @@ router.patch("/api/flujos/:id/meta", protegerApi, async (req, res) => {
 
     log(`meta actualizada flujo=${id} estado=${nextMeta.estado}`);
     rt.flujoGuardado(req, usuarioId, { id, accion: "meta", meta: nextMeta });
-    res.json({ ok: true, meta: nextMeta });
+    res.json({
+      ok: true,
+      meta: {
+        ...nextMeta,
+        country: normalizeCountryForRead(nextMeta.country),
+      },
+    });
   } catch (error) {
     log("PATCH meta ERROR", error.response?.data || error.message);
     res.status(500).json({ ok: false, error: "No se pudo actualizar el flujo" });
@@ -632,6 +662,11 @@ router.post("/api/flujos", protegerApi, verificarLimiteNuevoFlujoSiempre, async 
       return res.status(400).json({ ok: false, error: "Línea WhatsApp no válida" });
     }
 
+    const countryWrite = normalizeCountryForWrite(meta.country);
+    if (!countryWrite.ok) {
+      return res.status(400).json({ ok: false, error: countryWrite.error });
+    }
+
     const data = {
       nodos: [],
       conexiones: [],
@@ -640,6 +675,7 @@ router.post("/api/flujos", protegerApi, verificarLimiteNuevoFlujoSiempre, async 
         carpeta: FOLDERS.includes(meta.carpeta) ? meta.carpeta : "sin_carpeta",
         etiquetas: [],
         campanas: [],
+        country: countryWrite.value,
         actualizado_en: new Date().toISOString(),
       },
     };

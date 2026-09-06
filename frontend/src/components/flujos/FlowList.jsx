@@ -14,6 +14,7 @@ function FlowList({
   onDelete,
   onMoveFolder,
   onEditName,
+  onEditCountry,
   onShowHistory,
   onCreate,
   onImport,
@@ -61,6 +62,7 @@ function FlowList({
           onDelete={onDelete}
           onMoveFolder={onMoveFolder}
           onEditName={onEditName}
+          onEditCountry={onEditCountry}
           onShowHistory={onShowHistory}
           carpetas={carpetas}
           carpetasMover={carpetasMover}
