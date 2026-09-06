@@ -89,6 +89,9 @@ const {
   evaluarCicloVidaSesionFlujo,
   expirarSesion,
 } = require("./flowSessionService");
+const {
+  isContactCompatibleWithFlowCountry,
+} = require("./flowCountryMeta");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
@@ -2611,17 +2614,58 @@ async function resolverActivadorEntrante(
   const ordenados = sortActivadores(activadores);
   let activador = null;
   let matchInfo = null;
+  const contactNumero = opts.clienteNumero ?? opts.numero ?? null;
 
   for (const a of ordenados) {
     if (opts.excluirCualquierMensaje && resolveTipo(a) === TIPOS.CUALQUIER) {
       continue;
     }
     const result = matchActivador(textoNorm, a, opts);
-    if (result.matched) {
-      activador = a;
-      matchInfo = result;
-      break;
+    if (!result.matched) {
+      continue;
     }
+
+    // Filtro de elegibilidad por país del contacto (no cambia sort ni match).
+    // Fail-closed: sin flujo/datos legibles para country → continue (no break).
+    if (contactNumero != null && String(contactNumero).trim() !== "") {
+      const candidateFlowId = a.flujo_id;
+      if (
+        !candidateFlowId ||
+        candidateFlowId === "undefined" ||
+        candidateFlowId === "null"
+      ) {
+        continue;
+      }
+
+      let countryEvalOk = false;
+      try {
+        const responseFlujoCountry = await axios.get(
+          `${SUPABASE_URL}/rest/v1/flujos_builder?id=eq.${candidateFlowId}&usuario_id=eq.${usuarioId}&select=*`,
+          { headers: supabaseHeaders() }
+        );
+        const flujoCountry = responseFlujoCountry.data?.[0];
+        const flujoDatosCountry = obtenerDatosFlujo(flujoCountry);
+        if (flujoCountry && flujoDatosCountry) {
+          const country =
+            (flujoDatosCountry.macbot_meta &&
+              flujoDatosCountry.macbot_meta.country) ||
+            null;
+          if (isContactCompatibleWithFlowCountry(contactNumero, country)) {
+            countryEvalOk = true;
+          }
+        }
+      } catch (_errCountry) {
+        countryEvalOk = false;
+      }
+
+      if (!countryEvalOk) {
+        continue;
+      }
+    }
+
+    activador = a;
+    matchInfo = result;
+    break;
   }
 
   if (!activador || !matchInfo) return null;
@@ -2669,12 +2713,18 @@ async function resolverActivadorEntrante(
   return { activador, matchInfo, flujo, flujoDatos, flowId };
 }
 
-async function buscarActivadorValido(textoCliente, usuarioId, conexionWhatsappId) {
+async function buscarActivadorValido(
+  textoCliente,
+  usuarioId,
+  conexionWhatsappId,
+  clienteNumero = null
+) {
+  // Misma resolución que el runtime entrante (incl. filtro país) para reactivar pausa.
   const resolved = await resolverActivadorEntrante(
     textoCliente,
     usuarioId,
     conexionWhatsappId,
-    { excluirCualquierMensaje: true }
+    { excluirCualquierMensaje: true, clienteNumero }
   );
   return resolved?.activador || null;
 }
@@ -2698,7 +2748,8 @@ async function manejarGuardPausaBot({
   const activador = await buscarActivadorValido(
     texto,
     usuarioId,
-    conexionWhatsappId
+    conexionWhatsappId,
+    clienteNumero
   );
   if (!activador) {
     console.log("[BOT_PAUSE] automatizacion omitida por pausa", {
@@ -2764,7 +2815,7 @@ async function buscarYEjecutarActivador(
     textoCliente,
     usuarioId,
     conexionWhatsappId,
-    matchOpts
+    { ...matchOpts, clienteNumero: numero }
   );
   if (!resolved) {
     console.log("⚠️ ACTIVADOR — no encontrado para texto:", textoNorm);
