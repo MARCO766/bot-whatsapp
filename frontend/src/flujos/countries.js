@@ -1,4 +1,4 @@
-import countriesData from "./countries.json";
+import countriesData from "@flow-countries";
 
 export const COUNTRY_MODE_ALL = "all";
 export const COUNTRY_MODE_SPECIFIC = "specific";

@@ -1,18 +1,33 @@
 /**
  * País de venta del flujo (macbot_meta.country).
  * Solo persistencia / validación — no afecta routing de mensajes.
+ *
+ * Fuente única: data/flow-countries.json (incluida en la imagen Docker).
  */
 const path = require("path");
+const fs = require("fs");
+
+const CATALOG_PATH = path.join(__dirname, "..", "data", "flow-countries.json");
 
 let COUNTRIES = [];
 try {
-  COUNTRIES = require("../frontend/src/flujos/countries.json");
+  const raw = fs.readFileSync(CATALOG_PATH, "utf8");
+  const parsed = JSON.parse(raw);
+  COUNTRIES = Array.isArray(parsed) ? parsed : [];
 } catch (err) {
   console.log(
-    "[flowCountryMeta] no se pudo cargar countries.json:",
+    "[flowCountryMeta] no se pudo cargar data/flow-countries.json:",
     err?.message || err
   );
   COUNTRIES = [];
+}
+
+if (!COUNTRIES.length) {
+  console.log(
+    "[flowCountryMeta] catálogo vacío — países específicos fallarán hasta que exista data/flow-countries.json"
+  );
+} else {
+  console.log(`[flowCountryMeta] catálogo cargado: ${COUNTRIES.length} países (${CATALOG_PATH})`);
 }
 
 const MODE_ALL = "all";
@@ -144,6 +159,5 @@ module.exports = {
   normalizeCountryForRead,
   normalizeCountryForWrite,
   hasPersistedCountry,
-  // path hint for debugging
-  catalogPath: path.join(__dirname, "../frontend/src/flujos/countries.json"),
+  catalogPath: CATALOG_PATH,
 };

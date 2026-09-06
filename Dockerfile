@@ -7,9 +7,14 @@ ARG NODE_VERSION=22.14.0
 # ─── 1) React / Vite ───────────────────────────────────────────────────────────
 FROM node:${NODE_VERSION}-alpine AS frontend-build
 
-WORKDIR /app/frontend
+WORKDIR /app
 
-COPY frontend/package.json frontend/package-lock.json ./
+# Catálogo compartido (frontend importa vía alias @flow-countries → ../data/...)
+COPY data ./data
+
+COPY frontend/package.json frontend/package-lock.json ./frontend/
+
+WORKDIR /app/frontend
 
 RUN npm ci --ignore-scripts
 
@@ -59,6 +64,8 @@ COPY --chown=macbot:nodejs jobs ./jobs
 COPY --chown=macbot:nodejs utils ./utils
 COPY --chown=macbot:nodejs views ./views
 COPY --chown=macbot:nodejs public ./public
+# Fuente única del catálogo de países (flowCountryMeta + build frontend)
+COPY --chown=macbot:nodejs data ./data
 
 COPY --from=frontend-build --chown=macbot:nodejs /app/frontend/dist ./frontend/dist
 

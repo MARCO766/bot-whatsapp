@@ -1,12 +1,23 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
+import path from 'path'
+import { fileURLToPath } from 'url'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const repoRoot = path.resolve(__dirname, '..')
 
 export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
   ],
+  resolve: {
+    alias: {
+      // Fuente única del catálogo de países (compartida con el backend).
+      '@flow-countries': path.resolve(repoRoot, 'data/flow-countries.json'),
+    },
+  },
   build: {
     outDir: 'dist',
     emptyOutDir: true,
@@ -27,6 +38,10 @@ export default defineConfig({
     },
   },
   server: {
+    fs: {
+      // Permitir importar data/flow-countries.json fuera de frontend/
+      allow: [repoRoot],
+    },
     proxy: {
       '/assets': {
         target: process.env.VITE_DEV_API || 'http://localhost:3000',
