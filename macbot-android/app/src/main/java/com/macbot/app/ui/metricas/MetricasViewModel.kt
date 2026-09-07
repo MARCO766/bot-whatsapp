@@ -83,6 +83,7 @@ class MetricasViewModel(
 
     private val loadMutex = Mutex()
     private var loadGeneration = 0
+    private var expectedQueryKey: String? = null
 
     init {
         loadInitial()
@@ -91,11 +92,18 @@ class MetricasViewModel(
     fun loadInitial() {
         viewModelScope.launch {
             loadMutex.withLock {
-                _uiState.update { it.copy(isLoading = true, mainError = null) }
+                val hasData = _uiState.value.kpis != null
+                _uiState.update {
+                    it.copy(
+                        isLoading = !hasData,
+                        isUpdating = hasData,
+                        mainError = if (hasData) null else it.mainError,
+                    )
+                }
                 loadConexionesInternal()
                 loadFlujosListaInternal()
                 loadMetricasInternal(buildQueryParams(_uiState.value))
-                _uiState.update { it.copy(isLoading = false) }
+                _uiState.update { it.copy(isUpdating = false, isLoading = false) }
             }
         }
     }
@@ -215,6 +223,8 @@ class MetricasViewModel(
 
     private suspend fun loadMetricasInternal(params: MetricasQueryParams) {
         val generation = ++loadGeneration
+        val queryKey = buildQueryKey(params)
+        expectedQueryKey = queryKey
 
         coroutineScope {
             val resumenDeferred = async { metricasRepository.fetchResumen(params) }
@@ -235,7 +245,7 @@ class MetricasViewModel(
                 revenueDeferred,
             )
 
-            if (generation != loadGeneration) return@coroutineScope
+            if (!isCurrentMetricasRequest(generation, queryKey)) return@coroutineScope
 
             @Suppress("UNCHECKED_CAST")
             val resumenResult = results[0] as InboxResult<com.macbot.app.data.api.model.MetricasResumenResponse>
@@ -252,7 +262,7 @@ class MetricasViewModel(
             @Suppress("UNCHECKED_CAST")
             val revenueResult = results[6] as InboxResult<MetricasRevenueBreakdownResponse>
 
-            if (generation != loadGeneration) return@coroutineScope
+            if (!isCurrentMetricasRequest(generation, queryKey)) return@coroutineScope
 
             val optionalErrors = mutableMapOf<String, String>()
             var snackbarMessage: String? = null
@@ -278,7 +288,7 @@ class MetricasViewModel(
                     }
                     is InboxResult.Success -> {
                         val body = resumenResult.data
-                        if (responseMatchesParams(body.flujoId, params.flujoId)) {
+                        if (responseMatchesRequest(body.flujoId, params)) {
                             next = next.copy(
                                 kpis = body.kpis,
                                 salud = body.salud,
@@ -294,7 +304,7 @@ class MetricasViewModel(
                         return@update state
                     }
                     is InboxResult.Success -> {
-                        if (responseMatchesParams(funnelResult.data.flujoId, params.flujoId)) {
+                        if (responseMatchesRequest(funnelResult.data.flujoId, params)) {
                             next = next.copy(funnel = funnelResult.data)
                         }
                     }
@@ -307,7 +317,7 @@ class MetricasViewModel(
                         return@update state
                     }
                     is InboxResult.Success -> {
-                        if (responseMatchesParams(seriesResult.data.flujoId, params.flujoId)) {
+                        if (responseMatchesRequest(seriesResult.data.flujoId, params)) {
                             next = next.copy(series = seriesResult.data)
                         }
                     }
@@ -320,15 +330,17 @@ class MetricasViewModel(
                         return@update state
                     }
                     is InboxResult.Success -> {
-                        val allowedIds = next.flujosLista.mapNotNull { it.id }.toSet()
-                        val filtered = flujosResult.data.flujos.orEmpty().filter { flujo ->
-                            flujo.flujoId != null && flowIdAllowed(flujo.flujoId, allowedIds)
+                        if (responseMatchesRequest(null, params)) {
+                            val allowedIds = next.flujosLista.mapNotNull { it.id }.toSet()
+                            val filtered = flujosResult.data.flujos.orEmpty().filter { flujo ->
+                                flujo.flujoId != null && flowIdAllowed(flujo.flujoId, allowedIds)
+                            }
+                            val ranking = sortFlujosRanking(filtered)
+                            next = next.copy(
+                                flujos = flujosResult.data,
+                                flujosRanking = ranking,
+                            )
                         }
-                        val ranking = sortFlujosRanking(filtered)
-                        next = next.copy(
-                            flujos = flujosResult.data,
-                            flujosRanking = ranking,
-                        )
                     }
                     is InboxResult.Error -> optionalErrors["flujos"] = flujosResult.message
                 }
@@ -339,7 +351,7 @@ class MetricasViewModel(
                         return@update state
                     }
                     is InboxResult.Success -> {
-                        if (responseMatchesParams(diagnosticoResult.data.flujoId, params.flujoId)) {
+                        if (responseMatchesRequest(diagnosticoResult.data.flujoId, params)) {
                             next = next.copy(diagnostico = diagnosticoResult.data)
                         }
                     }
@@ -352,7 +364,7 @@ class MetricasViewModel(
                         return@update state
                     }
                     is InboxResult.Success -> {
-                        if (responseMatchesParams(heatmapResult.data.flujoId, params.flujoId)) {
+                        if (responseMatchesRequest(heatmapResult.data.flujoId, params)) {
                             next = next.copy(heatmap = heatmapResult.data)
                         }
                     }
@@ -365,7 +377,7 @@ class MetricasViewModel(
                         return@update state
                     }
                     is InboxResult.Success -> {
-                        if (responseMatchesParams(revenueResult.data.flujoId, params.flujoId)) {
+                        if (responseMatchesRequest(revenueResult.data.flujoId, params)) {
                             next = next.copy(revenueBreakdown = revenueResult.data)
                         }
                     }
@@ -388,6 +400,20 @@ class MetricasViewModel(
         )
     }
 
+    private fun buildQueryKey(params: MetricasQueryParams): String {
+        return listOf(
+            params.periodo.trim(),
+            params.conexionWhatsappId?.trim().orEmpty(),
+            params.flujoId?.trim().orEmpty(),
+            params.desde?.trim().orEmpty(),
+            params.hasta?.trim().orEmpty(),
+        ).joinToString("|")
+    }
+
+    private fun isCurrentMetricasRequest(generation: Int, queryKey: String): Boolean {
+        return generation == loadGeneration && queryKey == expectedQueryKey
+    }
+
     private fun apiConexionParam(selectedId: String): String? {
         return if (selectedId == InboxConstants.CONEXION_TODAS) null else selectedId.trim()
     }
@@ -406,8 +432,8 @@ class MetricasViewModel(
         return allowedIds.any { allowed -> flowIdsMatch(allowed, flujoId) }
     }
 
-    private fun responseMatchesParams(responseFlujoId: String?, requestFlujoId: String?): Boolean {
-        val requested = normalizeFlujoId(requestFlujoId)
+    private fun responseMatchesRequest(responseFlujoId: String?, params: MetricasQueryParams): Boolean {
+        val requested = normalizeFlujoId(params.flujoId)
         val responded = normalizeFlujoId(responseFlujoId)
         if (requested == null) return true
         if (responded == null) return true

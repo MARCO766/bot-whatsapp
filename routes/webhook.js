@@ -64,6 +64,136 @@ function urlPatchEstadoEnvio(whatsappMessageId, estado) {
   return url;
 }
 
+// --- TEMP CTWA DIAGNOSTIC (eliminar tras prueba) ---
+const CTWA_ATTR_KEY_HINT =
+  /referral|source_|ctwa|attrib|campaign|ad_id|click.?id|origin/i;
+const CTWA_ID_FIELD_HINT =
+  /id$|_id$|clid|source_id|campaign|ad_id|click/i;
+const CTWA_URL_FIELD_HINT = /url|uri|href|link/i;
+const CTWA_SECRET_FIELD_HINT =
+  /token|secret|password|authorization|bearer/i;
+
+function ctwaObjectKeys(obj) {
+  if (!obj || typeof obj !== "object" || Array.isArray(obj)) return [];
+  return Object.keys(obj);
+}
+
+function ctwaValueType(v) {
+  if (v === null) return "null";
+  if (Array.isArray(v)) return "array";
+  return typeof v;
+}
+
+function ctwaIdPreview(str) {
+  const s = String(str);
+  if (s.length <= 8) return { length: s.length, preview: "(too_short_to_preview)" };
+  return {
+    length: s.length,
+    preview: `${s.slice(0, 4)}…${s.slice(-4)}`,
+  };
+}
+
+function ctwaDescribeAttrField(key, value) {
+  const type = ctwaValueType(value);
+  if (value === undefined) {
+    return `${key}: absent`;
+  }
+  if (value === null) {
+    return `${key}: present, type=null`;
+  }
+  if (CTWA_SECRET_FIELD_HINT.test(key)) {
+    return `${key}: present, type=${type}, value=redacted`;
+  }
+  if (type === "object") {
+    return `${key}: present, type=object, keys=[${ctwaObjectKeys(value).join(", ")}]`;
+  }
+  if (type === "array") {
+    return `${key}: present, type=array, length=${value.length}`;
+  }
+  if (type === "string") {
+    if (CTWA_URL_FIELD_HINT.test(key)) {
+      return `${key}: present, type=string, length=${value.length}, value=redacted_url`;
+    }
+    if (CTWA_ID_FIELD_HINT.test(key)) {
+      const prev = ctwaIdPreview(value);
+      return `${key}: present, type=string, length=${prev.length}, preview=${prev.preview}`;
+    }
+    return `${key}: present, type=string, length=${value.length}, value=redacted`;
+  }
+  if (type === "number" || type === "boolean") {
+    return `${key}: present, type=${type}`;
+  }
+  return `${key}: present, type=${type}`;
+}
+
+function ctwaDescribeNestedAttr(label, obj) {
+  const lines = [];
+  const keys = ctwaObjectKeys(obj);
+  lines.push(`${label} exists: true`);
+  lines.push(`${label} keys: [${keys.join(", ")}]`);
+  for (const key of keys) {
+    lines.push(ctwaDescribeAttrField(`${label}.${key}`, obj[key]));
+    const child = obj[key];
+    if (child && typeof child === "object" && !Array.isArray(child)) {
+      for (const nestedKey of ctwaObjectKeys(child)) {
+        lines.push(
+          ctwaDescribeAttrField(`${label}.${key}.${nestedKey}`, child[nestedKey])
+        );
+      }
+    }
+  }
+  return lines;
+}
+
+/** Solo estructura / presencia CTWA. No muta inputs. No loguea PII ni body completo. */
+function logCtwaAttributionDiagnostic(message, value) {
+  try {
+    const lines = ["[CTWA DIAGNOSTIC]"];
+    const msgKeys = ctwaObjectKeys(message);
+    lines.push(`message keys: [${msgKeys.join(", ")}]`);
+
+    if (message?.context != null && typeof message.context === "object") {
+      lines.push(...ctwaDescribeNestedAttr("context", message.context));
+    } else {
+      lines.push("context exists: false");
+    }
+
+    if (message?.referral != null && typeof message.referral === "object") {
+      lines.push(...ctwaDescribeNestedAttr("referral", message.referral));
+    } else {
+      lines.push("referral exists: false");
+    }
+
+    const relatedOnMessage = msgKeys.filter((k) => CTWA_ATTR_KEY_HINT.test(k));
+    lines.push(
+      `message attribution-related keys: [${relatedOnMessage.join(", ")}]`
+    );
+    for (const key of relatedOnMessage) {
+      if (key === "referral" || key === "context") continue;
+      lines.push(ctwaDescribeAttrField(`message.${key}`, message[key]));
+      const child = message[key];
+      if (child && typeof child === "object" && !Array.isArray(child)) {
+        lines.push(...ctwaDescribeNestedAttr(`message.${key}`, child));
+      }
+    }
+
+    const valueKeys = ctwaObjectKeys(value);
+    const relatedOnValue = valueKeys.filter((k) => CTWA_ATTR_KEY_HINT.test(k));
+    if (relatedOnValue.length) {
+      lines.push(`value attribution-related keys: [${relatedOnValue.join(", ")}]`);
+      for (const key of relatedOnValue) {
+        lines.push(ctwaDescribeAttrField(`value.${key}`, value[key]));
+      }
+    }
+
+    lines.push("[/CTWA DIAGNOSTIC]");
+    console.log(lines.join("\n"));
+  } catch (err) {
+    console.log("[CTWA DIAGNOSTIC] error:", err?.message || String(err));
+  }
+}
+// --- END TEMP CTWA DIAGNOSTIC ---
+
 setInterval(() => {
   mensajesProcesados.clear();
 }, 1000 * 60 * 10);
@@ -191,6 +321,8 @@ if (!value || !value.messages || !value.messages[0]) {
 }
 
     const message = value.messages[0];
+    // TEMP CTWA: solo inspección estructural; no altera variables ni flujo.
+    logCtwaAttributionDiagnostic(message, value);
 const nombre = value.contacts?.[0]?.profile?.name || "amiga";
 if (mensajesProcesados.has(message.id)) {
   return res.sendStatus(200);
