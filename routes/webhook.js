@@ -160,6 +160,15 @@ function logCtwaAttributionDiagnostic(message, value) {
 
     if (message?.referral != null && typeof message.referral === "object") {
       lines.push(...ctwaDescribeNestedAttr("referral", message.referral));
+      // TEMP: source_id completo solo para cruce Ads Manager (revertir tras prueba).
+      if (
+        message.referral.source_id != null &&
+        String(message.referral.source_id).trim() !== ""
+      ) {
+        lines.push(
+          `referral.source_id FULL: ${String(message.referral.source_id)}`
+        );
+      }
     } else {
       lines.push("referral exists: false");
     }
