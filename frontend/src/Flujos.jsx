@@ -9,6 +9,8 @@ import ImportFlowModal from "./components/flujos/ImportFlowModal";
 import FlowVersionsModal from "./components/flujos/FlowVersionsModal";
 import CountrySelect from "./components/flujos/CountrySelect";
 import FlowCountryModal from "./components/flujos/FlowCountryModal";
+import MetaAdsAdIdsField from "./components/flujos/MetaAdsAdIdsField";
+import FlowMetaAdsModal from "./components/flujos/FlowMetaAdsModal";
 import { FLOW_STATES } from "./flujos/constants";
 import { flujosStyles } from "./flujos/styles";
 import { SORT_OPTIONS } from "./flujos/constants";
@@ -18,6 +20,7 @@ import UpgradeLimitModal from "./planes/UpgradeLimitModal";
 import { CONEXION_TODAS, sameConexionId } from "./utils/conexionesInbox";
 import { FLOW_DRAG_MIME, flowMatchesFolder } from "./flujos/utils";
 import { countryAllValue } from "./flujos/countries";
+import { buildMetaAdsFromAdIds, emptyMetaAdsValue } from "./flujos/metaAds";
 
 const STORAGE_COLLAPSE = "macbot_flujos_collapse_sections";
 
@@ -106,9 +109,12 @@ export default function Flujos({ cambiarVista }) {
   const [newFlowOpen, setNewFlowOpen] = useState(false);
   const [newFlowName, setNewFlowName] = useState("");
   const [newFlowCountry, setNewFlowCountry] = useState(countryAllValue);
+  const [newFlowMetaAds, setNewFlowMetaAds] = useState(emptyMetaAdsValue);
   const [newFlowSaving, setNewFlowSaving] = useState(false);
   const [countryEditFlow, setCountryEditFlow] = useState(null);
   const [countryEditSaving, setCountryEditSaving] = useState(false);
+  const [metaAdsEditFlow, setMetaAdsEditFlow] = useState(null);
+  const [metaAdsEditSaving, setMetaAdsEditSaving] = useState(false);
   const [carpetaModal, setCarpetaModal] = useState(null);
   const [carpetaSaving, setCarpetaSaving] = useState(false);
   const [confirmDeleteCarpeta, setConfirmDeleteCarpeta] = useState(null);
@@ -221,17 +227,23 @@ export default function Flujos({ cambiarVista }) {
   async function handleCreate() {
     if (!newFlowName.trim() || newFlowSaving) return;
     setNewFlowSaving(true);
-    const flow = await crearFlujo(newFlowName.trim(), { country: newFlowCountry });
+    const metaAds = buildMetaAdsFromAdIds(newFlowMetaAds.ad_ids);
+    const flow = await crearFlujo(newFlowName.trim(), {
+      country: newFlowCountry,
+      meta_ads: metaAds,
+    });
     setNewFlowSaving(false);
     if (!flow) return;
     setNewFlowName("");
     setNewFlowCountry(countryAllValue());
+    setNewFlowMetaAds(emptyMetaAdsValue());
     setNewFlowOpen(false);
   }
 
   function openNewFlowModal() {
     setNewFlowName("");
     setNewFlowCountry(countryAllValue());
+    setNewFlowMetaAds(emptyMetaAdsValue());
     setNewFlowOpen(true);
   }
 
@@ -240,6 +252,13 @@ export default function Flujos({ cambiarVista }) {
     await updateMeta(flowId, { country });
     setCountryEditSaving(false);
     setCountryEditFlow(null);
+  }
+
+  async function handleSaveMetaAds(flowId, metaAds) {
+    setMetaAdsEditSaving(true);
+    await updateMeta(flowId, { meta_ads: buildMetaAdsFromAdIds(metaAds?.ad_ids) });
+    setMetaAdsEditSaving(false);
+    setMetaAdsEditFlow(null);
   }
 
   function handleEditName(flow) {
@@ -504,6 +523,7 @@ export default function Flujos({ cambiarVista }) {
         onMoveFolder={moveToFolder}
         onEditName={handleEditName}
         onEditCountry={(flow) => setCountryEditFlow(flow)}
+        onEditMetaAds={(flow) => setMetaAdsEditFlow(flow)}
         onShowHistory={(flow) => setHistoryFlow(flow)}
         onCreate={openNewFlowModal}
         onImport={() => setImportOpen(true)}
@@ -620,6 +640,12 @@ export default function Flujos({ cambiarVista }) {
               onChange={setNewFlowCountry}
               disabled={newFlowSaving}
             />
+            <MetaAdsAdIdsField
+              id="new-flow-meta-ads"
+              value={newFlowMetaAds}
+              onChange={setNewFlowMetaAds}
+              disabled={newFlowSaving}
+            />
             <div className="flModalActions">
               <button
                 type="button"
@@ -648,6 +674,14 @@ export default function Flujos({ cambiarVista }) {
         saving={countryEditSaving}
         onClose={() => !countryEditSaving && setCountryEditFlow(null)}
         onSave={handleSaveCountry}
+      />
+
+      <FlowMetaAdsModal
+        open={!!metaAdsEditFlow}
+        flow={metaAdsEditFlow}
+        saving={metaAdsEditSaving}
+        onClose={() => !metaAdsEditSaving && setMetaAdsEditFlow(null)}
+        onSave={handleSaveMetaAds}
       />
 
       <UpgradeLimitModal

@@ -15,6 +15,7 @@ function FlowList({
   onMoveFolder,
   onEditName,
   onEditCountry,
+  onEditMetaAds,
   onShowHistory,
   onCreate,
   onImport,
@@ -63,6 +64,7 @@ function FlowList({
           onMoveFolder={onMoveFolder}
           onEditName={onEditName}
           onEditCountry={onEditCountry}
+          onEditMetaAds={onEditMetaAds}
           onShowHistory={onShowHistory}
           carpetas={carpetas}
           carpetasMover={carpetasMover}

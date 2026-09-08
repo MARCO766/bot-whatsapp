@@ -14,6 +14,7 @@ export default function FlowActionsMenu({
   onMoveFolder,
   onEditName,
   onEditCountry,
+  onEditMetaAds,
   onShowHistory,
   carpetasMover = [],
   carpetas = [],
@@ -182,6 +183,28 @@ export default function FlowActionsMenu({
         >
           <span className="flMenuIcon" aria-hidden>🌎</span>
           <span>País de venta</span>
+        </button>
+        <button
+          type="button"
+          role="menuitem"
+          className={!puedeEscribir ? "flMenuItemDisabled" : ""}
+          title={
+            puedeEscribir
+              ? undefined
+              : "Selecciona una línea WhatsApp (no «Todas las líneas»)"
+          }
+          onClick={() => {
+            if (!puedeEscribir) {
+              showMiniToast("Selecciona una línea WhatsApp");
+              close();
+              return;
+            }
+            onEditMetaAds?.(flow);
+            close();
+          }}
+        >
+          <span className="flMenuIcon" aria-hidden>📣</span>
+          <span>IDs de anuncios Meta</span>
         </button>
 
         <div className="flMenuDivider" />

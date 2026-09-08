@@ -26,6 +26,11 @@ const {
   normalizeCountryForWrite,
   hasPersistedCountry,
 } = require("../services/flowCountryMeta");
+const {
+  normalizeMetaAdsForRead,
+  normalizeMetaAdsForWrite,
+  hasPersistedMetaAds,
+} = require("../services/flowMetaAdsMeta");
 const rt = require("../services/realtimeService");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -157,6 +162,8 @@ function extractMeta(data) {
     ultima_ejecucion: meta.ultima_ejecucion || null,
     // Compat: sin country en meta → Todos los países (solo lectura API; no migra filas).
     country: normalizeCountryForRead(meta.country),
+    // Compat: sin meta_ads → ad_ids vacío (solo lectura API; no migra filas).
+    meta_ads: normalizeMetaAdsForRead(meta.meta_ads),
   };
 }
 
@@ -586,6 +593,18 @@ router.patch("/api/flujos/:id/meta", protegerApi, async (req, res) => {
       delete nextMeta.country;
     }
 
+    if (patch.meta_ads !== undefined) {
+      const metaAdsWrite = normalizeMetaAdsForWrite(patch.meta_ads);
+      if (!metaAdsWrite.ok) {
+        return res.status(400).json({ ok: false, error: metaAdsWrite.error });
+      }
+      nextMeta.meta_ads = metaAdsWrite.value;
+    } else if (hasPersistedMetaAds(rawMeta)) {
+      nextMeta.meta_ads = normalizeMetaAdsForRead(rawMeta.meta_ads);
+    } else {
+      delete nextMeta.meta_ads;
+    }
+
     data.macbot_meta = nextMeta;
 
     await axios.patch(
@@ -606,6 +625,7 @@ router.patch("/api/flujos/:id/meta", protegerApi, async (req, res) => {
       meta: {
         ...nextMeta,
         country: normalizeCountryForRead(nextMeta.country),
+        meta_ads: normalizeMetaAdsForRead(nextMeta.meta_ads),
       },
     });
   } catch (error) {
@@ -667,17 +687,28 @@ router.post("/api/flujos", protegerApi, verificarLimiteNuevoFlujoSiempre, async 
       return res.status(400).json({ ok: false, error: countryWrite.error });
     }
 
+    const macbot_meta = {
+      estado: "borrador",
+      carpeta: FOLDERS.includes(meta.carpeta) ? meta.carpeta : "sin_carpeta",
+      etiquetas: [],
+      campanas: [],
+      country: countryWrite.value,
+      actualizado_en: new Date().toISOString(),
+    };
+
+    // meta_ads opcional: solo persistir si el cliente lo envía (vacío o con IDs).
+    if (meta.meta_ads !== undefined) {
+      const metaAdsWrite = normalizeMetaAdsForWrite(meta.meta_ads);
+      if (!metaAdsWrite.ok) {
+        return res.status(400).json({ ok: false, error: metaAdsWrite.error });
+      }
+      macbot_meta.meta_ads = metaAdsWrite.value;
+    }
+
     const data = {
       nodos: [],
       conexiones: [],
-      macbot_meta: {
-        estado: "borrador",
-        carpeta: FOLDERS.includes(meta.carpeta) ? meta.carpeta : "sin_carpeta",
-        etiquetas: [],
-        campanas: [],
-        country: countryWrite.value,
-        actualizado_en: new Date().toISOString(),
-      },
+      macbot_meta,
     };
 
     const created = await axios.post(

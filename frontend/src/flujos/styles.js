@@ -1897,6 +1897,68 @@ export const flujosStyles = `
   font-weight: 600;
 }
 
+.flMetaAdsField {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.flMetaAdsHint {
+  margin: 0;
+  font-size: 0.8rem;
+  color: #64748b;
+}
+
+.flMetaAdsList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.flMetaAdsRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.flMetaAdsInput {
+  flex: 1;
+  margin-bottom: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.flMetaAdsRemove {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  background: rgba(2, 6, 23, 0.45);
+  color: #94a3b8;
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.flMetaAdsRemove:hover:not(:disabled) {
+  color: #f87171;
+  border-color: rgba(248, 113, 113, 0.45);
+}
+
+.flMetaAdsRemove:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.flMetaAdsAdd {
+  align-self: flex-start;
+  margin-top: 2px;
+}
+
 @media (max-width: 768px) {
   .flStatsGrid { grid-template-columns: repeat(2, 1fr); }
   .flCard.listMode { flex-direction: column; }

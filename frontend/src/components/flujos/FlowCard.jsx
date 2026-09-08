@@ -14,6 +14,7 @@ import FlowActionsMenu from "./FlowActionsMenu";
 import FlowPreviewMini from "./FlowPreviewMini";
 import FlowTimeline from "./FlowTimeline";
 import { formatCountryLabel } from "../../flujos/countries";
+import { formatMetaAdsLabel } from "../../flujos/metaAds";
 
 const PRIMARY_METRICS = [
   {
@@ -100,6 +101,7 @@ function FlowCard({
   onMoveFolder,
   onEditName,
   onEditCountry,
+  onEditMetaAds,
   onShowHistory,
   carpetas = [],
   carpetasMover = [],
@@ -116,6 +118,7 @@ function FlowCard({
   const totalActivadores = flow.activadores?.length || 0;
   const isActivo = flow.meta?.estado === "activo";
   const carpetaTheme = resolveFlowCarpetaTheme(flow, carpetas);
+  const metaAdsLabel = formatMetaAdsLabel(flow.meta?.meta_ads);
 
   return (
     <article
@@ -174,6 +177,12 @@ function FlowCard({
               <span className="flMetaChipIcon" aria-hidden>📍</span>
               {formatCountryLabel(flow.meta?.country)}
             </span>
+            {metaAdsLabel && (
+              <span className="flMetaChip" title="IDs de anuncios de Meta">
+                <span className="flMetaChipIcon" aria-hidden>📣</span>
+                {metaAdsLabel}
+              </span>
+            )}
             <span className="flMetaChip" title="Activadores del flujo">
               <span className="flMetaChipIcon" aria-hidden>⚡</span>
               {activos}/{totalActivadores} activadores
@@ -190,6 +199,7 @@ function FlowCard({
           onMoveFolder={onMoveFolder}
           onEditName={onEditName}
           onEditCountry={onEditCountry}
+          onEditMetaAds={onEditMetaAds}
           onShowHistory={onShowHistory}
           carpetasMover={carpetasMover}
           carpetas={carpetas}
