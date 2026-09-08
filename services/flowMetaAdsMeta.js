@@ -1,6 +1,6 @@
 /**
  * IDs de anuncios de Meta (macbot_meta.meta_ads).
- * Persistencia / validación opcional — sin routing ni llamadas a Meta API.
+ * Persistencia / validación opcional + elegibilidad runtime (FASE 3).
  *
  * Forma:
  *   { ad_ids: string[] }   // solo dígitos, sin duplicados
@@ -23,6 +23,7 @@ function hasPersistedMetaAds(rawMeta) {
 
 /**
  * Normaliza un ID individual: trim + solo dígitos.
+ * Siempre string (nunca Number / parseInt).
  * @returns {string|null} null si vacío o no es solo dígitos
  */
 function normalizeAdId(raw) {
@@ -81,6 +82,32 @@ function normalizeMetaAdsForWrite(raw) {
   return { ok: true, value: { ad_ids: sanitizeAdIdsList(raw.ad_ids) } };
 }
 
+/**
+ * Elegibilidad runtime: ¿el flujo admite este ctwaAdId?
+ *
+ * Legacy-safe (sin restricción → true):
+ * - meta_ads ausente / null / no-objeto
+ * - ad_ids ausente / vacío tras normalizar
+ *
+ * Fail-closed (con restricción):
+ * - ad_ids con uno o más IDs válidos
+ * - ctwaAdId ausente / vacío / no-dígitos / no listado → false
+ *
+ * Comparación siempre como string (nunca Number).
+ *
+ * @param {unknown} metaAds  macbot_meta.meta_ads (crudo o normalizado)
+ * @param {unknown} ctwaAdId  referral.source_id threadado
+ * @returns {boolean}
+ */
+function isFlowCompatibleWithAdId(metaAds, ctwaAdId) {
+  const { ad_ids: adIds } = normalizeMetaAdsForRead(metaAds);
+  if (!adIds.length) return true;
+
+  const id = normalizeAdId(ctwaAdId);
+  if (!id) return false;
+  return adIds.includes(id);
+}
+
 module.exports = {
   emptyMetaAds,
   hasPersistedMetaAds,
@@ -88,4 +115,5 @@ module.exports = {
   sanitizeAdIdsList,
   normalizeMetaAdsForRead,
   normalizeMetaAdsForWrite,
+  isFlowCompatibleWithAdId,
 };

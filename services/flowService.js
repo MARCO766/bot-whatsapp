@@ -92,6 +92,10 @@ const {
 const {
   isContactCompatibleWithFlowCountry,
 } = require("./flowCountryMeta");
+const {
+  normalizeMetaAdsForRead,
+  isFlowCompatibleWithAdId,
+} = require("./flowMetaAdsMeta");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
@@ -2613,7 +2617,7 @@ async function resolverActivadorEntrante(
   conexionWhatsappId,
   opts = {}
 ) {
-  // FASE 2: transporte CTWA Ad ID — disponible en scope; NO se usa para filtrar/seleccionar.
+  // FASE 2+3: ctwaAdId threadado desde webhook; FASE 3 lo usa solo como elegibilidad.
   const ctwaAdId = normalizeCtwaAdId(opts.ctwaAdId);
   logCtwaAdIdThread(ctwaAdId);
 
@@ -2639,34 +2643,70 @@ async function resolverActivadorEntrante(
       continue;
     }
 
-    // Filtro de elegibilidad por país del contacto (no cambia sort ni match).
-    // Fail-closed: sin flujo/datos legibles para country → continue (no break).
-    if (contactNumero != null && String(contactNumero).trim() !== "") {
-      const candidateFlowId = a.flujo_id;
-      if (
-        !candidateFlowId ||
-        candidateFlowId === "undefined" ||
-        candidateFlowId === "null"
-      ) {
-        continue;
-      }
+    const candidateFlowId = a.flujo_id;
+    if (
+      !candidateFlowId ||
+      candidateFlowId === "undefined" ||
+      candidateFlowId === "null"
+    ) {
+      continue;
+    }
 
+    // Una sola lectura del flujo candidato: Ad ID (FASE 3) + country (existente).
+    let flujoCand = null;
+    let flujoDatosCand = null;
+    try {
+      const responseFlujoCand = await axios.get(
+        `${SUPABASE_URL}/rest/v1/flujos_builder?id=eq.${candidateFlowId}&usuario_id=eq.${usuarioId}&select=*`,
+        { headers: supabaseHeaders() }
+      );
+      flujoCand = responseFlujoCand.data?.[0];
+      flujoDatosCand = obtenerDatosFlujo(flujoCand);
+    } catch (_errLoad) {
+      flujoCand = null;
+      flujoDatosCand = null;
+    }
+
+    // Fail-closed: sin flujo/datos legibles → no elegible (mismo espíritu que country).
+    if (!flujoCand || !flujoDatosCand) {
+      continue;
+    }
+
+    const macbotMeta =
+      flujoDatosCand.macbot_meta && typeof flujoDatosCand.macbot_meta === "object"
+        ? flujoDatosCand.macbot_meta
+        : null;
+    const metaAds = macbotMeta ? macbotMeta.meta_ads : undefined;
+    const adIdsConfigured = normalizeMetaAdsForRead(metaAds).ad_ids;
+    const adIdCompatible = isFlowCompatibleWithAdId(metaAds, ctwaAdId);
+
+    if (ctwaAdId) {
+      console.log("[CTWA AD ROUTING]");
+      console.log(`ctwaAdId: ${ctwaAdId}`);
+      console.log(`flow_id: ${candidateFlowId}`);
+      console.log(`ad_ids_configured: ${JSON.stringify(adIdsConfigured)}`);
+      console.log(`ad_id_match: ${adIdCompatible}`);
+      console.log("[/CTWA AD ROUTING]");
+    }
+
+    if (!adIdCompatible) {
+      console.log("[CTWA AD ROUTING SKIP]");
+      console.log("motivo: ad_id_no_coincide");
+      console.log(`ctwaAdId: ${ctwaAdId || ""}`);
+      console.log(`flow_id: ${candidateFlowId}`);
+      console.log("[/CTWA AD ROUTING SKIP]");
+      continue;
+    }
+
+    // Filtro de elegibilidad por país del contacto (no cambia sort ni match).
+    // Fail-closed: country incompatible → continue (no break).
+    if (contactNumero != null && String(contactNumero).trim() !== "") {
       let countryEvalOk = false;
       try {
-        const responseFlujoCountry = await axios.get(
-          `${SUPABASE_URL}/rest/v1/flujos_builder?id=eq.${candidateFlowId}&usuario_id=eq.${usuarioId}&select=*`,
-          { headers: supabaseHeaders() }
-        );
-        const flujoCountry = responseFlujoCountry.data?.[0];
-        const flujoDatosCountry = obtenerDatosFlujo(flujoCountry);
-        if (flujoCountry && flujoDatosCountry) {
-          const country =
-            (flujoDatosCountry.macbot_meta &&
-              flujoDatosCountry.macbot_meta.country) ||
-            null;
-          if (isContactCompatibleWithFlowCountry(contactNumero, country)) {
-            countryEvalOk = true;
-          }
+        const country =
+          (macbotMeta && macbotMeta.country) || null;
+        if (isContactCompatibleWithFlowCountry(contactNumero, country)) {
+          countryEvalOk = true;
         }
       } catch (_errCountry) {
         countryEvalOk = false;
