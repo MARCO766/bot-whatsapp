@@ -2380,7 +2380,10 @@ async function procesarMensajeEntrante(
           usuarioId,
           messageId,
           opts.conexionWhatsappId || null,
-          { esPrimerMensaje: opts.esPrimerMensaje }
+          {
+            esPrimerMensaje: opts.esPrimerMensaje,
+            ctwaAdId: opts.ctwaAdId,
+          }
         );
 
         if (activadorPrioritario) {
@@ -2478,7 +2481,10 @@ async function procesarMensajeEntrante(
     usuarioId,
     messageId,
     opts.conexionWhatsappId || null,
-    { esPrimerMensaje: opts.esPrimerMensaje }
+    {
+      esPrimerMensaje: opts.esPrimerMensaje,
+      ctwaAdId: opts.ctwaAdId,
+    }
   );
   if (!activadorEjecutado && usuarioId && numero) {
     try {
@@ -2510,6 +2516,10 @@ const {
   sortActivadores,
   sameConexionId,
 } = require("./activadorUtils");
+const {
+  normalizeCtwaAdId,
+  logCtwaAdIdThread,
+} = require("./ctwaAdIdThread");
 function normalizarTextoActivador(texto) {
   return String(texto || "")
     .toLowerCase()
@@ -2603,6 +2613,10 @@ async function resolverActivadorEntrante(
   conexionWhatsappId,
   opts = {}
 ) {
+  // FASE 2: transporte CTWA Ad ID — disponible en scope; NO se usa para filtrar/seleccionar.
+  const ctwaAdId = normalizeCtwaAdId(opts.ctwaAdId);
+  logCtwaAdIdThread(ctwaAdId);
+
   if (!textoCliente || !usuarioId || !conexionWhatsappId) return null;
 
   const textoNorm = normalizarTextoActivador(textoCliente);
@@ -2678,6 +2692,8 @@ async function resolverActivadorEntrante(
     conexion_entrante: conexionWhatsappId,
     flujo_id: activador.flujo_id,
     tipo_match: matchInfo.tipo,
+    // Solo diagnóstico de threading; no afecta la selección.
+    ctwa_ad_id_threaded: ctwaAdId || null,
   });
 
   const flowId = activador.flujo_id;

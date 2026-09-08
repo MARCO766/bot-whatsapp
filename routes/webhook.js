@@ -24,6 +24,9 @@ const {
 const rt = require("../services/realtimeService");
 const { evaluarLimiteContactoEntrante } = require("../middlewares/planLimits");
 const { calcularEsPrimerMensaje } = require("../services/firstMessageService");
+const {
+  extractCtwaAdIdFromMessage,
+} = require("../services/ctwaAdIdThread");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
@@ -820,6 +823,8 @@ const activadorEjecutado = await procesarMensajeEntrante(
     filename: message.document?.filename || null,
     conexionWhatsappId: conexionWhatsappId || null,
     esPrimerMensaje,
+    // FASE 2: solo transporte CTWA Ad ID — sin routing.
+    ctwaAdId: extractCtwaAdIdFromMessage(message),
   }
 );
 
