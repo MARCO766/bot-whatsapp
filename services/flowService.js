@@ -93,7 +93,6 @@ const {
   isContactCompatibleWithFlowCountry,
 } = require("./flowCountryMeta");
 const {
-  normalizeMetaAdsForRead,
   isFlowCompatibleWithAdId,
 } = require("./flowMetaAdsMeta");
 
@@ -2522,7 +2521,6 @@ const {
 } = require("./activadorUtils");
 const {
   normalizeCtwaAdId,
-  logCtwaAdIdThread,
 } = require("./ctwaAdIdThread");
 function normalizarTextoActivador(texto) {
   return String(texto || "")
@@ -2617,9 +2615,8 @@ async function resolverActivadorEntrante(
   conexionWhatsappId,
   opts = {}
 ) {
-  // FASE 2+3: ctwaAdId threadado desde webhook; FASE 3 lo usa solo como elegibilidad.
+  // FASE 2+3: ctwaAdId threadado desde webhook; se usa como elegibilidad Ad ID.
   const ctwaAdId = normalizeCtwaAdId(opts.ctwaAdId);
-  logCtwaAdIdThread(ctwaAdId);
 
   if (!textoCliente || !usuarioId || !conexionWhatsappId) return null;
 
@@ -2677,24 +2674,9 @@ async function resolverActivadorEntrante(
         ? flujoDatosCand.macbot_meta
         : null;
     const metaAds = macbotMeta ? macbotMeta.meta_ads : undefined;
-    const adIdsConfigured = normalizeMetaAdsForRead(metaAds).ad_ids;
     const adIdCompatible = isFlowCompatibleWithAdId(metaAds, ctwaAdId);
 
-    if (ctwaAdId) {
-      console.log("[CTWA AD ROUTING]");
-      console.log(`ctwaAdId: ${ctwaAdId}`);
-      console.log(`flow_id: ${candidateFlowId}`);
-      console.log(`ad_ids_configured: ${JSON.stringify(adIdsConfigured)}`);
-      console.log(`ad_id_match: ${adIdCompatible}`);
-      console.log("[/CTWA AD ROUTING]");
-    }
-
     if (!adIdCompatible) {
-      console.log("[CTWA AD ROUTING SKIP]");
-      console.log("motivo: ad_id_no_coincide");
-      console.log(`ctwaAdId: ${ctwaAdId || ""}`);
-      console.log(`flow_id: ${candidateFlowId}`);
-      console.log("[/CTWA AD ROUTING SKIP]");
       continue;
     }
 
@@ -2732,8 +2714,6 @@ async function resolverActivadorEntrante(
     conexion_entrante: conexionWhatsappId,
     flujo_id: activador.flujo_id,
     tipo_match: matchInfo.tipo,
-    // Solo diagnóstico de threading; no afecta la selección.
-    ctwa_ad_id_threaded: ctwaAdId || null,
   });
 
   const flowId = activador.flujo_id;

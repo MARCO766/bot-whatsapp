@@ -1,6 +1,7 @@
 /**
- * FASE 2 — Transporte interno CTWA Ad ID (referral.source_id).
- * Solo extracción / normalización. Sin routing ni filtro por meta_ads.
+ * Transporte interno CTWA Ad ID (referral.source_id).
+ * Extracción / normalización para threading hacia resolverActivadorEntrante.
+ * Sin logging de diagnóstico.
  */
 
 /**
@@ -30,17 +31,7 @@ function normalizeCtwaAdId(raw) {
   return s || undefined;
 }
 
-/** Log temporal (eliminar tras validar Fase 3). Solo si hay valor. */
-function logCtwaAdIdThread(ctwaAdId) {
-  const id = normalizeCtwaAdId(ctwaAdId);
-  if (!id) return;
-  console.log("[CTWA AD ID THREAD]");
-  console.log(`ctwaAdId: ${id}`);
-  console.log("[/CTWA AD ID THREAD]");
-}
-
 module.exports = {
   extractCtwaAdIdFromMessage,
   normalizeCtwaAdId,
-  logCtwaAdIdThread,
 };
