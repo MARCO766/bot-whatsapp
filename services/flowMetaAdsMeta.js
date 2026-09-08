@@ -108,6 +108,24 @@ function isFlowCompatibleWithAdId(metaAds, ctwaAdId) {
   return adIds.includes(id);
 }
 
+/**
+ * Hard-match para excepción CTWA de primer_mensaje.
+ * Requiere ad_ids NO vacío + ctwaAdId normalizado listado.
+ * Distinto de isFlowCompatibleWithAdId (legacy-open con ad_ids []).
+ *
+ * @param {unknown} metaAds
+ * @param {unknown} ctwaAdId
+ * @returns {boolean}
+ */
+function flowHasExplicitAdIdMatch(metaAds, ctwaAdId) {
+  const { ad_ids: adIds } = normalizeMetaAdsForRead(metaAds);
+  if (!adIds.length) return false;
+
+  const id = normalizeAdId(ctwaAdId);
+  if (!id) return false;
+  return adIds.includes(id);
+}
+
 module.exports = {
   emptyMetaAds,
   hasPersistedMetaAds,
@@ -116,4 +134,5 @@ module.exports = {
   normalizeMetaAdsForRead,
   normalizeMetaAdsForWrite,
   isFlowCompatibleWithAdId,
+  flowHasExplicitAdIdMatch,
 };

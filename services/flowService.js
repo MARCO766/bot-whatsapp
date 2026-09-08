@@ -88,6 +88,7 @@ const {
   registrarFinSesionFlujo,
   evaluarCicloVidaSesionFlujo,
   expirarSesion,
+  obtenerSesionActiva,
 } = require("./flowSessionService");
 const {
   isContactCompatibleWithFlowCountry,
@@ -95,6 +96,9 @@ const {
 const {
   isFlowCompatibleWithAdId,
 } = require("./flowMetaAdsMeta");
+const {
+  evaluateCtwaPrimerMensajeException,
+} = require("./ctwaPrimerMensajeException");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
@@ -2631,13 +2635,47 @@ async function resolverActivadorEntrante(
   let matchInfo = null;
   const contactNumero = opts.clienteNumero ?? opts.numero ?? null;
 
+  // Lazy: flujo_id de sesión ACTIVE (solo para guard caso mismo flujo / excepción CTWA).
+  let cachedActiveFlowId = undefined;
+  async function resolveActiveSessionFlowId() {
+    if (cachedActiveFlowId !== undefined) return cachedActiveFlowId;
+    cachedActiveFlowId = null;
+    if (contactNumero == null || String(contactNumero).trim() === "") {
+      return cachedActiveFlowId;
+    }
+    try {
+      const sesion = await obtenerSesionActiva({
+        usuarioId,
+        conexionWhatsappId,
+        clienteNumero: contactNumero,
+      });
+      cachedActiveFlowId = sesion?.flujo_id ?? null;
+    } catch (_errSesion) {
+      cachedActiveFlowId = null;
+    }
+    return cachedActiveFlowId;
+  }
+
   for (const a of ordenados) {
     if (opts.excluirCualquierMensaje && resolveTipo(a) === TIPOS.CUALQUIER) {
       continue;
     }
-    const result = matchActivador(textoNorm, a, opts);
+    let result = matchActivador(textoNorm, a, opts);
+    let viaCtwaPrimerMensajeException = false;
+
     if (!result.matched) {
-      continue;
+      // Excepción local: primer_mensaje rechazado por sesión vigente + hard-match Ad ID.
+      // No altera matchActivador ni esPrimerMensaje globales.
+      if (resolveTipo(a) !== TIPOS.PRIMER_MENSAJE) {
+        continue;
+      }
+      if (opts.esPrimerMensaje === true) {
+        continue;
+      }
+      if (!ctwaAdId) {
+        continue;
+      }
+      viaCtwaPrimerMensajeException = true;
     }
 
     const candidateFlowId = a.flujo_id;
@@ -2674,6 +2712,33 @@ async function resolverActivadorEntrante(
         ? flujoDatosCand.macbot_meta
         : null;
     const metaAds = macbotMeta ? macbotMeta.meta_ads : undefined;
+
+    if (viaCtwaPrimerMensajeException) {
+      const activeSessionFlowId = await resolveActiveSessionFlowId();
+      const ex = evaluateCtwaPrimerMensajeException({
+        tipoActivador: TIPOS.PRIMER_MENSAJE,
+        esPrimerMensaje: opts.esPrimerMensaje,
+        ctwaAdId,
+        metaAds,
+        candidateFlowId,
+        activeSessionFlowId,
+      });
+      if (!ex.allow) {
+        continue;
+      }
+      result = {
+        matched: true,
+        tipo: TIPOS.PRIMER_MENSAJE,
+        detalle: "primer_mensaje_ctwa_ad_id",
+      };
+      console.log("[CTWA_PRIMER_MENSAJE_EXCEPTION]", {
+        reason: ex.reason,
+        candidate_flujo_id: candidateFlowId,
+        active_flujo_id: activeSessionFlowId,
+        ctwaAdId,
+      });
+    }
+
     const adIdCompatible = isFlowCompatibleWithAdId(metaAds, ctwaAdId);
 
     if (!adIdCompatible) {

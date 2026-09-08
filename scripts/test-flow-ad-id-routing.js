@@ -1,15 +1,25 @@
 /**
- * FASE 3 — Elegibilidad por Ad ID (routing).
+ * FASE 3 — Elegibilidad por Ad ID (routing) + excepción CTWA primer_mensaje.
  * Ejecutar: node scripts/test-flow-ad-id-routing.js
  *
- * Cubre isFlowCompatibleWithAdId + simulación estática del orden
- * match → Ad ID → country (sin harness e2e de resolverActivadorEntrante).
+ * Cubre isFlowCompatibleWithAdId, flowHasExplicitAdIdMatch,
+ * evaluateCtwaPrimerMensajeException + simulación estática del orden
+ * match → (excepción CTWA) → Ad ID → country.
  */
 const {
   normalizeAdId,
   normalizeMetaAdsForRead,
   isFlowCompatibleWithAdId,
+  flowHasExplicitAdIdMatch,
 } = require("../services/flowMetaAdsMeta");
+const {
+  evaluateCtwaPrimerMensajeException,
+} = require("../services/ctwaPrimerMensajeException");
+const {
+  matchActivador,
+  sortActivadores,
+  TIPOS,
+} = require("../services/activadorUtils");
 const {
   isContactCompatibleWithFlowCountry,
   countryAll,
@@ -31,6 +41,10 @@ function check(name, cond) {
 const CTWA = "120251260803260234";
 const OTHER = "999999999999999999";
 const LONG_ID = "120251260803260234120251260803260234";
+const AD_111 = "111";
+const AD_222 = "222";
+const FLOW_1 = "flow-1";
+const FLOW_2 = "flow-2";
 
 // --- 1. ad_ids ausente + ctwaAdId → true ---
 check(
@@ -161,6 +175,29 @@ check(
     isFlowCompatibleWithAdId(undefined, CTWA) === true
 );
 
+// --- Hard-match (excepción): distinto de legacy-open ---
+check(
+  "HM. ad_ids [] + ctwa → hard-match false (compat true)",
+  flowHasExplicitAdIdMatch({ ad_ids: [] }, CTWA) === false &&
+    isFlowCompatibleWithAdId({ ad_ids: [] }, CTWA) === true
+);
+check(
+  "HM. meta_ads ausente + ctwa → hard-match false",
+  flowHasExplicitAdIdMatch(undefined, CTWA) === false
+);
+check(
+  "HM. ad_ids con match → true",
+  flowHasExplicitAdIdMatch({ ad_ids: [AD_222] }, AD_222) === true
+);
+check(
+  "HM. ad_ids sin match → false",
+  flowHasExplicitAdIdMatch({ ad_ids: [AD_222] }, "999") === false
+);
+check(
+  "HM. sin ctwa → false",
+  flowHasExplicitAdIdMatch({ ad_ids: [AD_222] }, undefined) === false
+);
+
 // --- Casos A–G (simulación estática del filtro de elegibilidad) ---
 function evaluateCandidate({ matched, metaAds, ctwaAdId, contactNumero, country }) {
   if (!matched) return { ok: false, stage: "match" };
@@ -173,6 +210,43 @@ function evaluateCandidate({ matched, metaAds, ctwaAdId, contactNumero, country 
     }
   }
   return { ok: true, stage: "selected" };
+}
+
+/**
+ * Simula el gate de excepción + filtros posteriores (sin I/O).
+ * matchNormal = resultado de matchActivador; si false, se evalúa excepción.
+ */
+function evaluateWithCtwaException({
+  tipoActivador,
+  esPrimerMensaje,
+  ctwaAdId,
+  metaAds,
+  candidateFlowId,
+  activeSessionFlowId,
+  contactNumero,
+  country,
+  matchNormal,
+}) {
+  let matched = Boolean(matchNormal);
+  if (!matched) {
+    const ex = evaluateCtwaPrimerMensajeException({
+      tipoActivador,
+      esPrimerMensaje,
+      ctwaAdId,
+      metaAds,
+      candidateFlowId,
+      activeSessionFlowId,
+    });
+    if (!ex.allow) return { ok: false, stage: "match", reason: ex.reason };
+    matched = true;
+  }
+  return evaluateCandidate({
+    matched,
+    metaAds,
+    ctwaAdId,
+    contactNumero,
+    country,
+  });
 }
 
 check(
@@ -284,5 +358,259 @@ check(
     return r.ok === false && r.stage === "match";
   })()
 );
+
+// ========== Excepción CTWA primer_mensaje (casos 1–12) ==========
+
+check(
+  "EX1. ACTIVE legacy sin Ad IDs → Flujo2 Ad 222 → entra",
+  evaluateWithCtwaException({
+    tipoActivador: "primer_mensaje",
+    esPrimerMensaje: false,
+    ctwaAdId: AD_222,
+    metaAds: { ad_ids: [AD_222] },
+    candidateFlowId: FLOW_2,
+    activeSessionFlowId: FLOW_1,
+    matchNormal: false,
+    contactNumero: null,
+  }).ok === true
+);
+
+check(
+  "EX2. ACTIVE Ad 111 → Flujo2 Ad 222 → entra",
+  evaluateWithCtwaException({
+    tipoActivador: "primer_mensaje",
+    esPrimerMensaje: false,
+    ctwaAdId: AD_222,
+    metaAds: { ad_ids: [AD_222] },
+    candidateFlowId: FLOW_2,
+    activeSessionFlowId: FLOW_1,
+    matchNormal: false,
+    contactNumero: null,
+  }).ok === true
+);
+
+check(
+  "EX3. ACTIVE + sin referral → NO excepción",
+  (() => {
+    const r = evaluateWithCtwaException({
+      tipoActivador: "primer_mensaje",
+      esPrimerMensaje: false,
+      ctwaAdId: undefined,
+      metaAds: { ad_ids: [AD_222] },
+      candidateFlowId: FLOW_2,
+      activeSessionFlowId: FLOW_1,
+      matchNormal: false,
+      contactNumero: null,
+    });
+    return r.ok === false && r.reason === "no_ctwa_ad_id";
+  })()
+);
+
+check(
+  "EX4. ACTIVE + Ad no coincidente → NO excepción",
+  (() => {
+    const r = evaluateWithCtwaException({
+      tipoActivador: "primer_mensaje",
+      esPrimerMensaje: false,
+      ctwaAdId: "999",
+      metaAds: { ad_ids: [AD_222] },
+      candidateFlowId: FLOW_2,
+      activeSessionFlowId: FLOW_1,
+      matchNormal: false,
+      contactNumero: null,
+    });
+    return r.ok === false && r.reason === "no_explicit_ad_match";
+  })()
+);
+
+check(
+  "EX5. ACTIVE + Flujo2 ad_ids=[] → NO excepción",
+  (() => {
+    const r = evaluateWithCtwaException({
+      tipoActivador: "primer_mensaje",
+      esPrimerMensaje: false,
+      ctwaAdId: AD_222,
+      metaAds: { ad_ids: [] },
+      candidateFlowId: FLOW_2,
+      activeSessionFlowId: FLOW_1,
+      matchNormal: false,
+      contactNumero: null,
+    });
+    return r.ok === false && r.reason === "no_explicit_ad_match";
+  })()
+);
+
+check(
+  "EX6. palabra_unica → excepción no aplica (match propio)",
+  (() => {
+    const act = {
+      tipo_activador: TIPOS.PALABRA_UNICA,
+      frase: "hola",
+      coincidencia: "contiene",
+    };
+    const m = matchActivador("hola mundo", act, { esPrimerMensaje: false });
+    const ex = evaluateCtwaPrimerMensajeException({
+      tipoActivador: TIPOS.PALABRA_UNICA,
+      esPrimerMensaje: false,
+      ctwaAdId: AD_222,
+      metaAds: { ad_ids: [AD_222] },
+      candidateFlowId: FLOW_2,
+      activeSessionFlowId: FLOW_1,
+    });
+    return m.matched === true && ex.allow === false && ex.reason === "not_primer_mensaje";
+  })()
+);
+
+check(
+  "EX7. cualquier_mensaje → excepción no aplica",
+  (() => {
+    const act = { tipo_activador: TIPOS.CUALQUIER, frase: "*" };
+    const m = matchActivador("cualquier texto", act, { esPrimerMensaje: false });
+    const ex = evaluateCtwaPrimerMensajeException({
+      tipoActivador: TIPOS.CUALQUIER,
+      esPrimerMensaje: false,
+      ctwaAdId: AD_222,
+      metaAds: { ad_ids: [AD_222] },
+      candidateFlowId: FLOW_2,
+      activeSessionFlowId: FLOW_1,
+    });
+    return m.matched === true && ex.allow === false;
+  })()
+);
+
+check(
+  "EX8. country incompatible → no entra tras excepción",
+  (() => {
+    const chile = findByCode("CL");
+    const r = evaluateWithCtwaException({
+      tipoActivador: "primer_mensaje",
+      esPrimerMensaje: false,
+      ctwaAdId: AD_222,
+      metaAds: { ad_ids: [AD_222] },
+      candidateFlowId: FLOW_2,
+      activeSessionFlowId: FLOW_1,
+      matchNormal: false,
+      contactNumero: "59171234567",
+      country: {
+        mode: MODE_SPECIFIC,
+        code: chile.code,
+        name: chile.name,
+        prefix: chile.prefix,
+      },
+    });
+    return r.ok === false && r.stage === "country";
+  })()
+);
+
+check(
+  "EX9. mismo flujo ACTIVE + mismo Ad → NO reinicia",
+  (() => {
+    const r = evaluateCtwaPrimerMensajeException({
+      tipoActivador: "primer_mensaje",
+      esPrimerMensaje: false,
+      ctwaAdId: AD_222,
+      metaAds: { ad_ids: [AD_222] },
+      candidateFlowId: FLOW_1,
+      activeSessionFlowId: FLOW_1,
+    });
+    return r.allow === false && r.reason === "same_active_flow";
+  })()
+);
+
+check(
+  "EX10. FINISHED (sin ACTIVE) + Ad Flujo2 → entra",
+  evaluateWithCtwaException({
+    tipoActivador: "primer_mensaje",
+    esPrimerMensaje: false,
+    ctwaAdId: AD_222,
+    metaAds: { ad_ids: [AD_222] },
+    candidateFlowId: FLOW_2,
+    activeSessionFlowId: null,
+    matchNormal: false,
+    contactNumero: null,
+  }).ok === true
+);
+
+check(
+  "EX11. Ad duplicado entre dos flujos → respeta sort (primero gana)",
+  (() => {
+    const ordenados = sortActivadores([
+      {
+        id: "a-late",
+        flujo_id: "flow-late",
+        tipo_activador: TIPOS.PRIMER_MENSAJE,
+        prioridad: 0,
+        frase: "",
+      },
+      {
+        id: "a-early",
+        flujo_id: "flow-early",
+        tipo_activador: TIPOS.PRIMER_MENSAJE,
+        prioridad: 10,
+        frase: "",
+      },
+    ]);
+    assert(ordenados[0].id === "a-early", "sort prioridad");
+
+    let winner = null;
+    for (const a of ordenados) {
+      const r = evaluateWithCtwaException({
+        tipoActivador: TIPOS.PRIMER_MENSAJE,
+        esPrimerMensaje: false,
+        ctwaAdId: AD_222,
+        metaAds: { ad_ids: [AD_222] },
+        candidateFlowId: a.flujo_id,
+        activeSessionFlowId: FLOW_1,
+        matchNormal: false,
+        contactNumero: null,
+      });
+      if (r.ok) {
+        winner = a.flujo_id;
+        break;
+      }
+    }
+    return winner === "flow-early";
+  })()
+);
+
+check(
+  "EX12. legacy sin Ad IDs + CTWA + sesión vigente → NO excepción",
+  (() => {
+    const r = evaluateCtwaPrimerMensajeException({
+      tipoActivador: "primer_mensaje",
+      esPrimerMensaje: false,
+      ctwaAdId: AD_222,
+      metaAds: undefined,
+      candidateFlowId: FLOW_2,
+      activeSessionFlowId: FLOW_1,
+    });
+    return r.allow === false && r.reason === "no_explicit_ad_match";
+  })()
+);
+
+check(
+  "EX. esPrimerMensaje true → no usa excepción (match normal)",
+  evaluateCtwaPrimerMensajeException({
+    tipoActivador: "primer_mensaje",
+    esPrimerMensaje: true,
+    ctwaAdId: AD_222,
+    metaAds: { ad_ids: [AD_222] },
+    candidateFlowId: FLOW_2,
+    activeSessionFlowId: FLOW_1,
+  }).allow === false
+);
+
+check(
+  "EX. matchActivador primer_mensaje sigue exigiendo esPrimerMensaje",
+  matchActivador("hola", { tipo_activador: TIPOS.PRIMER_MENSAJE }, {
+    esPrimerMensaje: false,
+  }).matched === false &&
+    matchActivador("hola", { tipo_activador: TIPOS.PRIMER_MENSAJE }, {
+      esPrimerMensaje: true,
+    }).matched === true
+);
+
+// silence unused (documentado en EX2: F1 tenía 111, no se inspecciona)
+void AD_111;
 
 console.log(`\nTodas las pruebas OK (${passed})`);
