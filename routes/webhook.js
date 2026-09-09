@@ -27,6 +27,7 @@ const { calcularEsPrimerMensaje } = require("../services/firstMessageService");
 const {
   extractCtwaAdIdFromMessage,
 } = require("../services/ctwaAdIdThread");
+const { registrarEntradaCtwa } = require("../services/ctwaLeadService");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
@@ -67,9 +68,43 @@ function urlPatchEstadoEnvio(whatsappMessageId, estado) {
   return url;
 }
 
-setInterval(() => {
+/**
+ * Fase 2C — ledger CTWA comercial (fail-open).
+ * Independiente de clientes / plan / flujo / country / routing.
+ * @param {{ message: object, from: string|null|undefined, usuarioIdWebhook: string|null|undefined, conexionWebhook: object|null|undefined, registrar?: Function }} args
+ */
+async function intentarRegistrarLeadCtwaWebhook({
+  message,
+  from,
+  usuarioIdWebhook,
+  conexionWebhook,
+  registrar = registrarEntradaCtwa,
+}) {
+  try {
+    if (!usuarioIdWebhook || !from || !message?.id) return;
+    const ctwaAdId = extractCtwaAdIdFromMessage(message);
+    if (!ctwaAdId) return;
+    await registrar({
+      usuarioId: usuarioIdWebhook,
+      clienteNumero: from,
+      conexionWhatsappId: conexionWebhook?.id ?? null,
+      messageId: message.id,
+      ctwaAdId,
+    });
+  } catch (error) {
+    console.error(
+      "[CTWA LEAD LEDGER] Error registrando entrada",
+      error?.message || error
+    );
+  }
+}
+
+const _mensajesProcesadosTimer = setInterval(() => {
   mensajesProcesados.clear();
 }, 1000 * 60 * 10);
+if (typeof _mensajesProcesadosTimer.unref === "function") {
+  _mensajesProcesadosTimer.unref();
+}
 // 🔐 VERIFICACIÓN WEBHOOK
 router.get('/webhook', (req, res) => {
   const VERIFY_TOKEN =
@@ -202,6 +237,14 @@ mensajesProcesados.add(message.id);
 
     
     const from = message.from;
+
+    // Fase 2C: ledger CTWA (antes de bloqueado / plan / clientes / flujo)
+    await intentarRegistrarLeadCtwaWebhook({
+      message,
+      from,
+      usuarioIdWebhook,
+      conexionWebhook,
+    });
 
     const creadoEn = message.timestamp
   ? new Date(Number(message.timestamp) * 1000).toISOString()
@@ -721,3 +764,4 @@ return res.sendStatus(200);
 });
 
 module.exports = router;
+module.exports.intentarRegistrarLeadCtwaWebhook = intentarRegistrarLeadCtwaWebhook;
