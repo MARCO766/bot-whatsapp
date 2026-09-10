@@ -272,14 +272,24 @@ async function supabaseCountPorUsuario(table, usuarioId) {
 
 /**
  * Uso real de recursos del usuario (conteos en Supabase).
+ * - contactos_usados: filas en `clientes` (contactos únicos CRM)
+ * - leads_usados: filas en `macbot_ctwa_leads` (entradas CTWA comerciales)
+ * @param {string} usuarioId
+ * @param {{ countPorUsuario?: Function }} [deps] solo para tests
  */
-async function obtenerUsoUsuario(usuarioId) {
-  const [whatsapp_usados, contactos_usados, flujos_usados] = await Promise.all([
-    supabaseCountPorUsuario("conexiones_whatsapp", usuarioId),
-    supabaseCountPorUsuario("clientes", usuarioId),
-    supabaseCountPorUsuario("flujos_builder", usuarioId),
-  ]);
-  return { whatsapp_usados, contactos_usados, flujos_usados };
+async function obtenerUsoUsuario(usuarioId, deps = {}) {
+  const count =
+    typeof deps.countPorUsuario === "function"
+      ? deps.countPorUsuario
+      : supabaseCountPorUsuario;
+  const [whatsapp_usados, contactos_usados, flujos_usados, leads_usados] =
+    await Promise.all([
+      count("conexiones_whatsapp", usuarioId),
+      count("clientes", usuarioId),
+      count("flujos_builder", usuarioId),
+      count("macbot_ctwa_leads", usuarioId),
+    ]);
+  return { whatsapp_usados, contactos_usados, flujos_usados, leads_usados };
 }
 
 /**
@@ -370,6 +380,7 @@ function buildMiPlanResponse(planData, uso = null, extras = null) {
       uso: {
         whatsapp_usados: toInt(usoNorm.whatsapp_usados, 0),
         contactos_usados: toInt(usoNorm.contactos_usados, 0),
+        leads_usados: toInt(usoNorm.leads_usados, 0),
         flujos_usados: toInt(usoNorm.flujos_usados, 0),
       },
     },

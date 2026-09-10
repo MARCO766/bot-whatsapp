@@ -62,7 +62,22 @@ function EstadoBadge({ estado }) {
   return <span className={`miPlanEstadoBadge miPlanEstadoBadge--${key}`}>{label}</span>;
 }
 
-function UsageResourceRow({ label, icon, usados, limite }) {
+function UsageResourceRow({ label, icon, usados, limite, soloConteo = false }) {
+  if (soloConteo) {
+    return (
+      <div className="miPlanUsageRow">
+        <div className="miPlanLimitHead">
+          <strong>
+            {icon} {label}
+          </strong>
+        </div>
+        <p className="miPlanUsageText">
+          {Number(usados || 0).toLocaleString("es-BO")} leads CTWA consumidos
+        </p>
+      </div>
+    );
+  }
+
   const ilimitado = esLimiteIlimitado(limite);
   const pct = calcPorcentaje(usados, limite);
   const tone = colorPorcentaje(pct);
@@ -176,7 +191,8 @@ export default function MiPlanSection() {
           <h2>Plan actual</h2>
           <p>{tagline}</p>
           <p className="miPlanHeroSub">
-            Uso real de WhatsApp, contactos y flujos según tu plan {nombreUi}.
+            Uso real de WhatsApp, leads CTWA, contactos y flujos según tu plan{" "}
+            {nombreUi}.
           </p>
           <div className="miPlanHeroMeta">
             <span>
@@ -215,6 +231,11 @@ export default function MiPlanSection() {
           <span className="label">WhatsApps conectados</span>
         </article>
         <article className="miPlanQuickCard">
+          <span className="miPlanQuickIcon">⚡</span>
+          <strong>{formatUsoCount(uso.leads_usados)}</strong>
+          <span className="label">Leads</span>
+        </article>
+        <article className="miPlanQuickCard">
           <span className="miPlanQuickIcon">👤</span>
           <strong>{formatUsoCount(uso.contactos_usados)}</strong>
           <span className="label">Contactos CRM</span>
@@ -235,6 +256,12 @@ export default function MiPlanSection() {
           icon="📱"
           usados={uso.whatsapp_usados}
           limite={limites.whatsapp}
+        />
+        <UsageResourceRow
+          label="Leads"
+          icon="⚡"
+          usados={uso.leads_usados}
+          soloConteo
         />
         <UsageResourceRow
           label="Contactos"
@@ -267,8 +294,9 @@ export default function MiPlanSection() {
       </div>
 
       <p className="miPlanFootNote">
-        Plan {nombreUi} · estado {ESTADO_LABELS[estado] || estado}. Los conteos
-        reflejan tus conexiones, clientes CRM y flujos en MacBot.
+        Plan {nombreUi} · estado {ESTADO_LABELS[estado] || estado}. Los leads
+        cuentan entradas CTWA; los contactos CRM son números únicos. También se
+        reflejan conexiones WhatsApp y flujos.
       </p>
     </div>
   );
