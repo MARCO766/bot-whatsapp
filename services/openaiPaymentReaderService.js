@@ -11,14 +11,72 @@ const MONEDA_ALIASES = {
   bs: ["bs", "bob", "boliviano", "bolivianos", "bol", "bs."],
   usd: ["usd", "dolar", "dolares", "dólar", "dólares", "us$", "u$s"],
   eur: ["eur", "euro", "euros"],
+  ars: ["ars", "peso argentino", "pesos argentinos", "arg"],
 };
 
+/** Marcador interno: símbolo "$" ambiguo (ARS vs USD). */
+const MONEDA_SIMBOLO_DOLAR = "$";
+
+/**
+ * Normaliza montos LATAM/US sin tratar siempre "." como decimal.
+ * "1.490" → 1490 | "1490,50" → 1490.50 | "1490.00" → 1490
+ */
 function toNumber(value, fallback = 0) {
-  const cleaned = String(value ?? "")
-    .replace(",", ".")
-    .replace(/[^\d.-]/g, "");
-  const n = Number(cleaned);
-  return Number.isFinite(n) ? n : fallback;
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : fallback;
+  }
+
+  let s = String(value ?? "").trim();
+  if (!s) return fallback;
+
+  const neg = /^-/.test(s.replace(/[^\d.,-]/g, ""));
+  s = s.replace(/[^\d.,]/g, "");
+  if (!s) return fallback;
+
+  let normalized;
+  const hasDot = s.includes(".");
+  const hasComma = s.includes(",");
+
+  if (hasDot && hasComma) {
+    const lastDot = s.lastIndexOf(".");
+    const lastComma = s.lastIndexOf(",");
+    if (lastComma > lastDot) {
+      // LATAM: 1.490,50
+      normalized = s.replace(/\./g, "").replace(",", ".");
+    } else {
+      // US: 1,490.50
+      normalized = s.replace(/,/g, "");
+    }
+  } else if (hasComma) {
+    if (/^\d{1,3}(,\d{3})+$/.test(s)) {
+      // miles US: 1,490
+      normalized = s.replace(/,/g, "");
+    } else if (/^\d+,\d{1,2}$/.test(s)) {
+      // decimal LATAM: 1490,50
+      normalized = s.replace(",", ".");
+    } else {
+      normalized = s.replace(/,/g, "");
+    }
+  } else if (hasDot) {
+    if (/^\d{1,3}(\.\d{3})+$/.test(s)) {
+      // miles LATAM: 1.490
+      normalized = s.replace(/\./g, "");
+    } else if (/^\d+\.\d{1,2}$/.test(s)) {
+      // decimal: 1490.50 / 1490.00
+      normalized = s;
+    } else if (/^\d{1,3}(\.\d{3})+\.\d{1,2}$/.test(s)) {
+      const lastDot = s.lastIndexOf(".");
+      normalized = s.slice(0, lastDot).replace(/\./g, "") + "." + s.slice(lastDot + 1);
+    } else {
+      normalized = s;
+    }
+  } else {
+    normalized = s;
+  }
+
+  const n = Number(normalized);
+  if (!Number.isFinite(n)) return fallback;
+  return neg ? -Math.abs(n) : n;
 }
 
 function normalizeText(value) {
@@ -112,8 +170,17 @@ function compararNombreFlexible(esperado, lectura) {
 }
 
 function normalizarMonedaCanon(moneda) {
-  const raw = normalizeText(moneda).replace(/\./g, "").replace(/\$/g, "");
-  if (!raw) return "";
+  const normalized = normalizeText(moneda);
+  if (!normalized) return "";
+
+  const sinPuntos = normalized.replace(/\./g, "");
+  // "$" solo es ambiguo (ARS/USD); no mapear a una moneda concreta.
+  if (sinPuntos === MONEDA_SIMBOLO_DOLAR) {
+    return MONEDA_SIMBOLO_DOLAR;
+  }
+
+  const raw = sinPuntos.replace(/\$/g, "").trim();
+  if (!raw) return MONEDA_SIMBOLO_DOLAR;
 
   for (const [canon, aliases] of Object.entries(MONEDA_ALIASES)) {
     if (aliases.some((alias) => raw === alias || raw.includes(alias))) {
@@ -134,6 +201,14 @@ function compararMonedaFlexible(esperada, leida) {
   const espCanon = normalizarMonedaCanon(esp);
   const lecCanon = normalizarMonedaCanon(lec);
   if (espCanon && lecCanon && espCanon === lecCanon) return true;
+
+  // "$" ambiguo: solo válido si la ruta espera ARS o USD.
+  if (
+    lecCanon === MONEDA_SIMBOLO_DOLAR &&
+    (espCanon === "ars" || espCanon === "usd")
+  ) {
+    return true;
+  }
 
   return normalizeText(esp) === normalizeText(lec);
 }
@@ -206,8 +281,23 @@ async function analizarComprobanteConVision({ imageDataUrl, imagePublicUrl }) {
   const prompt = [
     "Extrae SOLO este JSON del comprobante de pago.",
     "Sin markdown y sin explicaciones.",
-    'Formato exacto: {"monto":29,"moneda":"bs","nombre":"Marco Antonio Arias Perez"}',
+    'Formato exacto: {"monto":29,"moneda":"BOB","nombre":"Marco Antonio Arias Perez"}',
     "Si falta un dato devuelve null en ese campo.",
+    "",
+    "MONTO:",
+    "- Devuelve el monto como número SIN separadores de miles.",
+    '- Ejemplo visual \"$ 1.490\" (Argentina / Mercado Pago) → monto 1490, NO 1.49 ni 1.490.',
+    '- Ejemplo visual \"1.490,50\" → monto 1490.5',
+    '- Ejemplo visual \"1490.00\" → monto 1490',
+    "- Respeta si el punto/coma son miles o decimales según el formato local del comprobante.",
+    "",
+    "MONEDA (preferí código ISO):",
+    '- Pesos argentinos / Mercado Pago Argentina / \"$\" en contexto AR → \"ARS\".',
+    '- Bolivianos / Bs / BOB → \"BOB\".',
+    '- Dólares estadounidenses → \"USD\".',
+    '- Euros → \"EUR\".',
+    '- NO asumas que el símbolo \"$\" es siempre USD; en Argentina suele ser ARS.',
+    '- Si solo ves \"$\" y no puedes confirmar el país/moneda, puedes devolver \"$\".',
     "",
     'El campo "nombre" es el DESTINATARIO / BENEFICIARIO / RECEPTOR del dinero:',
     "la persona o entidad que RECIBE el pago (NO quien envía).",
@@ -223,8 +313,11 @@ async function analizarComprobanteConVision({ imageDataUrl, imagePublicUrl }) {
     '"Cuenta origen", "Ordenante", "Pagador", "Remitente", "De:", "Enviado por",',
     '"Titular origen", o equivalentes.',
     "",
-    "Ejemplo: Cuenta origen: Ticona Condori Eliana / Cuenta destino: Ibanca Chambi Balboa",
-    '→ {"monto":7,"moneda":"bs","nombre":"Ibanca Chambi Balboa"}',
+    "Ejemplo Bolivia: Cuenta origen: Ticona Condori Eliana / Cuenta destino: Ibanca Chambi Balboa",
+    '→ {"monto":7,"moneda":"BOB","nombre":"Ibanca Chambi Balboa"}',
+    "",
+    "Ejemplo Argentina Mercado Pago: monto visible \"$ 1.490\"",
+    '→ {"monto":1490,"moneda":"ARS","nombre":null}',
     "",
     "Si el destinatario/beneficiario es claramente visible, NO devuelvas nombre: null.",
     "nombre: null solo si no es posible identificar ningún destinatario o beneficiario.",
@@ -560,4 +653,6 @@ module.exports = {
   compararMonedaFlexible,
   compararNombreFlexible,
   normalizarPaymentEsperado,
+  normalizarMonedaCanon,
+  toNumber,
 };
