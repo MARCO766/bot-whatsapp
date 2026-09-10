@@ -22,12 +22,18 @@ const {
   registrarRespuestaBotonSeguimiento,
 } = require("../services/seguimiento/registrarRespuestaBoton");
 const rt = require("../services/realtimeService");
-const { evaluarLimiteContactoEntrante } = require("../middlewares/planLimits");
+const {
+  evaluarLimiteContactoEntrante,
+  evaluarCapacidadLeadCtwa,
+} = require("../middlewares/planLimits");
 const { calcularEsPrimerMensaje } = require("../services/firstMessageService");
 const {
   extractCtwaAdIdFromMessage,
 } = require("../services/ctwaAdIdThread");
-const { registrarEntradaCtwa } = require("../services/ctwaLeadService");
+const {
+  registrarEntradaCtwa,
+  existeEntradaCtwa,
+} = require("../services/ctwaLeadService");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
@@ -69,9 +75,24 @@ function urlPatchEstadoEnvio(whatsappMessageId, estado) {
 }
 
 /**
- * Fase 2C — ledger CTWA comercial (fail-open).
- * Independiente de clientes / plan / flujo / country / routing.
- * @param {{ message: object, from: string|null|undefined, usuarioIdWebhook: string|null|undefined, conexionWebhook: object|null|undefined, registrar?: Function }} args
+ * Fase 2B — Gate de capacidad de leads CTWA (solo inbound con source_id).
+ * Campañas / statuses / salientes / seguimientos NO pasan por aquí.
+ *
+ * Flujo: detectar CTWA → ¿message_id ya existe? → cupo → registrar o hard-stop.
+ * Fail-closed comercial: COUNT/INSERT/exists inciertos → no continuar CRM/Flow.
+ * HTTP 200 lo decide el handler (nunca 500 por este gate).
+ *
+ * @returns {Promise<{
+ *   permitir: boolean,
+ *   skipped?: boolean,
+ *   duplicate?: boolean,
+ *   registered?: boolean,
+ *   blocked?: boolean,
+ *   code?: string,
+ *   limite?: number|null,
+ *   usados?: number,
+ *   error?: boolean
+ * }>}
  */
 async function intentarRegistrarLeadCtwaWebhook({
   message,
@@ -79,11 +100,73 @@ async function intentarRegistrarLeadCtwaWebhook({
   usuarioIdWebhook,
   conexionWebhook,
   registrar = registrarEntradaCtwa,
+  existe = existeEntradaCtwa,
+  evaluarCapacidad = evaluarCapacidadLeadCtwa,
 }) {
+  if (!usuarioIdWebhook || !from || !message?.id) {
+    return { permitir: true, skipped: true };
+  }
+  const ctwaAdId = extractCtwaAdIdFromMessage(message);
+  if (!ctwaAdId) {
+    return { permitir: true, skipped: true };
+  }
+
+  let yaExiste;
   try {
-    if (!usuarioIdWebhook || !from || !message?.id) return;
-    const ctwaAdId = extractCtwaAdIdFromMessage(message);
-    if (!ctwaAdId) return;
+    yaExiste = await existe(usuarioIdWebhook, message.id);
+  } catch (error) {
+    console.error(
+      "[PLAN_LIMIT_LEADS] error consultando existencia CTWA (fail-closed)",
+      error?.message || error
+    );
+    return {
+      permitir: false,
+      blocked: true,
+      code: "CTWA_LEAD_EXISTS_CHECK_FAILED",
+      error: true,
+    };
+  }
+
+  if (yaExiste) {
+    return { permitir: true, duplicate: true };
+  }
+
+  let cupo;
+  try {
+    cupo = await evaluarCapacidad(usuarioIdWebhook);
+  } catch (error) {
+    console.error(
+      "[PLAN_LIMIT_LEADS] error evaluando capacidad (fail-closed)",
+      error?.message || error
+    );
+    return {
+      permitir: false,
+      blocked: true,
+      code: "PLAN_LIMIT_LEADS_UNAVAILABLE",
+      error: true,
+    };
+  }
+
+  if (!cupo.permitir) {
+    console.log("[PLAN_LIMIT_LEADS] CTWA bloqueado por capacidad de leads", {
+      usuarioId: usuarioIdWebhook,
+      message_id: message.id,
+      code: cupo.code || "PLAN_LIMIT_LEADS",
+      limite: cupo.limite,
+      usados: cupo.usados,
+      error: Boolean(cupo.error),
+    });
+    return {
+      permitir: false,
+      blocked: true,
+      code: cupo.code || "PLAN_LIMIT_LEADS",
+      limite: cupo.limite,
+      usados: cupo.usados,
+      error: Boolean(cupo.error),
+    };
+  }
+
+  try {
     await registrar({
       usuarioId: usuarioIdWebhook,
       clienteNumero: from,
@@ -93,10 +176,18 @@ async function intentarRegistrarLeadCtwaWebhook({
     });
   } catch (error) {
     console.error(
-      "[CTWA LEAD LEDGER] Error registrando entrada",
+      "[PLAN_LIMIT_LEADS] error registrando lead CTWA (fail-closed, sin CRM/Flow)",
       error?.message || error
     );
+    return {
+      permitir: false,
+      blocked: true,
+      code: "CTWA_LEAD_REGISTER_FAILED",
+      error: true,
+    };
   }
+
+  return { permitir: true, registered: true };
 }
 
 const _mensajesProcesadosTimer = setInterval(() => {
@@ -238,14 +329,6 @@ mensajesProcesados.add(message.id);
     
     const from = message.from;
 
-    // Fase 2C: ledger CTWA (antes de bloqueado / plan / clientes / flujo)
-    await intentarRegistrarLeadCtwaWebhook({
-      message,
-      from,
-      usuarioIdWebhook,
-      conexionWebhook,
-    });
-
     const creadoEn = message.timestamp
   ? new Date(Number(message.timestamp) * 1000).toISOString()
   : new Date().toISOString();
@@ -262,10 +345,22 @@ const responseClienteBloqueado = await axios.get(
 
 const clienteBloqueado = responseClienteBloqueado.data?.[0];
 
+// Contacto bloqueado ANTES del gate CTWA: no consume lead comercial.
 if (clienteBloqueado?.estado === "bloqueado") {
   console.log("🚫 Mensaje ignorado de contacto bloqueado:", from);
   return res.sendStatus(200);
 }
+
+    // Fase 2B: gate leads CTWA (tras bloqueado; antes de clientes / flujo / Ad ID / country)
+    const gateLeadCtwa = await intentarRegistrarLeadCtwaWebhook({
+      message,
+      from,
+      usuarioIdWebhook,
+      conexionWebhook,
+    });
+    if (!gateLeadCtwa.permitir) {
+      return res.sendStatus(200);
+    }
 
 if (usuarioIdWebhook) {
   const limiteContacto = await evaluarLimiteContactoEntrante(

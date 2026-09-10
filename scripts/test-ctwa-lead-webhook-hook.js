@@ -1,8 +1,8 @@
 /**
- * FASE 2C — Gate del ledger CTWA en webhook (sin HTTP e2e).
+ * FASE 2B — Gate del ledger CTWA en webhook (sin HTTP e2e).
  * Ejecutar: node scripts/test-ctwa-lead-webhook-hook.js
  *
- * Cubre intentarRegistrarLeadCtwaWebhook (dedupe→from→ledger→resto).
+ * Cubre intentarRegistrarLeadCtwaWebhook (detect→exists→cupo→register/block).
  * No arranca Express ni toca Supabase real.
  */
 const {
@@ -41,6 +41,14 @@ function makeRegistrar() {
   return registrar;
 }
 
+function allowCap() {
+  return async () => ({ permitir: true, limite: 1000, usados: 0 });
+}
+
+function noneExists() {
+  return async () => false;
+}
+
 function ctwaMessage(overrides = {}) {
   return {
     id: "wamid.HOOK_1",
@@ -53,31 +61,29 @@ function ctwaMessage(overrides = {}) {
 }
 
 (async () => {
-  // 1. CTWA válido → una llamada
-  await checkAsync("1. CTWA válido → registrarEntradaCtwa una vez", async () => {
+  await checkAsync("1. CTWA válido + cupo → registrarEntradaCtwa una vez", async () => {
     const registrar = makeRegistrar();
-    await intentarRegistrarLeadCtwaWebhook({
+    const r = await intentarRegistrarLeadCtwaWebhook({
       message: ctwaMessage(),
       from: FROM,
       usuarioIdWebhook: U1,
       conexionWebhook: CONN,
       registrar,
+      existe: noneExists(),
+      evaluarCapacidad: allowCap(),
     });
+    assert(r.permitir && r.registered, "registered");
     assert(registrar.calls.length === 1, "una llamada");
     assert(registrar.calls[0].usuarioId === U1, "usuario");
     assert(registrar.calls[0].clienteNumero === FROM, "from");
     assert(registrar.calls[0].messageId === "wamid.HOOK_1", "messageId");
     assert(registrar.calls[0].ctwaAdId === AD1, "ctwaAdId");
-    assert(
-      registrar.calls[0].conexionWhatsappId === CONN.id,
-      "conexion"
-    );
+    assert(registrar.calls[0].conexionWhatsappId === CONN.id, "conexion");
   });
 
-  // 2. Sin source_id
   await checkAsync("2. mensaje normal sin source_id → no registra", async () => {
     const registrar = makeRegistrar();
-    await intentarRegistrarLeadCtwaWebhook({
+    const r = await intentarRegistrarLeadCtwaWebhook({
       message: {
         id: "wamid.ORG",
         type: "text",
@@ -87,174 +93,194 @@ function ctwaMessage(overrides = {}) {
       usuarioIdWebhook: U1,
       conexionWebhook: CONN,
       registrar,
+      existe: noneExists(),
+      evaluarCapacidad: allowCap(),
     });
+    assert(r.skipped === true, "skipped");
     assert(registrar.calls.length === 0, "sin llamadas");
   });
 
-  // 3. source_id vacío
   await checkAsync("3. source_id vacío → no registra", async () => {
     const registrar = makeRegistrar();
-    await intentarRegistrarLeadCtwaWebhook({
+    const r = await intentarRegistrarLeadCtwaWebhook({
       message: ctwaMessage({ referral: { source_id: "   " } }),
       from: FROM,
       usuarioIdWebhook: U1,
       conexionWebhook: CONN,
       registrar,
+      existe: noneExists(),
+      evaluarCapacidad: allowCap(),
     });
+    assert(r.skipped === true, "skipped");
     assert(registrar.calls.length === 0, "sin llamadas");
   });
 
-  // 4. message.id ausente
   await checkAsync("4. message.id ausente → no registra", async () => {
     const registrar = makeRegistrar();
     const msg = ctwaMessage();
     delete msg.id;
-    await intentarRegistrarLeadCtwaWebhook({
+    const r = await intentarRegistrarLeadCtwaWebhook({
       message: msg,
       from: FROM,
       usuarioIdWebhook: U1,
       conexionWebhook: CONN,
       registrar,
+      existe: noneExists(),
+      evaluarCapacidad: allowCap(),
     });
+    assert(r.skipped === true, "skipped");
     assert(registrar.calls.length === 0, "sin llamadas");
   });
 
-  // 5. usuarioIdWebhook ausente
   await checkAsync("5. usuarioIdWebhook ausente → no registra", async () => {
     const registrar = makeRegistrar();
-    await intentarRegistrarLeadCtwaWebhook({
+    const r = await intentarRegistrarLeadCtwaWebhook({
       message: ctwaMessage(),
       from: FROM,
       usuarioIdWebhook: null,
       conexionWebhook: CONN,
       registrar,
+      existe: noneExists(),
+      evaluarCapacidad: allowCap(),
     });
+    assert(r.skipped === true, "skipped");
     assert(registrar.calls.length === 0, "sin llamadas");
   });
 
-  // 6. from ausente
   await checkAsync("6. from ausente → no registra", async () => {
     const registrar = makeRegistrar();
-    await intentarRegistrarLeadCtwaWebhook({
+    const r = await intentarRegistrarLeadCtwaWebhook({
       message: ctwaMessage(),
       from: null,
       usuarioIdWebhook: U1,
       conexionWebhook: CONN,
       registrar,
+      existe: noneExists(),
+      evaluarCapacidad: allowCap(),
     });
+    assert(r.skipped === true, "skipped");
     assert(registrar.calls.length === 0, "sin llamadas");
   });
 
-  // 7. statuses no pasan por este helper (documentado: early-return en webhook)
   check(
     "7. statuses no usan el helper (rama value.statuses previa en webhook)",
     true
   );
 
-  // 8. duplicate → continúa (no throw)
-  await checkAsync("8. duplicate → webhook continúa (sin error)", async () => {
+  await checkAsync("8. message_id ya existe → continúa sin registrar", async () => {
     const registrar = makeRegistrar();
-    registrar.calls; // keep
-    async function registrarDup(payload) {
-      registrar.calls.push(payload);
-      return { registered: false, duplicate: true };
-    }
-    registrarDup.calls = registrar.calls;
-    await intentarRegistrarLeadCtwaWebhook({
+    const r = await intentarRegistrarLeadCtwaWebhook({
       message: ctwaMessage({ id: "wamid.DUP" }),
       from: FROM,
       usuarioIdWebhook: U1,
       conexionWebhook: CONN,
-      registrar: registrarDup,
+      registrar,
+      existe: async () => true,
+      evaluarCapacidad: allowCap(),
     });
-    assert(registrar.calls.length === 1, "llamó una vez");
+    assert(r.permitir && r.duplicate, "duplicate continue");
+    assert(registrar.calls.length === 0, "sin insert");
   });
 
-  // 9. error Supabase → fail-open
-  await checkAsync(
-    "9. error del servicio → fail-open (no relanza)",
-    async () => {
-      let threw = false;
-      try {
-        await intentarRegistrarLeadCtwaWebhook({
-          message: ctwaMessage({ id: "wamid.ERR" }),
-          from: FROM,
-          usuarioIdWebhook: U1,
-          conexionWebhook: CONN,
-          registrar: async () => {
-            throw new Error("db down");
-          },
-        });
-      } catch (_e) {
-        threw = true;
-      }
-      assert(!threw, "no debe relanzar");
-    }
-  );
-
-  // 10. contacto existente (mismo from) → igual registra
-  await checkAsync(
-    "10. CTWA con contacto existente → intenta registrar",
-    async () => {
-      const registrar = makeRegistrar();
-      await intentarRegistrarLeadCtwaWebhook({
-        message: ctwaMessage({ id: "wamid.EXIST" }),
+  await checkAsync("9. INSERT falla → fail-closed (no relanza, NO permitir)", async () => {
+    let threw = false;
+    let r;
+    try {
+      r = await intentarRegistrarLeadCtwaWebhook({
+        message: ctwaMessage({ id: "wamid.ERR" }),
         from: FROM,
         usuarioIdWebhook: U1,
         conexionWebhook: CONN,
-        registrar,
+        registrar: async () => {
+          throw new Error("db down");
+        },
+        existe: noneExists(),
+        evaluarCapacidad: allowCap(),
       });
-      assert(registrar.calls.length === 1, "registra igual");
-      assert(registrar.calls[0].clienteNumero === FROM, "from");
+    } catch (_e) {
+      threw = true;
     }
-  );
+    assert(!threw, "no debe relanzar");
+    assert(r.permitir === false && r.blocked === true, "fail-closed");
+    assert(r.code === "CTWA_LEAD_REGISTER_FAILED", "código");
+  });
 
-  // 11–12. ledger antes de flujo/country (gate no consulta flow/country)
-  await checkAsync(
-    "11. sin flujo: ledger se intenta igual (gate independiente)",
-    async () => {
-      const registrar = makeRegistrar();
-      await intentarRegistrarLeadCtwaWebhook({
-        message: ctwaMessage({ id: "wamid.NOFLOW" }),
-        from: FROM,
-        usuarioIdWebhook: U1,
-        conexionWebhook: CONN,
-        registrar,
-      });
-      assert(registrar.calls.length === 1, "registra antes de routing");
-    }
-  );
+  await checkAsync("10. CTWA con contacto existente → registra si hay cupo", async () => {
+    const registrar = makeRegistrar();
+    const r = await intentarRegistrarLeadCtwaWebhook({
+      message: ctwaMessage({ id: "wamid.EXIST" }),
+      from: FROM,
+      usuarioIdWebhook: U1,
+      conexionWebhook: CONN,
+      registrar,
+      existe: noneExists(),
+      evaluarCapacidad: allowCap(),
+    });
+    assert(r.registered, "registra");
+    assert(registrar.calls[0].clienteNumero === FROM, "from");
+  });
 
-  await checkAsync(
-    "12. country incompatible: ledger se intenta igual (gate independiente)",
-    async () => {
-      const registrar = makeRegistrar();
-      await intentarRegistrarLeadCtwaWebhook({
-        message: ctwaMessage({ id: "wamid.COUNTRY" }),
-        from: FROM,
-        usuarioIdWebhook: U1,
-        conexionWebhook: CONN,
-        registrar,
-      });
-      assert(registrar.calls.length === 1, "registra sin mirar country");
-    }
-  );
+  await checkAsync("11. sin flujo: ledger se intenta igual", async () => {
+    const registrar = makeRegistrar();
+    const r = await intentarRegistrarLeadCtwaWebhook({
+      message: ctwaMessage({ id: "wamid.NOFLOW" }),
+      from: FROM,
+      usuarioIdWebhook: U1,
+      conexionWebhook: CONN,
+      registrar,
+      existe: noneExists(),
+      evaluarCapacidad: allowCap(),
+    });
+    assert(r.registered, "registra antes de routing");
+  });
 
-  // conexion null permitida
-  await checkAsync(
-    "conexionWebhook null → conexionWhatsappId null",
-    async () => {
-      const registrar = makeRegistrar();
-      await intentarRegistrarLeadCtwaWebhook({
-        message: ctwaMessage({ id: "wamid.NOCONN" }),
-        from: FROM,
-        usuarioIdWebhook: U1,
-        conexionWebhook: null,
-        registrar,
-      });
-      assert(registrar.calls[0].conexionWhatsappId === null, "null");
-    }
-  );
+  await checkAsync("12. country incompatible: ledger se intenta igual", async () => {
+    const registrar = makeRegistrar();
+    const r = await intentarRegistrarLeadCtwaWebhook({
+      message: ctwaMessage({ id: "wamid.COUNTRY" }),
+      from: FROM,
+      usuarioIdWebhook: U1,
+      conexionWebhook: CONN,
+      registrar,
+      existe: noneExists(),
+      evaluarCapacidad: allowCap(),
+    });
+    assert(r.registered, "registra sin mirar country");
+  });
+
+  await checkAsync("13. sin cupo → hard stop sin insert", async () => {
+    const registrar = makeRegistrar();
+    const r = await intentarRegistrarLeadCtwaWebhook({
+      message: ctwaMessage({ id: "wamid.NOCAP" }),
+      from: FROM,
+      usuarioIdWebhook: U1,
+      conexionWebhook: CONN,
+      registrar,
+      existe: noneExists(),
+      evaluarCapacidad: async () => ({
+        permitir: false,
+        code: "PLAN_LIMIT_LEADS",
+        limite: 1000,
+        usados: 1000,
+      }),
+    });
+    assert(r.permitir === false && r.blocked, "blocked");
+    assert(registrar.calls.length === 0, "no insert");
+  });
+
+  await checkAsync("conexionWebhook null → conexionWhatsappId null", async () => {
+    const registrar = makeRegistrar();
+    await intentarRegistrarLeadCtwaWebhook({
+      message: ctwaMessage({ id: "wamid.NOCONN" }),
+      from: FROM,
+      usuarioIdWebhook: U1,
+      conexionWebhook: null,
+      registrar,
+      existe: noneExists(),
+      evaluarCapacidad: allowCap(),
+    });
+    assert(registrar.calls[0].conexionWhatsappId === null, "null");
+  });
 
   console.log(`\nPASS ${passed} checks (ctwa lead webhook hook)`);
 })().catch((err) => {

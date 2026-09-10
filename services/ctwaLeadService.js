@@ -1,11 +1,10 @@
 /**
  * Ledger comercial CTWA — registro idempotente en macbot_ctwa_leads.
  *
- * Fase 2B: servicio aislado. NO conectado al webhook.
- * Fase 2C (futura): llamar registrarEntradaCtwa desde routes/webhook.js
- *   justo después del dedupe en memoria (mensajesProcesados.add) y
- *   const from = message.from, ANTES de bloqueado/plan/clientes/flujo.
+ * Fase 2B (capacidad): el webhook consulta existencia + cupo de leads antes
+ * de llamar registrarEntradaCtwa. Este servicio NO aplica capacidad.
  *
+ * Idempotencia durable: UNIQUE(usuario_id, message_id).
  * No consulta clientes, flujos, activadores, country ni planes.
  * No importa routing CTWA.
  */
@@ -92,6 +91,52 @@ function normalizarPayloadEntradaCtwa({
 }
 
 /**
+ * ¿Ya existe una fila para (usuario_id, message_id)?
+ * Solo lectura; filtrado siempre por usuario_id (nunca COUNT global).
+ *
+ * @param {string} usuarioId
+ * @param {string} messageId
+ * @param {{ get?: Function, supabaseUrl?: string }} [deps] solo para tests
+ * @returns {Promise<boolean>}
+ */
+async function existeEntradaCtwa(usuarioId, messageId, deps = {}) {
+  const usuario_id = String(usuarioId ?? "").trim();
+  const message_id = String(messageId ?? "").trim();
+  if (!usuario_id || !message_id) return false;
+
+  const baseUrl = deps.supabaseUrl || SUPABASE_URL;
+  const get =
+    typeof deps.get === "function"
+      ? deps.get
+      : (url, cfg) => axios.get(url, cfg);
+
+  if (typeof deps.get !== "function") {
+    if (!baseUrl || !SUPABASE_KEY) {
+      throw supabaseError("SUPABASE_URL / SUPABASE_SECRET_KEY no configurados");
+    }
+  }
+
+  const url =
+    `${baseUrl || "http://ctwa-lead.test"}/rest/v1/${TABLE}` +
+    `?usuario_id=eq.${encodeURIComponent(usuario_id)}` +
+    `&message_id=eq.${encodeURIComponent(message_id)}` +
+    `&select=id&limit=1`;
+
+  try {
+    const res = await get(url, { headers: headers() });
+    return Boolean(Array.isArray(res?.data) ? res.data[0] : res?.data);
+  } catch (error) {
+    const detail = errorMessage(error).slice(0, 200);
+    log("error consultando existencia CTWA", {
+      usuario_id,
+      message_id,
+      detail,
+    });
+    throw supabaseError(`Error consultando entrada CTWA: ${detail}`, error);
+  }
+}
+
+/**
  * INSERT atómico idempotente por UNIQUE(usuario_id, message_id).
  *
  * @param {object} params
@@ -151,5 +196,6 @@ async function registrarEntradaCtwa(params, deps = {}) {
 
 module.exports = {
   registrarEntradaCtwa,
+  existeEntradaCtwa,
   normalizarPayloadEntradaCtwa,
 };

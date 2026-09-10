@@ -1,17 +1,20 @@
 /**
  * Límites de plan — Fase 3A: conexiones WhatsApp.
- * Fase 3C: contactos nuevos vía webhook.
+ * Fase 3C: contactos CRM (solo plan activo; ya no consumen capacidad comercial).
  * Fase 3B: creación de flujos nuevos.
+ * Fase 2B: capacidad comercial = leads CTWA (macbot_ctwa_leads vs
+ * obtenerCapacidadEfectivaContactos). CRM no gasta ese cupo.
  *
  * Los cupos de WhatsApp/flujos salen de planesService (starter/pro → MACBOT:
- * 2 WhatsApp y 20 flujos). El tope de contactos es la capacidad efectiva
- * (max_contactos + bloques pagados en MACBOT). No se escribe max_contactos.
+ * 2 WhatsApp y 20 flujos). Capacidad comercial reutiliza max_contactos + bloques
+ * (solo lectura; no se escribe max_contactos).
  */
 const axios = require("axios");
 const { getConexionesUsuario } = require("../services/conexionesWhatsappService");
 const {
   obtenerPlanUsuario,
   obtenerLimitesUsuario,
+  obtenerCapacidadEfectivaContactos,
   esPlanActivo,
   esWhatsappIlimitado,
   esContactosIlimitado,
@@ -80,6 +83,50 @@ async function existeContactoUsuario(usuarioId, clienteNumero) {
   }
 }
 
+/** Error tipado: COUNT de leads no confiable (nunca confundir con 0 real). */
+function leadsCountUnavailableError(detail) {
+  const err = new Error(
+    typeof detail === "string" && detail ? detail : "COUNT macbot_ctwa_leads no disponible"
+  );
+  err.code = "LEADS_COUNT_UNAVAILABLE";
+  return err;
+}
+
+/**
+ * Leads CTWA por usuario_id en macbot_ctwa_leads (nunca COUNT global).
+ * Enforcement: ante error o conteo ambiguo → THROW (no devolver 0).
+ * 0 real solo si Content-Range reporta total 0 de forma fiable.
+ */
+async function contarLeadsCtwaUsuario(usuarioId) {
+  if (!usuarioId || !SUPABASE_URL || !SUPABASE_KEY) {
+    throw leadsCountUnavailableError("usuarioId/Supabase no configurados para COUNT leads");
+  }
+
+  try {
+    const res = await axios.get(
+      `${SUPABASE_URL}/rest/v1/macbot_ctwa_leads?usuario_id=eq.${encodeURIComponent(usuarioId)}&select=id`,
+      {
+        headers: supabaseHeaders({
+          Prefer: "count=exact",
+          Range: "0-0",
+        }),
+      }
+    );
+    const range = res.headers["content-range"] || res.headers["Content-Range"] || "";
+    const total = parseInt(String(range).split("/")[1], 10);
+    if (!Number.isFinite(total) || total < 0) {
+      throw leadsCountUnavailableError(
+        `Content-Range inválido para COUNT leads: ${String(range).slice(0, 80)}`
+      );
+    }
+    return total;
+  } catch (error) {
+    if (error?.code === "LEADS_COUNT_UNAVAILABLE") throw error;
+    console.log("[planLimits] contarLeadsCtwaUsuario:", error.response?.data || error.message);
+    throw leadsCountUnavailableError(error.response?.data || error.message);
+  }
+}
+
 /**
  * @returns {Promise<{
  *   ok: boolean,
@@ -100,42 +147,22 @@ async function puedeCrearContacto(usuarioId, clienteNumero) {
     return { ok: true, existente: true };
   }
 
-  const [plan, limites, usados] = await Promise.all([
-    obtenerPlanUsuario(usuarioId),
-    obtenerLimitesUsuario(usuarioId),
-    contarContactosUsuario(usuarioId),
-  ]);
+  const plan = await obtenerPlanUsuario(usuarioId);
 
   if (!esPlanActivo(plan)) {
     return {
       ok: false,
       code: "PLAN_INACTIVE",
-      limite: limites.contactos,
-      usados,
     };
   }
 
-  // limites.contactos ya es capacidad efectiva (planesService, Fase 2.2).
-  const limite = limites.contactos;
-
-  if (esContactosIlimitado(limite)) {
-    return { ok: true, limite, usados };
-  }
-
-  if (usados >= limite) {
-    return {
-      ok: false,
-      code: "PLAN_LIMIT_CONTACTOS",
-      limite,
-      usados,
-    };
-  }
-
-  return { ok: true, limite, usados };
+  // Fase 2B: clientes CRM no consumen capacidad comercial (leads CTWA).
+  return { ok: true };
 }
 
 /**
- * Webhook: contactos existentes siempre pasan; nuevos respetan la capacidad efectiva.
+ * Webhook: contactos existentes siempre pasan; nuevos solo respetan plan activo.
+ * Ya no bloquea por cupo de contactos (capacidad = leads CTWA).
  * @returns {Promise<{ permitir: boolean, existente?: boolean, code?: string, limite?: number, usados?: number }>}
  */
 async function evaluarLimiteContactoEntrante(usuarioId, clienteNumero, opts = {}) {
@@ -151,32 +178,168 @@ async function evaluarLimiteContactoEntrante(usuarioId, clienteNumero, opts = {}
   }
 
   if (existente) {
-    console.log("[PLAN_LIMIT_CONTACTOS] contacto existente permitido", {
-      usuarioId,
-      cliente_numero: numero,
-    });
     return { permitir: true, existente: true };
   }
 
   const check = await puedeCrearContacto(usuarioId, numero);
   if (!check.ok) {
-    console.log("[PLAN_LIMIT_CONTACTOS] contacto nuevo bloqueado", {
+    console.log("[PLAN_INACTIVE] contacto nuevo bloqueado (plan no activo)", {
       usuarioId,
       cliente_numero: numero,
       ok: false,
-      code: check.code || "PLAN_LIMIT_CONTACTOS",
-      limite: check.limite,
-      usados: check.usados,
+      code: check.code || "PLAN_INACTIVE",
     });
     return {
       permitir: false,
-      code: check.code || "PLAN_LIMIT_CONTACTOS",
-      limite: check.limite,
-      usados: check.usados,
+      code: check.code || "PLAN_INACTIVE",
     };
   }
 
   return { permitir: true, existente: false };
+}
+
+/**
+ * Lectura ESTRICTA del plan solo para el gate CTWA.
+ * No usa obtenerPlanUsuario (que hace fallback a Free/100).
+ * Error de red / sin fila → throw o null (caller = fail-closed).
+ */
+async function fetchPlanRowStrictParaGateLeads(usuarioId) {
+  if (!usuarioId || !SUPABASE_URL || !SUPABASE_KEY) {
+    const err = new Error("Supabase/usuario no disponible para leer plan (gate leads)");
+    err.code = "PLAN_READ_UNAVAILABLE";
+    throw err;
+  }
+  const res = await axios.get(
+    `${SUPABASE_URL}/rest/v1/crm_usuarios?id=eq.${encodeURIComponent(usuarioId)}` +
+      `&select=id,plan,estado_plan,fecha_vencimiento,max_whatsapp,max_contactos,max_flujos,created_plan_at,updated_plan_at`,
+    { headers: supabaseHeaders() }
+  );
+  return res.data?.[0] || null;
+}
+
+/**
+ * Capacidad comercial de leads CTWA (Fase 2B).
+ * No usa el fallback Free/100 de obtenerPlanUsuario.
+ *
+ * Orden:
+ * 1) Leer plan en modo estricto (error ≠ Free).
+ * 2) Capacidad vía obtenerCapacidadEfectivaContactos(usuarioId, planRow) — fórmula intacta.
+ * 3) Ilimitado (null/-1) → permitir SIN COUNT.
+ * 4) Limitado → COUNT; error COUNT → fail-closed.
+ *
+ * @param {string} usuarioId
+ * @param {{
+ *   fetchPlan?: Function,
+ *   obtenerCapacidad?: Function,
+ *   contarLeads?: Function,
+ * }} [deps] solo para tests
+ */
+async function evaluarCapacidadLeadCtwa(usuarioId, deps = {}) {
+  if (!usuarioId) {
+    return { permitir: true };
+  }
+
+  const fetchPlan =
+    typeof deps.fetchPlan === "function"
+      ? deps.fetchPlan
+      : fetchPlanRowStrictParaGateLeads;
+  const obtenerCapacidad =
+    typeof deps.obtenerCapacidad === "function"
+      ? deps.obtenerCapacidad
+      : obtenerCapacidadEfectivaContactos;
+  const contarLeads =
+    typeof deps.contarLeads === "function" ? deps.contarLeads : contarLeadsCtwaUsuario;
+
+  let planRow;
+  try {
+    planRow = await fetchPlan(usuarioId);
+  } catch (error) {
+    console.log(
+      "[PLAN_LIMIT_LEADS] error leyendo plan (fail-closed, no Free/100)",
+      error?.message || error
+    );
+    return {
+      permitir: false,
+      code: "PLAN_LIMIT_LEADS_UNAVAILABLE",
+      error: true,
+    };
+  }
+
+  if (!planRow || typeof planRow !== "object") {
+    console.log("[PLAN_LIMIT_LEADS] plan ausente (fail-closed, no Free/100)", {
+      usuarioId,
+    });
+    return {
+      permitir: false,
+      code: "PLAN_LIMIT_LEADS_UNAVAILABLE",
+      error: true,
+    };
+  }
+
+  let limite;
+  try {
+    // Preload evita obtenerPlanUsuario y su fallback a DEFAULTS_PLAN.
+    limite = await obtenerCapacidad(usuarioId, planRow);
+  } catch (error) {
+    console.log(
+      "[PLAN_LIMIT_LEADS] error obteniendo capacidad efectiva",
+      error?.message || error
+    );
+    return {
+      permitir: false,
+      code: "PLAN_LIMIT_LEADS_UNAVAILABLE",
+      error: true,
+    };
+  }
+
+  if (esContactosIlimitado(limite)) {
+    return { permitir: true, limite, ilimitado: true };
+  }
+
+  let usados;
+  try {
+    usados = await contarLeads(usuarioId);
+  } catch (error) {
+    console.log(
+      "[PLAN_LIMIT_LEADS] error COUNT leads (fail-closed)",
+      error?.message || error
+    );
+    return {
+      permitir: false,
+      code: "PLAN_LIMIT_LEADS_UNAVAILABLE",
+      limite: Number.isFinite(Number(limite)) ? Number(limite) : limite,
+      error: true,
+    };
+  }
+
+  if (typeof usados !== "number" || !Number.isFinite(usados) || usados < 0) {
+    return {
+      permitir: false,
+      code: "PLAN_LIMIT_LEADS_UNAVAILABLE",
+      limite: Number.isFinite(Number(limite)) ? Number(limite) : limite,
+      error: true,
+    };
+  }
+
+  const limiteNum = Number(limite);
+  const usadosNum = usados;
+
+  if (Number.isFinite(limiteNum) && usadosNum >= limiteNum) {
+    return {
+      permitir: false,
+      code: "PLAN_LIMIT_LEADS",
+      limite: limiteNum,
+      usados: usadosNum,
+      ilimitado: false,
+    };
+  }
+
+  return {
+    permitir: true,
+    limite: Number.isFinite(limiteNum) ? limiteNum : limite,
+    usados: usadosNum,
+    ilimitado: false,
+  };
 }
 
 /** Flujos en flujos_builder por usuario_id */
@@ -395,10 +558,12 @@ async function verificarLimiteNuevaConexionWhatsappSiempre(req, res, next) {
 module.exports = {
   contarConexionesWhatsappUsuario,
   contarContactosUsuario,
+  contarLeadsCtwaUsuario,
   contarFlujosUsuario,
   existeContactoUsuario,
   puedeCrearContacto,
   evaluarLimiteContactoEntrante,
+  evaluarCapacidadLeadCtwa,
   puedeCrearFlujo,
   verificarLimiteNuevoFlujo,
   verificarLimiteNuevoFlujoSiempre,
