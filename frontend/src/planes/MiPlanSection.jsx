@@ -62,8 +62,16 @@ function EstadoBadge({ estado }) {
   return <span className={`miPlanEstadoBadge miPlanEstadoBadge--${key}`}>{label}</span>;
 }
 
-function UsageResourceRow({ label, icon, usados, limite, soloConteo = false }) {
+function UsageResourceRow({
+  label,
+  icon,
+  usados,
+  limite,
+  soloConteo = false,
+  soloConteoDetalle = null,
+}) {
   if (soloConteo) {
+    const detalle = soloConteoDetalle ? ` ${soloConteoDetalle}` : "";
     return (
       <div className="miPlanUsageRow">
         <div className="miPlanLimitHead">
@@ -72,7 +80,8 @@ function UsageResourceRow({ label, icon, usados, limite, soloConteo = false }) {
           </strong>
         </div>
         <p className="miPlanUsageText">
-          {Number(usados || 0).toLocaleString("es-BO")} leads CTWA consumidos
+          {Number(usados || 0).toLocaleString("es-BO")}
+          {detalle}
         </p>
       </div>
     );
@@ -117,10 +126,17 @@ function UsageResourceRow({ label, icon, usados, limite, soloConteo = false }) {
   );
 }
 
+/** Capacidad comercial (alias leads o contactos legacy). Solo métricas con tope de plan. */
+function capacidadComercialLeads(limites) {
+  if (!limites || typeof limites !== "object") return undefined;
+  if (limites.leads !== undefined) return limites.leads;
+  return limites.contactos;
+}
+
 function maxUsoPorcentaje(uso, limites) {
   const pairs = [
     [uso?.whatsapp_usados, limites?.whatsapp],
-    [uso?.contactos_usados, limites?.contactos],
+    [uso?.leads_usados, capacidadComercialLeads(limites)],
     [uso?.flujos_usados, limites?.flujos],
   ];
   let max = 0;
@@ -261,13 +277,14 @@ export default function MiPlanSection() {
           label="Leads"
           icon="⚡"
           usados={uso.leads_usados}
-          soloConteo
+          limite={capacidadComercialLeads(limites)}
         />
         <UsageResourceRow
-          label="Contactos"
+          label="Contactos CRM"
           icon="👤"
           usados={uso.contactos_usados}
-          limite={limites.contactos}
+          soloConteo
+          soloConteoDetalle="en CRM (no consumen capacidad del plan)"
         />
         <UsageResourceRow
           label="Flujos"
@@ -279,7 +296,7 @@ export default function MiPlanSection() {
 
       <ComprarContactosSection
         contactosBloques={data?.contactos_bloques}
-        limiteContactos={limites.contactos}
+        limiteContactos={capacidadComercialLeads(limites)}
       />
 
       <div className="miPlanBenefitsCard miPlanGlass">
@@ -294,9 +311,9 @@ export default function MiPlanSection() {
       </div>
 
       <p className="miPlanFootNote">
-        Plan {nombreUi} · estado {ESTADO_LABELS[estado] || estado}. Los leads
-        cuentan entradas CTWA; los contactos CRM son números únicos. También se
-        reflejan conexiones WhatsApp y flujos.
+        Plan {nombreUi} · estado {ESTADO_LABELS[estado] || estado}. La capacidad
+        del plan se muestra en leads CTWA; los contactos CRM son números únicos
+        informativos. También se reflejan conexiones WhatsApp y flujos.
       </p>
     </div>
   );

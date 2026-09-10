@@ -360,6 +360,10 @@ async function obtenerLimitesUsuario(usuarioId) {
 /**
  * Respuesta API GET /api/planes/mi-plan
  * extras.contactos, si se pasa, es la capacidad efectiva (no max_contactos).
+ *
+ * Fase 2A (Mi Plan): `limites.leads` es alias de la misma capacidad efectiva.
+ * No existe max_leads en BD; no cambia la fórmula de obtenerCapacidadEfectivaContactos.
+ * Enforcement CTWA / retiro de límite CRM: fases posteriores.
  */
 function buildMiPlanResponse(planData, uso = null, extras = null) {
   const u = normalizarPlanUsuario(planData);
@@ -375,6 +379,8 @@ function buildMiPlanResponse(planData, uso = null, extras = null) {
       limites: {
         whatsapp: u.max_whatsapp,
         contactos: contactosLimite,
+        /** Alias comercial: misma capacidad efectiva (base + bloques) para UI de leads. */
+        leads: contactosLimite,
         flujos: u.max_flujos,
       },
       uso: {

@@ -140,6 +140,8 @@ async function main() {
     assert(body.plan.uso.leads_usados === 150, "leads_usados en respuesta");
     assert(body.plan.uso.contactos_usados === 42, "contactos_usados intacto");
     assert(body.plan.limites.contactos === 1000, "limite contactos intacto");
+    assert(body.plan.limites.leads === 1000, "alias limites.leads = capacidad");
+    assert(body.plan.limites.leads === body.plan.limites.contactos, "leads === contactos");
     assert(body.plan.uso.whatsapp_usados === 1, "whatsapp_usados intacto");
     assert(body.plan.uso.flujos_usados === 3, "flujos_usados intacto");
     return true;
@@ -152,6 +154,62 @@ async function main() {
     );
     assert(body.plan.uso.leads_usados === 0, "default 0");
     assert(body.plan.uso.contactos_usados === 5, "contactos ok");
+    assert(body.plan.limites.leads === 100, "alias leads desde max_contactos");
+    assert(body.plan.limites.leads === body.plan.limites.contactos, "alias igual a contactos");
+    return true;
+  })());
+
+  check("10. Fase 2A: capacidad efectiva (extras) → limites.leads (bloques incluidos)", (() => {
+    // extras.contactos = obtenerCapacidadEfectivaContactos (base 1000 + bloque 1000)
+    const body = buildMiPlanResponse(
+      {
+        plan: "macbot",
+        estado_plan: "activo",
+        max_whatsapp: 2,
+        max_contactos: 1000,
+        max_flujos: 20,
+      },
+      {
+        contactos_usados: 9011,
+        leads_usados: 140,
+      },
+      { contactos: 2000 }
+    );
+    assert(body.plan.limites.contactos === 2000, "capacidad efectiva en contactos");
+    assert(body.plan.limites.leads === 2000, "misma capacidad en leads");
+    assert(body.plan.uso.leads_usados === 140, "leads 140");
+    assert(body.plan.uso.contactos_usados === 9011, "CRM informativo 9011");
+    return true;
+  })());
+
+  check("11. Fase 2A: Agency ilimitado → limites.leads null/-1", (() => {
+    const bodyNull = buildMiPlanResponse(
+      {
+        plan: "agency",
+        estado_plan: "activo",
+        max_whatsapp: -1,
+        max_contactos: null,
+        max_flujos: -1,
+      },
+      { leads_usados: 50, contactos_usados: 10 },
+      { contactos: null }
+    );
+    assert(bodyNull.plan.limites.contactos === null, "agency contactos null");
+    assert(bodyNull.plan.limites.leads === null, "agency leads null");
+
+    const bodyNeg = buildMiPlanResponse(
+      {
+        plan: "agency",
+        estado_plan: "activo",
+        max_whatsapp: -1,
+        max_contactos: -1,
+        max_flujos: -1,
+      },
+      { leads_usados: 50 },
+      { contactos: -1 }
+    );
+    assert(bodyNeg.plan.limites.leads === -1, "agency leads -1");
+    assert(bodyNeg.plan.limites.leads === bodyNeg.plan.limites.contactos, "alias agency");
     return true;
   })());
 
