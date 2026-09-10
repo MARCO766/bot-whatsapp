@@ -7,9 +7,7 @@ export function formatNum(n) {
 }
 
 export function formatMoney(monto, moneda = "BOB") {
-  const v = Number(monto);
-  if (!Number.isFinite(v) || v === 0) return `Bs 0`;
-  return `Bs ${formatNum(Math.round(v * 100) / 100)}`;
+  return formatRevenueMoney(monto, moneda);
 }
 
 /** Ingresos con símbolo por moneda (revenue-breakdown). */
