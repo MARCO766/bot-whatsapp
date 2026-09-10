@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo } from "react";
 import { useRevenueBreakdown } from "../useRevenueBreakdown";
 import {
   pickDefaultMoneda,
@@ -29,9 +29,9 @@ export default function RevenuePremiumSection({
   flujoId = "",
   conexionSeleccionadaId = null,
   conexionesLoading = false,
+  monedaActiva = "BOB",
+  onMonedaChange,
 }) {
-  const [monedaActiva, setMonedaActiva] = useState("BOB");
-
   const { data, loading, error, reload } = useRevenueBreakdown(
     periodo,
     flujoId,
@@ -46,11 +46,11 @@ export default function RevenuePremiumSection({
   );
 
   useEffect(() => {
-    if (!monedas.length) return;
+    if (!monedas.length || typeof onMonedaChange !== "function") return;
     if (!monedas.includes(monedaActiva)) {
-      setMonedaActiva(pickDefaultMoneda(data?.porMoneda));
+      onMonedaChange(pickDefaultMoneda(data?.porMoneda));
     }
-  }, [monedas, monedaActiva, data?.porMoneda]);
+  }, [monedas, monedaActiva, data?.porMoneda, onMonedaChange]);
 
   const bucket = data?.porMoneda?.[monedaActiva];
   const kpis = bucket?.kpis;
@@ -72,7 +72,7 @@ export default function RevenuePremiumSection({
             <RevenueMonedaTabs
               monedas={monedas}
               value={monedaActiva}
-              onChange={setMonedaActiva}
+              onChange={onMonedaChange}
               disabled={loading || !!error}
             />
           )}

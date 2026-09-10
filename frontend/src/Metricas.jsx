@@ -2,7 +2,13 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useMetricas } from "./metricas/useMetricas";
 import { useMetaAdsStatus } from "./metricas/useMetaAdsStatus";
 import { useMetaAdsInsights } from "./metricas/useMetaAdsInsights";
-import { formatMoney, formatNum, formatPct, formatTendencia, formatCustomRangeDisplay } from "./metricas/format";
+import {
+  formatMoney,
+  formatNum,
+  formatPct,
+  formatTendencia,
+  formatCustomRangeDisplay,
+} from "./metricas/format";
 import FlujoCampanaSelect from "./metricas/FlujoCampanaSelect";
 import MetricasPeriodoSelector from "./metricas/MetricasPeriodoSelector";
 import RevenuePremiumSection from "./metricas/revenue/RevenuePremiumSection";
@@ -112,6 +118,7 @@ export default function Metricas() {
   const [customRange, setCustomRange] = useState(null);
   const [periodoToast, setPeriodoToast] = useState("");
   const [flujoId, setFlujoId] = useState("");
+  const [monedaActiva, setMonedaActiva] = useState("BOB");
   const [metaAdsModalOpen, setMetaAdsModalOpen] = useState(false);
   const [metaAdsCampaignId, setMetaAdsCampaignId] = useState(META_CAMPAIGN_TODAS);
   const {
@@ -159,7 +166,16 @@ export default function Metricas() {
   const salud = resumen?.salud || { score: 0, label: "Sin datos" };
 
   const mainCards = useMemo(
-    () => [
+    () => {
+      const desglose = kpis.ingresosDesglose;
+      const hasMoneda =
+        desglose &&
+        typeof desglose === "object" &&
+        Object.prototype.hasOwnProperty.call(desglose, monedaActiva);
+      const ingresosMonto = hasMoneda ? desglose[monedaActiva] : kpis.ingresos;
+      const ingresosMoneda = hasMoneda ? monedaActiva : kpis.moneda;
+
+      return [
       {
         titulo: "Leads",
         valor: formatNum(kpis.leads),
@@ -186,14 +202,15 @@ export default function Metricas() {
       },
       {
         titulo: "Ingresos",
-        valor: formatMoney(kpis.ingresos, kpis.moneda),
+        valor: formatMoney(ingresosMonto, ingresosMoneda),
         detalle: kpis.ventas > 0 ? `Desde ${kpis.ventas} venta(s)` : "Sin ventas en el periodo",
         icono: "🚀",
         color: "orange",
         tendencia: null,
       },
-    ],
-    [kpis]
+    ];
+    },
+    [kpis, monedaActiva]
   );
 
   const performanceCards = useMemo(
@@ -401,6 +418,8 @@ export default function Metricas() {
         flujoId={flujoId}
         conexionSeleccionadaId={conexionSeleccionadaId}
         conexionesLoading={conexionesLoading}
+        monedaActiva={monedaActiva}
+        onMonedaChange={setMonedaActiva}
       />
 
       {periodoToast ? <div className="metricasPeriodoToast">{periodoToast}</div> : null}
