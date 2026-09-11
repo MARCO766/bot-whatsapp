@@ -84,6 +84,10 @@ function normalizarPaymentCamino(raw) {
     montoEsperado: parseFloat(p.montoEsperado ?? p.monto_esperado) || 0,
     monedaEsperada: String(p.monedaEsperada ?? p.moneda_esperada ?? "").trim(),
     nombreEsperado: String(p.nombreEsperado ?? p.nombre_esperado ?? "").trim(),
+    modoMonto:
+      String((p.modoMonto ?? p.modo_monto) || "").trim() === "cualquiera"
+        ? "cualquiera"
+        : "exacto",
   };
 }
 
