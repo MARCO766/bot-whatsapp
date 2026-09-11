@@ -687,12 +687,17 @@ window.MacBotIA = (function () {
       : ROUTE_TYPE_TEXTO;
   }
 
+  function normalizarModoMonto(raw) {
+    return String(raw || "").trim() === "cualquiera" ? "cualquiera" : "exacto";
+  }
+
   function normalizarPaymentCamino(raw) {
     const p = raw && typeof raw.payment === "object" ? raw.payment : raw || {};
     return {
       montoEsperado: parseFloat(p.montoEsperado ?? p.monto_esperado) || 0,
       monedaEsperada: String(p.monedaEsperada ?? p.moneda_esperada ?? "").trim(),
       nombreEsperado: String(p.nombreEsperado ?? p.nombre_esperado ?? "").trim(),
+      modoMonto: normalizarModoMonto(p.modoMonto ?? p.modo_monto),
     };
   }
 
@@ -1068,6 +1073,9 @@ window.MacBotIA = (function () {
             row.querySelector(".ia-ruta-moneda")?.value.trim() || "",
           nombreEsperado:
             row.querySelector(".ia-ruta-nombre")?.value.trim() || "",
+          modoMonto: normalizarModoMonto(
+            row.querySelector(".ia-ruta-modo-monto")?.value
+          ),
         };
       }
       caminos.push(normalizarRutaExtensible(caminoData));
@@ -1268,12 +1276,22 @@ window.MacBotIA = (function () {
   function renderCamposPaymentEditor(route) {
     const payment = normalizarPaymentCamino(route);
     const esPayment = esCaminoPaymentReader(route);
+    const modoMonto = payment.modoMonto === "cualquiera" ? "cualquiera" : "exacto";
     return (
       '<div class="ia-ruta-payment-block"' +
       (esPayment ? "" : ' style="display:none"') +
       ">" +
       '<p class="ia-route-payment-label">Datos esperados del comprobante</p>' +
       '<div class="ia-route-payment-grid">' +
+      '<div class="panel-campo ia-field ia-field--full"><label>Modo de monto</label>' +
+      '<select class="ia-ruta-modo-monto ia-input">' +
+      '<option value="exacto"' +
+      (modoMonto === "exacto" ? " selected" : "") +
+      ">Monto exacto</option>" +
+      '<option value="cualquiera"' +
+      (modoMonto === "cualquiera" ? " selected" : "") +
+      ">Monto cualquiera</option>" +
+      "</select></div>" +
       '<div class="panel-campo ia-field"><label>Monto esperado</label>' +
       '<input type="number" class="ia-ruta-monto ia-input" min="0" step="0.01" value="' +
       esc(payment.montoEsperado) +

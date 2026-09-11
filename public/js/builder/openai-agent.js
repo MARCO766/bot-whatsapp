@@ -80,12 +80,17 @@ window.MacBotOpenAIAgent = (function () {
     return t === ROUTE_TYPE_PAYMENT_READER ? ROUTE_TYPE_PAYMENT_READER : ROUTE_TYPE_TEXTO;
   }
 
+  function normalizarModoMonto(raw) {
+    return String(raw || "").trim() === "cualquiera" ? "cualquiera" : "exacto";
+  }
+
   function normalizarPaymentCamino(raw) {
     const p = raw && typeof raw.payment === "object" ? raw.payment : raw || {};
     return {
       montoEsperado: parseFloat(p.montoEsperado ?? p.monto_esperado) || 0,
       monedaEsperada: String(p.monedaEsperada ?? p.moneda_esperada ?? "").trim(),
       nombreEsperado: String(p.nombreEsperado ?? p.nombre_esperado ?? "").trim(),
+      modoMonto: normalizarModoMonto(p.modoMonto ?? p.modo_monto),
     };
   }
 
@@ -1166,6 +1171,9 @@ window.MacBotOpenAIAgent = (function () {
             row.querySelector(".openai-agent-ruta-moneda")?.value.trim() || "",
           nombreEsperado:
             row.querySelector(".openai-agent-ruta-nombre")?.value.trim() || "",
+          modoMonto: normalizarModoMonto(
+            row.querySelector(".openai-agent-ruta-modo-monto")?.value
+          ),
         };
       }
       caminos.push(camino);
@@ -1345,12 +1353,22 @@ window.MacBotOpenAIAgent = (function () {
   function renderCamposPaymentEditor(route) {
     const payment = normalizarPaymentCamino(route);
     const esPayment = esCaminoPaymentReader(route);
+    const modoMonto = payment.modoMonto === "cualquiera" ? "cualquiera" : "exacto";
     return (
       '<div class="openai-agent-ruta-payment-block oai-route-payment-block"' +
       (esPayment ? "" : ' style="display:none"') +
       ">" +
       '<p class="oai-route-payment-label">Lector de pago interno</p>' +
       '<div class="oai-route-payment-grid">' +
+      '<div class="panel-campo oai-field oai-field--full"><label>Modo de monto</label>' +
+      '<select class="openai-agent-ruta-modo-monto oai-input oai-select">' +
+      '<option value="exacto"' +
+      (modoMonto === "exacto" ? " selected" : "") +
+      ">Monto exacto</option>" +
+      '<option value="cualquiera"' +
+      (modoMonto === "cualquiera" ? " selected" : "") +
+      ">Monto cualquiera</option>" +
+      "</select></div>" +
       '<div class="panel-campo oai-field"><label>Monto esperado</label>' +
       '<input type="number" class="openai-agent-ruta-monto oai-input" min="0" step="0.01" value="' +
       esc(payment.montoEsperado) +

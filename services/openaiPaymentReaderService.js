@@ -213,12 +213,17 @@ function compararMonedaFlexible(esperada, leida) {
   return normalizeText(esp) === normalizeText(lec);
 }
 
+function normalizarModoMonto(raw) {
+  return String(raw || "").trim() === "cualquiera" ? "cualquiera" : "exacto";
+}
+
 function normalizarPaymentEsperado(payment = {}) {
   const p = payment && typeof payment === "object" ? payment : {};
   return {
     montoEsperado: toNumber(p.montoEsperado ?? p.monto_esperado, 0),
     monedaEsperada: String(p.monedaEsperada ?? p.moneda_esperada ?? "").trim(),
     nombreEsperado: String(p.nombreEsperado ?? p.nombre_esperado ?? "").trim(),
+    modoMonto: normalizarModoMonto(p.modoMonto ?? p.modo_monto),
     tolerancia:
       parseFloat(p.tolerancia) >= 0
         ? parseFloat(p.tolerancia)
@@ -396,9 +401,12 @@ function compararPagoOpenAI(esperado, lectura) {
     };
   }
 
+  const modoMonto = normalizarModoMonto(esperado.modoMonto);
   const tolerancia = toNumber(esperado.tolerancia, TOLERANCIA_MONTO_DEFAULT);
   const montoOk =
-    Math.abs(montoLeido - toNumber(esperado.montoEsperado, 0)) <= tolerancia;
+    modoMonto === "cualquiera"
+      ? true
+      : Math.abs(montoLeido - toNumber(esperado.montoEsperado, 0)) <= tolerancia;
   if (!montoOk) {
     return {
       valido: false,
@@ -653,6 +661,7 @@ module.exports = {
   compararMonedaFlexible,
   compararNombreFlexible,
   normalizarPaymentEsperado,
+  normalizarModoMonto,
   normalizarMonedaCanon,
   toNumber,
 };
