@@ -1,7 +1,6 @@
 /**
  * Fuente única de verdad para rangos de fechas.
- * Fase D2.2: 7d/30d/90d/ayer usan días calendario en TZ explícita (default America/La_Paz).
- * periodo=hoy usa día calendario UTC (00:00:00.000Z → 23:59:59.999Z).
+ * Fase D2.2: hoy/ayer/7d/30d/90d usan días calendario completos en TZ explícita (default America/La_Paz).
  */
 
 const DEFAULT_TIMEZONE = "America/La_Paz";
@@ -115,19 +114,17 @@ function normalizeCustomRange(desde, hasta, options = {}) {
 }
 
 /**
- * Día calendario actual en UTC: 00:00:00.000Z → 23:59:59.999Z.
- * Intencionalmente ignora timeZone (America/La_Paz u otra): periodo=hoy es día UTC.
- * @param {{ now?: Date }} [context]
+ * Día calendario actual en timeZone: 00:00:00.000 → 23:59:59.999.
+ * Default: America/La_Paz (día civil de Bolivia).
+ * @param {{ now?: Date, timeZone?: string, zona_horaria?: string, zonaHoraria?: string }} [context]
  * @returns {{ desde: string, hasta: string, periodo: "hoy" }}
  */
 function resolveToday(context = {}) {
   const now = context.now ?? new Date();
-  const year = now.getUTCFullYear();
-  const month = now.getUTCMonth() + 1;
-  const day = now.getUTCDate();
-  const desde = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0)).toISOString();
-  const hasta = new Date(Date.UTC(year, month - 1, day, 23, 59, 59, 999)).toISOString();
-  return { desde, hasta, periodo: "hoy" };
+  const timeZone = context.timeZone ?? normalizeTimezone(context);
+  const { year, month, day } = getZonedCalendarParts(now, timeZone);
+  const range = calendarDateToDayRangeIso(year, month, day, timeZone);
+  return { ...range, periodo: "hoy" };
 }
 
 /**
