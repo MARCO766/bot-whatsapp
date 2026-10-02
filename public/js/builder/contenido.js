@@ -26,6 +26,8 @@ window.MacBotContenido = (function () {
   let variantePanelIndex = 0;
   let isEditingBlock = false;
   let editingBlockIndex = -1;
+  /** URL subida pendiente de confirmar (alta nueva: imagen + caption). */
+  let imagenDraftUrl = null;
 
   const BTN_AGREGAR_POR_TIPO = {
     texto: "Agregar texto",
@@ -700,6 +702,33 @@ window.MacBotContenido = (function () {
     if (btn) btn.textContent = BTN_GUARDAR_CAMBIOS;
   }
 
+  function limpiarDraftImagen() {
+    imagenDraftUrl = null;
+  }
+
+  function construirItemImagen(url) {
+    const item = { tipo: "imagen", valor: url };
+    const desc = document.getElementById("cntPanelDescImg")?.value?.trim();
+    if (desc) item.descripcion = desc;
+    return item;
+  }
+
+  function confirmarImagenDesdeDraft() {
+    if (!imagenDraftUrl) return false;
+    const item = construirItemImagen(imagenDraftUrl);
+    limpiarDraftImagen();
+    varianteActualPanel().push(item);
+    const fileInput = document.getElementById("cntPanelImagen");
+    if (fileInput) fileInput.value = "";
+    const desc = document.getElementById("cntPanelDescImg");
+    if (desc) desc.value = "";
+    const done = document.getElementById("cntImgUploadDone");
+    if (done) done.style.display = "none";
+    ocultarProgresoImagen();
+    onPanelChange();
+    return true;
+  }
+
   function limpiarCamposEditor() {
     const texto = document.getElementById("cntPanelTexto");
     const tiempo = document.getElementById("cntPanelTiempo");
@@ -711,6 +740,7 @@ window.MacBotContenido = (function () {
     const fileVid = document.getElementById("cntPanelVideo");
     const done = document.getElementById("cntImgUploadDone");
 
+    limpiarDraftImagen();
     if (texto) texto.value = "";
     if (tiempo) tiempo.value = "";
     if (descImg) descImg.value = "";
@@ -737,6 +767,13 @@ window.MacBotContenido = (function () {
       doc: "cntFieldDoc",
       boton: "cntFieldBoton",
     };
+
+    if (tipo !== "imagen" && imagenDraftUrl) {
+      limpiarDraftImagen();
+      const done = document.getElementById("cntImgUploadDone");
+      if (done) done.style.display = "none";
+      ocultarProgresoImagen();
+    }
 
     Object.keys(fields).forEach(function (k) {
       const el = document.getElementById(fields[k]);
@@ -1169,23 +1206,19 @@ window.MacBotContenido = (function () {
         setProgresoImagen(100, "✅ Imagen lista");
         console.log("✅ upload completado");
 
-        const item = { tipo: "imagen", valor: data.url };
-        const desc = document.getElementById("cntPanelDescImg")?.value?.trim();
-        if (desc) item.descripcion = desc;
+        const fileInput = document.getElementById("cntPanelImagen");
+        if (fileInput) fileInput.value = "";
+        mostrarPreviewImagenLista(data.url);
 
-        if (finalizarEdicionBloque(item)) {
-          const fileInput = document.getElementById("cntPanelImagen");
-          if (fileInput) fileInput.value = "";
-          mostrarPreviewImagenLista(data.url);
+        // Edición de bloque existente: confirmar al terminar el re-upload.
+        if (isEditingBlock && editingBlockIndex >= 0) {
+          const item = construirItemImagen(data.url);
+          finalizarEdicionBloque(item);
           return;
         }
 
-        varianteActualPanel().push(item);
-        const fileInput = document.getElementById("cntPanelImagen");
-        if (fileInput) fileInput.value = "";
-
-        mostrarPreviewImagenLista(data.url);
-        onPanelChange();
+        // Alta nueva: draft temporal; NO push ni onPanelChange hasta "Subir imagen".
+        imagenDraftUrl = data.url;
         return;
       }
 
@@ -1197,6 +1230,9 @@ window.MacBotContenido = (function () {
       setProgresoImagen(0, "❌ Error al subir imagen");
       mostrarToastContenido(msg);
       ocultarProgresoImagen();
+      if (!isEditingBlock && imagenDraftUrl) {
+        mostrarPreviewImagenLista(imagenDraftUrl);
+      }
     });
 
     xhr.addEventListener("error", function () {
@@ -1204,6 +1240,9 @@ window.MacBotContenido = (function () {
       setProgresoImagen(0, "❌ Error al subir imagen");
       mostrarToastContenido("❌ Error al subir imagen");
       ocultarProgresoImagen();
+      if (!isEditingBlock && imagenDraftUrl) {
+        mostrarPreviewImagenLista(imagenDraftUrl);
+      }
     });
 
     xhr.open("POST", "/subir-imagen-nodo-flujo");
@@ -1220,12 +1259,18 @@ window.MacBotContenido = (function () {
       }
       const bloque = varianteActualPanel()[editingBlockIndex];
       if (!bloque || bloque.tipo !== "imagen" || !bloque.valor) return;
-      const item = { tipo: "imagen", valor: bloque.valor };
-      const desc = document.getElementById("cntPanelDescImg")?.value?.trim();
-      if (desc) item.descripcion = desc;
+      const item = construirItemImagen(bloque.valor);
       finalizarEdicionBloque(item);
       return;
     }
+
+    // B) Imagen ya preparada en draft → confirmar imagen + caption juntos.
+    if (imagenDraftUrl) {
+      confirmarImagenDesdeDraft();
+      return;
+    }
+
+    // A) Sin imagen preparada → seleccionar/subir archivo.
     iniciarSubidaImagenDesdePanel();
   }
 
@@ -1373,6 +1418,7 @@ window.MacBotContenido = (function () {
     variantePanelIndex = 0;
     isEditingBlock = false;
     editingBlockIndex = -1;
+    limpiarDraftImagen();
 
     const contenido = document.getElementById("panelNodoContenido");
     if (!contenido) return;
@@ -1501,6 +1547,7 @@ window.MacBotContenido = (function () {
     variantePanelIndex = 0;
     isEditingBlock = false;
     editingBlockIndex = -1;
+    limpiarDraftImagen();
   }
 
   function getNodoActivo() {
