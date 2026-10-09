@@ -14,6 +14,7 @@ const {
 const {
   extraerLecturaComprobanteOpenAI,
   evaluarRutasPaymentReaderContraLectura,
+  recolectarNombresReferenciaPayment,
 } = require("./openaiPaymentReaderService");
 const { resolverShortConfirmation } = require("./openaiShortConfirmation");
 const {
@@ -1493,6 +1494,9 @@ async function resolverPaymentReaderOpenAI(
     })
   );
 
+  const nombresReferencia =
+    recolectarNombresReferenciaPayment(rutasPaymentReader);
+
   let ocrResult;
   try {
     ocrResult = await extraerLecturaComprobanteOpenAI({
@@ -1500,6 +1504,7 @@ async function resolverPaymentReaderOpenAI(
       mimeType: opts.mimeType || mediaEntrante?.mimeType || null,
       filename: opts.filename || mediaEntrante?.filename || null,
       messageType: opts.messageType || mediaEntrante?.messageType || null,
+      nombresReferencia,
     });
   } catch (error) {
     setPaymentReaderStatus(usuarioId, conexionWhatsappId, numero, "waiting");

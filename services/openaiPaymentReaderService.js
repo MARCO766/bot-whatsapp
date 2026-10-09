@@ -278,55 +278,134 @@ function esDocumentoNoLegible({ mimeType, filename } = {}) {
   return false;
 }
 
-async function analizarComprobanteConVision({ imageDataUrl, imagePublicUrl }) {
+/**
+ * Nombres esperados únicos (orden de primera aparición) desde rutas payment_reader.
+ * No elige una ruta: solo reúne referencias para el OCR.
+ */
+function recolectarNombresReferenciaPayment(rutasPaymentReader) {
+  const vistos = new Set();
+  const out = [];
+  for (const route of rutasPaymentReader || []) {
+    const p = route && typeof route.payment === "object" ? route.payment : {};
+    const nombre = String(p.nombreEsperado ?? p.nombre_esperado ?? "").trim();
+    if (!nombre) continue;
+    const key = normalizeText(nombre);
+    if (!key || vistos.has(key)) continue;
+    vistos.add(key);
+    out.push(nombre);
+  }
+  return out;
+}
+
+function normalizarListaNombresReferencia(raw) {
+  if (raw == null) return [];
+  const list = Array.isArray(raw) ? raw : [raw];
+  const vistos = new Set();
+  const out = [];
+  for (const item of list) {
+    const nombre = String(item || "").trim();
+    if (!nombre) continue;
+    const key = normalizeText(nombre);
+    if (!key || vistos.has(key)) continue;
+    vistos.add(key);
+    out.push(nombre);
+  }
+  return out;
+}
+
+const PROMPT_COMPROBANTE_VISION_BASE = [
+  "Extrae SOLO este JSON del comprobante de pago.",
+  "Sin markdown y sin explicaciones.",
+  'Formato exacto: {"monto":29,"moneda":"BOB","nombre":"Marco Antonio Arias Perez"}',
+  "Si falta un dato devuelve null en ese campo.",
+  "",
+  "MONTO:",
+  "- Devuelve el monto como número SIN separadores de miles.",
+  '- Ejemplo visual \"$ 1.490\" (Argentina / Mercado Pago) → monto 1490, NO 1.49 ni 1.490.',
+  '- Ejemplo visual \"1.490,50\" → monto 1490.5',
+  '- Ejemplo visual \"1490.00\" → monto 1490',
+  "- Respeta si el punto/coma son miles o decimales según el formato local del comprobante.",
+  "",
+  "MONEDA (preferí código ISO):",
+  '- Pesos argentinos / Mercado Pago Argentina / \"$\" en contexto AR → \"ARS\".',
+  '- Bolivianos / Bs / BOB → \"BOB\".',
+  '- Dólares estadounidenses → \"USD\".',
+  '- Euros → \"EUR\".',
+  '- NO asumas que el símbolo \"$\" es siempre USD; en Argentina suele ser ARS.',
+  '- Si solo ves \"$\" y no puedes confirmar el país/moneda, puedes devolver \"$\".',
+  "",
+  'El campo "nombre" es el DESTINATARIO / BENEFICIARIO / RECEPTOR del dinero:',
+  "la persona o entidad que RECIBE el pago (NO quien envía).",
+  "",
+  "Prioriza etiquetas equivalentes en cualquier banco o formato, por ejemplo:",
+  '- "Cuenta destino", "Beneficiario", "Destinatario", "Receptor", "A nombre de",',
+  '"Titular destino", "Cuenta del beneficiario", "Recibido por", "Depositado a",',
+  "o cualquier texto que indique quién recibe el dinero.",
+  "Si hay varias etiquetas de receptor, usa la más clara; si hay varios nombres,",
+  "elige siempre el de quien RECIBE el pago.",
+  "",
+  "NO uses nombres de quien ENVÍA o paga, aunque aparezcan primero. Ignora:",
+  '"Cuenta origen", "Ordenante", "Pagador", "Remitente", "De:", "Enviado por",',
+  '"Titular origen", o equivalentes.',
+  "",
+  "Ejemplo Bolivia: Cuenta origen: Ticona Condori Eliana / Cuenta destino: Ibanca Chambi Balboa",
+  '→ {"monto":7,"moneda":"BOB","nombre":"Ibanca Chambi Balboa"}',
+  "",
+  "Ejemplo Argentina Mercado Pago: monto visible \"$ 1.490\"",
+  '→ {"monto":1490,"moneda":"ARS","nombre":null}',
+  "",
+  "Si el destinatario/beneficiario es claramente visible, NO devuelvas nombre: null.",
+  "nombre: null solo si no es posible identificar ningún destinatario o beneficiario.",
+].join("\n");
+
+/**
+ * Prompt Vision. Sin referencias → prompt base idéntico al anterior.
+ * Con referencias → bloque adicional de búsqueda; no fuerza coincidencia.
+ */
+function construirPromptComprobanteVision(nombresReferencia = []) {
+  const refs = normalizarListaNombresReferencia(nombresReferencia);
+  if (!refs.length) return PROMPT_COMPROBANTE_VISION_BASE;
+
+  const lista = refs.map((n) => `- "${n}"`).join("\n");
+  const bloqueReferencia = [
+    "",
+    "NOMBRES DE REFERENCIA (solo ayuda de búsqueda visual; NO son prueba de pago válido):",
+    lista,
+    "",
+    "Con estos nombres de referencia:",
+    "- Búscalos visualmente en el comprobante si aparecen.",
+    "- Identifica el rol de cada nombre según etiquetas y contexto visibles",
+    "  (destinatario/beneficiario vs remitente/ordenante/pagador).",
+    "- Etiquetas útiles de destinatario (ej. Mercado Pago): \"Transferiste a\", \"Para\",",
+    "  \"Enviaste a\", \"Beneficiario\", \"Destinatario\".",
+    "- Etiquetas de remitente a NO usar en \"nombre\": \"Recibiste de\", \"Te envió\",",
+    "  \"Desde\", \"De:\", \"Ordenante\", \"Pagador\".",
+    "- El campo \"nombre\" del JSON debe ser SIEMPRE el destinatario/beneficiario real",
+    "  según la evidencia visual, no el remitente.",
+    "- Si un nombre de referencia aparece como destinatario/beneficiario, puedes usarlo en \"nombre\".",
+    "- Si un nombre de referencia aparece solo como remitente/ordenante/pagador, NO lo pongas en \"nombre\";",
+    "  extrae el destinatario real visible o null.",
+    "- NO inventes ni devuelvas un nombre solo porque figura en la lista de referencia.",
+    "- NO copies un nombre de referencia si no está legible en la imagen con evidencia suficiente.",
+    "- Si no puedes identificar al destinatario con evidencia visual suficiente, usa nombre: null.",
+    "- La presencia textual de un nombre de referencia en cualquier parte de la imagen",
+    "  NO implica por sí sola que ese nombre deba ir en \"nombre\".",
+  ].join("\n");
+
+  return PROMPT_COMPROBANTE_VISION_BASE + bloqueReferencia;
+}
+
+async function analizarComprobanteConVision({
+  imageDataUrl,
+  imagePublicUrl,
+  nombresReferencia = [],
+} = {}) {
   if (!OPENAI_API_KEY) throw new Error("OPENAI_API_KEY no configurada");
   if (!imageDataUrl && !imagePublicUrl) throw new Error("Imagen no disponible");
 
   const imageUrl = imageDataUrl || imagePublicUrl;
-  const prompt = [
-    "Extrae SOLO este JSON del comprobante de pago.",
-    "Sin markdown y sin explicaciones.",
-    'Formato exacto: {"monto":29,"moneda":"BOB","nombre":"Marco Antonio Arias Perez"}',
-    "Si falta un dato devuelve null en ese campo.",
-    "",
-    "MONTO:",
-    "- Devuelve el monto como número SIN separadores de miles.",
-    '- Ejemplo visual \"$ 1.490\" (Argentina / Mercado Pago) → monto 1490, NO 1.49 ni 1.490.',
-    '- Ejemplo visual \"1.490,50\" → monto 1490.5',
-    '- Ejemplo visual \"1490.00\" → monto 1490',
-    "- Respeta si el punto/coma son miles o decimales según el formato local del comprobante.",
-    "",
-    "MONEDA (preferí código ISO):",
-    '- Pesos argentinos / Mercado Pago Argentina / \"$\" en contexto AR → \"ARS\".',
-    '- Bolivianos / Bs / BOB → \"BOB\".',
-    '- Dólares estadounidenses → \"USD\".',
-    '- Euros → \"EUR\".',
-    '- NO asumas que el símbolo \"$\" es siempre USD; en Argentina suele ser ARS.',
-    '- Si solo ves \"$\" y no puedes confirmar el país/moneda, puedes devolver \"$\".',
-    "",
-    'El campo "nombre" es el DESTINATARIO / BENEFICIARIO / RECEPTOR del dinero:',
-    "la persona o entidad que RECIBE el pago (NO quien envía).",
-    "",
-    "Prioriza etiquetas equivalentes en cualquier banco o formato, por ejemplo:",
-    '- "Cuenta destino", "Beneficiario", "Destinatario", "Receptor", "A nombre de",',
-    '"Titular destino", "Cuenta del beneficiario", "Recibido por", "Depositado a",',
-    "o cualquier texto que indique quién recibe el dinero.",
-    "Si hay varias etiquetas de receptor, usa la más clara; si hay varios nombres,",
-    "elige siempre el de quien RECIBE el pago.",
-    "",
-    "NO uses nombres de quien ENVÍA o paga, aunque aparezcan primero. Ignora:",
-    '"Cuenta origen", "Ordenante", "Pagador", "Remitente", "De:", "Enviado por",',
-    '"Titular origen", o equivalentes.',
-    "",
-    "Ejemplo Bolivia: Cuenta origen: Ticona Condori Eliana / Cuenta destino: Ibanca Chambi Balboa",
-    '→ {"monto":7,"moneda":"BOB","nombre":"Ibanca Chambi Balboa"}',
-    "",
-    "Ejemplo Argentina Mercado Pago: monto visible \"$ 1.490\"",
-    '→ {"monto":1490,"moneda":"ARS","nombre":null}',
-    "",
-    "Si el destinatario/beneficiario es claramente visible, NO devuelvas nombre: null.",
-    "nombre: null solo si no es posible identificar ningún destinatario o beneficiario.",
-  ].join("\n");
+  const refs = normalizarListaNombresReferencia(nombresReferencia);
+  const prompt = construirPromptComprobanteVision(refs);
 
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
@@ -455,7 +534,10 @@ async function extraerLecturaComprobanteOpenAI({
   mimeType = null,
   filename = null,
   messageType = null,
+  nombresReferencia = [],
 } = {}) {
+  const refs = normalizarListaNombresReferencia(nombresReferencia);
+
   if (!imageUrl) {
     const invalido = {
       ok: true,
@@ -478,6 +560,7 @@ async function extraerLecturaComprobanteOpenAI({
         mimeType: mimeType || "application/pdf",
         filename: filename || null,
         formato: "pdf",
+        nombresReferenciaCount: refs.length,
       })
     );
     const invalidoPdf = {
@@ -520,12 +603,16 @@ async function extraerLecturaComprobanteOpenAI({
       messageType: tipoMsg || null,
       mimeType: mimeType || null,
       filename: filename || null,
+      nombresReferenciaCount: refs.length,
     })
   );
 
   let lectura = null;
   try {
-    lectura = await analizarComprobanteConVision({ imagePublicUrl: imageUrl });
+    lectura = await analizarComprobanteConVision({
+      imagePublicUrl: imageUrl,
+      nombresReferencia: refs,
+    });
     console.log(
       "[OPENAI_PAYMENT_READER_OCR_RESULT]",
       JSON.stringify({ lectura: formatearLecturaSalida(lectura) })
@@ -564,12 +651,16 @@ async function validarComprobanteOpenAI({
   payment = {},
 } = {}) {
   const esperado = normalizarPaymentEsperado(payment);
+  const nombresReferencia = esperado.nombreEsperado
+    ? [esperado.nombreEsperado]
+    : [];
 
   const ocr = await extraerLecturaComprobanteOpenAI({
     imageUrl,
     mimeType,
     filename,
     messageType,
+    nombresReferencia,
   });
 
   if (!ocr.valido || !ocr.lectura) {
@@ -664,4 +755,8 @@ module.exports = {
   normalizarModoMonto,
   normalizarMonedaCanon,
   toNumber,
+  recolectarNombresReferenciaPayment,
+  normalizarListaNombresReferencia,
+  construirPromptComprobanteVision,
+  PROMPT_COMPROBANTE_VISION_BASE,
 };

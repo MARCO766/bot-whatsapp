@@ -9,6 +9,7 @@ const { esCaminoPaymentReader } = require("./openaiCaminoMatcher");
 const {
   extraerLecturaComprobanteOpenAI,
   evaluarRutasPaymentReaderContraLectura,
+  recolectarNombresReferenciaPayment,
 } = require("./openaiPaymentReaderService");
 const {
   usePythonAi,
@@ -383,6 +384,9 @@ async function resolverPaymentReaderIA(config, opts = {}, chatScope = {}) {
     })
   );
 
+  const nombresReferencia =
+    recolectarNombresReferenciaPayment(rutasPaymentReader);
+
   let ocrResult;
   try {
     ocrResult = await extraerLecturaComprobanteOpenAI({
@@ -390,6 +394,7 @@ async function resolverPaymentReaderIA(config, opts = {}, chatScope = {}) {
       mimeType: opts.mimeType || null,
       filename: opts.filename || null,
       messageType: opts.messageType || null,
+      nombresReferencia,
     });
   } catch (error) {
     setIAPaymentReaderStatus(usuarioId, conexionWhatsappId, numero, "waiting");
