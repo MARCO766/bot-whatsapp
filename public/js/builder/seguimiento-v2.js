@@ -1169,32 +1169,20 @@ window.MacBotSeguimientoV2 = (function () {
     box.innerHTML = '<div class="segv2-storage-warn">' + esc(msg) + "</div>";
   }
 
-  function renderArchivoLocalBox(paso) {
-    const box = document.getElementById("segv2ArchivoLocal");
-    const statusEl = document.getElementById("segv2UploadStatus");
-    if (!box || !paso) return;
+  function buildMiniaturaImagenHtml(src) {
+    const url = String(src || "").trim();
+    if (!url) return "";
+    return (
+      '<div class="segv2-upload-preview-box">' +
+      '<img src="' +
+      esc(url) +
+      '" alt="" class="segv2-upload-preview-img" loading="lazy" onerror="if(this.parentNode){this.parentNode.style.display=\'none\';}">' +
+      "</div>"
+    );
+  }
 
-    const local = archivosLocales[claveArchivoLocal(paso)];
-    const estado = estadoMediaPaso(paso);
-
-    if (!local?.file) {
-      box.innerHTML = "";
-      if (statusEl) {
-        statusEl.textContent = "";
-        statusEl.className = "segv2-upload-status";
-      }
-      return;
-    }
-
-    if (local.sizeError) {
-      box.innerHTML =
-        '<div class="segv2-upload-error">' + esc(local.sizeError) + "</div>";
-      if (statusEl) {
-        statusEl.textContent = "Error";
-        statusEl.className = "segv2-upload-status segv2-media-status--error";
-      }
-      return;
-    }
+  function aplicarStatusUpload(statusEl, estado) {
+    if (!statusEl) return;
 
     let statusClass = "segv2-media-status--neutral";
     let statusText = estado.texto || "";
@@ -1212,21 +1200,74 @@ window.MacBotSeguimientoV2 = (function () {
       statusText = estado.texto;
     }
 
-    box.innerHTML =
-      '<div class="segv2-upload-fileinfo">' +
-      "<strong>" +
-      esc(local.nombre || "Archivo") +
-      "</strong>" +
-      "<span>" +
-      formatearPeso(local.size) +
-      "</span></div>";
+    statusEl.textContent = statusText;
+    statusEl.className =
+      "segv2-upload-status " +
+      statusClass +
+      (estado.tipo === "uploading" ? " segv2-upload-status--uploading" : "");
+  }
 
+  function renderArchivoLocalBox(paso) {
+    const box = document.getElementById("segv2ArchivoLocal");
+    const statusEl = document.getElementById("segv2UploadStatus");
+    if (!box || !paso) return;
+
+    const local = archivosLocales[claveArchivoLocal(paso)];
+    const estado = estadoMediaPaso(paso);
+    const tipo = normalizarTipo(paso.tipo);
+    const mediaUrlGuardada = String(paso.media_url || "").trim();
+    const esImagen = tipo === "imagen";
+
+    if (local?.sizeError) {
+      box.innerHTML =
+        '<div class="segv2-upload-error">' + esc(local.sizeError) + "</div>";
+      if (statusEl) {
+        statusEl.textContent = "Error";
+        statusEl.className = "segv2-upload-status segv2-media-status--error";
+      }
+      return;
+    }
+
+    if (local?.file) {
+      let html =
+        '<div class="segv2-upload-fileinfo">' +
+        "<strong>" +
+        esc(local.nombre || "Archivo") +
+        "</strong>" +
+        "<span>" +
+        formatearPeso(local.size) +
+        "</span></div>";
+
+      if (esImagen && local.blobUrl) {
+        html += buildMiniaturaImagenHtml(local.blobUrl);
+      }
+
+      box.innerHTML = html;
+      aplicarStatusUpload(statusEl, estado);
+      return;
+    }
+
+    // Paso guardado sin File local: miniatura solo para imagen con media_url.
+    if (esImagen && mediaUrlGuardada) {
+      let html = "";
+      const nombreGuardado = String(paso.media_filename || "").trim();
+      if (nombreGuardado) {
+        html +=
+          '<div class="segv2-upload-fileinfo">' +
+          "<strong>" +
+          esc(nombreGuardado) +
+          "</strong></div>";
+      }
+      html += buildMiniaturaImagenHtml(mediaUrlGuardada);
+      box.innerHTML = html;
+      aplicarStatusUpload(statusEl, estado);
+      return;
+    }
+
+    box.innerHTML = "";
     if (statusEl) {
-      statusEl.textContent = statusText;
-      statusEl.className =
-        "segv2-upload-status " +
-        statusClass +
-        (estado.tipo === "uploading" ? " segv2-upload-status--uploading" : "");
+      statusEl.textContent = "";
+      statusEl.className = "segv2-upload-status";
     }
   }
 
@@ -1235,18 +1276,14 @@ window.MacBotSeguimientoV2 = (function () {
     const paso = getPasoEnEdicion();
     if (!paso) return;
 
+    // Cancelar el selector: no tocar media ni estado local previos.
+    if (!file) return;
+
     limpiarArchivoLocal(paso);
     delete paso.media_url;
     delete paso.media_filename;
     const urlElReset = document.getElementById("segv2MediaUrl");
     if (urlElReset) urlElReset.value = "";
-
-    if (!file) {
-      renderArchivoLocalBox(paso);
-      renderStorageBanner(normalizarTipo(paso.tipo), paso);
-      onPanelChange();
-      return;
-    }
 
     const tipo = normalizarTipo(paso.tipo);
     const sizeError = validarArchivoLocal(file, tipo);
