@@ -8,15 +8,20 @@ async function cancelarSeguimientosV2PorResetbot({
   usuarioId,
   numero,
   conexionWhatsappId,
+  motivo = "resetbot",
 }) {
   const conexionId = normalizarConexionId(conexionWhatsappId);
   const clienteNumero = numero != null ? String(numero).trim() : "";
   const usuario = usuarioId != null ? String(usuarioId).trim() : "";
+  const motivoCancel = motivo != null && String(motivo).trim() !== ""
+    ? String(motivo).trim()
+    : "resetbot";
 
   console.log("[RESETBOT_CANCEL_V2_START]", {
     usuario_id: usuario || null,
     cliente_numero: clienteNumero || null,
     conexion_whatsapp_id: conexionId,
+    motivo: motivoCancel,
   });
 
   if (!usuario || !clienteNumero || !conexionId) {
@@ -57,6 +62,7 @@ async function cancelarSeguimientosV2PorResetbot({
     ids: pendientes.map((p) => p.id),
     campana_ids: campanaIds,
     estados: [...new Set(pendientes.map((p) => p.estado))],
+    motivo: motivoCancel,
   });
 
   let cancelados = 0;
@@ -65,7 +71,7 @@ async function cancelarSeguimientosV2PorResetbot({
       usuarioId: usuario,
       numero: clienteNumero,
       conexionWhatsappId: conexionId,
-      motivo: "resetbot",
+      motivo: motivoCancel,
     });
   }
 
@@ -74,6 +80,7 @@ async function cancelarSeguimientosV2PorResetbot({
     cliente_numero: clienteNumero,
     conexion_whatsapp_id: conexionId,
     cancelados,
+    motivo: motivoCancel,
   });
 
   return { cancelados, items: pendientes };

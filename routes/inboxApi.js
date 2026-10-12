@@ -22,6 +22,9 @@ const {
   pausarBotConversacion,
   reactivarBotConversacion,
 } = require("../services/conversaciones/botPauseService");
+const {
+  cancelarSeguimientosPorBotPause,
+} = require("../services/conversaciones/cancelarSeguimientosPorBotPause");
 const { protegerApi } = require("../middlewares/auth");
 
 function log(msg, extra) {
@@ -164,6 +167,36 @@ router.post("/api/inbox/bot-pause", protegerApi, async (req, res) => {
       return res.status(400).json({ ok: false, error: result?.error || "Error" });
     }
 
+    let seguimientosCancelados = null;
+    if (action === "pause") {
+      // Pausa y cancelación no son atómicas: si la cancelación falla,
+      // el bot ya quedó pausado pero no se informa éxito total.
+      seguimientosCancelados = await cancelarSeguimientosPorBotPause({
+        usuarioId,
+        clienteNumero,
+        conexionWhatsappId,
+      });
+      if (!seguimientosCancelados?.ok) {
+        log("bot-pause cancelacion seguimientos fallida", seguimientosCancelados);
+        // La pausa ya está en BD: sincronizar UI aunque la cancelación haya fallado.
+        rt.conversacionActualizada(req, usuarioId, {
+          cliente_numero: clienteNumero,
+          conexion_whatsapp_id: conexionWhatsappId,
+          bot_pausado: result.bot_pausado,
+          bot_pausado_hasta: result.bot_pausado_hasta,
+          bot_pausado_motivo: result.bot_pausado_motivo,
+        });
+        return res.status(500).json({
+          ok: false,
+          error: "pausa_aplicada_cancelacion_seguimientos_fallida",
+          bot_pausado: result.bot_pausado,
+          bot_pausado_hasta: result.bot_pausado_hasta,
+          bot_pausado_motivo: result.bot_pausado_motivo,
+          cancelacion: seguimientosCancelados,
+        });
+      }
+    }
+
     rt.conversacionActualizada(req, usuarioId, {
       cliente_numero: clienteNumero,
       conexion_whatsapp_id: conexionWhatsappId,
@@ -172,12 +205,16 @@ router.post("/api/inbox/bot-pause", protegerApi, async (req, res) => {
       bot_pausado_motivo: result.bot_pausado_motivo,
     });
 
-    res.json({
+    const payload = {
       ok: true,
       bot_pausado: result.bot_pausado,
       bot_pausado_hasta: result.bot_pausado_hasta,
       bot_pausado_motivo: result.bot_pausado_motivo,
-    });
+    };
+    if (seguimientosCancelados) {
+      payload.cancelados_v2 = seguimientosCancelados.cancelados_v2;
+    }
+    res.json(payload);
   } catch (error) {
     log("bot-pause ERROR", error.response?.data || error.message);
     res.status(500).json({ ok: false, error: "Error actualizando flujo" });

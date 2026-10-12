@@ -2,10 +2,10 @@ const {
   obtenerPendientesVencidos,
   obtenerPorId,
   reservarParaEnvio,
-  actualizarEstado,
+  actualizarEstadoSiEn,
   insertarLog,
 } = require("./seguimientoV2Repository");
-const { ESTADOS_SEGUIMIENTO_V2 } = require("./constants");
+const { ESTADOS_SEGUIMIENTO_V2, ESTADOS_ACTIVOS_V2 } = require("./constants");
 const { enviarSeguimientoV2 } = require("./seguimientoV2Sender");
 const { obtenerConexionItem } = require("./seguimientoV2Guards");
 const {
@@ -13,15 +13,32 @@ const {
   liberarLockWorkerSeguimientoV2,
 } = require("./seguimientoV2WorkerLock");
 const { logSegV2Test, logSegV2Step, logSegV2PendingCount } = require("./seguimientoV2TestLog");
+const { estaBotPausado } = require("../conversaciones/botPauseService");
+const {
+  MOTIVO_BOT_PAUSADO_MANUAL,
+} = require("../conversaciones/cancelarSeguimientosPorBotPause");
 
-async function marcarFallido(item, motivo, evento) {
-  await actualizarEstado(item.id, ESTADOS_SEGUIMIENTO_V2.FALLIDO, {
-    error_detalle: motivo,
-  });
+const ESTADOS_TERMINALES_V2 = [
+  ESTADOS_SEGUIMIENTO_V2.RESPONDIDO,
+  ESTADOS_SEGUIMIENTO_V2.CANCELADO,
+  ESTADOS_SEGUIMIENTO_V2.ENVIADO,
+  ESTADOS_SEGUIMIENTO_V2.OMITIDO_DUPLICADO,
+  ESTADOS_SEGUIMIENTO_V2.FALLIDO,
+];
+
+async function marcarFallido(item, motivo, evento, deps = {}) {
+  const actualizarSiEn = deps.actualizarEstadoSiEn || actualizarEstadoSiEn;
+  const actualizado = await actualizarSiEn(
+    item.id,
+    ESTADOS_SEGUIMIENTO_V2.FALLIDO,
+    ESTADOS_ACTIVOS_V2,
+    { error_detalle: motivo }
+  );
+  if (!actualizado) return;
 
   const conexionId = obtenerConexionItem(item);
   if (conexionId && item.usuario_id && item.cliente_numero) {
-    await insertarLog({
+    await (deps.insertarLog || insertarLog)({
       seguimientoId: item.id,
       usuarioId: item.usuario_id,
       conexionWhatsappId: conexionId,
@@ -32,14 +49,19 @@ async function marcarFallido(item, motivo, evento) {
   }
 }
 
-async function marcarOmitidoDuplicado(item) {
-  await actualizarEstado(item.id, ESTADOS_SEGUIMIENTO_V2.OMITIDO_DUPLICADO, {
-    error_detalle: "Idempotente: mensaje ya en bandeja",
-  });
+async function marcarOmitidoDuplicado(item, deps = {}) {
+  const actualizarSiEn = deps.actualizarEstadoSiEn || actualizarEstadoSiEn;
+  const actualizado = await actualizarSiEn(
+    item.id,
+    ESTADOS_SEGUIMIENTO_V2.OMITIDO_DUPLICADO,
+    [ESTADOS_SEGUIMIENTO_V2.PROCESANDO],
+    { error_detalle: "Idempotente: mensaje ya en bandeja" }
+  );
+  if (!actualizado) return;
 
   const conexionId = obtenerConexionItem(item);
   if (conexionId && item.usuario_id && item.cliente_numero) {
-    await insertarLog({
+    await (deps.insertarLog || insertarLog)({
       seguimientoId: item.id,
       usuarioId: item.usuario_id,
       conexionWhatsappId: conexionId,
@@ -50,7 +72,45 @@ async function marcarOmitidoDuplicado(item) {
   }
 }
 
-async function procesarSeguimientoV2Item(item) {
+async function cancelarPorBotPausado(item, fase, deps) {
+  const actualizarSiEn = deps.actualizarEstadoSiEn || actualizarEstadoSiEn;
+
+  const actualizado = await actualizarSiEn(
+    item.id,
+    ESTADOS_SEGUIMIENTO_V2.CANCELADO,
+    ESTADOS_ACTIVOS_V2,
+    { error_detalle: MOTIVO_BOT_PAUSADO_MANUAL }
+  );
+
+  if (!actualizado) {
+    console.log("[BOT_PAUSE] automatizacion V2 omitida — ya finalizada o no activa", {
+      origen: "seguimiento_v2_worker",
+      fase,
+      seguimiento_v2_id: item.id,
+    });
+    return { ok: false, motivo: "bot_pausado" };
+  }
+
+  console.log("[BOT_PAUSE] automatizacion V2 cancelada por pausa", {
+    origen: "seguimiento_v2_worker",
+    fase,
+    seguimiento_v2_id: actualizado.id,
+    usuario_id: actualizado.usuario_id,
+    cliente_numero: actualizado.cliente_numero,
+    conexion_whatsapp_id: actualizado.conexion_whatsapp_id,
+  });
+
+  return { ok: false, motivo: "bot_pausado" };
+}
+
+async function procesarSeguimientoV2Item(item, opts = {}) {
+  const deps = opts.deps || {};
+  const checkPausa = deps.estaBotPausado || estaBotPausado;
+  const reservar = deps.reservarParaEnvio || reservarParaEnvio;
+  const obtener = deps.obtenerPorId || obtenerPorId;
+  const enviar = deps.enviarSeguimientoV2 || enviarSeguimientoV2;
+  const actualizarSiEn = deps.actualizarEstadoSiEn || actualizarEstadoSiEn;
+
   const conexionId = obtenerConexionItem(item);
 
   if (!conexionId) {
@@ -58,23 +118,34 @@ async function procesarSeguimientoV2Item(item) {
       seguimiento_v2_id: item.id,
       motivo: "conexion_obligatoria",
     });
-    await actualizarEstado(item.id, ESTADOS_SEGUIMIENTO_V2.FALLIDO, {
-      error_detalle: "conexion_obligatoria",
-    });
+    await actualizarSiEn(
+      item.id,
+      ESTADOS_SEGUIMIENTO_V2.FALLIDO,
+      [ESTADOS_SEGUIMIENTO_V2.PENDIENTE, ESTADOS_SEGUIMIENTO_V2.PROCESANDO],
+      { error_detalle: "conexion_obligatoria" }
+    );
     return { ok: false, motivo: "conexion_obligatoria" };
   }
 
-  const reservado = await reservarParaEnvio(item.id);
+  if (
+    item.usuario_id &&
+    item.cliente_numero &&
+    (await checkPausa({
+      usuarioId: item.usuario_id,
+      clienteNumero: item.cliente_numero,
+      conexionWhatsappId: conexionId,
+    }))
+  ) {
+    return cancelarPorBotPausado(item, "pre_reserva", deps);
+  }
+
+  const reservado = await reservar(item.id);
   if (!reservado) {
     return { ok: false, motivo: "no_reservado" };
   }
 
-  const fresca = await obtenerPorId(reservado.id);
-  const estadosNoEnviar = [
-    ESTADOS_SEGUIMIENTO_V2.RESPONDIDO,
-    ESTADOS_SEGUIMIENTO_V2.CANCELADO,
-  ];
-  if (!fresca || estadosNoEnviar.includes(fresca.estado)) {
+  const fresca = await obtener(reservado.id);
+  if (!fresca || ESTADOS_TERMINALES_V2.includes(fresca.estado)) {
     console.log("[SEG_V2_WORKER] omitido — ya cancelado o respondido", {
       seguimiento_v2_id: reservado.id,
       estado: fresca?.estado ?? null,
@@ -82,10 +153,48 @@ async function procesarSeguimientoV2Item(item) {
     return { ok: false, motivo: "ya_cancelado_o_respondido" };
   }
 
-  const resultado = await enviarSeguimientoV2(fresca);
+  if (
+    fresca.usuario_id &&
+    fresca.cliente_numero &&
+    (await checkPausa({
+      usuarioId: fresca.usuario_id,
+      clienteNumero: fresca.cliente_numero,
+      conexionWhatsappId: conexionId,
+    }))
+  ) {
+    return cancelarPorBotPausado(fresca, "post_reserva", deps);
+  }
+
+  // Última puerta antes del envío real a WhatsApp.
+  const preEnvio = await obtener(reservado.id);
+  if (!preEnvio || ESTADOS_TERMINALES_V2.includes(preEnvio.estado)) {
+    console.log("[SEG_V2_WORKER] omitido — terminal justo antes de enviar", {
+      seguimiento_v2_id: reservado.id,
+      estado: preEnvio?.estado ?? null,
+    });
+    return { ok: false, motivo: "ya_cancelado_o_respondido" };
+  }
+  if (preEnvio.estado !== ESTADOS_SEGUIMIENTO_V2.PROCESANDO) {
+    return { ok: false, motivo: "estado_no_procesando" };
+  }
+
+  if (
+    preEnvio.usuario_id &&
+    preEnvio.cliente_numero &&
+    (await checkPausa({
+      usuarioId: preEnvio.usuario_id,
+      clienteNumero: preEnvio.cliente_numero,
+      conexionWhatsappId: conexionId,
+    }))
+  ) {
+    return cancelarPorBotPausado(preEnvio, "pre_envio", deps);
+  }
+
+  // Punto exacto de envío. Tras aceptación de Meta no hay cancelación absoluta.
+  const resultado = await enviar(preEnvio);
 
   if (resultado.omitido) {
-    await marcarOmitidoDuplicado(reservado);
+    await marcarOmitidoDuplicado(reservado, deps);
     logSegV2Test({
       campana_id: reservado.campana_id,
       seguimiento_v2_id: reservado.id,
@@ -101,7 +210,7 @@ async function procesarSeguimientoV2Item(item) {
 
   if (!resultado.ok) {
     const motivo = resultado.motivo || "error_envio";
-    await marcarFallido(reservado, motivo, motivo);
+    await marcarFallido(reservado, motivo, motivo, deps);
     logSegV2Test({
       campana_id: reservado.campana_id,
       seguimiento_v2_id: reservado.id,
@@ -115,26 +224,37 @@ async function procesarSeguimientoV2Item(item) {
     return { ok: false, motivo };
   }
 
-  await actualizarEstado(reservado.id, ESTADOS_SEGUIMIENTO_V2.ENVIADO, {
-    meta_message_id: resultado.metaMessageId || null,
-  });
+  const marcado = await actualizarSiEn(
+    reservado.id,
+    ESTADOS_SEGUIMIENTO_V2.ENVIADO,
+    [ESTADOS_SEGUIMIENTO_V2.PROCESANDO],
+    { meta_message_id: resultado.metaMessageId || null }
+  );
+
+  if (!marcado) {
+    console.log("[SEG_V2_WORKER] envio Meta posible pero estado ya no procesando", {
+      seguimiento_v2_id: reservado.id,
+      nota: "no se sobrescribe cancelado/enviado/respondido",
+    });
+    return { ok: false, motivo: "estado_cambiado_tras_envio" };
+  }
 
   logSegV2Test({
-    campana_id: reservado.campana_id,
-    seguimiento_v2_id: reservado.id,
+    campana_id: marcado.campana_id,
+    seguimiento_v2_id: marcado.id,
     conexion_whatsapp_id: conexionId,
     phone_id: resultado.phoneId || null,
     estado: ESTADOS_SEGUIMIENTO_V2.ENVIADO,
-    paso_index: reservado.paso_index,
-    cliente_numero: reservado.cliente_numero,
+    paso_index: marcado.paso_index,
+    cliente_numero: marcado.cliente_numero,
     prueba: "worker",
   });
 
-  await insertarLog({
-    seguimientoId: reservado.id,
-    usuarioId: reservado.usuario_id,
+  await (deps.insertarLog || insertarLog)({
+    seguimientoId: marcado.id,
+    usuarioId: marcado.usuario_id,
     conexionWhatsappId: conexionId,
-    numero: reservado.cliente_numero,
+    numero: marcado.cliente_numero,
     evento: "enviado",
     detalle: {
       meta_message_id: resultado.metaMessageId || null,

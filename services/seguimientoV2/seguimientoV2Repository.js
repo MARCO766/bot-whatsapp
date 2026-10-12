@@ -101,7 +101,7 @@ async function reservarParaEnvio(id) {
   return (response.data || [])[0] || null;
 }
 
-async function actualizarEstado(id, estado, extra = {}) {
+function payloadActualizarEstadoV2(estado, extra = {}) {
   const payload = {
     estado,
     updated_at: nowUtc(),
@@ -118,11 +118,39 @@ async function actualizarEstado(id, estado, extra = {}) {
     payload.respondido_en = nowUtc();
   }
 
+  return payload;
+}
+
+async function actualizarEstado(id, estado, extra = {}) {
   await axios.patch(
     `${SUPABASE_URL}/rest/v1/${TABLA}?id=eq.${encodeURIComponent(id)}`,
-    payload,
+    payloadActualizarEstadoV2(estado, extra),
     { headers: headers({ Prefer: "return=minimal" }) }
   );
+}
+
+/**
+ * UPDATE condicional V2: solo si el registro está en estadosDesde.
+ * Devuelve la fila o null si no hubo match.
+ */
+async function actualizarEstadoSiEn(id, estado, estadosDesde = [], extra = {}) {
+  const desde = (estadosDesde || [])
+    .map((e) => (e != null ? String(e).trim() : ""))
+    .filter(Boolean);
+  if (!id || !desde.length) return null;
+
+  const filtroEstado =
+    desde.length === 1
+      ? `estado=eq.${encodeURIComponent(desde[0])}`
+      : `estado=in.(${desde.map((e) => encodeURIComponent(e)).join(",")})`;
+
+  const response = await axios.patch(
+    `${SUPABASE_URL}/rest/v1/${TABLA}?id=eq.${encodeURIComponent(id)}&${filtroEstado}`,
+    payloadActualizarEstadoV2(estado, extra),
+    { headers: headers({ Prefer: "return=representation" }) }
+  );
+
+  return (response.data || [])[0] || null;
 }
 
 async function listarPorCampana(campanaId) {
@@ -325,6 +353,7 @@ module.exports = {
   obtenerPorId,
   reservarParaEnvio,
   actualizarEstado,
+  actualizarEstadoSiEn,
   listarPorCampana,
   listarPendientesPorClaveTriple,
   cancelarCampana,
