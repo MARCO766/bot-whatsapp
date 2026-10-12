@@ -240,6 +240,42 @@ function formatearLecturaSalida(lectura) {
   };
 }
 
+/**
+ * Resumen seguro para logs: no incluye el nombre completo (PII).
+ * Sirve para correlacionar presencia/longitud/tokens con nombreOk.
+ */
+function resumenNombreParaLog(value) {
+  const raw = String(value || "").trim();
+  if (!raw) {
+    return { presente: false, len: 0, tokens: 0 };
+  }
+  return {
+    presente: true,
+    len: raw.length,
+    tokens: tokenizeNombre(raw).length,
+  };
+}
+
+function formatearLecturaParaLog(lectura) {
+  if (!lectura) return null;
+  const out = formatearLecturaSalida(lectura);
+  return {
+    monto: out.monto,
+    moneda: out.moneda,
+    nombre: resumenNombreParaLog(out.nombre),
+  };
+}
+
+function formatearPaymentEsperadoParaLog(esperado) {
+  const e = esperado && typeof esperado === "object" ? esperado : {};
+  return {
+    montoEsperado: toNumber(e.montoEsperado, 0),
+    monedaEsperada: String(e.monedaEsperada || "").trim(),
+    modoMonto: normalizarModoMonto(e.modoMonto),
+    nombreEsperado: resumenNombreParaLog(e.nombreEsperado),
+  };
+}
+
 function extractJson(text) {
   const raw = String(text || "").trim();
   const direct = raw.match(/\{[\s\S]*\}/);
@@ -340,26 +376,31 @@ const PROMPT_COMPROBANTE_VISION_BASE = [
   "Prioriza etiquetas equivalentes en cualquier banco o formato, por ejemplo:",
   '- "Cuenta destino", "Beneficiario", "Destinatario", "Receptor", "A nombre de",',
   '"Titular destino", "Cuenta del beneficiario", "Recibido por", "Depositado a",',
+  '"Transferiste a", "Para", "Enviaste a", "Le transferiste a",',
   "o cualquier texto que indique quién recibe el dinero.",
   "Si hay varias etiquetas de receptor, usa la más clara; si hay varios nombres,",
   "elige siempre el de quien RECIBE el pago.",
   "",
-  "NO uses nombres de quien ENVÍA o paga, aunque aparezcan primero. Ignora:",
+  "NO uses nombres de quien ENVÍA o paga, aunque aparezcan primero o más grandes. Ignora:",
   '"Cuenta origen", "Ordenante", "Pagador", "Remitente", "De:", "Enviado por",',
-  '"Titular origen", o equivalentes.',
+  '"Titular origen", "Recibiste de", "Te envió", "Desde", o equivalentes.',
   "",
   "Ejemplo Bolivia: Cuenta origen: Ticona Condori Eliana / Cuenta destino: Ibanca Chambi Balboa",
   '→ {"monto":7,"moneda":"BOB","nombre":"Ibanca Chambi Balboa"}',
   "",
-  "Ejemplo Argentina Mercado Pago: monto visible \"$ 1.490\"",
+  'Ejemplo Argentina Mercado Pago: monto "$ 1.490" y texto "Transferiste a Alex Moises Arias Perez"',
+  '→ {"monto":1490,"moneda":"ARS","nombre":"Alex Moises Arias Perez"}',
+  "",
+  "Ejemplo solo monto/moneda visibles sin destinatario legible:",
   '→ {"monto":1490,"moneda":"ARS","nombre":null}',
   "",
   "Si el destinatario/beneficiario es claramente visible, NO devuelvas nombre: null.",
+  "Transcribe el nombre del destinatario tal como aparece (sin inventar ni completar).",
   "nombre: null solo si no es posible identificar ningún destinatario o beneficiario.",
 ].join("\n");
 
 /**
- * Prompt Vision. Sin referencias → prompt base idéntico al anterior.
+ * Prompt Vision. Sin referencias → prompt base (monto/moneda sin cambios de reglas).
  * Con referencias → bloque adicional de búsqueda; no fuerza coincidencia.
  */
 function construirPromptComprobanteVision(nombresReferencia = []) {
@@ -382,9 +423,13 @@ function construirPromptComprobanteVision(nombresReferencia = []) {
     "  \"Desde\", \"De:\", \"Ordenante\", \"Pagador\".",
     "- El campo \"nombre\" del JSON debe ser SIEMPRE el destinatario/beneficiario real",
     "  según la evidencia visual, no el remitente.",
+    "- Prefiere el nombre junto a una etiqueta de destinatario sobre cualquier otra",
+    "  aparición suelta del mismo texto en la imagen.",
     "- Si un nombre de referencia aparece como destinatario/beneficiario, puedes usarlo en \"nombre\".",
     "- Si un nombre de referencia aparece solo como remitente/ordenante/pagador, NO lo pongas en \"nombre\";",
     "  extrae el destinatario real visible o null.",
+    "- Si el destinatario visible NO es ninguno de los nombres de referencia, igual extrae",
+    "  ese destinatario real (no sustituyas por un nombre de la lista).",
     "- NO inventes ni devuelvas un nombre solo porque figura en la lista de referencia.",
     "- NO copies un nombre de referencia si no está legible en la imagen con evidencia suficiente.",
     "- Si no puedes identificar al destinatario con evidencia visual suficiente, usa nombre: null.",
@@ -535,8 +580,13 @@ async function extraerLecturaComprobanteOpenAI({
   filename = null,
   messageType = null,
   nombresReferencia = [],
+  diagCorrId = null,
 } = {}) {
   const refs = normalizarListaNombresReferencia(nombresReferencia);
+  const corr =
+    diagCorrId != null && String(diagCorrId).trim() !== ""
+      ? String(diagCorrId).trim()
+      : null;
 
   if (!imageUrl) {
     const invalido = {
@@ -547,7 +597,7 @@ async function extraerLecturaComprobanteOpenAI({
     };
     console.log(
       "[OPENAI_PAYMENT_READER_VALIDATION]",
-      JSON.stringify({ ...invalido, razon: "sin_imageUrl" })
+      JSON.stringify({ ...invalido, razon: "sin_imageUrl", corrId: corr })
     );
     return invalido;
   }
@@ -556,6 +606,7 @@ async function extraerLecturaComprobanteOpenAI({
     console.log(
       "[OPENAI_PAYMENT_READER_OCR_START]",
       JSON.stringify({
+        corrId: corr,
         messageType: messageType || "document",
         mimeType: mimeType || "application/pdf",
         filename: filename || null,
@@ -571,9 +622,16 @@ async function extraerLecturaComprobanteOpenAI({
     };
     console.log(
       "[OPENAI_PAYMENT_READER_OCR_RESULT]",
-      JSON.stringify({ error: "pdf_no_soportado_por_vision" })
+      JSON.stringify({
+        corrId: corr,
+        error: "pdf_no_soportado_por_vision",
+        nombreExtraido: resumenNombreParaLog(""),
+      })
     );
-    console.log("[OPENAI_PAYMENT_READER_VALIDATION]", JSON.stringify(invalidoPdf));
+    console.log(
+      "[OPENAI_PAYMENT_READER_VALIDATION]",
+      JSON.stringify({ ...invalidoPdf, corrId: corr })
+    );
     return invalidoPdf;
   }
 
@@ -589,6 +647,7 @@ async function extraerLecturaComprobanteOpenAI({
       "[OPENAI_PAYMENT_READER_VALIDATION]",
       JSON.stringify({
         ...invalidoFormato,
+        corrId: corr,
         mimeType: mimeType || null,
         filename: filename || null,
       })
@@ -599,7 +658,8 @@ async function extraerLecturaComprobanteOpenAI({
   console.log(
     "[OPENAI_PAYMENT_READER_OCR_START]",
     JSON.stringify({
-      imageUrl: String(imageUrl).slice(0, 120),
+      corrId: corr,
+      hasImageUrl: !!imageUrl,
       messageType: tipoMsg || null,
       mimeType: mimeType || null,
       filename: filename || null,
@@ -613,14 +673,23 @@ async function extraerLecturaComprobanteOpenAI({
       imagePublicUrl: imageUrl,
       nombresReferencia: refs,
     });
+    const lecturaFmt = formatearLecturaSalida(lectura);
     console.log(
       "[OPENAI_PAYMENT_READER_OCR_RESULT]",
-      JSON.stringify({ lectura: formatearLecturaSalida(lectura) })
+      JSON.stringify({
+        corrId: corr,
+        lectura: formatearLecturaParaLog(lecturaFmt),
+        nombreExtraido: resumenNombreParaLog(lecturaFmt?.nombre),
+      })
     );
   } catch (error) {
     console.log(
       "[OPENAI_PAYMENT_READER_OCR_RESULT]",
-      JSON.stringify({ error: error.message || String(error) })
+      JSON.stringify({
+        corrId: corr,
+        error: error.message || String(error),
+        nombreExtraido: resumenNombreParaLog(""),
+      })
     );
     const invalido = {
       ok: true,
@@ -628,7 +697,10 @@ async function extraerLecturaComprobanteOpenAI({
       motivo: "ocr_invalido",
       lectura: null,
     };
-    console.log("[OPENAI_PAYMENT_READER_VALIDATION]", JSON.stringify(invalido));
+    console.log(
+      "[OPENAI_PAYMENT_READER_VALIDATION]",
+      JSON.stringify({ ...invalido, corrId: corr })
+    );
     return invalido;
   }
 
@@ -681,7 +753,10 @@ async function validarComprobanteOpenAI({
       montoOk: comparacion.montoOk,
       monedaOk: comparacion.monedaOk,
       nombreOk: comparacion.nombreOk,
-      lectura: ocr.lectura,
+      nombreRequerido: !!String(esperado.nombreEsperado || "").trim(),
+      nombreEsperado: resumenNombreParaLog(esperado.nombreEsperado),
+      nombreExtraido: resumenNombreParaLog(ocr.lectura?.nombre),
+      lectura: formatearLecturaParaLog(ocr.lectura),
     })
   );
 
@@ -701,17 +776,29 @@ async function validarComprobanteOpenAI({
   };
 }
 
-function evaluarRutasPaymentReaderContraLectura(rutasPaymentReader, lectura) {
+function evaluarRutasPaymentReaderContraLectura(
+  rutasPaymentReader,
+  lectura,
+  diag = {}
+) {
   const candidatos = [];
+  const corr =
+    diag?.corrId != null && String(diag.corrId).trim() !== ""
+      ? String(diag.corrId).trim()
+      : null;
+  const nombreExtraido = resumenNombreParaLog(lectura?.nombre);
 
   rutasPaymentReader.forEach((route, orden) => {
     const esperado = normalizarPaymentEsperado(route.payment);
     const comparacion = compararPagoOpenAI(esperado, lectura);
     const especificidad = calcularEspecificidadRuta(esperado, comparacion);
+    const nombreRequerido = !!String(esperado.nombreEsperado || "").trim();
+    const nombreEsperado = resumenNombreParaLog(esperado.nombreEsperado);
 
     console.log(
       "[OPENAI_PAYMENT_READER_EVAL_ROUTE]",
       JSON.stringify({
+        corrId: corr,
         routeId: route.id,
         routeNombre: route.nombre || null,
         orden,
@@ -720,8 +807,26 @@ function evaluarRutasPaymentReaderContraLectura(rutasPaymentReader, lectura) {
         montoOk: comparacion.montoOk,
         monedaOk: comparacion.monedaOk,
         nombreOk: comparacion.nombreOk,
+        nombreRequerido,
+        nombreEsperado,
+        nombreExtraido,
         especificidad,
-        payment: esperado,
+        payment: formatearPaymentEsperadoParaLog(esperado),
+      })
+    );
+
+    console.log(
+      "[OPENAI_PAYMENT_READER_NAME_DIAG]",
+      JSON.stringify({
+        corrId: corr,
+        routeId: route.id,
+        orden,
+        nombreRequerido,
+        nombreEsperado,
+        nombreExtraido,
+        nombreOk: comparacion.nombreOk,
+        motivo: comparacion.motivo || null,
+        valido: comparacion.valido,
       })
     );
 
@@ -758,5 +863,8 @@ module.exports = {
   recolectarNombresReferenciaPayment,
   normalizarListaNombresReferencia,
   construirPromptComprobanteVision,
+  resumenNombreParaLog,
+  formatearLecturaParaLog,
+  formatearPaymentEsperadoParaLog,
   PROMPT_COMPROBANTE_VISION_BASE,
 };

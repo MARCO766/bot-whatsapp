@@ -15,6 +15,10 @@ const {
   extraerLecturaComprobanteOpenAI,
   evaluarRutasPaymentReaderContraLectura,
   recolectarNombresReferenciaPayment,
+  resumenNombreParaLog,
+  formatearLecturaParaLog,
+  formatearPaymentEsperadoParaLog,
+  normalizarPaymentEsperado,
 } = require("./openaiPaymentReaderService");
 const { resolverShortConfirmation } = require("./openaiShortConfirmation");
 const {
@@ -1470,27 +1474,36 @@ async function resolverPaymentReaderOpenAI(
   if (!rutasPaymentReader.length) return null;
 
   const { usuarioId, conexionWhatsappId, numero } = chatScope;
+  // Correlación por request (sin teléfono ni PII); no es infraestructura nueva.
+  const corrId = `pr_${Date.now().toString(36)}_${Math.random()
+    .toString(36)
+    .slice(2, 8)}`;
 
   logPaymentReaderMedia(opts);
 
   console.log(
     "[OPENAI_PAYMENT_READER_ROUTES]",
     JSON.stringify({
+      corrId,
       total: rutasPaymentReader.length,
-      routes: rutasPaymentReader.map((r) => ({
-        id: r.id,
-        nombre: r.nombre || null,
-        payment: r.payment || null,
-      })),
+      routes: rutasPaymentReader.map((r) => {
+        const payment = normalizarPaymentEsperado(r.payment);
+        return {
+          id: r.id,
+          nombre: r.nombre || null,
+          payment: formatearPaymentEsperadoParaLog(payment),
+        };
+      }),
     })
   );
 
   console.log(
     "[OPENAI_PAYMENT_READER_START]",
     JSON.stringify({
+      corrId,
       totalRutas: rutasPaymentReader.length,
       messageType: opts.messageType || null,
-      imageUrl: String(opts.imageUrl).slice(0, 120),
+      hasImageUrl: !!opts.imageUrl,
     })
   );
 
@@ -1505,6 +1518,7 @@ async function resolverPaymentReaderOpenAI(
       filename: opts.filename || mediaEntrante?.filename || null,
       messageType: opts.messageType || mediaEntrante?.messageType || null,
       nombresReferencia,
+      diagCorrId: corrId,
     });
   } catch (error) {
     setPaymentReaderStatus(usuarioId, conexionWhatsappId, numero, "waiting");
@@ -1515,8 +1529,10 @@ async function resolverPaymentReaderOpenAI(
     console.log(
       "[OPENAI_PAYMENT_READER_NO_MATCH]",
       JSON.stringify({
+        corrId,
         motivo: ocrResult.motivo || "ocr_invalido",
-        lectura: ocrResult.lectura || null,
+        lectura: formatearLecturaParaLog(ocrResult.lectura),
+        nombreExtraido: resumenNombreParaLog(ocrResult.lectura?.nombre),
         rutasEvaluadas: 0,
       })
     );
@@ -1526,7 +1542,8 @@ async function resolverPaymentReaderOpenAI(
 
   const ganadora = evaluarRutasPaymentReaderContraLectura(
     rutasPaymentReader,
-    ocrResult.lectura
+    ocrResult.lectura,
+    { corrId }
   );
 
   if (ganadora) {
@@ -1535,17 +1552,22 @@ async function resolverPaymentReaderOpenAI(
     console.log(
       "[OPENAI_PAYMENT_READER_MATCH]",
       JSON.stringify({
+        corrId,
         routeId: route.id,
         routeNombre: route.nombre || null,
         orden: ganadora.orden,
         especificidad: ganadora.especificidad,
-        lectura: ocrResult.lectura,
+        lectura: formatearLecturaParaLog(ocrResult.lectura),
+        nombreExtraido: resumenNombreParaLog(ocrResult.lectura?.nombre),
+        nombreOk: ganadora.comparacion?.nombreOk ?? null,
+        motivo: ganadora.comparacion?.motivo || null,
         candidatos: rutasPaymentReader.length,
       })
     );
     console.log(
       "[OPENAI_PAYMENT_READER_ROUTE]",
       JSON.stringify({
+        corrId,
         routeId: route.id,
         source: "openai-payment-reader",
       })
@@ -1565,7 +1587,9 @@ async function resolverPaymentReaderOpenAI(
   console.log(
     "[OPENAI_PAYMENT_READER_NO_MATCH]",
     JSON.stringify({
-      lectura: ocrResult.lectura,
+      corrId,
+      lectura: formatearLecturaParaLog(ocrResult.lectura),
+      nombreExtraido: resumenNombreParaLog(ocrResult.lectura?.nombre),
       rutasEvaluadas: rutasPaymentReader.length,
       motivo: "ninguna_ruta_coincide",
     })
