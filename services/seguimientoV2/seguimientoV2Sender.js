@@ -9,6 +9,8 @@ const {
   resolverConexionV2,
 } = require("./seguimientoV2Guards");
 const { logSegV2Test, logSegV2TestVariant } = require("./seguimientoV2TestLog");
+const { MOTIVO_VENTANA_WHATSAPP_CERRADA } = require("./constants");
+const { evaluarVentana24hSeguimientoV2 } = require("./seguimientoV2Ventana24h");
 
 function buildOpcionesEnvioV2(item) {
   const conexionId = obtenerConexionItem(item);
@@ -36,9 +38,17 @@ function normalizarTipoMedia(tipo) {
   return t;
 }
 
-async function enviarSeguimientoV2(item) {
+async function enviarSeguimientoV2(item, opts = {}) {
+  const deps = opts.deps || {};
   const seguimientoV2Id = item?.id ?? null;
   const conexionId = obtenerConexionItem(item);
+  const enviarTexto = deps.enviarTextoWhatsApp || enviarTextoWhatsApp;
+  const enviarMedia = deps.enviarMediaWhatsApp || enviarMediaWhatsApp;
+  const evaluarVentana =
+    deps.evaluarVentana24hSeguimientoV2 || evaluarVentana24hSeguimientoV2;
+  const existeDup =
+    deps.existeMensajePorSeguimientoV2Id || existeMensajePorSeguimientoV2Id;
+  const resolverConn = deps.resolverConexionV2 || resolverConexionV2;
 
   console.log("[SEG_V2_EXEC]", {
     seguimiento_v2_id: seguimientoV2Id,
@@ -50,7 +60,7 @@ async function enviarSeguimientoV2(item) {
     return { ok: false, motivo: "conexion_obligatoria" };
   }
 
-  const duplicado = await existeMensajePorSeguimientoV2Id(seguimientoV2Id);
+  const duplicado = await existeDup(seguimientoV2Id);
   if (duplicado) {
     console.log("[SEG_V2_DUP]", { seguimiento_v2_id: seguimientoV2Id });
     return {
@@ -61,7 +71,7 @@ async function enviarSeguimientoV2(item) {
     };
   }
 
-  const conexion = await resolverConexionV2(item.usuario_id, conexionId);
+  const conexion = await resolverConn(item.usuario_id, conexionId);
   if (!conexion) {
     console.log("[SEG_V2_FAIL]", {
       seguimiento_v2_id: seguimientoV2Id,
@@ -69,6 +79,18 @@ async function enviarSeguimientoV2(item) {
       conexion_whatsapp_id: conexionId,
     });
     return { ok: false, motivo: "conexion_no_encontrada" };
+  }
+
+  // Puerta exclusiva V2: cero POST Meta si la ventana 24h está vencida o no verificable.
+  const ventana = await evaluarVentana(item, deps);
+  if (!ventana.permitir) {
+    const motivo = ventana.motivo || MOTIVO_VENTANA_WHATSAPP_CERRADA;
+    console.log("[SEG_V2_FAIL]", {
+      seguimiento_v2_id: seguimientoV2Id,
+      motivo,
+      detalle: ventana.detalle || null,
+    });
+    return { ok: false, motivo, bloqueadoVentana24h: true };
   }
 
   const opciones = buildOpcionesEnvioV2(item);
@@ -93,7 +115,7 @@ async function enviarSeguimientoV2(item) {
         });
       }
 
-      resultado = await enviarTextoWhatsApp(numero, texto, opciones);
+      resultado = await enviarTexto(numero, texto, opciones);
     } else {
       const mediaUrl = String(item.media_url || "").trim();
       if (!mediaUrl) {
@@ -104,7 +126,7 @@ async function enviarSeguimientoV2(item) {
         tipo === "image" ? "image" : tipo === "video" ? "video" : tipo === "audio" ? "audio" : "document";
       const filename = String(item.media_filename || item.filename || "").trim();
       const opcionesMedia = filename ? { ...opciones, filename } : opciones;
-      resultado = await enviarMediaWhatsApp(numero, tipoMedia, mediaUrl, caption, opcionesMedia);
+      resultado = await enviarMedia(numero, tipoMedia, mediaUrl, caption, opcionesMedia);
     }
   } catch (err) {
     console.log("[SEG_V2_FAIL]", {
