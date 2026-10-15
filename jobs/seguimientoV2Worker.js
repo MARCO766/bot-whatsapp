@@ -5,6 +5,26 @@ let workerIniciado = false;
 let procesando = false;
 let intervalId = null;
 
+/** Fallos de config/esquema: apagan el worker. Errores temporales no. */
+const MOTIVOS_LOCK_PERMANENTE = ["sin_supabase", "lock_tabla_ausente"];
+
+function esMotivoLockPermanente(motivo) {
+  return MOTIVOS_LOCK_PERMANENTE.includes(motivo);
+}
+
+function apagarWorkerSeguimientoV2(motivo) {
+  console.log("[SEG_V2_WORKER_NO_LOCK_DISABLED]", {
+    pid: process.pid,
+    motivo: motivo || "lock_perdido",
+  });
+  if (intervalId) {
+    clearInterval(intervalId);
+    intervalId = null;
+  }
+  global.__macbotSeguimientoV2WorkerIniciado = false;
+  workerIniciado = false;
+}
+
 async function startSeguimientoV2Worker(app) {
   if (global.__macbotSeguimientoV2WorkerIniciado || workerIniciado) {
     console.log("⏱️ Worker Seguimiento V2 ya activo — no se duplica", {
@@ -16,12 +36,22 @@ async function startSeguimientoV2Worker(app) {
 
   const lockCheck = await verificarTablaLockDisponible();
   if (!lockCheck.ok) {
-    console.log("[SEG_V2_WORKER_NO_LOCK_DISABLED]", {
-      pid: process.pid,
-      timestamp: new Date().toISOString(),
-      motivo: lockCheck.motivo,
-    });
-    return;
+    if (!esMotivoLockPermanente(lockCheck.motivo)) {
+      console.log("[SEG_V2_WORKER_LOCK_TRANSIENT]", {
+        pid: process.pid,
+        timestamp: new Date().toISOString(),
+        motivo: lockCheck.motivo || "lock_verificacion_fallida",
+        fase: "startup",
+        accion: "continuar_arranque_intervalo",
+      });
+    } else {
+      console.log("[SEG_V2_WORKER_NO_LOCK_DISABLED]", {
+        pid: process.pid,
+        timestamp: new Date().toISOString(),
+        motivo: lockCheck.motivo,
+      });
+      return;
+    }
   }
 
   global.__macbotSeguimientoV2WorkerIniciado = true;
@@ -45,16 +75,16 @@ async function startSeguimientoV2Worker(app) {
       const resultado = await procesarSeguimientosV2Vencidos({ fromWorker: true });
 
       if (resultado.lock === "no_lock_db") {
-        console.log("[SEG_V2_WORKER_NO_LOCK_DISABLED]", {
-          pid: process.pid,
-          motivo: resultado.motivo || "lock_perdido",
-        });
-        if (intervalId) {
-          clearInterval(intervalId);
-          intervalId = null;
+        if (!esMotivoLockPermanente(resultado.motivo)) {
+          console.log("[SEG_V2_WORKER_LOCK_TRANSIENT]", {
+            pid: process.pid,
+            motivo: resultado.motivo || "lock_verificacion_fallida",
+            fase: "tick",
+            accion: "omitir_ciclo_reintentar",
+          });
+          return;
         }
-        global.__macbotSeguimientoV2WorkerIniciado = false;
-        workerIniciado = false;
+        apagarWorkerSeguimientoV2(resultado.motivo);
         return;
       }
 
@@ -84,4 +114,6 @@ async function startSeguimientoV2Worker(app) {
 
 module.exports = {
   startSeguimientoV2Worker,
+  esMotivoLockPermanente,
+  MOTIVOS_LOCK_PERMANENTE,
 };

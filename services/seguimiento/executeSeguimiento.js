@@ -521,13 +521,13 @@ async function procesarSeguimientosVencidos(io, opts = {}) {
 
   const lock = await adquirirLockWorkerSeguimiento();
   if (!lock.acquired) {
-    const sinLockDb = ["sin_supabase", "lock_tabla_ausente", "lock_verificacion_fallida"].includes(
-      lock.motivo
-    );
+    // Error temporal de red/Supabase: omitir ciclo (skipped). No apagar worker.
+    // Solo config ausente o tabla de lock inexistente → no_lock_db (apagado seguro).
+    const sinLockDb = ["sin_supabase", "lock_tabla_ausente"].includes(lock.motivo);
     if (sinLockDb) {
       return { procesados: 0, enviados: 0, lock: "no_lock_db", motivo: lock.motivo };
     }
-    return { procesados: 0, enviados: 0, lock: "skipped" };
+    return { procesados: 0, enviados: 0, lock: "skipped", motivo: lock.motivo || null };
   }
 
   try {
