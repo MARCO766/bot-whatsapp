@@ -34,6 +34,9 @@ const {
   registrarEntradaCtwa,
   existeEntradaCtwa,
 } = require("../services/ctwaLeadService");
+const {
+  resolverContenidoUnsupported,
+} = require("../services/whatsappUnsupportedInbound");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
@@ -390,6 +393,17 @@ if (message.type === "interactive" && message.interactive?.button_reply) {
   });
 }
 
+// Meta type "unsupported": sin cuerpo recuperable; etiqueta para Bandeja (no altera activadores).
+let contenidoInbox = text;
+if (message.type === "unsupported") {
+  const u = resolverContenidoUnsupported(message);
+  contenidoInbox = u.contenido;
+  console.log("[WEBHOOK_UNSUPPORTED]", {
+    subtipo: u.subtipo,
+    errorCode: u.errorCode,
+  });
+}
+
 console.log("📩 MENSAJE ENTRANTE:", text, from);
 
 await axios.post(
@@ -611,6 +625,11 @@ if (message.document && message.document.id && conexionWebhook?.token) {
 
 }
 
+// Media (audio/imagen/documento) puede haber actualizado `text` después del init de contenidoInbox.
+if (message.type !== "unsupported") {
+  contenidoInbox = text;
+}
+
 const conexionWhatsappId = conexionWebhook?.id || null;
 
 const { esPrimerMensaje, motivo: motivoPrimerMensaje } = await calcularEsPrimerMensaje(
@@ -634,7 +653,7 @@ await axios.post(
     usuario_id: usuarioIdWebhook,
     direccion: "entrante",
     tipo: message.type,
-    contenido: text || "",
+    contenido: contenidoInbox || "",
     imagen_url: mediaUrlFinal || null,
     ...(conexionWhatsappId ? { conexion_whatsapp_id: conexionWhatsappId } : {}),
   },
@@ -653,7 +672,7 @@ rt.nuevoMensaje(req, usuarioIdWebhook, {
     usuario_id: usuarioIdWebhook,
     direccion: "entrante",
     tipo: message.type,
-    contenido: text || "",
+    contenido: contenidoInbox || "",
     imagen_url: mediaUrlFinal || null,
     conexion_whatsapp_id: conexionWhatsappId,
     creado_en: creadoEn,
@@ -661,7 +680,7 @@ rt.nuevoMensaje(req, usuarioIdWebhook, {
   rt.conversacionActualizada(req, usuarioIdWebhook, {
     cliente_numero: from,
     conexion_whatsapp_id: conexionWhatsappId,
-    ultimo_mensaje: text || "",
+    ultimo_mensaje: contenidoInbox || "",
     direccion: "entrante",
   });
 
@@ -689,8 +708,8 @@ if (conversacionActual) {
     `${SUPABASE_URL}/rest/v1/conversaciones?cliente_numero=eq.${from}&usuario_id=eq.${usuarioIdWebhook}${filtroConexionConv}`,
     {
       ultimo_mensaje:
-  text && text.trim() !== ""
-    ? text
+  contenidoInbox && String(contenidoInbox).trim() !== ""
+    ? contenidoInbox
     : message.type,
       ultimo_mensaje_en: new Date().toISOString(),
       estado: "abierta",
@@ -713,8 +732,8 @@ if (conversacionActual) {
       cliente_numero: from,
       usuario_id: usuarioIdWebhook,
       ultimo_mensaje:
-  text && text.trim() !== ""
-    ? text
+  contenidoInbox && String(contenidoInbox).trim() !== ""
+    ? contenidoInbox
     : message.type,
       ultimo_mensaje_en: new Date().toISOString(),
       estado: "abierta",

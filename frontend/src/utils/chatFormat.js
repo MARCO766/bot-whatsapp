@@ -4,6 +4,7 @@ export function formatPreview(texto) {
   if (texto === "audio") return "🎧 Audio";
   if (texto === "document") return "📄 Documento";
   if (texto === "video") return "🎥 Video";
+  if (texto === "unsupported") return "Mensaje no soportado";
   return String(texto).substring(0, 35);
 }
 

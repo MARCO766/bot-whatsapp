@@ -233,8 +233,22 @@ export function docExtension(name) {
   return ext && ext.length <= 5 ? ext : "DOC";
 }
 
+const UNSUPPORTED_UI_FALLBACK = "Mensaje no soportado por WhatsApp";
+
 export function visibleCaption(msg, kind) {
   const text = (msg?.contenido || "").trim();
+  const tipo = String(msg?.tipo || msg?.type || "")
+    .trim()
+    .toLowerCase();
+
+  // Filas históricas unsupported con contenido vacío: evitar burbuja en blanco.
+  if (tipo === "unsupported") {
+    if (!text || text.startsWith("http") || isPlaceholderContent(text)) {
+      return UNSUPPORTED_UI_FALLBACK;
+    }
+    return text;
+  }
+
   if (!text || text.startsWith("http") || isPlaceholderContent(text)) return null;
   if (kind === "document") {
     const docName = docDisplayName(msg);
