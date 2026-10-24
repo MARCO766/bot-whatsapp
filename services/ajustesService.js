@@ -187,6 +187,18 @@ async function guardarConexionAjustes(usuarioId, body) {
     phone_id: body.phone_id || body.phoneNumberId,
     pixel_id: body.pixel_id || body.pixelId,
     capi_token: body.capi_token || body.capiToken,
+    indicador_escritura:
+      body.indicador_escritura !== undefined
+        ? body.indicador_escritura
+        : body.indicadorEscritura,
+    demora_respuesta_activa:
+      body.demora_respuesta_activa !== undefined
+        ? body.demora_respuesta_activa
+        : body.demoraRespuestaActiva,
+    demora_respuesta_segundos:
+      body.demora_respuesta_segundos !== undefined
+        ? body.demora_respuesta_segundos
+        : body.demoraRespuestaSegundos,
   });
   const activa = await getConexionActiva(usuarioId);
   return {

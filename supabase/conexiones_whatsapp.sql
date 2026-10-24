@@ -11,6 +11,9 @@ create table if not exists public.conexiones_whatsapp (
   waba_id text,
   pixel_id text,
   capi_token text,
+  indicador_escritura boolean not null default false,
+  demora_respuesta_activa boolean not null default false,
+  demora_respuesta_segundos integer not null default 3,
   activo boolean not null default true,
   estado text not null default 'conectado',
   creado_en timestamptz not null default now(),
@@ -46,5 +49,8 @@ alter table public.conexiones_whatsapp add column if not exists waba_id text;
 alter table public.conexiones_whatsapp add column if not exists estado text default 'conectado';
 alter table public.conexiones_whatsapp add column if not exists creado_en timestamptz default now();
 alter table public.conexiones_whatsapp add column if not exists actualizado_en timestamptz default now();
+alter table public.conexiones_whatsapp add column if not exists indicador_escritura boolean not null default false;
+alter table public.conexiones_whatsapp add column if not exists demora_respuesta_activa boolean not null default false;
+alter table public.conexiones_whatsapp add column if not exists demora_respuesta_segundos integer not null default 3;
 
 comment on table public.conexiones_whatsapp is 'Credenciales WhatsApp Cloud API por usuario (multi-número).';

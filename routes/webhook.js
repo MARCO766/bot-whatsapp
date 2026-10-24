@@ -37,6 +37,10 @@ const {
 const {
   resolverContenidoUnsupported,
 } = require("../services/whatsappUnsupportedInbound");
+const { readTimingFromRow } = require("../services/conexionRespuestaTimingConfig");
+const {
+  reclamarMensajeEntrantePorWamid,
+} = require("../services/webhookInboundClaim");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
@@ -645,26 +649,28 @@ console.log("[FIRST_MESSAGE_CHECK]", {
   motivo: motivoPrimerMensaje,
 });
 
-await axios.post(
-  `${SUPABASE_URL}/rest/v1/mensajes`,
-  
-  {
-    cliente_numero: from,
-    usuario_id: usuarioIdWebhook,
-    direccion: "entrante",
-    tipo: message.type,
-    contenido: contenidoInbox || "",
-    imagen_url: mediaUrlFinal || null,
-    ...(conexionWhatsappId ? { conexion_whatsapp_id: conexionWhatsappId } : {}),
-  },
-  {
-    headers: {
-      apikey: SUPABASE_KEY,
-      Authorization: `Bearer ${SUPABASE_KEY}`,
-      "Content-Type": "application/json"
-    }
-  }
-);
+// A2: claim durable por wamid (tabla mensajes existente).
+// Si ya existe → reintento Meta / otra instancia: ACK sin reprocesar bot.
+const claim = await reclamarMensajeEntrantePorWamid({
+  cliente_numero: from,
+  usuario_id: usuarioIdWebhook,
+  direccion: "entrante",
+  tipo: message.type,
+  contenido: contenidoInbox || "",
+  imagen_url: mediaUrlFinal || null,
+  whatsapp_message_id: message.id || null,
+  ...(conexionWhatsappId ? { conexion_whatsapp_id: conexionWhatsappId } : {}),
+});
+if (claim.duplicate) {
+  console.log("[WEBHOOK] wamid duplicado — 200 sin reproceso", {
+    messageId: message.id ? String(message.id).slice(0, 16) + "…" : null,
+  });
+  return res.sendStatus(200);
+}
+if (claim.error && !claim.claimed) {
+  console.log("[WEBHOOK] claim entrante falló:", claim.reason || "unknown");
+  return res.sendStatus(200);
+}
 
 rt.nuevoMensaje(req, usuarioIdWebhook, {
     cliente_numero: from,
@@ -824,56 +830,77 @@ if (message.type === "document") {
   });
 }
 
-const activadorEjecutado = await procesarMensajeEntrante(
-  from,
-  textoParaActivador,
-  usuarioIdWebhook,
-  message.id,
-  {
-    messageType: message.type,
-    imageMetaId: message.image?.id || null,
-    documentMetaId: message.document?.id || null,
-    metaToken: conexionWebhook?.token || null,
-    imageUrl: mediaUrlFinal || null,
-    mimeType: message.document?.mime_type || message.image?.mime_type || null,
-    filename: message.document?.filename || null,
-    conexionWhatsappId: conexionWhatsappId || null,
-    esPrimerMensaje,
-    // FASE 2: solo transporte CTWA Ad ID — sin routing.
-    ctwaAdId: extractCtwaAdIdFromMessage(message),
+// A1: ACK temprano a Meta ANTES de demora/flujo (evita retries por webhook largo).
+// Recuperación: si el proceso muere tras claim+ACK y antes de responder, el
+// reintento verá wamid duplicado y NO reejecutará el bot (posible reply perdido).
+if (!res.headersSent) {
+  res.sendStatus(200);
+}
+
+const respuestaTimingSnapshot = readTimingFromRow(conexionWebhook);
+const reqRef = req;
+void (async () => {
+  try {
+    const activadorEjecutado = await procesarMensajeEntrante(
+      from,
+      textoParaActivador,
+      usuarioIdWebhook,
+      message.id,
+      {
+        messageType: message.type,
+        imageMetaId: message.image?.id || null,
+        documentMetaId: message.document?.id || null,
+        metaToken: conexionWebhook?.token || null,
+        metaPhoneId: conexionWebhook?.phone_id || null,
+        imageUrl: mediaUrlFinal || null,
+        mimeType: message.document?.mime_type || message.image?.mime_type || null,
+        filename: message.document?.filename || null,
+        conexionWhatsappId: conexionWhatsappId || null,
+        esPrimerMensaje,
+        ctwaAdId: extractCtwaAdIdFromMessage(message),
+        respuestaTiming: respuestaTimingSnapshot,
+      }
+    );
+
+    if (!activadorEjecutado) {
+      console.log(
+        "⚠️ ACTIVADOR — no se encontró coincidencia para:",
+        textoParaActivador
+      );
+    }
+
+    try {
+      await cancelarSeguimientosPorRespuesta(from, usuarioIdWebhook, reqRef, {
+        mensajeAt: creadoEn,
+        mensajeEntrante: textoParaActivador || text || "",
+        conexionWhatsappId: conexionWhatsappId || null,
+      });
+    } catch (cancelErr) {
+      console.log("[WEBHOOK] cancelar seguimientos:", cancelErr.message);
+    }
+
+    try {
+      await cancelarSeguimientosV2PorRespuesta({
+        usuarioId: usuarioIdWebhook,
+        numero: from,
+        conexionWhatsappId: conexionWhatsappId || null,
+        mensajeAt: creadoEn,
+      });
+    } catch (cancelV2Err) {
+      console.log("[WEBHOOK] cancelar seguimientos V2:", cancelV2Err.message);
+    }
+  } catch (postAckErr) {
+    console.log(
+      "[WEBHOOK] error post-ack (bot/seguimientos):",
+      postAckErr.response?.data || postAckErr.message
+    );
   }
-);
-
-if (!activadorEjecutado) {
-  console.log("⚠️ ACTIVADOR — no se encontró coincidencia para:", textoParaActivador);
-}
-
-try {
-  await cancelarSeguimientosPorRespuesta(from, usuarioIdWebhook, req, {
-    mensajeAt: creadoEn,
-    mensajeEntrante: textoParaActivador || text || "",
-    conexionWhatsappId: conexionWhatsappId || null,
-  });
-} catch (cancelErr) {
-  console.log("[WEBHOOK] cancelar seguimientos:", cancelErr.message);
-}
-
-try {
-  await cancelarSeguimientosV2PorRespuesta({
-    usuarioId: usuarioIdWebhook,
-    numero: from,
-    conexionWhatsappId: conexionWhatsappId || null,
-    mensajeAt: creadoEn,
-  });
-} catch (cancelV2Err) {
-  console.log("[WEBHOOK] cancelar seguimientos V2:", cancelV2Err.message);
-}
-
-return res.sendStatus(200);
+})();
+return;
 
   } catch (error) {
     console.log("ERROR:", error.response?.data || error.message);
-    res.sendStatus(200);
+    if (!res.headersSent) res.sendStatus(200);
   }
 });
 

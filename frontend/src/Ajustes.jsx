@@ -5,6 +5,14 @@ import { logout, fetchConexionDiagnostico } from "./ajustes/api";
 import { fetchMetaAdsStatus } from "./metricas/metaAdsApi";
 import MiPlanSection from "./planes/MiPlanSection";
 import UpgradeLimitModal from "./planes/UpgradeLimitModal";
+import {
+  DEMORA_SEGUNDOS_DEFAULT,
+  DEMORA_SEGUNDOS_MAX,
+  DEMORA_SEGUNDOS_MIN,
+  TIMING_DEFAULTS,
+  timingFromConexion,
+  validateDemoraSegundosInput,
+} from "./ajustes/respuestaTiming";
 
 const SECCIONES = [
   { id: "plan", label: "Mi Plan", icon: "💎" },
@@ -255,6 +263,7 @@ export default function Ajustes({ cambiarVista, seccionInicial }) {
   }
 
   function abrirConfigurar(c = conexionActiva) {
+    const timing = timingFromConexion(c);
     setConnForm({
       id: c?.id,
       nombre: c?.nombre || "",
@@ -266,6 +275,9 @@ export default function Ajustes({ cambiarVista, seccionInicial }) {
       capi_token: "",
       capi_token_masked: c?.capi_token_masked || c?.capiTokenMasked || null,
       test_event_code: "",
+      indicador_escritura: timing.indicador_escritura,
+      demora_respuesta_activa: timing.demora_respuesta_activa,
+      demora_respuesta_segundos: timing.demora_respuesta_segundos,
     });
   }
 
@@ -278,6 +290,7 @@ export default function Ajustes({ cambiarVista, seccionInicial }) {
       pixel_id: "",
       capi_token: "",
       test_event_code: "",
+      ...TIMING_DEFAULTS,
     });
   }
 
@@ -300,11 +313,20 @@ export default function Ajustes({ cambiarVista, seccionInicial }) {
       return;
     }
 
+    const demoraCheck = validateDemoraSegundosInput(connForm.demora_respuesta_segundos);
+    if (!demoraCheck.ok) {
+      showToast(demoraCheck.error, "error");
+      return;
+    }
+
     const body = {
       nombre: connForm.nombre,
       numero: connForm.numero,
       phone_id,
       pixel_id: connForm.pixel_id,
+      indicador_escritura: !!connForm.indicador_escritura,
+      demora_respuesta_activa: !!connForm.demora_respuesta_activa,
+      demora_respuesta_segundos: demoraCheck.value,
     };
     if (connForm.id) body.id = connForm.id;
     if (token) body.token = token;
@@ -703,6 +725,62 @@ export default function Ajustes({ cambiarVista, seccionInicial }) {
                         Enviar evento de prueba de esta línea
                       </button>
                     ) : null}
+                  </section>
+                  <section className="waModalGroup">
+                    <h3 className="waModalGroupTitle">Respuesta automática</h3>
+                    <p className="waModalGroupHint">
+                      Opcional y por esta línea. Desactivado = comportamiento actual (sin indicador ni
+                      demora). El indicador oficial de WhatsApp puede marcar el mensaje entrante como
+                      leído.
+                    </p>
+                    <SwitchRow
+                      label="Indicador de escritura de WhatsApp"
+                      hint="Muestra «escribiendo…» al cliente antes de la respuesta automática del bot."
+                      on={!!connForm.indicador_escritura}
+                      onToggle={() =>
+                        setConnForm({
+                          ...connForm,
+                          indicador_escritura: !connForm.indicador_escritura,
+                        })
+                      }
+                    />
+                    <SwitchRow
+                      label="Demora antes de responder"
+                      hint={`Espera artificial de ${DEMORA_SEGUNDOS_MIN} a ${DEMORA_SEGUNDOS_MAX} s solo en respuestas automáticas de esta línea.`}
+                      on={!!connForm.demora_respuesta_activa}
+                      onToggle={() =>
+                        setConnForm({
+                          ...connForm,
+                          demora_respuesta_activa: !connForm.demora_respuesta_activa,
+                        })
+                      }
+                    />
+                    <div className="ajField">
+                      <label>Segundos de demora ({DEMORA_SEGUNDOS_MIN}–{DEMORA_SEGUNDOS_MAX})</label>
+                      <input
+                        type="number"
+                        min={DEMORA_SEGUNDOS_MIN}
+                        max={DEMORA_SEGUNDOS_MAX}
+                        step={1}
+                        inputMode="numeric"
+                        disabled={!connForm.demora_respuesta_activa}
+                        value={
+                          connForm.demora_respuesta_segundos ?? DEMORA_SEGUNDOS_DEFAULT
+                        }
+                        onChange={(e) => {
+                          const raw = e.target.value;
+                          setConnForm({
+                            ...connForm,
+                            demora_respuesta_segundos:
+                              raw === "" ? "" : raw,
+                          });
+                        }}
+                      />
+                      <p className="ajHint">
+                        Valor sugerido: {DEMORA_SEGUNDOS_DEFAULT} s. No se aplica mientras la demora
+                        esté desactivada.
+                      </p>
+                    </div>
                   </section>
                 </div>
                 <div className="waModalFoot">

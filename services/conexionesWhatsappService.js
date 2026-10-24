@@ -4,6 +4,10 @@
  */
 const axios = require("axios");
 const { enviarTextoWhatsApp } = require("./whatsappService");
+const {
+  resolveTimingForSave,
+  mapTimingToApi,
+} = require("./conexionRespuestaTimingConfig");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
@@ -128,6 +132,8 @@ async function guardarConexion(usuarioId, body) {
     throw err;
   }
 
+  const timing = resolveTimingForSave(body, filaRef);
+
   const datos = {
     nombre: (nombre ?? filaRef?.nombre ?? conexionActiva?.nombre)?.trim() || "WhatsApp",
     numero: (numero ?? filaRef?.numero ?? conexionActiva?.numero)?.trim() || "",
@@ -135,6 +141,9 @@ async function guardarConexion(usuarioId, body) {
     phone_id: phone_id.trim(),
     pixel_id: resolvePixelId(pixel_id, filaRef),
     capi_token: resolveCapiToken(capi_token, filaRef),
+    indicador_escritura: timing.indicador_escritura,
+    demora_respuesta_activa: timing.demora_respuesta_activa,
+    demora_respuesta_segundos: timing.demora_respuesta_segundos,
   };
 
   if (conexionId) {
@@ -322,6 +331,7 @@ function mapConexionApi(row) {
     tiene_capi_token: Boolean(row.capi_token?.trim()),
     pixel_id: row.pixel_id || "",
     pixelId: row.pixel_id || "",
+    ...mapTimingToApi(row),
     activo: row.activo !== false,
     conectado: ok,
     estado: ok ? "conectado" : "incompleto",

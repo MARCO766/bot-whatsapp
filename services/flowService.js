@@ -78,6 +78,11 @@ const {
 const {
   procesarRespuestaRemarketing,
 } = require("./remarketing24h/procesarRespuestaRemarketing");
+const { readTimingFromRow } = require("./conexionRespuestaTimingConfig");
+const {
+  aplicarTimingAntesDeRespuestaAutomatica,
+  timingEstaActivo,
+} = require("./conexionRespuestaTimingRuntime");
 const {
   estaBotPausado,
   reactivarBotConversacion,
@@ -815,6 +820,9 @@ async function ejecutarFlujo(
   let opts = optsEntrada;
   if (!flujoData || !flujoData.nodos || !flujoData.conexiones) return;
 
+  // Lock de conversación solo si timing ON (single-process). Liberar siempre.
+  let releaseTimingLock = null;
+  try {
   const nodos = flujoData.nodos;
   const conexiones = normalizarConexionesFlujo(flujoData.conexiones);
   const textosReservadosSeguimiento = construirTextosReservadosSeguimientoFlujo(nodos);
@@ -863,6 +871,32 @@ async function ejecutarFlujo(
   }
 
   logFlowKey(usuarioId, flowContext.conexionWhatsappId, numero);
+
+  // Timing opcional (indicador + demora): un solo disparo al inicio, solo si el
+  // caller entrante lo pidió. OFF = no-op. No aplica a continuarFlujo / schedulers.
+  if (opts.aplicarRespuestaTiming === true && !opts._respuestaTimingAplicado) {
+    opts._respuestaTimingAplicado = true;
+    const timing = readTimingFromRow(opts.respuestaTiming || null);
+    if (timingEstaActivo(timing)) {
+      const timingResult = await aplicarTimingAntesDeRespuestaAutomatica({
+        timing,
+        messageId: opts.messageId || null,
+        usuarioId,
+        conexionWhatsappId: flowContext.conexionWhatsappId || conexionLineaEntrante,
+        clienteNumero: numero,
+        metaToken: opts.metaToken || null,
+        metaPhoneId: opts.metaPhoneId || null,
+      });
+      releaseTimingLock =
+        typeof timingResult.releaseLock === "function"
+          ? timingResult.releaseLock
+          : null;
+      if (!timingResult.ok) {
+        console.log("[FLUJO] omitido tras timing —", timingResult.motivo || "no_ok");
+        return;
+      }
+    }
+  }
 
   const opEnvioNodo = () =>
     opcionesEnvioFlujo(usuarioId, flowContext.conexionWhatsappId);
@@ -2009,6 +2043,15 @@ async function ejecutarFlujo(
   });
 
   await ejecutarNodo("nodo_inicio");
+  } finally {
+    if (typeof releaseTimingLock === "function") {
+      try {
+        releaseTimingLock();
+      } catch (errRel) {
+        console.log("[FLUJO] release timing lock:", errRel.message || errRel);
+      }
+    }
+  }
 }
 
 async function continuarFlujoDesdeLectorPago(numero, usuarioId, resultado) {
@@ -2111,6 +2154,11 @@ async function reanudarFlujoIAPendiente(
     mensajeResume: mensaje,
     conexionWhatsappId: sesionConexion,
     ...mediaResume,
+    aplicarRespuestaTiming: resumeOpts.aplicarRespuestaTiming === true,
+    respuestaTiming: resumeOpts.respuestaTiming || null,
+    messageId: resumeOpts.messageId || null,
+    metaToken: resumeOpts.metaToken || null,
+    metaPhoneId: resumeOpts.metaPhoneId || null,
   });
 
   return true;
@@ -2178,6 +2226,15 @@ async function procesarMensajeEntrante(
   }
 
   const conexionWhatsappIdEntrante = opts.conexionWhatsappId || null;
+  // Solo opts.respuestaTiming (inyectado por webhook). Sin él → defaults OFF.
+  const respuestaTiming = readTimingFromRow(opts.respuestaTiming || null);
+  const timingOptsFlujo = {
+    aplicarRespuestaTiming: true,
+    respuestaTiming,
+    messageId: messageId || null,
+    metaToken: opts.metaToken || null,
+    metaPhoneId: opts.metaPhoneId || null,
+  };
 
   // Flow Sessions — dueño de la continuidad (Fase 7).
   // Si la sesión active no puede continuar: marcar expired, limpiar IA y caer a activadores.
@@ -2242,6 +2299,7 @@ async function procesarMensajeEntrante(
     metaToken: opts.metaToken || null,
     mimeType: opts.mimeType || null,
     filename: opts.filename || null,
+    ...timingOptsFlujo,
   };
   const sesionIAPendiente = conexionWhatsappIdEntrante
     ? await obtenerSesionIAPendiente(usuarioId, conexionWhatsappIdEntrante, numero)
@@ -2390,6 +2448,7 @@ async function procesarMensajeEntrante(
           {
             esPrimerMensaje: opts.esPrimerMensaje,
             ctwaAdId: opts.ctwaAdId,
+            ...timingOptsFlujo,
           }
         );
 
@@ -2491,6 +2550,7 @@ async function procesarMensajeEntrante(
     {
       esPrimerMensaje: opts.esPrimerMensaje,
       ctwaAdId: opts.ctwaAdId,
+      ...timingOptsFlujo,
     }
   );
   if (!activadorEjecutado && usuarioId && numero) {
@@ -2964,6 +3024,11 @@ async function buscarYEjecutarActivador(
     ultimoMensaje: textoCliente,
     flujoNombre: flujo.nombre || null,
     conexionWhatsappId: conexionWhatsappId || null,
+    aplicarRespuestaTiming: matchOpts.aplicarRespuestaTiming === true,
+    respuestaTiming: matchOpts.respuestaTiming || null,
+    messageId: messageId || matchOpts.messageId || null,
+    metaToken: matchOpts.metaToken || null,
+    metaPhoneId: matchOpts.metaPhoneId || null,
   });
   await registrarUsoActivador(activador);
 
