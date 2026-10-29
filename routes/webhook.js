@@ -863,10 +863,9 @@ void (async () => {
     );
 
     if (!activadorEjecutado) {
-      console.log(
-        "⚠️ ACTIVADOR — no se encontró coincidencia para:",
-        textoParaActivador
-      );
+      console.log("[ACTIVADOR] flujo no ejecutado", {
+        usuario_id: usuarioIdWebhook,
+      });
     }
 
     try {

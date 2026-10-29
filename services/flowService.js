@@ -101,6 +101,9 @@ const {
 } = require("./flowCountryMeta");
 const {
   isFlowCompatibleWithAdId,
+  clasificarDescarteAdId,
+  resumenCierreEnrutamientoCtwa,
+  idAnuncioParaLog,
 } = require("./flowMetaAdsMeta");
 const {
   evaluateCtwaPrimerMensajeException,
@@ -2524,6 +2527,13 @@ async function procesarMensajeEntrante(
           policy_mode: rmContext.policy?.mode,
           disparado_en: rmContext.disparado_en,
         });
+        console.log("[CTWA_ROUTING]", {
+          evento: "detenido",
+          motivo: "remarketing",
+          usuario_id: usuarioId,
+          conexion_whatsapp_id: conexionEntrante,
+          flujo_id: rmContext.flujo_id,
+        });
         await procesarRespuestaRemarketing({
           numero,
           texto,
@@ -2696,6 +2706,10 @@ async function resolverActivadorEntrante(
   let activador = null;
   let matchInfo = null;
   const contactNumero = opts.clienteNumero ?? opts.numero ?? null;
+  // Solo el enrutado entrante pide observación. La reactivación de pausa no.
+  const observacionCtwa = opts.observacionCtwa || null;
+  const descartesAd = [];
+  let rechazoPais = false;
 
   // Lazy: flujo_id de sesión ACTIVE (guard de mismo flujo en la excepción CTWA).
   let cachedActiveFlowId = undefined;
@@ -2854,6 +2868,17 @@ async function resolverActivadorEntrante(
     const adIdCompatible = isFlowCompatibleWithAdId(metaAds, ctwaAdId);
 
     if (!adIdCompatible) {
+      if (observacionCtwa) {
+        const motivoAd = clasificarDescarteAdId(metaAds, ctwaAdId);
+        descartesAd.push(motivoAd);
+        console.log("[CTWA_ROUTING]", {
+          evento: "candidato_descartado",
+          motivo: motivoAd,
+          flujo_id: candidateFlowId,
+          tiene_source_id: Boolean(ctwaAdId),
+          ctwa_ad_id: idAnuncioParaLog(ctwaAdId),
+        });
+      }
       continue;
     }
 
@@ -2872,6 +2897,16 @@ async function resolverActivadorEntrante(
       }
 
       if (!countryEvalOk) {
+        if (observacionCtwa) {
+          rechazoPais = true;
+          console.log("[CTWA_ROUTING]", {
+            evento: "candidato_descartado",
+            motivo: "pais",
+            flujo_id: candidateFlowId,
+            tiene_source_id: Boolean(ctwaAdId),
+            ctwa_ad_id: idAnuncioParaLog(ctwaAdId),
+          });
+        }
         continue;
       }
     }
@@ -2881,7 +2916,16 @@ async function resolverActivadorEntrante(
     break;
   }
 
-  if (!activador || !matchInfo) return null;
+  if (!activador || !matchInfo) {
+    if (observacionCtwa) {
+      observacionCtwa.motivo = resumenCierreEnrutamientoCtwa({
+        tieneSourceId: Boolean(ctwaAdId),
+        descartesAd,
+        rechazoPais,
+      });
+    }
+    return null;
+  }
 
   console.log("[ACTIVADOR_MATCH_TRACE]", {
     texto_norm: textoNorm,
@@ -2900,6 +2944,7 @@ async function resolverActivadorEntrante(
     activador.conexion_whatsapp_id &&
     !sameConexionId(activador.conexion_whatsapp_id, conexionWhatsappId)
   ) {
+    if (observacionCtwa) observacionCtwa.motivo = "conexion_activador";
     return null;
   }
 
@@ -2911,17 +2956,24 @@ async function resolverActivadorEntrante(
   const flujo = responseFlujo.data?.[0];
   const flujoDatos = obtenerDatosFlujo(flujo);
 
-  if (!flujo || !flujoDatos) return null;
+  if (!flujo || !flujoDatos) {
+    if (observacionCtwa) observacionCtwa.motivo = "flujo_ilegible";
+    return null;
+  }
 
   if (
     conexionWhatsappId &&
     (!flujo.conexion_whatsapp_id ||
       !sameConexionId(flujo.conexion_whatsapp_id, conexionWhatsappId))
   ) {
+    if (observacionCtwa) observacionCtwa.motivo = "conexion_flujo";
     return null;
   }
 
-  if (!flujoEstaActivo(flujo)) return null;
+  if (!flujoEstaActivo(flujo)) {
+    if (observacionCtwa) observacionCtwa.motivo = "flujo_inactivo";
+    return null;
+  }
 
   return { activador, matchInfo, flujo, flujoDatos, flowId };
 }
@@ -2970,6 +3022,13 @@ async function manejarGuardPausaBot({
       cliente_numero: clienteNumero,
       conexion_whatsapp_id: conexionWhatsappId,
       origen,
+    });
+    console.log("[CTWA_ROUTING]", {
+      evento: "detenido",
+      motivo: "pausa",
+      origen,
+      usuario_id: usuarioId,
+      conexion_whatsapp_id: conexionWhatsappId,
     });
     return { continuar: false };
   }
@@ -3024,14 +3083,25 @@ async function buscarYEjecutarActivador(
     conexionWhatsappId
   );
 
+  const observacionCtwa = { motivo: null };
+  const ctwaAdIdEntrante = normalizeCtwaAdId(matchOpts.ctwaAdId);
   const resolved = await resolverActivadorEntrante(
     textoCliente,
     usuarioId,
     conexionWhatsappId,
-    { ...matchOpts, clienteNumero: numero }
+    { ...matchOpts, clienteNumero: numero, observacionCtwa }
   );
   if (!resolved) {
-    console.log("⚠️ ACTIVADOR — no encontrado para texto:", textoNorm);
+    if (observacionCtwa.motivo) {
+      console.log("[CTWA_ROUTING]", {
+        evento: "sin_flujo",
+        motivo: observacionCtwa.motivo,
+        tiene_source_id: Boolean(ctwaAdIdEntrante),
+        ctwa_ad_id: idAnuncioParaLog(ctwaAdIdEntrante),
+      });
+    } else {
+      console.log("⚠️ ACTIVADOR — no encontrado para texto:", textoNorm);
+    }
     return false;
   }
 
@@ -3071,6 +3141,15 @@ async function buscarYEjecutarActivador(
   }
 
   console.log("✅ FLUJO ENCONTRADO:", flujo.nombre || "—", "| id:", flujo.id);
+  console.log("[CTWA_ROUTING]", {
+    evento: "flujo_ejecutado",
+    motivo: "coincidencia",
+    flujo_id: flujo.id,
+    activador_id: activador.id,
+    tipo: matchInfo.tipo,
+    tiene_source_id: Boolean(ctwaAdIdEntrante),
+    ctwa_ad_id: idAnuncioParaLog(ctwaAdIdEntrante),
+  });
 
   await ejecutarFlujo(numero, flujoDatos, usuarioId, flujo.id, {
     ultimoMensaje: textoCliente,

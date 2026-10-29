@@ -109,6 +109,57 @@ function isFlowCompatibleWithAdId(metaAds, ctwaAdId) {
 }
 
 /**
+ * Motivo de descarte solo cuando isFlowCompatibleWithAdId es false.
+ * null = el flujo sigue siendo elegible por anuncio. No elige candidato.
+ * @returns {"sin_source_id"|"source_id_sin_coincidencia"|null}
+ */
+function clasificarDescarteAdId(metaAds, ctwaAdId) {
+  if (isFlowCompatibleWithAdId(metaAds, ctwaAdId)) return null;
+  const raw = ctwaAdId == null ? "" : String(ctwaAdId).trim();
+  if (!raw) return "sin_source_id";
+  return "source_id_sin_coincidencia";
+}
+
+/**
+ * Valor mostrado en logs [CTWA_ROUTING]. No normaliza ni compara:
+ * la elegibilidad sigue usando el identificador completo.
+ * @returns {string} últimos 4 caracteres, o "sin_id" si no hay valor usable
+ */
+function idAnuncioParaLog(raw) {
+  if (typeof raw === "number") {
+    if (!Number.isFinite(raw)) return "sin_id";
+    raw = String(raw);
+  } else if (typeof raw === "bigint") {
+    raw = String(raw);
+  } else if (typeof raw !== "string") {
+    return "sin_id";
+  }
+  const texto = raw.trim();
+  if (!texto) return "sin_id";
+  return texto.slice(-4);
+}
+
+/**
+ * Resumen cuando el bucle no eligió flujo.
+ * null = el cierre no fue por anuncio ni por país; el caller conserva su log genérico.
+ * No altera el orden ni el ganador.
+ * @returns {"sin_source_id"|"source_id_sin_coincidencia"|"pais"|null}
+ */
+function resumenCierreEnrutamientoCtwa({
+  tieneSourceId = false,
+  descartesAd = [],
+  rechazoPais = false,
+} = {}) {
+  if (rechazoPais) return "pais";
+  const lista = Array.isArray(descartesAd) ? descartesAd : [];
+  if (!tieneSourceId && lista.includes("sin_source_id")) return "sin_source_id";
+  if (tieneSourceId && lista.includes("source_id_sin_coincidencia")) {
+    return "source_id_sin_coincidencia";
+  }
+  return null;
+}
+
+/**
  * Hard-match para excepción CTWA de primer_mensaje.
  * Requiere ad_ids NO vacío + ctwaAdId normalizado listado.
  * Distinto de isFlowCompatibleWithAdId (legacy-open con ad_ids []).
@@ -134,5 +185,8 @@ module.exports = {
   normalizeMetaAdsForRead,
   normalizeMetaAdsForWrite,
   isFlowCompatibleWithAdId,
+  clasificarDescarteAdId,
+  idAnuncioParaLog,
+  resumenCierreEnrutamientoCtwa,
   flowHasExplicitAdIdMatch,
 };

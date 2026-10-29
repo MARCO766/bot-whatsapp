@@ -10,6 +10,9 @@ const {
   normalizeAdId,
   normalizeMetaAdsForRead,
   isFlowCompatibleWithAdId,
+  clasificarDescarteAdId,
+  idAnuncioParaLog,
+  resumenCierreEnrutamientoCtwa,
   flowHasExplicitAdIdMatch,
 } = require("../services/flowMetaAdsMeta");
 const fs = require("fs");
@@ -942,5 +945,185 @@ check(
 
 // AD_111 se usa en P3: un anuncio que no está en la lista no inicia el flujo.
 void AD_111;
+
+// --- Observabilidad CTWA: el motivo no cambia la elegibilidad ---
+const matrizDescarte = [
+  [undefined, undefined],
+  [undefined, CTWA],
+  [{ ad_ids: [] }, undefined],
+  [{ ad_ids: [] }, CTWA],
+  [{ ad_ids: [CTWA] }, CTWA],
+  [{ ad_ids: [CTWA] }, undefined],
+  [{ ad_ids: [CTWA] }, null],
+  [{ ad_ids: [CTWA] }, ""],
+  [{ ad_ids: [CTWA] }, "   "],
+  [{ ad_ids: [OTHER] }, CTWA],
+  [{ ad_ids: [CTWA] }, "12a34"],
+];
+
+check(
+  "OBS. clasificarDescarteAdId es null exactamente cuando el flujo sigue siendo compatible",
+  matrizDescarte.every(([meta, id]) => {
+    const compatible = isFlowCompatibleWithAdId(meta, id);
+    const motivo = clasificarDescarteAdId(meta, id);
+    return compatible === (motivo === null);
+  })
+);
+
+check(
+  "OBS. sin source_id en flujo restringido → sin_source_id",
+  clasificarDescarteAdId({ ad_ids: [CTWA] }, undefined) === "sin_source_id" &&
+    clasificarDescarteAdId({ ad_ids: [CTWA] }, "") === "sin_source_id"
+);
+
+check(
+  "OBS. source_id presente que no está en la lista → source_id_sin_coincidencia",
+  clasificarDescarteAdId({ ad_ids: [OTHER] }, CTWA) === "source_id_sin_coincidencia" &&
+    clasificarDescarteAdId({ ad_ids: [CTWA] }, "12a34") === "source_id_sin_coincidencia"
+);
+
+check(
+  "OBS. source_id que sí está en la lista no produce motivo de descarte",
+  clasificarDescarteAdId({ ad_ids: [CTWA] }, CTWA) === null &&
+    isFlowCompatibleWithAdId({ ad_ids: [CTWA] }, CTWA) === true
+);
+
+/**
+ * Misma regla que el bucle: primer compatible gana; el resto solo se anota.
+ * No reordena ni inventa un ganador si ninguno pasa el Ad ID.
+ */
+function simularLineaConAnuncios(ctwaAdId) {
+  const flujos = [
+    { id: "bolivia", ad_ids: ["1"] },
+    { id: "bubble", ad_ids: ["2"] },
+    { id: "todosantos", ad_ids: ["3"] },
+    { id: "navidad-ar", ad_ids: ["4"] },
+  ];
+  const descartesAd = [];
+  let winner = null;
+  for (const flujo of flujos) {
+    const metaAds = { ad_ids: flujo.ad_ids };
+    if (!isFlowCompatibleWithAdId(metaAds, ctwaAdId)) {
+      descartesAd.push(clasificarDescarteAdId(metaAds, ctwaAdId));
+      continue;
+    }
+    winner = flujo.id;
+    break;
+  }
+  const resumen = winner
+    ? null
+    : resumenCierreEnrutamientoCtwa({
+        tieneSourceId: Boolean(ctwaAdId),
+        descartesAd,
+        rechazoPais: false,
+      });
+  return { winner, descartesAd, resumen };
+}
+
+check(
+  "OBS. cuatro flujos restringidos y sin source_id → ninguno gana y el cierre es sin_source_id",
+  (() => {
+    const r = simularLineaConAnuncios(undefined);
+    return (
+      r.winner === null &&
+      r.descartesAd.length === 4 &&
+      r.descartesAd.every((m) => m === "sin_source_id") &&
+      r.resumen === "sin_source_id"
+    );
+  })()
+);
+
+check(
+  "OBS. source_id del segundo flujo → gana ese flujo, igual que antes del log",
+  (() => {
+    const r = simularLineaConAnuncios("2");
+    return (
+      r.winner === "bubble" &&
+      r.descartesAd.length === 1 &&
+      r.descartesAd[0] === "source_id_sin_coincidencia" &&
+      r.resumen === null &&
+      clasificarDescarteAdId({ ad_ids: ["2"] }, "2") === null
+    );
+  })()
+);
+
+check(
+  "OBS. source_id que no está en ningún flujo → cierre source_id_sin_coincidencia y sin ganador",
+  (() => {
+    const r = simularLineaConAnuncios("999");
+    return (
+      r.winner === null &&
+      r.descartesAd.length === 4 &&
+      r.descartesAd.every((m) => m === "source_id_sin_coincidencia") &&
+      r.resumen === "source_id_sin_coincidencia"
+    );
+  })()
+);
+
+check(
+  "OBS. un flujo compatible rechazado por país no se resume como falta de anuncio",
+  resumenCierreEnrutamientoCtwa({
+    tieneSourceId: true,
+    descartesAd: ["source_id_sin_coincidencia"],
+    rechazoPais: true,
+  }) === "pais"
+);
+
+check(
+  "OBS. el log muestra los últimos 4 caracteres, o sin_id si el valor no sirve",
+  idAnuncioParaLog(undefined) === "sin_id" &&
+    idAnuncioParaLog(null) === "sin_id" &&
+    idAnuncioParaLog("") === "sin_id" &&
+    idAnuncioParaLog("   ") === "sin_id" &&
+    idAnuncioParaLog("1202100000000999") === "0999" &&
+    idAnuncioParaLog("  1202100000000999  ") === "0999" &&
+    idAnuncioParaLog("12") === "12" &&
+    idAnuncioParaLog(1202100000999) === "0999" &&
+    idAnuncioParaLog(Number.NaN) === "sin_id" &&
+    idAnuncioParaLog(Number.POSITIVE_INFINITY) === "sin_id" &&
+    idAnuncioParaLog(true) === "sin_id" &&
+    idAnuncioParaLog({}) === "sin_id" &&
+    idAnuncioParaLog([]) === "sin_id" &&
+    idAnuncioParaLog(CTWA) === CTWA.slice(-4) &&
+    isFlowCompatibleWithAdId({ ad_ids: [CTWA] }, CTWA) === true
+);
+
+check(
+  "OBS. el log nuevo usa el id parcial y la comparación sigue con el id completo",
+  (() => {
+    const flowSrc = fs.readFileSync(
+      path.join(__dirname, "../services/flowService.js"),
+      "utf8"
+    );
+    const llamadas = flowSrc.split("idAnuncioParaLog(").length - 1;
+    return (
+      llamadas === 4 &&
+      flowSrc.includes("idAnuncioParaLog(ctwaAdId)") &&
+      flowSrc.includes("idAnuncioParaLog(ctwaAdIdEntrante)") &&
+      !flowSrc.includes("ctwa_ad_id: ctwaAdId || null") &&
+      !flowSrc.includes("ctwa_ad_id: ctwaAdIdEntrante || null") &&
+      flowSrc.includes("isFlowCompatibleWithAdId(metaAds, ctwaAdId)") &&
+      flowSrc.includes("clasificarDescarteAdId(metaAds, ctwaAdId)")
+    );
+  })()
+);
+
+check(
+  "OBS. el descarte de anuncio sigue siendo continue y no asigna ganador",
+  (() => {
+    const flowSrc = fs.readFileSync(
+      path.join(__dirname, "../services/flowService.js"),
+      "utf8"
+    );
+    const at = flowSrc.indexOf("const adIdCompatible = isFlowCompatibleWithAdId");
+    const bloque = flowSrc.slice(at, flowSrc.indexOf("activador = a;", at));
+    return (
+      at > 0 &&
+      bloque.includes("clasificarDescarteAdId") &&
+      bloque.includes("continue;") &&
+      !bloque.includes("return {")
+    );
+  })()
+);
 
 console.log(`\nTodas las pruebas OK (${passed})`);
