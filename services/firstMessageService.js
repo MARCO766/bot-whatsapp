@@ -148,4 +148,5 @@ async function calcularEsPrimerMensaje(usuarioId, clienteNumero, conexionWhatsap
 
 module.exports = {
   calcularEsPrimerMensaje,
+  sesionBloqueaReingreso,
 };

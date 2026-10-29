@@ -93,6 +93,7 @@ const {
   registrarFinSesionFlujo,
   evaluarCicloVidaSesionFlujo,
   expirarSesion,
+  obtenerSesion,
   obtenerSesionActiva,
 } = require("./flowSessionService");
 const {
@@ -103,6 +104,7 @@ const {
 } = require("./flowMetaAdsMeta");
 const {
   evaluateCtwaPrimerMensajeException,
+  clasificarLecturaSesion,
 } = require("./ctwaPrimerMensajeException");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -2695,7 +2697,7 @@ async function resolverActivadorEntrante(
   let matchInfo = null;
   const contactNumero = opts.clienteNumero ?? opts.numero ?? null;
 
-  // Lazy: flujo_id de sesión ACTIVE (solo para guard caso mismo flujo / excepción CTWA).
+  // Lazy: flujo_id de sesión ACTIVE (guard de mismo flujo en la excepción CTWA).
   let cachedActiveFlowId = undefined;
   async function resolveActiveSessionFlowId() {
     if (cachedActiveFlowId !== undefined) return cachedActiveFlowId;
@@ -2716,6 +2718,33 @@ async function resolverActivadorEntrante(
     return cachedActiveFlowId;
   }
 
+  // Última flow_session de esta entrada (cualquier status). No escribe expires_at.
+  // Error o consulta no hecha ≠ ausencia confirmada.
+  let cachedLecturaSesion = undefined;
+  async function resolveLecturaSesion() {
+    if (cachedLecturaSesion !== undefined) return cachedLecturaSesion;
+    if (
+      contactNumero == null ||
+      String(contactNumero).trim() === "" ||
+      !SUPABASE_URL ||
+      !SUPABASE_KEY
+    ) {
+      cachedLecturaSesion = clasificarLecturaSesion({ ok: false });
+      return cachedLecturaSesion;
+    }
+    try {
+      const sesion = await obtenerSesion({
+        usuarioId,
+        conexionWhatsappId,
+        clienteNumero: contactNumero,
+      });
+      cachedLecturaSesion = clasificarLecturaSesion({ ok: true, sesion });
+    } catch (_errSesion) {
+      cachedLecturaSesion = clasificarLecturaSesion({ ok: false });
+    }
+    return cachedLecturaSesion;
+  }
+
   for (const a of ordenados) {
     if (opts.excluirCualquierMensaje && resolveTipo(a) === TIPOS.CUALQUIER) {
       continue;
@@ -2724,7 +2753,8 @@ async function resolverActivadorEntrante(
     let viaCtwaPrimerMensajeException = false;
 
     if (!result.matched) {
-      // Excepción local: primer_mensaje rechazado por sesión vigente + hard-match Ad ID.
+      // Excepción local: primer_mensaje sin match normal + hard-match Ad ID.
+      // Una sesión de esta entrada que aún bloquea el reingreso la impide.
       // No altera matchActivador ni esPrimerMensaje globales.
       if (resolveTipo(a) !== TIPOS.PRIMER_MENSAJE) {
         continue;
@@ -2775,6 +2805,8 @@ async function resolverActivadorEntrante(
 
     if (viaCtwaPrimerMensajeException) {
       const activeSessionFlowId = await resolveActiveSessionFlowId();
+      const lectura = await resolveLecturaSesion();
+      const sesionReciente = lectura.sesionReciente;
       const ex = evaluateCtwaPrimerMensajeException({
         tipoActivador: TIPOS.PRIMER_MENSAJE,
         esPrimerMensaje: opts.esPrimerMensaje,
@@ -2782,8 +2814,28 @@ async function resolverActivadorEntrante(
         metaAds,
         candidateFlowId,
         activeSessionFlowId,
+        sesionReciente,
+        lecturaSesion: lectura.lecturaSesion,
+        claveEntrada: {
+          usuarioId,
+          clienteNumero: contactNumero,
+          conexionWhatsappId,
+        },
       });
       if (!ex.allow) {
+        if (
+          ex.reason === "sesion_vigente_bloquea_reingreso" ||
+          ex.reason === "lectura_sesion_indeterminada"
+        ) {
+          console.log("[CTWA_PRIMER_MENSAJE_EXCEPTION]", {
+            reason: ex.reason,
+            candidate_flujo_id: candidateFlowId,
+            active_flujo_id: activeSessionFlowId,
+            lectura_sesion: lectura.lecturaSesion,
+            sesion_status: sesionReciente?.status ?? null,
+            ctwaAdId,
+          });
+        }
         continue;
       }
       result = {

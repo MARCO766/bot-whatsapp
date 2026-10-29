@@ -12,9 +12,14 @@ const {
   isFlowCompatibleWithAdId,
   flowHasExplicitAdIdMatch,
 } = require("../services/flowMetaAdsMeta");
+const fs = require("fs");
+const path = require("path");
 const {
   evaluateCtwaPrimerMensajeException,
+  clasificarLecturaSesion,
+  sesionEsDeEstaEntrada,
 } = require("../services/ctwaPrimerMensajeException");
+const { sesionBloqueaReingreso } = require("../services/firstMessageService");
 const {
   matchActivador,
   sortActivadores,
@@ -226,6 +231,9 @@ function evaluateWithCtwaException({
   contactNumero,
   country,
   matchNormal,
+  sesionReciente = null,
+  claveEntrada = null,
+  lecturaSesion = null,
 }) {
   let matched = Boolean(matchNormal);
   if (!matched) {
@@ -236,6 +244,9 @@ function evaluateWithCtwaException({
       metaAds,
       candidateFlowId,
       activeSessionFlowId,
+      sesionReciente,
+      claveEntrada,
+      lecturaSesion,
     });
     if (!ex.allow) return { ok: false, stage: "match", reason: ex.reason };
     matched = true;
@@ -247,6 +258,32 @@ function evaluateWithCtwaException({
     contactNumero,
     country,
   });
+}
+
+const USUARIO_A = "11111111-1111-4111-8111-111111111111";
+const USUARIO_B = "22222222-2222-4222-8222-222222222222";
+const CONN_A = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const CONN_B = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+const NUM_A = "5491110000001";
+const NUM_B = "5491110000002";
+const CLAVE_A = {
+  usuarioId: USUARIO_A,
+  clienteNumero: NUM_A,
+  conexionWhatsappId: CONN_A,
+};
+const EXPIRA_FUTURO = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+const EXPIRA_PASADO = new Date(Date.now() - 60 * 1000).toISOString();
+
+function sesionEntradaA(status, expiresAt, extra = {}) {
+  return {
+    usuario_id: USUARIO_A,
+    cliente_numero: NUM_A,
+    conexion_whatsapp_id: CONN_A,
+    flujo_id: FLOW_1,
+    status,
+    expires_at: expiresAt,
+    ...extra,
+  };
 }
 
 check(
@@ -362,35 +399,47 @@ check(
 // ========== Excepción CTWA primer_mensaje (casos 1–12) ==========
 
 check(
-  "EX1. ACTIVE legacy sin Ad IDs → Flujo2 Ad 222 → entra",
-  evaluateWithCtwaException({
-    tipoActivador: "primer_mensaje",
-    esPrimerMensaje: false,
-    ctwaAdId: AD_222,
-    metaAds: { ad_ids: [AD_222] },
-    candidateFlowId: FLOW_2,
-    activeSessionFlowId: FLOW_1,
-    matchNormal: false,
-    contactNumero: null,
-  }).ok === true
+  "EX1. sesión A active vigente + anuncio B → no interrumpe",
+  (() => {
+    const r = evaluateWithCtwaException({
+      tipoActivador: "primer_mensaje",
+      esPrimerMensaje: false,
+      ctwaAdId: AD_222,
+      metaAds: { ad_ids: [AD_222] },
+      candidateFlowId: FLOW_2,
+      activeSessionFlowId: FLOW_1,
+      matchNormal: false,
+      contactNumero: NUM_A,
+      sesionReciente: sesionEntradaA("active", EXPIRA_FUTURO),
+      claveEntrada: CLAVE_A,
+    });
+    return r.ok === false && r.reason === "sesion_vigente_bloquea_reingreso";
+  })()
 );
 
 check(
-  "EX2. ACTIVE Ad 111 → Flujo2 Ad 222 → entra",
-  evaluateWithCtwaException({
-    tipoActivador: "primer_mensaje",
-    esPrimerMensaje: false,
-    ctwaAdId: AD_222,
-    metaAds: { ad_ids: [AD_222] },
-    candidateFlowId: FLOW_2,
-    activeSessionFlowId: FLOW_1,
-    matchNormal: false,
-    contactNumero: null,
-  }).ok === true
+  "EX2. sesión A active vigente + anuncio de otro flujo → no interrumpe",
+  (() => {
+    const r = evaluateWithCtwaException({
+      tipoActivador: "primer_mensaje",
+      esPrimerMensaje: false,
+      ctwaAdId: AD_222,
+      metaAds: { ad_ids: [AD_222] },
+      candidateFlowId: FLOW_2,
+      activeSessionFlowId: FLOW_1,
+      matchNormal: false,
+      contactNumero: NUM_A,
+      sesionReciente: sesionEntradaA("active", EXPIRA_FUTURO, {
+        flujo_id: FLOW_1,
+      }),
+      claveEntrada: CLAVE_A,
+    });
+    return r.ok === false && r.reason === "sesion_vigente_bloquea_reingreso";
+  })()
 );
 
 check(
-  "EX3. ACTIVE + sin referral → NO excepción",
+  "EX3. sesión A vigente + sin referral → NO excepción",
   (() => {
     const r = evaluateWithCtwaException({
       tipoActivador: "primer_mensaje",
@@ -400,7 +449,9 @@ check(
       candidateFlowId: FLOW_2,
       activeSessionFlowId: FLOW_1,
       matchNormal: false,
-      contactNumero: null,
+      contactNumero: NUM_A,
+      sesionReciente: sesionEntradaA("active", EXPIRA_FUTURO),
+      claveEntrada: CLAVE_A,
     });
     return r.ok === false && r.reason === "no_ctwa_ad_id";
   })()
@@ -518,17 +569,24 @@ check(
 );
 
 check(
-  "EX10. FINISHED (sin ACTIVE) + Ad Flujo2 → entra",
-  evaluateWithCtwaException({
-    tipoActivador: "primer_mensaje",
-    esPrimerMensaje: false,
-    ctwaAdId: AD_222,
-    metaAds: { ad_ids: [AD_222] },
-    candidateFlowId: FLOW_2,
-    activeSessionFlowId: null,
-    matchNormal: false,
-    contactNumero: null,
-  }).ok === true
+  "EX10. finished con expires_at futuro + anuncio B → no interrumpe",
+  (() => {
+    const sesion = sesionEntradaA("finished", EXPIRA_FUTURO);
+    assert(sesionBloqueaReingreso(sesion) === true, "finished vigente bloquea");
+    const r = evaluateWithCtwaException({
+      tipoActivador: "primer_mensaje",
+      esPrimerMensaje: false,
+      ctwaAdId: AD_222,
+      metaAds: { ad_ids: [AD_222] },
+      candidateFlowId: FLOW_2,
+      activeSessionFlowId: null,
+      matchNormal: false,
+      contactNumero: NUM_A,
+      sesionReciente: sesion,
+      claveEntrada: CLAVE_A,
+    });
+    return r.ok === false && r.reason === "sesion_vigente_bloquea_reingreso";
+  })()
 );
 
 check(
@@ -610,7 +668,279 @@ check(
     }).matched === true
 );
 
-// silence unused (documentado en EX2: F1 tenía 111, no se inspecciona)
+check(
+  "P1. sesión A vigente (expires_at null) + anuncio B → A continúa",
+  (() => {
+    const sesion = sesionEntradaA("active", null);
+    assert(sesionBloqueaReingreso(sesion) === true, "sin expires_at sigue vigente");
+    const r = evaluateWithCtwaException({
+      tipoActivador: "primer_mensaje",
+      esPrimerMensaje: false,
+      ctwaAdId: AD_222,
+      metaAds: { ad_ids: [AD_222] },
+      candidateFlowId: FLOW_2,
+      activeSessionFlowId: FLOW_1,
+      matchNormal: false,
+      sesionReciente: sesion,
+      claveEntrada: CLAVE_A,
+    });
+    return r.ok === false && r.reason === "sesion_vigente_bloquea_reingreso";
+  })()
+);
+
+check(
+  "P2. sesión A vigente + anuncio sin referral → A continúa",
+  (() => {
+    const r = evaluateWithCtwaException({
+      tipoActivador: "primer_mensaje",
+      esPrimerMensaje: false,
+      ctwaAdId: "   ",
+      metaAds: { ad_ids: [AD_222] },
+      candidateFlowId: FLOW_2,
+      activeSessionFlowId: FLOW_1,
+      matchNormal: false,
+      sesionReciente: sesionEntradaA("finished", EXPIRA_FUTURO),
+      claveEntrada: CLAVE_A,
+    });
+    return r.ok === false && r.reason === "no_ctwa_ad_id";
+  })()
+);
+
+check(
+  "P3. sesión A vencida por expires_at + anuncio B → B puede iniciar",
+  (() => {
+    const activeVencida = sesionEntradaA("active", EXPIRA_PASADO);
+    const finishedVencida = sesionEntradaA("finished", EXPIRA_PASADO);
+    const expired = sesionEntradaA("expired", EXPIRA_PASADO);
+    assert(sesionBloqueaReingreso(activeVencida) === false, "active vencida no bloquea");
+    assert(sesionBloqueaReingreso(finishedVencida) === false, "finished vencida no bloquea");
+    assert(sesionBloqueaReingreso(expired) === false, "status expired no bloquea");
+
+    const porExcepcion = evaluateWithCtwaException({
+      tipoActivador: "primer_mensaje",
+      esPrimerMensaje: false,
+      ctwaAdId: AD_222,
+      metaAds: { ad_ids: [AD_222] },
+      candidateFlowId: FLOW_2,
+      activeSessionFlowId: FLOW_1,
+      matchNormal: false,
+      sesionReciente: activeVencida,
+      claveEntrada: CLAVE_A,
+    });
+    const finishedVencidaEntra = evaluateWithCtwaException({
+      tipoActivador: "primer_mensaje",
+      esPrimerMensaje: false,
+      ctwaAdId: AD_222,
+      metaAds: { ad_ids: [AD_222] },
+      candidateFlowId: FLOW_2,
+      activeSessionFlowId: null,
+      matchNormal: false,
+      sesionReciente: finishedVencida,
+      claveEntrada: CLAVE_A,
+    });
+    const porMatchNormal = evaluateCandidate({
+      matched: true,
+      metaAds: { ad_ids: [AD_222] },
+      ctwaAdId: AD_222,
+      contactNumero: null,
+    });
+    const anuncioDistinto = evaluateCandidate({
+      matched: true,
+      metaAds: { ad_ids: [AD_111] },
+      ctwaAdId: AD_222,
+      contactNumero: null,
+    });
+    return (
+      porExcepcion.ok === true &&
+      porExcepcion.stage === "selected" &&
+      finishedVencidaEntra.ok === true &&
+      porMatchNormal.ok === true &&
+      anuncioDistinto.ok === false &&
+      anuncioDistinto.stage === "ad_id"
+    );
+  })()
+);
+
+check(
+  "P4. sin sesión bloqueante + anuncio B → comportamiento normal",
+  evaluateWithCtwaException({
+    tipoActivador: "primer_mensaje",
+    esPrimerMensaje: false,
+    ctwaAdId: AD_222,
+    metaAds: { ad_ids: [AD_222] },
+    candidateFlowId: FLOW_2,
+    activeSessionFlowId: null,
+    matchNormal: false,
+    sesionReciente: null,
+    claveEntrada: CLAVE_A,
+    lecturaSesion: "ausente",
+  }).ok === true &&
+    evaluateWithCtwaException({
+      tipoActivador: "primer_mensaje",
+      esPrimerMensaje: false,
+      ctwaAdId: AD_222,
+      metaAds: { ad_ids: [AD_222] },
+      candidateFlowId: FLOW_2,
+      activeSessionFlowId: null,
+      matchNormal: false,
+      sesionReciente: sesionEntradaA("cancelled", EXPIRA_FUTURO),
+      claveEntrada: CLAVE_A,
+    }).ok === true
+);
+
+check(
+  "P5. sesión de otro contacto, conexión o usuario no bloquea",
+  (() => {
+    const base = sesionEntradaA("active", EXPIRA_FUTURO);
+    const casos = [
+      { ...base, cliente_numero: NUM_B },
+      { ...base, conexion_whatsapp_id: CONN_B },
+      { ...base, usuario_id: USUARIO_B },
+    ];
+    return casos.every((sesion) => {
+      assert(
+        sesionEsDeEstaEntrada(sesion, CLAVE_A) === false,
+        "clave distinta no es esta entrada"
+      );
+      const r = evaluateWithCtwaException({
+        tipoActivador: "primer_mensaje",
+        esPrimerMensaje: false,
+        ctwaAdId: AD_222,
+        metaAds: { ad_ids: [AD_222] },
+        candidateFlowId: FLOW_2,
+        activeSessionFlowId: null,
+        matchNormal: false,
+        sesionReciente: sesion,
+        claveEntrada: CLAVE_A,
+      });
+      return r.ok === true;
+    });
+  })()
+);
+
+check(
+  "P6. pausa e IA conservan el orden y la pausa no enhebra el Ad ID",
+  (() => {
+    const flowSrc = fs.readFileSync(
+      path.join(__dirname, "../services/flowService.js"),
+      "utf8"
+    );
+    const procAt = flowSrc.indexOf("async function procesarMensajeEntrante(");
+    const procEnd = flowSrc.indexOf("\nfunction supabaseHeaders", procAt);
+    const proc = flowSrc.slice(procAt, procEnd);
+    const iPausa = proc.indexOf("manejarGuardPausaBot");
+    const iIa = proc.indexOf("reanudarFlujoIAPendiente");
+    const iActivador = proc.lastIndexOf("buscarYEjecutarActivador");
+
+    const pausaAt = flowSrc.indexOf("async function buscarActivadorValido(");
+    const pausa = flowSrc.slice(pausaAt, pausaAt + 420);
+    const sinAdEnPausa = !pausa.includes("ctwaAdId") && !pausa.includes("esPrimerMensaje");
+
+    const sinReferral = evaluateCtwaPrimerMensajeException({
+      tipoActivador: "primer_mensaje",
+      esPrimerMensaje: false,
+      ctwaAdId: undefined,
+      metaAds: { ad_ids: [AD_222] },
+      candidateFlowId: FLOW_2,
+      activeSessionFlowId: null,
+      sesionReciente: null,
+      claveEntrada: CLAVE_A,
+    });
+
+    return (
+      iPausa >= 0 &&
+      iIa > iPausa &&
+      iActivador > iIa &&
+      sinAdEnPausa &&
+      sinReferral.allow === false &&
+      sinReferral.reason === "no_ctwa_ad_id"
+    );
+  })()
+);
+
+check(
+  "P7. lectura ausente, encontrada vigente, encontrada vencida y error no se confunden",
+  (() => {
+    const vigente = sesionEntradaA("active", EXPIRA_FUTURO);
+    const vencida = sesionEntradaA("finished", EXPIRA_PASADO);
+    const base = {
+      tipoActivador: "primer_mensaje",
+      esPrimerMensaje: false,
+      ctwaAdId: AD_222,
+      metaAds: { ad_ids: [AD_222] },
+      candidateFlowId: FLOW_2,
+      activeSessionFlowId: null,
+      matchNormal: false,
+      claveEntrada: CLAVE_A,
+    };
+
+    const ausente = clasificarLecturaSesion({ ok: true, sesion: null });
+    const encontradaVigente = clasificarLecturaSesion({ ok: true, sesion: vigente });
+    const encontradaVencida = clasificarLecturaSesion({ ok: true, sesion: vencida });
+    const error = clasificarLecturaSesion({ ok: false });
+    const raro = clasificarLecturaSesion({ ok: true, sesion: "x" });
+
+    assert(ausente.lecturaSesion === "ausente", "null confirmado es ausencia");
+    assert(encontradaVigente.lecturaSesion === "encontrada", "fila vigente");
+    assert(encontradaVencida.lecturaSesion === "encontrada", "fila vencida");
+    assert(error.lecturaSesion === "indeterminada", "fallo no es ausencia");
+    assert(raro.lecturaSesion === "indeterminada", "valor inválido es indeterminado");
+    assert(clasificarLecturaSesion(null).lecturaSesion === "indeterminada", "sin resultado");
+
+    const rAusente = evaluateWithCtwaException({
+      ...base,
+      sesionReciente: ausente.sesionReciente,
+      lecturaSesion: ausente.lecturaSesion,
+    });
+    const rVigente = evaluateWithCtwaException({
+      ...base,
+      activeSessionFlowId: FLOW_1,
+      sesionReciente: encontradaVigente.sesionReciente,
+      lecturaSesion: encontradaVigente.lecturaSesion,
+    });
+    const rVencida = evaluateWithCtwaException({
+      ...base,
+      sesionReciente: encontradaVencida.sesionReciente,
+      lecturaSesion: encontradaVencida.lecturaSesion,
+    });
+    const rError = evaluateWithCtwaException({
+      ...base,
+      sesionReciente: error.sesionReciente,
+      lecturaSesion: error.lecturaSesion,
+    });
+    const rMatchNormal = evaluateWithCtwaException({
+      ...base,
+      matchNormal: true,
+      lecturaSesion: "indeterminada",
+    });
+
+    const flowSrc = fs.readFileSync(
+      path.join(__dirname, "../services/flowService.js"),
+      "utf8"
+    );
+    const fnAt = flowSrc.indexOf("async function resolveLecturaSesion(");
+    const fn = flowSrc.slice(fnAt, fnAt + 1200);
+    const catchCierra =
+      fn.includes("clasificarLecturaSesion({ ok: false })") &&
+      fn.includes("!SUPABASE_URL") &&
+      fn.indexOf("!SUPABASE_URL") < fn.indexOf("try {") &&
+      !fn.includes("cachedLecturaSesion = null");
+
+    return (
+      rAusente.ok === true &&
+      rVigente.ok === false &&
+      rVigente.reason === "sesion_vigente_bloquea_reingreso" &&
+      rVencida.ok === true &&
+      rError.ok === false &&
+      rError.reason === "lectura_sesion_indeterminada" &&
+      rMatchNormal.ok === true &&
+      rMatchNormal.stage === "selected" &&
+      catchCierra
+    );
+  })()
+);
+
+// AD_111 se usa en P3: un anuncio que no está en la lista no inicia el flujo.
 void AD_111;
 
 console.log(`\nTodas las pruebas OK (${passed})`);
