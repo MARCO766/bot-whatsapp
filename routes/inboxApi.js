@@ -73,19 +73,25 @@ router.get("/api/inbox/conexiones", protegerApi, async (req, res) => {
   }
 });
 
-// GET /api/inbox?etiqueta=&conexion_whatsapp_id=&limit=&offset=
+// GET /api/inbox?etiqueta=&conexion_whatsapp_id=&flujo_id=&limit=&offset=
 router.get("/api/inbox", protegerApi, async (req, res) => {
   try {
     const etiquetaFiltro = req.query.etiqueta || "";
     const conexionWhatsappId = req.query.conexion_whatsapp_id || null;
+    if (Array.isArray(req.query.flujo_id)) {
+      return res.status(400).json({ ok: false, error: "Producto no válido" });
+    }
+    const flujoId =
+      req.query.flujo_id == null ? "" : String(req.query.flujo_id).trim();
     const data = await loadInboxData(req.session.usuario.id, {
       etiquetaFiltro,
       conexionWhatsappId,
+      flujoId,
       limit: req.query.limit,
       offset: req.query.offset,
       includeMensajes: false,
     });
-    res.json({
+    const body = {
       ok: true,
       usuarioId: req.session.usuario.id,
       conexionWhatsappId: data.conexionWhatsappId,
@@ -99,10 +105,17 @@ router.get("/api/inbox", protegerApi, async (req, res) => {
       offset: data.offset,
       limit: data.limit,
       totalConversations: data.totalConversations,
-    });
+    };
+    if (data.flujoId) body.flujoId = data.flujoId;
+    res.json(body);
   } catch (error) {
+    const status = Number(error.statusCode) || 500;
     log("GET /api/inbox ERROR", error.response?.data || error.message);
-    res.status(500).json({ ok: false, error: "Error cargando bandeja" });
+    const controlled = status === 400 || status === 503;
+    res.status(status).json({
+      ok: false,
+      error: controlled ? error.message : "Error cargando bandeja",
+    });
   }
 });
 

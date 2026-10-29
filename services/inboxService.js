@@ -431,11 +431,308 @@ async function loadInboxDataPorEtiqueta(
   };
 }
 
+const FLUJO_UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const CONEXION_TODAS_INBOX = "__todas__";
+const RPC_INBOX_POR_FLUJO = "inbox_conversaciones_por_flujo";
+const LIMITE_MAX_FLUJO = 100;
+const OFFSET_MAX_FLUJO = 100000;
+
+function inboxHttpError(message, statusCode) {
+  const err = new Error(message);
+  err.statusCode = statusCode;
+  return err;
+}
+
+function esUuidFiltro(valor) {
+  return FLUJO_UUID_RE.test(String(valor || "").trim());
+}
+
+function assertLimitePaginaFlujo(pageLimit, pageOffset) {
+  if (
+    !Number.isSafeInteger(pageLimit) ||
+    !Number.isSafeInteger(pageOffset) ||
+    pageLimit < 1 ||
+    pageOffset < 0 ||
+    pageLimit > LIMITE_MAX_FLUJO ||
+    pageOffset > OFFSET_MAX_FLUJO
+  ) {
+    throw inboxHttpError("Página no válida", 400);
+  }
+}
+
+/**
+ * El flujo tiene que ser del usuario y de la línea. El id del cliente no basta.
+ */
+async function assertFlujoDeLinea(usuarioId, flujoId, conexionId) {
+  const url =
+    `${SUPABASE_URL}/rest/v1/flujos_builder?select=id` +
+    `&id=eq.${encodeURIComponent(flujoId)}` +
+    `&usuario_id=eq.${encodeURIComponent(usuarioId)}` +
+    `&conexion_whatsapp_id=eq.${encodeURIComponent(conexionId)}` +
+    `&limit=1`;
+  const res = await axios.get(url, { headers: supabaseHeaders() });
+  if (!Array.isArray(res.data) || !res.data[0]) {
+    throw inboxHttpError("Producto no válido", 400);
+  }
+}
+
+async function fetchConversacionesPorFlujoRpc(
+  usuarioId,
+  conexionId,
+  flujoId,
+  etiquetaFiltro,
+  limit,
+  offset
+) {
+  const etiqueta = etiquetaFiltro == null ? "" : String(etiquetaFiltro);
+  const res = await axios.post(
+    `${SUPABASE_URL}/rest/v1/rpc/${RPC_INBOX_POR_FLUJO}`,
+    {
+      p_usuario_id: usuarioId,
+      p_conexion_whatsapp_id: conexionId,
+      p_flujo_id: flujoId,
+      p_limit: limit,
+      p_offset: offset,
+      p_etiqueta: etiqueta === "" ? null : etiqueta,
+    },
+    {
+      headers: supabaseHeaders({ "Content-Type": "application/json" }),
+    }
+  );
+  return Array.isArray(res.data) ? res.data : [];
+}
+
+async function completarInboxDesdeConversaciones(
+  usuarioId,
+  {
+    conexionWhatsappId,
+    etiquetaFiltro,
+    flujoId,
+    pageLimit,
+    pageOffset,
+    includeMensajes,
+    conversacionesDB,
+    hasMore,
+  }
+) {
+  const filtroConexion = filtroConexionQuery(conexionWhatsappId);
+  const [
+    responseMensajes,
+    responseColoresEtiquetas,
+    responseClientes,
+    conexionesInbox,
+  ] = await Promise.all([
+    includeMensajes
+      ? axios.get(
+          `${SUPABASE_URL}/rest/v1/mensajes?usuario_id=eq.${usuarioId}${filtroConexion}&select=*&order=creado_en.desc&limit=200`,
+          { headers: supabaseHeaders() }
+        )
+      : Promise.resolve({ data: [] }),
+    axios.get(
+      `${SUPABASE_URL}/rest/v1/etiquetas?usuario_id=eq.${usuarioId}&select=nombre,color,conexion_whatsapp_id`,
+      { headers: supabaseHeaders() }
+    ),
+    axios.get(
+      `${SUPABASE_URL}/rest/v1/clientes?usuario_id=eq.${usuarioId}&select=*`,
+      { headers: supabaseHeaders() }
+    ),
+    loadConexionesInbox(usuarioId),
+  ]);
+
+  const mapaNombreConexion = {};
+  (conexionesInbox || []).forEach((c) => {
+    if (c?.id != null) {
+      mapaNombreConexion[String(c.id)] =
+        (c.nombre && String(c.nombre).trim()) ||
+        (c.numero && String(c.numero).trim()) ||
+        "";
+    }
+  });
+
+  const mapaColoresEtiquetas = {};
+  (responseColoresEtiquetas.data || []).forEach((e) => {
+    mapaColoresEtiquetas[e.nombre] = e.color || "#25d366";
+  });
+
+  const etiquetasDisponibles = responseColoresEtiquetas.data || [];
+  const clientes = responseClientes.data || [];
+  const mapaClientes = {};
+  clientes.forEach((c) => {
+    mapaClientes[c.numero] = c;
+  });
+
+  const mapaUnread = {};
+  const mapaConversaciones = {};
+  conversacionesDB.forEach((c) => {
+    const numero = c.cliente_numero;
+    const connId = c.conexion_whatsapp_id;
+    if (!numero || !connId) return;
+    const key = chatCompositeKey(numero, connId);
+    mapaUnread[key] = c.unread_count || 0;
+    mapaConversaciones[key] = c;
+  });
+
+  const responseEtiquetas = await loadEtiquetasParaConversacionesVisibles(
+    usuarioId,
+    conversacionesDB
+  );
+  const etiquetasClientes = responseEtiquetas.data || [];
+  const etiquetasParaFiltro = etiquetasDisponibles.filter((e) =>
+    sameConexionId(e.conexion_whatsapp_id, conexionWhatsappId)
+  );
+  const etiquetasUnicas = [
+    ...new Set(etiquetasParaFiltro.map((e) => e.nombre).filter(Boolean)),
+  ];
+
+  const conversaciones = {};
+  const mensajes = responseMensajes.data || [];
+  mensajes.sort((a, b) => new Date(a.creado_en) - new Date(b.creado_en));
+  mensajes.forEach((msg) => {
+    const numero =
+      msg.cliente_numero ||
+      msg.numero_de_cliente ||
+      msg["número_de_cliente"];
+    const connId = msg.conexion_whatsapp_id;
+    if (!numero || !connId) return;
+    const key = chatCompositeKey(numero, connId);
+    if (!conversaciones[key]) conversaciones[key] = [];
+    conversaciones[key].push(msg);
+  });
+
+  const chatKeys = [];
+  const clavesVistas = new Set();
+  for (const conv of conversacionesDB) {
+    const numero = conv?.cliente_numero;
+    const connId = conv?.conexion_whatsapp_id;
+    if (!numero || !connId) continue;
+    const key = chatCompositeKey(numero, connId);
+    if (clavesVistas.has(key)) continue;
+    clavesVistas.add(key);
+    chatKeys.push(key);
+  }
+
+  const chats = chatKeys.map((key) => {
+    const conv = mapaConversaciones[key];
+    const msgs = conversaciones[key] || [];
+    const lastMsg = msgs[msgs.length - 1];
+    const parsed = parseChatCompositeKey(key);
+    const numero =
+      conv?.cliente_numero || lastMsg?.cliente_numero || parsed.numero;
+    const connId =
+      conv?.conexion_whatsapp_id ||
+      lastMsg?.conexion_whatsapp_id ||
+      parsed.conexionWhatsappId;
+    const cliente = mapaClientes[numero];
+    const previewRaw =
+      conv?.ultimo_mensaje || lastMsg?.contenido || lastMsg?.tipo || "";
+    const tags = etiquetasClientes
+      .filter(
+        (e) =>
+          e.cliente_numero === numero &&
+          sameConexionId(e.conexion_whatsapp_id, connId)
+      )
+      .map((e) => ({
+        nombre: e.etiqueta,
+        color: mapaColoresEtiquetas[e.etiqueta] || "#25d366",
+      }));
+
+    return {
+      chatKey: chatCompositeKey(numero, connId),
+      numero,
+      cliente_numero: numero,
+      conexion_whatsapp_id: connId,
+      conexionWhatsappId: connId,
+      conexion_nombre: mapaNombreConexion[String(connId)] || "",
+      conversacion_id: conv?.id || null,
+      conversacionId: conv?.id || null,
+      nombre: cliente?.nombre || numero,
+      bloqueado: cliente?.estado === "bloqueado",
+      online: true,
+      noLeidos: mapaUnread[key] || 0,
+      ultimoMensaje: formatPreview(previewRaw),
+      ultimoMensajeEn: conv?.ultimo_mensaje_en || lastMsg?.creado_en || null,
+      etiquetas: tags,
+      ...botPauseFieldsFromConv(conv),
+    };
+  });
+
+  const totalNoLeidos = chats.reduce((sum, c) => sum + (c.noLeidos || 0), 0);
+
+  return {
+    conexionWhatsappId,
+    etiquetaFiltro,
+    flujoId,
+    etiquetasUnicas,
+    etiquetasDisponibles,
+    mapaColoresEtiquetas,
+    etiquetasClientes,
+    conversaciones,
+    mapaConversaciones,
+    mapaClientes,
+    mapaUnread,
+    chatKeys,
+    chats,
+    totalNoLeidos,
+    horaBolivia,
+    limit: pageLimit,
+    offset: pageOffset,
+    totalConversations: null,
+    hasMore,
+  };
+}
+
+async function loadInboxDataPorFlujo(
+  usuarioId,
+  {
+    flujoId,
+    etiquetaFiltro = "",
+    conexionWhatsappId = null,
+    pageLimit,
+    pageOffset,
+    includeMensajes = true,
+  }
+) {
+  const conexionId = String(conexionWhatsappId || "").trim();
+  if (!conexionId || conexionId === CONEXION_TODAS_INBOX) {
+    throw inboxHttpError("Selecciona una línea WhatsApp", 400);
+  }
+  if (!esUuidFiltro(flujoId) || !esUuidFiltro(conexionId)) {
+    throw inboxHttpError("Producto no válido", 400);
+  }
+
+  assertLimitePaginaFlujo(pageLimit, pageOffset);
+
+  await assertFlujoDeLinea(usuarioId, flujoId, conexionId);
+
+  const filas = await fetchConversacionesPorFlujoRpc(
+    usuarioId,
+    conexionId,
+    flujoId,
+    etiquetaFiltro,
+    pageLimit + 1,
+    pageOffset
+  );
+  const hasMore = filas.length > pageLimit;
+
+  return completarInboxDesdeConversaciones(usuarioId, {
+    conexionWhatsappId: conexionId,
+    etiquetaFiltro,
+    flujoId,
+    pageLimit,
+    pageOffset,
+    includeMensajes,
+    conversacionesDB: hasMore ? filas.slice(0, pageLimit) : filas,
+    hasMore,
+  });
+}
+
 async function loadInboxData(
   usuarioId,
   {
     etiquetaFiltro = "",
     conexionWhatsappId = null,
+    flujoId = "",
     limit = 20,
     offset = 0,
     includeMensajes = true,
@@ -450,6 +747,18 @@ async function loadInboxData(
     Number.isFinite(Number(offset)) && Number(offset) >= 0
       ? Math.floor(Number(offset))
       : 0;
+
+  const flujoFiltro = String(flujoId || "").trim();
+  if (flujoFiltro) {
+    return loadInboxDataPorFlujo(usuarioId, {
+      flujoId: flujoFiltro,
+      etiquetaFiltro,
+      conexionWhatsappId,
+      pageLimit,
+      pageOffset,
+      includeMensajes,
+    });
+  }
 
   if (etiquetaFiltro) {
     return loadInboxDataPorEtiqueta(usuarioId, {

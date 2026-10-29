@@ -25,6 +25,7 @@ import {
   normalizeConexionesInbox,
   findConexionInbox,
 } from "../utils/conexionesInbox";
+import { listaTrasSocket } from "../utils/bandejaProductos";
 
 export { CONEXION_TODAS };
 
@@ -88,7 +89,10 @@ function findChatInList(chats, selected) {
   return chats.find((c) => sameChat(c, selected)) || null;
 }
 
-export function useInbox({ onUnreadChange } = {}) {
+export function useInbox({ onUnreadChange, flujoId = "" } = {}) {
+  const flujoNormalizado = String(flujoId || "").trim();
+  const flujoRef = useRef(flujoNormalizado);
+  flujoRef.current = flujoNormalizado;
   const { usuarioId: sessionUsuarioId } = useSocket() || {};
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -177,6 +181,7 @@ export function useInbox({ onUnreadChange } = {}) {
           limit: INBOX_PAGE_LIMIT,
           offset: 0,
           signal: ac.signal,
+          flujoId: flujoNormalizado,
         });
         if (isStale()) return;
         if (filtro && !(data.etiquetasUnicas || []).includes(filtro)) {
@@ -200,7 +205,7 @@ export function useInbox({ onUnreadChange } = {}) {
         if (!isStale()) setLoading(false);
       }
     },
-    [etiquetaFiltro, conexionSeleccionadaId]
+    [etiquetaFiltro, conexionSeleccionadaId, flujoNormalizado]
   );
 
   const loadMoreInbox = useCallback(async () => {
@@ -226,6 +231,7 @@ export function useInbox({ onUnreadChange } = {}) {
       const data = await fetchInbox(etiquetaFiltro, apiConexion, {
         limit,
         offset,
+        flujoId: flujoNormalizado,
       });
       if (loadSeq !== inboxLoadSeqRef.current) return;
       const nuevosChats = data.chats || [];
@@ -243,7 +249,7 @@ export function useInbox({ onUnreadChange } = {}) {
         setLoadingMore(false);
       }
     }
-  }, [loading, conexionSeleccionadaId, etiquetaFiltro]);
+  }, [loading, conexionSeleccionadaId, etiquetaFiltro, flujoNormalizado]);
 
   useEffect(() => {
     if (!sessionUsuarioId) return undefined;
@@ -318,6 +324,17 @@ export function useInbox({ onUnreadChange } = {}) {
     () => findConexionInbox(conexionesInbox, conexionSeleccionadaId),
     [conexionesInbox, conexionSeleccionadaId]
   );
+
+  const prevFlujoRef = useRef(flujoNormalizado);
+  useEffect(() => {
+    if (prevFlujoRef.current === flujoNormalizado) return;
+    prevFlujoRef.current = flujoNormalizado;
+    resetPanelState();
+    setChats([]);
+    hasMoreRef.current = false;
+    nextOffsetRef.current = 0;
+    setHasMore(false);
+  }, [flujoNormalizado, resetPanelState]);
 
   useEffect(() => {
     if (!conexionSeleccionadaId) return;
@@ -422,46 +439,11 @@ export function useInbox({ onUnreadChange } = {}) {
   }, [loading, chats, abrirChat, conexionSeleccionadaId]);
 
   const moverChatArriba = useCallback((chatKey, preview, ultimoEn) => {
-    const key = String(chatKey || "").trim();
-    if (!key || !key.includes("::")) return;
+    const texto = formatPreview(preview);
     const ts = ultimoEn || new Date().toISOString();
-
-    setChats((prev) => {
-      const idx = prev.findIndex((c) => c.chatKey === key);
-      const texto = formatPreview(preview);
-      if (idx === -1) {
-        const sep = key.indexOf("::");
-        const numero = key.slice(0, sep);
-        const connId = key.slice(sep + 2);
-        if (!numero || !connId) return prev;
-        return [
-          {
-            chatKey: key,
-            numero,
-            cliente_numero: numero,
-            conexionWhatsappId: connId,
-            conexion_whatsapp_id: connId,
-            conexion_nombre: "",
-            nombre: numero,
-            bloqueado: false,
-            online: true,
-            noLeidos: 0,
-            ultimoMensaje: texto,
-            ultimoMensajeEn: ts,
-            etiquetas: [],
-          },
-          ...prev,
-        ];
-      }
-      const updated = [...prev];
-      const [item] = updated.splice(idx, 1);
-      updated.unshift({
-        ...item,
-        ultimoMensaje: texto || item.ultimoMensaje,
-        ultimoMensajeEn: ts,
-      });
-      return updated;
-    });
+    setChats((prev) =>
+      listaTrasSocket(prev, chatKey, texto, ts, flujoRef.current)
+    );
   }, []);
 
   const incrementarNoLeido = useCallback((chatKey) => {

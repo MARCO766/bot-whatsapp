@@ -404,6 +404,54 @@ async function fetchActivadores(usuarioId, scope) {
   }
 }
 
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/**
+ * Lista ligera para los chips de la bandeja: solo id y nombre.
+ * No calcula métricas ni lee data, activadores, seguimientos o mensajes.
+ */
+router.get("/api/flujos/bandeja", protegerApi, async (req, res) => {
+  const usuarioId = req.session.usuario.id;
+  const raw = req.query?.conexion_whatsapp_id;
+  const conexionId = raw == null ? "" : String(raw).trim();
+
+  if (!conexionId || conexionId === CONEXION_TODAS) {
+    return res.status(400).json({
+      ok: false,
+      error: "Selecciona una línea WhatsApp",
+    });
+  }
+  if (!UUID_RE.test(conexionId)) {
+    return res.status(400).json({ ok: false, error: "Línea WhatsApp no válida" });
+  }
+
+  try {
+    const propia = await validarConexionUsuario(usuarioId, conexionId);
+    if (!propia) {
+      return res.status(400).json({ ok: false, error: "Línea WhatsApp no válida" });
+    }
+
+    const response = await axios.get(
+      `${SUPABASE_URL}/rest/v1/flujos_builder?select=id,nombre` +
+        `&usuario_id=eq.${encodeURIComponent(usuarioId)}` +
+        `&conexion_whatsapp_id=eq.${encodeURIComponent(conexionId)}` +
+        `&order=nombre.asc`,
+      { headers: supabaseHeaders() }
+    );
+
+    const flows = (Array.isArray(response.data) ? response.data : []).map((row) => ({
+      id: row?.id ?? null,
+      nombre: row?.nombre == null ? "" : String(row.nombre),
+    }));
+
+    res.json({ ok: true, flows });
+  } catch (error) {
+    log("GET /api/flujos/bandeja ERROR", error.response?.data || error.message);
+    res.status(500).json({ ok: false, error: "No se pudieron cargar los productos" });
+  }
+});
+
 // GET /api/flujos/status
 router.get("/api/flujos/status", (req, res) => {
   res.json({

@@ -1,11 +1,13 @@
 import React, { useState } from "react";
 import { useInbox, CONEXION_TODAS } from "../hooks/useInbox";
+import { useBandejaProductos } from "../hooks/useBandejaProductos";
 import { sameConexionId } from "../utils/conexionesInbox";
 import ChatList from "../components/chat/ChatList";
 import ChatWindow from "../components/chat/ChatWindow";
 import ChatLeadPanel from "../components/chat/ChatLeadPanel";
 import TagModal from "../components/chat/TagModal";
 import BandejaLineaActiva from "../components/bandeja/BandejaLineaActiva";
+import BandejaProductos from "../components/bandeja/BandejaProductos";
 import "../styles/bandeja.css";
 
 function etiquetaTabConexion(c) {
@@ -17,7 +19,12 @@ function etiquetaTabConexion(c) {
 }
 
 export default function Bandeja({ onUnreadChange }) {
-  const inbox = useInbox({ onUnreadChange });
+  const [flujoConsultaId, setFlujoConsultaId] = useState("");
+  const inbox = useInbox({ onUnreadChange, flujoId: flujoConsultaId });
+  const productos = useBandejaProductos(inbox.conexionSeleccionadaId);
+  if (flujoConsultaId !== productos.flujoSeleccionadoId) {
+    setFlujoConsultaId(productos.flujoSeleccionadoId);
+  }
   const [crmAbierto, setCrmAbierto] = useState(false);
 
   if (
@@ -94,6 +101,16 @@ export default function Bandeja({ onUnreadChange }) {
           </div>
         )}
       </div>
+
+      <BandejaProductos
+        visible={productos.visible}
+        flujos={productos.flujos}
+        flujoSeleccionadoId={productos.flujoSeleccionadoId}
+        cargando={productos.cargando}
+        error={productos.error}
+        vacio={productos.vacio}
+        onSeleccionar={productos.seleccionarProducto}
+      />
 
       {inbox.error && <div className="bandejaError">{inbox.error}</div>}
 

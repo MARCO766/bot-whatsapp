@@ -87,6 +87,14 @@ export function fetchFlows(conexionWhatsappId) {
   return request(withConexionQuery("/api/flujos", conexionWhatsappId));
 }
 
+/** Chips de la bandeja: solo id y nombre. No usa el dashboard de /api/flujos. */
+export function fetchFlujosBandeja(conexionWhatsappId) {
+  const id = String(conexionWhatsappId || "").trim();
+  return request(
+    `/api/flujos/bandeja?conexion_whatsapp_id=${encodeURIComponent(id)}`
+  );
+}
+
 export function fetchCarpetas(conexionWhatsappId) {
   return request(withConexionQuery("/api/flujos/carpetas", conexionWhatsappId));
 }

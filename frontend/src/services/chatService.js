@@ -1,4 +1,5 @@
 import { resolveApiUrl } from "../flujos/apiBase";
+import { parametrosConsultaInbox } from "../utils/bandejaProductos";
 
 const INBOX_HEADERS = {
   "Content-Type": "application/json",
@@ -47,13 +48,15 @@ export async function fetchConexiones(signal) {
 export async function fetchInbox(
   etiquetaFiltro = "",
   conexionWhatsappId = null,
-  { limit, offset, signal } = {}
+  { limit, offset, signal, flujoId } = {}
 ) {
-  const params = new URLSearchParams();
-  if (conexionWhatsappId) params.set("conexion_whatsapp_id", conexionWhatsappId);
-  if (etiquetaFiltro) params.set("etiqueta", etiquetaFiltro);
-  if (limit != null) params.set("limit", String(limit));
-  if (offset != null) params.set("offset", String(offset));
+  const params = parametrosConsultaInbox({
+    etiquetaFiltro,
+    conexionWhatsappId,
+    flujoId,
+    limit,
+    offset,
+  });
   const q = params.toString();
   return request(q ? `/api/inbox?${q}` : "/api/inbox", signal ? { signal } : {});
 }
