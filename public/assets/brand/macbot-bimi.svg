@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+     version="1.2" baseProfile="tiny-ps"
+     width="1000" height="1000" viewBox="0 0 1000 1000">
+  <title>MacBot</title>
+  <desc>Logotipo de MacBot: una letra M verde claro con un rostro de robot negro y ojos verdes.</desc>
+  <rect x="0" y="0" width="1000" height="1000" fill="#087d08"/>
+  <path d="M85 150 H330 L500 475 L670 150 H915 V850 H700 V495 L590 680 H410 L300 495 V850 H85 Z" fill="#a7ff8a"/>
+  <path d="M390 515 L500 660 L610 515 L610 730 L390 730 Z" fill="#087d08"/>
+  <circle cx="500" cy="565" r="158" fill="#050b05" stroke="#48e52d" stroke-width="18"/>
+  <circle cx="435" cy="565" r="31" fill="#83ff62"/>
+  <circle cx="565" cy="565" r="31" fill="#83ff62"/>
+</svg>
