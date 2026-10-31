@@ -111,6 +111,38 @@ async function supabaseRpc(functionName, params) {
   }
 }
 
+function cuerpoRpcJson(data) {
+  if (typeof data !== "string") return data;
+  try {
+    return JSON.parse(data);
+  } catch {
+    return data;
+  }
+}
+
+/**
+ * Lectura de RPC que conserva el JSON completo (objeto, lista o número).
+ * Serie y diagnóstico la usan solo con METRICAS_RPC_SERIES_DIAGNOSTICO=1.
+ * Sin esa variable, ninguna ruta la llama. supabaseRpc sigue siendo el lector numérico.
+ * null = la función no está en la base.
+ */
+async function supabaseRpcJson(functionName, params) {
+  const url = `${SUPABASE_URL}/rest/v1/rpc/${functionName}`;
+  try {
+    const res = await axios.post(url, params, {
+      headers: headers({ "Content-Type": "application/json" }),
+    });
+    return cuerpoRpcJson(res.data);
+  } catch (e) {
+    if (isSchemaMissingError(e)) {
+      logSchemaFallback(`rpc/${functionName}`, e);
+      return null;
+    }
+    const detail = errorMessage(e) || e.message;
+    throw new Error(`[metricas] RPC ${functionName} falló: ${detail}`);
+  }
+}
+
 function buildDateFilter(desdeIso, hastaIso, field = "creado_en") {
   const desde = encodeURIComponent(desdeIso);
   const hasta = encodeURIComponent(hastaIso);
@@ -1465,7 +1497,142 @@ function computeSeriesFromBase(base) {
   };
 }
 
+/**
+ * Apagada salvo METRICAS_RPC_SERIES_DIAGNOSTICO=1.
+ * Serie y diagnóstico prueban la RPC y, si falta o falla, vuelven al cálculo actual.
+ * Embudo, resumen, ingresos, heatmap y flujos no leen esta variable.
+ */
+function metricasRpcSeriesDiagnosticoActiva() {
+  return String(process.env.METRICAS_RPC_SERIES_DIAGNOSTICO || "").trim() === "1";
+}
+
+function parametrosRpcMetricas(usuarioId, query = {}) {
+  const rango = parseRango(query);
+  const flujoId = query.flujo_id || query.flujoId || null;
+  const raw = query.conexion_whatsapp_id ?? query.conexionWhatsappId ?? null;
+  const texto = raw == null ? "" : String(raw).trim();
+  const conexion = !texto || texto === CONEXION_TODAS ? null : texto;
+
+  return {
+    rango,
+    flujoId: flujoId || null,
+    params: {
+      p_usuario_id: usuarioId,
+      p_desde: rango.desde,
+      p_hasta: rango.hasta,
+      p_conexion_whatsapp_id: conexion,
+      p_flujo_id: flujoId || null,
+    },
+  };
+}
+
+function esNumeroRpc(valor) {
+  return typeof valor === "number" && Number.isFinite(valor);
+}
+
+const CAMPOS_DIAGNOSTICO_RPC = [
+  "leads",
+  "conversaciones",
+  "respuestas",
+  "ventas",
+  "seguimientos_activos",
+];
+
+function diagnosticoRpcEsValido(rpc) {
+  if (!rpc || typeof rpc !== "object" || Array.isArray(rpc)) return false;
+  return CAMPOS_DIAGNOSTICO_RPC.every(
+    (campo) => Object.prototype.hasOwnProperty.call(rpc, campo) && esNumeroRpc(rpc[campo])
+  );
+}
+
+const CAMPOS_DIA_RPC = ["leads", "mensajes", "ventas", "ingresos_centavos"];
+
+function serieRpcEsValida(rpc, desdeIso, hastaIso) {
+  if (!rpc || typeof rpc !== "object" || Array.isArray(rpc)) return false;
+  if (!Array.isArray(rpc.diario) || !Array.isArray(rpc.conversiones_por_flujo)) return false;
+
+  const esperadas = new Set(esqueletoDiario(desdeIso, hastaIso).map((dia) => dia.fecha));
+  const vistas = new Set();
+  for (const row of rpc.diario) {
+    if (!row || typeof row !== "object" || Array.isArray(row)) return false;
+    const fecha = row.fecha == null ? "" : String(row.fecha);
+    if (!fecha || !esperadas.has(fecha) || vistas.has(fecha)) return false;
+    vistas.add(fecha);
+    const diaValido = CAMPOS_DIA_RPC.every(
+      (campo) => Object.prototype.hasOwnProperty.call(row, campo) && esNumeroRpc(row[campo])
+    );
+    if (!diaValido) return false;
+  }
+  if (vistas.size !== esperadas.size) return false;
+
+  for (const row of rpc.conversiones_por_flujo) {
+    if (!row || typeof row !== "object" || Array.isArray(row)) return false;
+    if (row.flujo_id == null || String(row.flujo_id).trim() === "") return false;
+    if (!Object.prototype.hasOwnProperty.call(row, "ventas") || !esNumeroRpc(row.ventas)) return false;
+  }
+
+  return true;
+}
+
+async function serieDesdeRpcONull(usuarioId, query) {
+  const { rango, flujoId, params } = parametrosRpcMetricas(usuarioId, query);
+  try {
+    const rpc = await supabaseRpcJson("metricas_series_diarias", params);
+    if (!serieRpcEsValida(rpc, rango.desde, rango.hasta)) {
+      console.log(
+        "[metricas] metricas_series_diarias con estructura o fechas inválidas. Se usa el cálculo actual."
+      );
+      return null;
+    }
+    return armarSerieDesdeRpc(
+      {
+        periodo: rango.periodo,
+        desde: rango.desde,
+        hasta: rango.hasta,
+        flujoId,
+      },
+      rpc
+    );
+  } catch (e) {
+    console.log(
+      `[metricas] metricas_series_diarias falló: ${errorMessage(e) || e.message}. Se usa el cálculo actual.`
+    );
+    return null;
+  }
+}
+
+async function diagnosticoDesdeRpcONull(usuarioId, query) {
+  const { rango, flujoId, params } = parametrosRpcMetricas(usuarioId, query);
+  try {
+    const rpc = await supabaseRpcJson("metricas_diagnostico_kpis", params);
+    if (!diagnosticoRpcEsValido(rpc)) {
+      console.log(
+        "[metricas] metricas_diagnostico_kpis con campos inválidos. Se usa el cálculo actual."
+      );
+      return null;
+    }
+    return armarDiagnosticoDesdeRpc(
+      {
+        periodo: rango.periodo,
+        desde: rango.desde,
+        hasta: rango.hasta,
+        flujoId,
+      },
+      rpc
+    ).respuesta;
+  } catch (e) {
+    console.log(
+      `[metricas] metricas_diagnostico_kpis falló: ${errorMessage(e) || e.message}. Se usa el cálculo actual.`
+    );
+    return null;
+  }
+}
+
 async function computeSeries(usuarioId, query) {
+  if (metricasRpcSeriesDiagnosticoActiva()) {
+    const porRpc = await serieDesdeRpcONull(usuarioId, query);
+    if (porRpc) return porRpc;
+  }
   return computeSeriesFromBase(await resolveMetricasBase(usuarioId, query));
 }
 
@@ -1514,6 +1681,10 @@ function computeDiagnosticoFromBase(base) {
 }
 
 async function computeDiagnostico(usuarioId, query) {
+  if (metricasRpcSeriesDiagnosticoActiva()) {
+    const porRpc = await diagnosticoDesdeRpcONull(usuarioId, query);
+    if (porRpc) return porRpc;
+  }
   return computeDiagnosticoFromBase(await resolveMetricasBase(usuarioId, query));
 }
 
@@ -1536,9 +1707,170 @@ async function computeHeatmap(usuarioId, query) {
   return computeHeatmapFromBase(await resolveMetricasBase(usuarioId, query));
 }
 
+function ingresosVisiblesDesdeCentavos(centavos) {
+  const n = Number(centavos) || 0;
+  return Math.round(n) / 100;
+}
+
+const ZONA_CALENDARIO_METRICAS = "America/La_Paz";
+
+function fechaCivilLaPaz(iso) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: ZONA_CALENDARIO_METRICAS,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(d);
+  const map = {};
+  for (const part of parts) {
+    if (part.type !== "literal") map[part.type] = part.value;
+  }
+  if (!map.year || !map.month || !map.day) return null;
+  return `${map.year}-${map.month}-${map.day}`;
+}
+
+/** Días civiles de America/La_Paz entre desde y hasta, inclusive. No usa la zona del proceso ni reemplaza a buildSeriesDiarias. */
+function esqueletoDiario(desdeIso, hastaIso) {
+  const inicio = fechaCivilLaPaz(desdeIso);
+  const fin = fechaCivilLaPaz(hastaIso);
+  if (!inicio || !fin || inicio > fin) return [];
+
+  const days = [];
+  const cursor = new Date(`${inicio}T12:00:00.000Z`);
+  const end = new Date(`${fin}T12:00:00.000Z`);
+  while (cursor <= end) {
+    const key = cursor.toISOString().slice(0, 10);
+    days.push({ fecha: key, leads: 0, mensajes: 0, ventas: 0, ingresos: 0 });
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+
+  return days;
+}
+
+/**
+ * Arma la respuesta de serie desde metricas_series_diarias.
+ * computeSeries la usa solo con METRICAS_RPC_SERIES_DIAGNOSTICO=1.
+ * Sin esa variable, la serie sigue en computeSeriesFromBase.
+ */
+function armarSerieDesdeRpc(meta, rpcSeries) {
+  const rpc =
+    rpcSeries && typeof rpcSeries === "object" && !Array.isArray(rpcSeries) ? rpcSeries : {};
+  const porFecha = new Map();
+  (Array.isArray(rpc.diario) ? rpc.diario : []).forEach((row) => {
+    if (!row || row.fecha == null) return;
+    porFecha.set(String(row.fecha), row);
+  });
+
+  const diario = esqueletoDiario(meta.desde, meta.hasta).map((dia) => {
+    const row = porFecha.get(dia.fecha);
+    const centavos = row ? Number(row.ingresos_centavos) || 0 : 0;
+    return {
+      fecha: dia.fecha,
+      leads: row ? Number(row.leads) || 0 : 0,
+      mensajes: row ? Number(row.mensajes) || 0 : 0,
+      ventas: row ? Number(row.ventas) || 0 : 0,
+      ingresos: ingresosVisiblesDesdeCentavos(centavos),
+    };
+  });
+  const vacio = diario.every((d) => d.leads === 0 && d.mensajes === 0 && d.ventas === 0);
+  const conversionesPorFlujo = {};
+  (Array.isArray(rpc.conversiones_por_flujo) ? rpc.conversiones_por_flujo : []).forEach((row) => {
+    if (!row || !row.flujo_id) return;
+    const ventas = Number(row.ventas);
+    if (!Number.isFinite(ventas) || ventas <= 0) return;
+    conversionesPorFlujo[String(row.flujo_id)] = ventas;
+  });
+
+  return {
+    ok: true,
+    periodo: meta.periodo,
+    desde: meta.desde,
+    hasta: meta.hasta,
+    flujoId: meta.flujoId ?? null,
+    diario,
+    conversionesPorFlujo,
+    vacio,
+    source: "supabase",
+  };
+}
+
+function indicadoresDiagnosticoDesdeRpc(rpcKpis) {
+  const src = rpcKpis && typeof rpcKpis === "object" ? rpcKpis : {};
+  const indicadores = {
+    leads: Number(src.leads) || 0,
+    conversaciones: Number(src.conversaciones) || 0,
+    respuestas: Number(src.respuestas) || 0,
+    ventas: Number(src.ventas) || 0,
+    seguimientosActivos: Number(src.seguimientos_activos) || 0,
+  };
+  indicadores.tasaCierre = pct(indicadores.ventas, indicadores.conversaciones);
+  indicadores.conversion = pct(indicadores.ventas, indicadores.leads);
+  indicadores.salud = computeSalud(indicadores);
+  return indicadores;
+}
+
+/**
+ * Arma el diagnóstico desde metricas_diagnostico_kpis.
+ * respuesta tiene la forma de computeDiagnosticoFromBase.
+ * indicadores sirve solo para la comparación en sombra.
+ * computeDiagnostico devuelve respuesta solo con METRICAS_RPC_SERIES_DIAGNOSTICO=1.
+ */
+function armarDiagnosticoDesdeRpc(meta, rpcKpis) {
+  const indicadores = indicadoresDiagnosticoDesdeRpc(rpcKpis);
+  const score = indicadores.salud;
+  return {
+    respuesta: {
+      ok: true,
+      periodo: meta.periodo,
+      desde: meta.desde,
+      hasta: meta.hasta,
+      flujoId: meta.flujoId ?? null,
+      items: buildDiagnosticoItems(indicadores),
+      salud: {
+        score,
+        label: saludLabel(score),
+      },
+      recomendacion:
+        score >= 60
+          ? "Mantén el ritmo de seguimiento y optimiza los flujos con más respuestas."
+          : "Prioriza respuesta rápida y seguimientos antes de escalar campañas.",
+      source: "supabase",
+    },
+    indicadores,
+  };
+}
+
+/**
+ * Lectura del cálculo actual para scripts/test-metricas-shadow.js.
+ * No la usa ninguna ruta HTTP.
+ */
+async function snapshotMetricasActual(usuarioId, query) {
+  const base = await resolveMetricasBase(usuarioId, query);
+  return {
+    series: computeSeriesFromBase(base),
+    diagnostico: computeDiagnosticoFromBase(base),
+    kpis: {
+      leads: base.kpis.leads,
+      conversaciones: base.kpis.conversaciones,
+      respuestas: base.kpis.respuestas,
+      ventas: base.kpis.ventas,
+      seguimientosActivos: base.kpis.seguimientosActivos,
+      tasaCierre: base.kpis.tasaCierre,
+      conversion: base.kpis.conversion,
+      salud: base.salud,
+    },
+  };
+}
+
 module.exports = {
   parseRango,
   rangoAnterior,
+  pct,
+  computeSalud,
+  saludLabel,
+  buildDiagnosticoItems,
   computeResumen,
   computeFunnel,
   computeSeries,
@@ -1549,4 +1881,9 @@ module.exports = {
   fetchFlujosList,
   fetchFlujosListMetricas,
   fetchFlujoClienteNumeros,
+  fetchConexionesActivasUsuario,
+  snapshotMetricasActual,
+  supabaseRpcJson,
+  armarSerieDesdeRpc,
+  armarDiagnosticoDesdeRpc,
 };
