@@ -32,7 +32,7 @@ export default function RevenuePremiumSection({
   monedaActiva = "BOB",
   onMonedaChange,
 }) {
-  const { data, loading, error, reload } = useRevenueBreakdown(
+  const { data, loading, updating, error, reload } = useRevenueBreakdown(
     periodo,
     flujoId,
     conexionSeleccionadaId,
@@ -54,7 +54,9 @@ export default function RevenuePremiumSection({
 
   const bucket = data?.porMoneda?.[monedaActiva];
   const kpis = bucket?.kpis;
-  const sinMonedas = !loading && !error && monedas.length === 0;
+  const showSkeleton = loading && !data;
+  const sinMonedas = !showSkeleton && !error && monedas.length === 0;
+  const reloadNotice = data && !loading && !updating && error ? error : null;
 
   return (
     <section className="revenuePremiumSection panelCard" aria-labelledby="revenue-premium-title">
@@ -65,6 +67,7 @@ export default function RevenuePremiumSection({
           <h2 id="revenue-premium-title">💰 Ingresos Premium</h2>
           <p className="revenuePremiumHint">
             Inteligencia de ventas por flujo y remarketing
+            {updating ? " · Actualizando…" : ""}
           </p>
         </div>
         <div className="revenuePremiumControls">
@@ -73,13 +76,13 @@ export default function RevenuePremiumSection({
               monedas={monedas}
               value={monedaActiva}
               onChange={onMonedaChange}
-              disabled={loading || !!error}
+              disabled={showSkeleton || (!!error && !data)}
             />
           )}
         </div>
       </div>
 
-      {error && !loading ? (
+      {error && !data ? (
         <RevenueErrorCard message={error} onRetry={reload} />
       ) : sinMonedas ? (
         <div className="emptyBlock">
@@ -92,15 +95,20 @@ export default function RevenuePremiumSection({
         </div>
       ) : (
         <>
-          <RevenueKpiStrip kpis={kpis} moneda={monedaActiva} loading={loading} />
+          {reloadNotice ? (
+            <p className="revenueReloadNotice" role="status">
+              No se pudo actualizar esta sección. {reloadNotice}
+            </p>
+          ) : null}
+          <RevenueKpiStrip kpis={kpis} moneda={monedaActiva} loading={showSkeleton} />
 
-          <RevenueDonutChart kpis={kpis} moneda={monedaActiva} loading={loading} />
+          <RevenueDonutChart kpis={kpis} moneda={monedaActiva} loading={showSkeleton} />
 
           <RevenueTipoComparisonChart
             flujoBucket={bucket?.flujo}
             remarketingBucket={bucket?.remarketing}
             moneda={monedaActiva}
-            loading={loading}
+            loading={showSkeleton}
           />
 
           <div className="revenueBreakdownGrid">
@@ -109,14 +117,14 @@ export default function RevenuePremiumSection({
               subtitle="Ventas del embudo principal"
               origenBucket={bucket?.flujo}
               moneda={monedaActiva}
-              loading={loading}
+              loading={showSkeleton}
             />
             <RevenueBreakdownColumn
               title="Remarketing"
               subtitle="Recuperación y ventas RM"
               origenBucket={bucket?.remarketing}
               moneda={monedaActiva}
-              loading={loading}
+              loading={showSkeleton}
               rmRevenuePct={kpis?.porcentajeIngresosRemarketing}
             />
           </div>
@@ -159,6 +167,12 @@ const sectionStyles = `
   color: #94a3b8;
   font-size: 12px;
   line-height: 1.35;
+}
+.revenueReloadNotice {
+  margin: 0 0 12px;
+  color: #fca5a5;
+  font-size: 13px;
+  line-height: 1.4;
 }
 .revenuePremiumControls {
   display: flex;

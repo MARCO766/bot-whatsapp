@@ -18,8 +18,10 @@ export function useRevenueBreakdown(
 ) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [updating, setUpdating] = useState(false);
   const [error, setError] = useState(null);
   const requestSeqRef = useRef(0);
+  const dataRef = useRef(null);
 
   const load = useCallback(async () => {
     if (conexionesLoading || conexionWhatsappId == null) return;
@@ -35,12 +37,15 @@ export function useRevenueBreakdown(
     if (params.periodo === "custom" && (!params.desde || !params.hasta)) return;
 
     const requestSeq = ++requestSeqRef.current;
-    setLoading(true);
+    const hadData = dataRef.current != null;
+    if (hadData) setUpdating(true);
+    else setLoading(true);
     setError(null);
 
     try {
       const res = await fetchMetricasRevenueBreakdown(params);
       if (requestSeq !== requestSeqRef.current) return;
+      dataRef.current = res;
       setData(res);
     } catch (err) {
       if (requestSeq !== requestSeqRef.current) return;
@@ -49,10 +54,14 @@ export function useRevenueBreakdown(
           ? err.message
           : "Error al cargar ingresos premium";
       setError(msg);
-      setData(null);
+      if (!hadData) {
+        dataRef.current = null;
+        setData(null);
+      }
     } finally {
       if (requestSeq === requestSeqRef.current) {
         setLoading(false);
+        setUpdating(false);
       }
     }
   }, [periodo, flujoId, conexionWhatsappId, conexionesLoading, customRange]);
@@ -65,5 +74,5 @@ export function useRevenueBreakdown(
   useSocketEvent(RT.METRICA_ACTUALIZADA, reloadLive);
   useSocketEvent(RT.CONVERSION_REGISTRADA, reloadLive);
 
-  return { data, loading, error, reload: load };
+  return { data, loading, updating, error, reload: load };
 }

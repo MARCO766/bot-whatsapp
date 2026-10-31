@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useMetricas } from "./metricas/useMetricas";
+import { metricasReloadNotice, metricasSectionView } from "./metricas/metricasSectionView";
 import { useMetaAdsStatus } from "./metricas/useMetaAdsStatus";
 import { useMetaAdsInsights } from "./metricas/useMetaAdsInsights";
 import {
@@ -28,6 +29,15 @@ const UI_OCULTAR_FASE1 = {
 
 function Skeleton({ className = "" }) {
   return <div className={`skel ${className}`} />;
+}
+
+function ReloadNotice({ message }) {
+  if (!message) return null;
+  return (
+    <p className="sectionWarn" role="status">
+      No se pudo actualizar esta sección. {message}
+    </p>
+  );
 }
 
 function EmptyBlock({ title, hint }) {
@@ -128,8 +138,66 @@ export default function Metricas() {
     seleccionarConexion,
     etiquetaTabConexion,
   } = useMetricasConexion();
-  const { resumen, funnel, series, flujos, diagnostico, heatmap, flujosLista, loading, error, reload } =
-    useMetricas(periodo, flujoId, conexionSeleccionadaId, conexionesLoading, UI_OCULTAR_FASE1, customRange);
+  const {
+    resumen,
+    funnel,
+    series,
+    flujos,
+    diagnostico,
+    heatmap,
+    flujosLista,
+    pending,
+    sectionError,
+    authError,
+    updating,
+    reload,
+  } = useMetricas(periodo, flujoId, conexionSeleccionadaId, conexionesLoading, UI_OCULTAR_FASE1, customRange);
+  const resumenView = metricasSectionView({
+    hasData: resumen != null,
+    pending: pending.resumen,
+    error: sectionError.resumen,
+  });
+  const seriesView = metricasSectionView({
+    hasData: series != null,
+    pending: pending.series,
+    error: sectionError.series,
+  });
+  const diagnosticoView = metricasSectionView({
+    hasData: diagnostico != null,
+    pending: pending.diagnostico,
+    error: sectionError.diagnostico,
+  });
+  const funnelView = metricasSectionView({
+    hasData: funnel != null,
+    pending: pending.funnel,
+    error: sectionError.funnel,
+  });
+  const heatmapView = metricasSectionView({
+    hasData: heatmap != null,
+    pending: pending.heatmap,
+    error: sectionError.heatmap,
+  });
+  const flujosView = metricasSectionView({
+    hasData: flujos != null,
+    pending: pending.flujos,
+    error: sectionError.flujos,
+  });
+  const anyPending = pending.resumen || pending.series || pending.diagnostico;
+  const resumenNotice = metricasReloadNotice({
+    hasData: resumen != null,
+    pending: pending.resumen,
+    error: sectionError.resumen,
+  });
+  const seriesNotice = metricasReloadNotice({
+    hasData: series != null,
+    pending: pending.series,
+    error: sectionError.series,
+  });
+  const diagnosticoNotice = metricasReloadNotice({
+    hasData: diagnostico != null,
+    pending: pending.diagnostico,
+    error: sectionError.diagnostico,
+  });
   const {
     status: metaAdsStatus,
     loading: metaAdsStatusLoading,
@@ -297,13 +365,13 @@ export default function Metricas() {
     setPeriodo(next);
   };
 
-  if (error && !loading) {
+  if (authError) {
     return (
       <div className="metricasMeta">
         <style>{styles}</style>
         <div className="errorPanel">
           <h2>No se pudieron cargar las métricas</h2>
-          <p>{error}</p>
+          <p>{authError}</p>
           <button type="button" onClick={reload}>
             Reintentar
           </button>
@@ -328,7 +396,7 @@ export default function Metricas() {
         </div>
 
         <div className="heroScore">
-          {loading ? (
+          {resumenView === "loading" ? (
             <Skeleton className="scoreSkel" />
           ) : (
             <>
@@ -357,7 +425,6 @@ export default function Metricas() {
             value={flujoId}
             onChange={setFlujoId}
             options={flujosLista}
-            disabled={loading}
           />
         </div>
 
@@ -368,7 +435,6 @@ export default function Metricas() {
             customRange={customRange}
             onCustomApply={handleCustomApply}
             onValidationError={showPeriodoToast}
-            disabled={loading}
           />
           {customRangeLabel ? (
             <p className="metricasCustomRangeHint">
@@ -378,24 +444,36 @@ export default function Metricas() {
         </div>
 
         <div className="controlActions">
-          <button type="button" className="refreshBtn" onClick={reload} disabled={loading}>
-            {loading ? "Cargando…" : "Actualizar"}
+          <button type="button" className="refreshBtn" onClick={reload} disabled={anyPending}>
+            {anyPending ? (updating ? "Actualizando…" : "Cargando…") : "Actualizar"}
           </button>
           <div className="liveBadge">
             <span className="liveDot" />
             <div>
               <strong>LIVE</strong>
-              <small>Datos Supabase</small>
+              <small>{updating ? "Actualizando…" : "Datos Supabase"}</small>
             </div>
           </div>
         </div>
       </section>
 
+      <ReloadNotice message={resumenNotice} />
+
       <section className="mainGrid">
-        {loading
+        {resumenView === "loading"
           ? Array.from({ length: 4 }).map((_, i) => (
               <div key={i} className="mainCard skelCard" />
             ))
+          : resumenView === "error"
+            ? (
+              <div className="mainCard sectionWarnCard">
+                <strong>No se pudieron cargar los indicadores</strong>
+                <p>{sectionError.resumen}</p>
+                <button type="button" className="refreshBtn" onClick={reload}>
+                  Reintentar
+                </button>
+              </div>
+            )
           : mainCards.map((card) => (
               <div
                 className={`mainCard ${card.color}`}
@@ -434,12 +512,14 @@ export default function Metricas() {
                   <p>Métricas internas del CRM en el periodo seleccionado.</p>
                 </div>
               </div>
-              {loading ? (
+              {resumenView === "loading" ? (
                 <div className="performanceGrid">
                   {Array.from({ length: 4 }).map((_, i) => (
                     <Skeleton key={i} className="perfSkel" />
                   ))}
                 </div>
+              ) : resumenView === "error" ? (
+                <p className="sectionWarn">{sectionError.resumen}</p>
               ) : (
                 <div className="performanceGrid">
                   {performanceCards.map((item) => (
@@ -465,9 +545,11 @@ export default function Metricas() {
                   <p>Leads → Conversaciones → Respuestas → Seguimientos → Ventas</p>
                 </div>
               </div>
-              {loading ? (
+              {funnelView === "loading" ? (
                 <Skeleton className="funnelSkel" />
-              ) : funnel?.vacio ? (
+              ) : funnelView === "error" ? (
+                <p className="sectionWarn">{sectionError.funnel}</p>
+              ) : funnelView === "idle" ? null : funnel?.vacio ? (
                 <EmptyBlock title="Embudo vacío" hint="Registra leads y conversaciones para ver el embudo." />
               ) : (
                 <div className="funnel">
@@ -495,9 +577,17 @@ export default function Metricas() {
                 <p>Leads, ventas e ingresos por día en el periodo.</p>
               </div>
             </div>
-            {loading ? (
+            {seriesView === "loading" ? (
               <Skeleton className="chartSkel" />
-            ) : (
+            ) : seriesView === "error" ? (
+              <p className="sectionWarn">{sectionError.series}</p>
+            ) : seriesView === "idle" ? null : (
+              <>
+                <ReloadNotice message={seriesNotice} />
+                {seriesView === "updating" &&
+                !diario.some((d) => (Number(d.leads) || Number(d.ventas) || Number(d.mensajes) || Number(d.ingresos)) > 0) ? (
+                  <p className="trendEmpty">Actualizando…</p>
+                ) : (
               <div className="trendBusinessRow">
                 <TrendMetric
                   label="Leads"
@@ -522,6 +612,8 @@ export default function Metricas() {
                   formatValue={(v) => formatMoney(v, kpis.moneda)}
                 />
               </div>
+                )}
+              </>
             )}
           </div>
 
@@ -533,7 +625,13 @@ export default function Metricas() {
                   <p>Horas con más mensajes y leads (hora local del navegador).</p>
                 </div>
               </div>
-              {loading ? <Skeleton className="heatmapSkel" /> : <HeatmapGrid heatmap={heatmap?.heatmap} />}
+              {heatmapView === "loading" ? (
+                <Skeleton className="heatmapSkel" />
+              ) : heatmapView === "error" ? (
+                <p className="sectionWarn">{sectionError.heatmap}</p>
+              ) : heatmapView === "idle" ? null : (
+                <HeatmapGrid heatmap={heatmap?.heatmap} />
+              )}
             </div>
           )}
 
@@ -541,9 +639,13 @@ export default function Metricas() {
             <div className="panelTop panelTop--compact">
               <h2>Diagnóstico inteligente</h2>
             </div>
-            {loading ? (
+            {diagnosticoView === "loading" ? (
               <Skeleton className="diagSkel" />
-            ) : (
+            ) : diagnosticoView === "error" ? (
+              <p className="sectionWarn">{sectionError.diagnostico}</p>
+            ) : diagnosticoView === "idle" ? null : (
+              <>
+                <ReloadNotice message={diagnosticoNotice} />
               <div className="diagnostico diagnostico--premium">
                 {(diagnostico?.items || []).map((d, i) => (
                   <div className={`diagItem ${d.tipo}`} key={i}>
@@ -554,16 +656,14 @@ export default function Metricas() {
                   </div>
                 ))}
               </div>
+              </>
             )}
           </div>
         </div>
 
         <aside className="dashAside">
           <div className="panelCard panelCard--compact">
-            {loading ? (
-              <Skeleton className="metaSkel" />
-            ) : (
-              <MetaAdsCompactCard
+            <MetaAdsCompactCard
                 status={metaAdsStatus}
                 statusLoading={metaAdsStatusLoading}
                 insights={metaAdsInsights}
@@ -578,17 +678,20 @@ export default function Metricas() {
                 onSelectCampaign={setMetaAdsCampaignId}
                 onConnect={() => setMetaAdsModalOpen(true)}
                 onRefresh={refreshMetaAdsInsights}
-              />
-            )}
+            />
           </div>
 
           <div className="panelCard panelCard--compact">
             <div className="panelTop panelTop--compact">
               <h2>Seguimientos</h2>
             </div>
-            {loading ? (
+            {resumenView === "loading" ? (
               <Skeleton className="segSkel" />
+            ) : resumenView === "error" ? (
+              <p className="sectionWarn">{sectionError.resumen}</p>
             ) : (
+              <>
+                <ReloadNotice message={resumenNotice} />
               <div className="segStrip">
                 {segCards.map((s) => (
                   <div key={s.label} className={`segStripItem ${s.tone}`}>
@@ -597,13 +700,18 @@ export default function Metricas() {
                   </div>
                 ))}
               </div>
+              </>
             )}
           </div>
 
           <div className="panelCard panelCard--insight">
-            {loading ? (
+            {diagnosticoView === "loading" ? (
               <Skeleton className="recSkel" />
-            ) : (
+            ) : diagnosticoView === "error" ? (
+              <p className="sectionWarn">{sectionError.diagnostico}</p>
+            ) : diagnosticoView === "idle" ? null : (
+              <>
+                <ReloadNotice message={diagnosticoNotice} />
               <div className="insightCard">
                 <span className="insightEmoji" aria-hidden="true">
                   💡
@@ -613,15 +721,18 @@ export default function Metricas() {
                   <p>{diagnostico?.recomendacion || "Revisa seguimientos y respuestas."}</p>
                 </div>
               </div>
+              </>
             )}
           </div>
 
           {!UI_OCULTAR_FASE1.metricasPorFlujo && (
             <div className="panelCard">
               <h2>Métricas por flujo</h2>
-              {loading ? (
+              {flujosView === "loading" ? (
                 <Skeleton className="flowSkel" />
-              ) : flujos?.flujos?.length ? (
+              ) : flujosView === "error" ? (
+                <p className="sectionWarn">{sectionError.flujos}</p>
+              ) : flujosView === "idle" ? null : flujos?.flujos?.length ? (
                 <div className="flowHighlights">
                   {flujos.destacados?.masLeads && (
                     <div className="flowHighlight">
@@ -723,6 +834,9 @@ const styles = `
 }
 .controlActions { display: flex; gap: 10px; align-items: center; }
 .refreshBtn { height: 42px; border: 0; border-radius: 14px; padding: 0 16px; background: rgba(255,255,255,.1); color: white; font-weight: 900; cursor: pointer; }
+.sectionWarn { margin: 8px 0 0; color: #fca5a5; font-size: 13px; line-height: 1.4; }
+.sectionWarnCard { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.sectionWarnCard p { margin: 0; color: #fca5a5; }
 .liveBadge { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 14px; background: rgba(255,255,255,.06); }
 .liveDot { width: 10px; height: 10px; border-radius: 50%; background: #22c55e; box-shadow: 0 0 8px rgba(34,197,94,.55); }
 .mainGrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 14px; }

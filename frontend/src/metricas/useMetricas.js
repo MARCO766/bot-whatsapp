@@ -14,6 +14,44 @@ import { useSocketEvent } from "../hooks/useSocketEvent";
 import { useDebouncedCallback } from "../hooks/useDebouncedCallback";
 import { RT } from "../realtime/events";
 import { apiConexionWhatsappParam } from "../utils/conexionesInbox";
+import { metricasSectionView } from "./metricasSectionView";
+
+export { metricasSectionView };
+
+const SECTION_KEYS = ["resumen", "funnel", "series", "flujos", "diagnostico", "heatmap"];
+
+function initialPending() {
+  return {
+    resumen: true,
+    funnel: true,
+    series: true,
+    flujos: true,
+    diagnostico: true,
+    heatmap: true,
+  };
+}
+
+function idlePending() {
+  return {
+    resumen: false,
+    funnel: false,
+    series: false,
+    flujos: false,
+    diagnostico: false,
+    heatmap: false,
+  };
+}
+
+function initialSectionError() {
+  return {
+    resumen: null,
+    funnel: null,
+    series: null,
+    flujos: null,
+    diagnostico: null,
+    heatmap: null,
+  };
+}
 
 export function useMetricas(
   periodo = "7d",
@@ -30,8 +68,9 @@ export function useMetricas(
   const [diagnostico, setDiagnostico] = useState(null);
   const [heatmap, setHeatmap] = useState(null);
   const [flujosLista, setFlujosLista] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [pending, setPending] = useState(initialPending);
+  const [sectionError, setSectionError] = useState(initialSectionError);
+  const [authError, setAuthError] = useState(null);
   const requestSeqRef = useRef(0);
 
   const loadFlujosLista = useCallback(async () => {
@@ -54,41 +93,73 @@ export function useMetricas(
       customRange
     );
     if (params.periodo === "custom" && (!params.desde || !params.hasta)) return;
+
     const requestSeq = ++requestSeqRef.current;
-    setLoading(true);
-    setError(null);
-    try {
-      const [r, f, s, fl, d, h] = await Promise.all([
-        fetchMetricasResumen(params),
-        uiOcultar.embudoReal ? Promise.resolve(null) : fetchMetricasFunnel(params),
-        fetchMetricasSeries(params),
-        uiOcultar.metricasPorFlujo ? Promise.resolve(null) : fetchMetricasFlujos(params),
-        fetchMetricasDiagnostico(params),
-        uiOcultar.heatmapHorario ? Promise.resolve(null) : fetchMetricasHeatmap(params),
-      ]);
-      if (requestSeq !== requestSeqRef.current) return;
-      setResumen(r);
-      setFunnel(f);
-      setSeries(s);
-      setFlujos(fl);
-      setDiagnostico(d);
-      setHeatmap(h);
-    } catch (err) {
-      if (requestSeq !== requestSeqRef.current) return;
-      const msg =
-        err instanceof MetricasApiError ? err.message : "Error al cargar métricas";
-      setError(msg);
-      setResumen(null);
-      setFunnel(null);
-      setSeries(null);
-      setFlujos(null);
-      setDiagnostico(null);
-      setHeatmap(null);
-    } finally {
-      if (requestSeq === requestSeqRef.current) {
-        setLoading(false);
+    const skip = {
+      resumen: false,
+      funnel: Boolean(uiOcultar.embudoReal),
+      series: false,
+      flujos: Boolean(uiOcultar.metricasPorFlujo),
+      diagnostico: false,
+      heatmap: Boolean(uiOcultar.heatmapHorario),
+    };
+
+    setAuthError(null);
+    setPending((current) => {
+      const next = { ...current };
+      SECTION_KEYS.forEach((key) => {
+        next[key] = !skip[key];
+      });
+      return next;
+    });
+    setSectionError((current) => {
+      const next = { ...current };
+      SECTION_KEYS.forEach((key) => {
+        if (!skip[key]) next[key] = null;
+      });
+      return next;
+    });
+
+    const stillCurrent = () => requestSeq === requestSeqRef.current;
+
+    const finishSection = (key) => {
+      if (!stillCurrent()) return;
+      setPending((current) => ({ ...current, [key]: false }));
+    };
+
+    const runSection = async (key, fetcher, applyData) => {
+      if (skip[key]) {
+        finishSection(key);
+        return;
       }
-    }
+      try {
+        const data = await fetcher(params);
+        if (!stillCurrent()) return;
+        applyData(data);
+        setSectionError((current) => ({ ...current, [key]: null }));
+      } catch (err) {
+        if (!stillCurrent()) return;
+        if (err instanceof MetricasApiError && (err.code === "NO_AUTH" || err.status === 401)) {
+          setAuthError(err.message);
+          setPending(idlePending());
+          return;
+        }
+        const msg =
+          err instanceof MetricasApiError ? err.message : "Error al cargar métricas";
+        setSectionError((current) => ({ ...current, [key]: msg }));
+      } finally {
+        finishSection(key);
+      }
+    };
+
+    await Promise.all([
+      runSection("resumen", fetchMetricasResumen, setResumen),
+      runSection("funnel", fetchMetricasFunnel, setFunnel),
+      runSection("series", fetchMetricasSeries, setSeries),
+      runSection("flujos", fetchMetricasFlujos, setFlujos),
+      runSection("diagnostico", fetchMetricasDiagnostico, setDiagnostico),
+      runSection("heatmap", fetchMetricasHeatmap, setHeatmap),
+    ]);
   }, [periodo, flujoId, conexionWhatsappId, conexionesLoading, uiOcultar, customRange]);
 
   const loadAll = useCallback(async () => {
@@ -112,6 +183,14 @@ export function useMetricas(
   const reloadFlujosListaLive = useDebouncedCallback(loadFlujosLista, 600);
   useSocketEvent(RT.FLUJO_GUARDADO, reloadFlujosListaLive);
 
+  const updating =
+    (pending.resumen && resumen != null) ||
+    (pending.funnel && funnel != null) ||
+    (pending.series && series != null) ||
+    (pending.flujos && flujos != null) ||
+    (pending.diagnostico && diagnostico != null) ||
+    (pending.heatmap && heatmap != null);
+
   return {
     resumen,
     funnel,
@@ -120,8 +199,10 @@ export function useMetricas(
     diagnostico,
     heatmap,
     flujosLista,
-    loading,
-    error,
+    pending,
+    sectionError,
+    authError,
+    updating,
     reload: loadAll,
   };
 }
