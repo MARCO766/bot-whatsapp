@@ -114,7 +114,7 @@ function HeatmapGrid({ heatmap }) {
 }
 
 export default function Metricas() {
-  const [periodo, setPeriodo] = useState("7d");
+  const [periodo, setPeriodo] = useState("hoy");
   const [customRange, setCustomRange] = useState(null);
   const [periodoToast, setPeriodoToast] = useState("");
   const [flujoId, setFlujoId] = useState("");
