@@ -1599,7 +1599,6 @@ async function serieDesdeRpcONull(usuarioId, query) {
       },
       rpc
     );
-    console.log(`[METRICAS_RPC] serie OK alcance=${alcanceLogRpc(params)}`);
     return serie;
   } catch (e) {
     console.log(
@@ -1628,7 +1627,6 @@ async function diagnosticoDesdeRpcONull(usuarioId, query) {
       },
       rpc
     ).respuesta;
-    console.log(`[METRICAS_RPC] diagnostico OK alcance=${alcanceLogRpc(params)}`);
     return diagnostico;
   } catch (e) {
     console.log(
