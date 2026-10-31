@@ -1574,6 +1574,12 @@ function serieRpcEsValida(rpc, desdeIso, hastaIso) {
   return true;
 }
 
+function alcanceLogRpc(params) {
+  const conexion = params && params.p_conexion_whatsapp_id;
+  if (conexion == null || String(conexion).trim() === "") return "todas";
+  return String(conexion);
+}
+
 async function serieDesdeRpcONull(usuarioId, query) {
   const { rango, flujoId, params } = parametrosRpcMetricas(usuarioId, query);
   try {
@@ -1584,7 +1590,7 @@ async function serieDesdeRpcONull(usuarioId, query) {
       );
       return null;
     }
-    return armarSerieDesdeRpc(
+    const serie = armarSerieDesdeRpc(
       {
         periodo: rango.periodo,
         desde: rango.desde,
@@ -1593,6 +1599,8 @@ async function serieDesdeRpcONull(usuarioId, query) {
       },
       rpc
     );
+    console.log(`[METRICAS_RPC] serie OK alcance=${alcanceLogRpc(params)}`);
+    return serie;
   } catch (e) {
     console.log(
       `[metricas] metricas_series_diarias falló: ${errorMessage(e) || e.message}. Se usa el cálculo actual.`
@@ -1611,7 +1619,7 @@ async function diagnosticoDesdeRpcONull(usuarioId, query) {
       );
       return null;
     }
-    return armarDiagnosticoDesdeRpc(
+    const diagnostico = armarDiagnosticoDesdeRpc(
       {
         periodo: rango.periodo,
         desde: rango.desde,
@@ -1620,6 +1628,8 @@ async function diagnosticoDesdeRpcONull(usuarioId, query) {
       },
       rpc
     ).respuesta;
+    console.log(`[METRICAS_RPC] diagnostico OK alcance=${alcanceLogRpc(params)}`);
+    return diagnostico;
   } catch (e) {
     console.log(
       `[metricas] metricas_diagnostico_kpis falló: ${errorMessage(e) || e.message}. Se usa el cálculo actual.`
