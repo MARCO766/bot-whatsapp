@@ -111,253 +111,83 @@ const PREMIUM_HERO_STYLES = `
   margin:0;font-size:.75rem;color:#64748b;
 }
 
-/* ── Builder demo — composición estática tipo captura real ── */
+/* ── Builder Visual — captura real, grande y proporcional ── */
 .mb-hero-builder{
-  --hb-w:1600;--hb-h:380;
-  width:100%;max-width:100%;margin:0 auto;
-  container-type:inline-size;
-  container-name:hero-builder;
+  --hb-float:-12px;
+  position:relative;
+  width:min(1024px,100%);
+  margin:8px auto 0;
 }
-.mb-hero-builder__shell{
-  border-radius:12px;
-  border:1px solid rgba(255,255,255,.06);
-  background:rgba(7,11,18,.5);
-  box-shadow:0 12px 40px rgba(0,0,0,.22);
-  overflow:visible;
+.mb-hero-builder__glow{
+  position:absolute;
+  inset:-14% -5% -10%;
+  pointer-events:none;
+  z-index:0;
+  background:
+    radial-gradient(ellipse 36% 58% at 14% 62%, rgba(57,255,20,.38), transparent 68%),
+    radial-gradient(ellipse 34% 54% at 86% 40%, rgba(34,211,238,.32), transparent 70%),
+    radial-gradient(ellipse 46% 36% at 50% 108%, rgba(57,255,20,.14), transparent 72%);
+  filter:blur(10px);
 }
-.mb-hero-builder__toolbar{
-  display:flex;align-items:center;justify-content:space-between;gap:10px;
-  padding:8px 12px;border-bottom:1px solid rgba(255,255,255,.05);
-  background:rgba(10,14,22,.72);
+.mb-hero-builder__float{
+  position:relative;
+  z-index:1;
+  animation:mb-hero-builder-float 6.8s ease-in-out infinite;
+  will-change:transform;
 }
-.mb-hero-builder__toolbar-left{display:flex;align-items:center;gap:8px;min-width:0}
-.mb-hero-builder__toolbar-back{
-  padding:5px 9px;border-radius:7px;border:none;
-  background:rgba(255,255,255,.06);color:#94a3b8;font-size:.62rem;font-weight:600;font-family:inherit;
+.mb-hero-builder__frame{
+  border-radius:22px;
+  padding:1px;
+  background:linear-gradient(135deg, rgba(57,255,20,.62), rgba(34,211,238,.38) 52%, rgba(57,255,20,.22));
+  box-shadow:
+    0 0 42px rgba(57,255,20,.18),
+    0 0 78px rgba(34,211,238,.14),
+    0 30px 70px rgba(0,0,0,.45);
 }
-.mb-hero-builder__toolbar-title{margin:0;font-size:.72rem;font-weight:600;color:#cbd5e1;line-height:1.2}
-.mb-hero-builder__toolbar-hint{margin:1px 0 0;font-size:.58rem;color:#64748b}
-.mb-hero-builder__toolbar-pill{
-  padding:4px 8px;border-radius:999px;
-  border:1px solid rgba(255,255,255,.08);
-  background:rgba(255,255,255,.03);
-  color:#94a3b8;font-size:.58rem;font-weight:600;white-space:nowrap;
+.mb-hero-builder__shot{
+  display:block;
+  width:100%;
+  height:auto;
+  aspect-ratio:1024 / 438;
+  object-fit:contain;
+  object-position:center;
+  border-radius:21px;
+  background:#070b14;
 }
-.mb-hero-builder__stage{
-  position:relative;overflow:visible;
-  padding:12px 6px 16px;min-height:400px;
+@keyframes mb-hero-builder-float{
+  0%,100%{transform:translateY(0)}
+  50%{transform:translateY(var(--hb-float))}
 }
-.mb-hero-builder__scroll{
-  overflow:visible;-webkit-overflow-scrolling:touch;
-  width:100%;display:flex;justify-content:center;
+@media (max-width:1100px){
+  .mb-hero-builder{width:100%;margin-top:4px}
+  .mb-hero-builder__glow{inset:-10% -3% -8%}
+  .mb-hero-builder__frame{border-radius:18px}
+  .mb-hero-builder__shot{border-radius:17px}
 }
-.mb-hero-builder__scale{
-  position:relative;width:100%;
-  height:calc(var(--hb-h) * 1px * (100cqw / var(--hb-w)));
-  min-height:340px;max-height:420px;
+@media (max-width:768px){
+  .mb-hero-builder{--hb-float:-8px}
+  .mb-hero-builder__glow{inset:-8% -2% -6%;filter:blur(8px)}
+  .mb-hero-builder__frame{
+    border-radius:14px;
+    box-shadow:
+      0 0 28px rgba(57,255,20,.16),
+      0 0 42px rgba(34,211,238,.12),
+      0 18px 40px rgba(0,0,0,.4);
+  }
+  .mb-hero-builder__shot{border-radius:13px}
 }
-.mb-hero-builder__canvas-wrap{
-  position:absolute;left:50%;top:0;
-  width:calc(var(--hb-w) * 1px);height:calc(var(--hb-h) * 1px);
-  transform-origin:top center;
-  transform:translateX(-50%) scale(calc(100cqw / (var(--hb-w) * 1px)));
-}
-@supports not (width: 1cqw){
-  .mb-hero-builder__scale{aspect-ratio:1600/380;height:auto;min-height:300px;max-height:420px}
-  .mb-hero-builder__canvas-wrap{left:0;transform:none;position:relative;margin:0 auto}
-}
-.mb-hero-builder__grid{
-  position:absolute;inset:0;pointer-events:none;
-  background-color:transparent;
-  background-image:radial-gradient(circle,rgba(255,255,255,.055) 1px,transparent 1px);
-  background-size:22px 22px;
-}
-.mb-hero-builder__edges{
-  position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:1;
-}
-.mb-hero-builder__edge{
-  fill:none;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;
-  stroke-dasharray:6 8;
-}
-.mb-hero-builder__edge--green{stroke:rgba(57,255,20,.72)}
-.mb-hero-builder__edge--cyan{stroke:rgba(34,211,238,.5)}
-.mb-hero-builder__edge--gold{stroke:rgba(251,191,36,.55)}
-.mb-hero-builder__nodes{position:absolute;inset:0;z-index:2}
-.mb-hero-builder__node-item{position:absolute}
-.mb-hero-builder__node-item--primary{z-index:3}
-.mb-hero-builder__node-item--hero{z-index:4}
-.mb-hero-builder .node{position:relative;box-sizing:border-box;font-family:inherit}
-.mb-hero-builder .port{
-  position:absolute;width:10px;height:10px;border-radius:50%;
-  border:2px solid rgba(255,255,255,.4);box-sizing:border-box;z-index:3;
-}
-.mb-hero-builder .port.in{
-  left:-5px;top:50%;transform:translateY(-50%);
-  background:#31ff92;
-}
-.mb-hero-builder .port.out{
-  right:-5px;top:50%;transform:translateY(-50%);
-  background:#ff9800;
-}
-.mb-hero-builder .port.out--top{top:28%;transform:translateY(-50%)}
-.mb-hero-builder .port.out--bottom{top:72%;transform:translateY(-50%)}
-
-/* Nodos principales */
-.mb-hero-builder .node-start{
-  width:186px;min-height:88px;padding:12px 14px;border-radius:14px;
-  background:linear-gradient(135deg,#39ff14,#18b80a);
-  border:1px solid rgba(140,255,60,.7);
-  box-shadow:0 2px 12px rgba(0,0,0,.2);
-}
-.mb-hero-builder .node-title-start{margin:0 0 4px;font-size:.78rem;font-weight:800;color:#061018}
-.mb-hero-builder .node-desc-start{margin:0;font-size:.66rem;font-weight:600;color:#061018;opacity:.86;line-height:1.35}
-.mb-hero-builder .openai-agent-node{background:transparent;border:none;box-shadow:none;padding:0}
-.mb-hero-builder .openai-agent-circle{
-  position:relative;width:120px;height:120px;border-radius:50%;
-  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
-  background:linear-gradient(145deg,#0f0a1f,#1e1b4b 38%,#312e81 62%,#4338ca);
-  border:2px solid rgba(103,232,249,.55);
-  box-shadow:0 4px 20px rgba(0,0,0,.28);
-}
-.mb-hero-builder .openai-agent-status-badge{
-  position:absolute;top:-5px;left:50%;transform:translateX(-50%);
-  padding:2px 7px;border-radius:999px;font-size:.46rem;font-weight:700;
-  letter-spacing:.06em;text-transform:uppercase;color:#a5f3fc;
-  background:rgba(15,23,42,.94);border:1px solid rgba(34,211,238,.4);
-}
-.mb-hero-builder .openai-agent-icon-svg{width:44px;height:44px;color:#f0fdfa}
-.mb-hero-builder .openai-agent-title{margin:0;font-size:.58rem;font-weight:800;color:#f8fafc;text-align:center}
-.mb-hero-builder .conversion-node{background:transparent;border:none;padding:0;box-shadow:none}
-.mb-hero-builder .conversion-circle{
-  position:relative;width:108px;height:108px;border-radius:50%;
-  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;
-  background:linear-gradient(145deg,rgba(28,22,8,.94),rgba(12,16,28,.96));
-  border:2px solid rgba(250,204,21,.65);
-  box-shadow:0 4px 18px rgba(0,0,0,.24);
-}
-.mb-hero-builder .conversion-badge-event{
-  position:absolute;top:6px;left:50%;transform:translateX(-50%);
-  font-size:.44rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;
-  color:#1a1408;background:linear-gradient(135deg,#fde047,#f59e0b);
-  border-radius:999px;padding:1px 5px;
-}
-.mb-hero-builder .conversion-icon{font-size:1rem;line-height:1}
-.mb-hero-builder .conversion-title{margin:0;font-size:.62rem;font-weight:800;color:#fde047}
-.mb-hero-builder .conversion-venta{margin:0;font-size:.5rem;color:#fcd34d;opacity:.88}
-
-/* Nodos secundarios */
-.mb-hero-builder .content-node{
-  width:168px;border-radius:12px;overflow:visible;
-  border:1px solid rgba(56,189,248,.22);
-  background:rgba(10,18,32,.92);
-  box-shadow:0 2px 10px rgba(0,0,0,.14);
-}
-.mb-hero-builder .content-node--mini{width:128px}
-.mb-hero-builder .content-header{
-  display:flex;align-items:center;justify-content:space-between;gap:4px;
-  padding:6px 8px;border-bottom:1px solid rgba(255,255,255,.06);
-}
-.mb-hero-builder .content-header-title{color:#67e8f9;font-weight:700;font-size:.62rem}
-.mb-hero-builder .content-status--completo{
-  font-size:.48rem;font-weight:700;text-transform:uppercase;
-  padding:1px 5px;border-radius:999px;color:#39ff14;
-  background:rgba(57,255,20,.08);border:1px solid rgba(57,255,20,.22);
-}
-.mb-hero-builder .content-body{padding:6px 8px 8px}
-.mb-hero-builder .content-preview{
-  margin:0;padding:5px 7px;border-radius:6px;
-  background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.04);
-  font-size:.56rem;line-height:1.35;color:#94a3b8;
-}
-.mb-hero-builder .content-variants{display:flex;gap:3px;margin-top:5px}
-.mb-hero-builder .content-variant-thumb{
-  width:24px;height:24px;border-radius:5px;
-  background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06);
-}
-.mb-hero-builder .seguimiento-v2-node{
-  width:158px;padding:0;border-radius:12px;
-  border:1px solid rgba(34,211,238,.22);
-  background:rgba(10,20,36,.9);
-  box-shadow:0 2px 10px rgba(0,0,0,.12);
-}
-.mb-hero-builder .segv2-shell{padding:8px 9px 9px}
-.mb-hero-builder .segv2-header{display:flex;align-items:flex-start;gap:6px;margin-bottom:5px}
-.mb-hero-builder .segv2-lock{font-size:14px;line-height:1}
-.mb-hero-builder .segv2-title{font-size:.62rem;font-weight:700;color:#bae6fd;line-height:1.25}
-.mb-hero-builder .segv2-badge{
-  display:inline-flex;padding:1px 5px;border-radius:999px;
-  font-size:.44rem;font-weight:700;text-transform:uppercase;
-  color:#083344;background:#22d3ee;
-}
-.mb-hero-builder .segv2-steps{display:flex;flex-direction:column;gap:3px}
-.mb-hero-builder .segv2-step{
-  padding:4px 6px;border-radius:6px;font-size:.52rem;color:#94a3b8;
-  background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.05);
-}
-.mb-hero-builder .lector-pago-node{
-  width:172px;padding:8px 9px 9px;border-radius:12px;
-  border:1px solid rgba(129,246,236,.18);
-  background:rgba(9,14,28,.9);
-  box-shadow:0 2px 10px rgba(0,0,0,.14);color:#dbe5f5;
-}
-.mb-hero-builder .lector-pago-header{display:flex;justify-content:space-between;align-items:center;gap:4px;margin-bottom:6px}
-.mb-hero-builder .lector-pago-header-main{display:flex;align-items:center;gap:5px}
-.mb-hero-builder .lector-pago-icon{
-  width:18px;height:18px;display:flex;align-items:center;justify-content:center;
-  border-radius:5px;background:rgba(34,211,238,.08);border:1px solid rgba(125,211,252,.14);font-size:.58rem;
-}
-.mb-hero-builder .lector-pago-node .node-title{
-  margin:0;font-size:.58rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#ecfeff;
-}
-.mb-hero-builder .lector-pago-status-badge{
-  font-size:.44rem;font-weight:600;color:#5eead4;
-  padding:1px 5px;border-radius:999px;background:rgba(45,212,191,.08);border:1px solid rgba(45,212,191,.18);
-}
-.mb-hero-builder .lector-pago-cards-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px}
-.mb-hero-builder .lector-pago-card{
-  padding:4px 6px;border-radius:6px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.04);
-}
-.mb-hero-builder .lector-pago-card-title{font-size:.44rem;font-weight:600;color:#64748b;margin-bottom:1px}
-.mb-hero-builder .lector-pago-card-value{font-size:.54rem;font-weight:700;color:#e2e8f0}
-.mb-hero-builder .node-etiqueta{
-  width:128px;padding:8px 9px;border-radius:10px;
-  background:rgba(10,16,28,.9);
-  border:1px solid rgba(41,182,246,.22);
-  box-shadow:0 2px 8px rgba(0,0,0,.1);
-}
-.mb-hero-builder .node-etiqueta::before{
-  content:"";position:absolute;left:0;top:0;bottom:0;width:2px;border-radius:10px 0 0 10px;
-  background:#29b6f6;
-}
-.mb-hero-builder .node-etiqueta .node-title{margin:0 0 5px;font-size:.62rem;font-weight:700;color:#29b6f6}
-.mb-hero-builder .node-etiqueta-select{
-  padding:5px 7px;border-radius:6px;
-  background:#0f1117;border:1px solid rgba(51,65,85,.6);color:#cbd5e1;
-  font-size:.54rem;
+@media (max-width:520px){
+  .mb-hero-builder{--hb-float:-6px}
+  .mb-hero-builder__frame{border-radius:12px}
+  .mb-hero-builder__shot{border-radius:11px}
 }
 
 @media(max-width:768px){
   .mb-premium__hero--centered{padding:36px 16px 28px}
-  .mb-premium__hero-showcase{margin-top:28px}
+  .mb-premium__hero-showcase{margin-top:22px}
   .mb-premium__hero-title{font-size:clamp(1.85rem,6.8vw,2.55rem);line-height:1.04;letter-spacing:-.038em}
   .mb-premium__hero-title-line--l1,
   .mb-premium__hero-title-line--l2{white-space:normal}
-  .mb-hero-builder__toolbar-hint{display:none}
-  .mb-hero-builder__scroll{
-    overflow-x:auto;justify-content:flex-start;padding-bottom:4px;
-  }
-  .mb-hero-builder__scale{
-    min-width:calc(var(--hb-w) * 1px);width:calc(var(--hb-w) * 1px);
-    height:calc(var(--hb-h) * 1px);min-height:calc(var(--hb-h) * 1px);
-    max-height:none;flex-shrink:0;
-  }
-  .mb-hero-builder__canvas-wrap{
-    position:relative;left:0;transform:none;
-    width:calc(var(--hb-w) * 1px);height:calc(var(--hb-h) * 1px);
-  }
-}
-@media(max-width:520px){
-  .mb-hero-builder__toolbar-back{display:none}
 }
 
 @keyframes mb-hero-showcase-in{
@@ -366,6 +196,7 @@ const PREMIUM_HERO_STYLES = `
 }
 @media(prefers-reduced-motion:reduce){
   .mb-premium__hero-showcase{animation:none!important;opacity:1;transform:none}
+  .mb-hero-builder__float{animation:none!important}
 }
 `;
 
@@ -378,216 +209,22 @@ const HERO_CHIPS = [
   "Multi WhatsApp",
 ];
 
-const HERO_OPENAI_ICON = `<svg class="openai-agent-icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M22.282 9.821a5.985 5.985 0 0 0-.516-4.938 6.046 6.046 0 0 0-6.51-2.9A6.065 6.065 0 0 0 4.981 4.18a5.985 5.985 0 0 0-3.998 2.9 6.046 6.046 0 0 0 .742 7.097 5.98 5.98 0 0 0 .511 4.936 6.051 6.051 0 0 0 6.514 2.9 5.985 5.985 0 0 0 4.997-2.9 6.056 6.056 0 0 0 3.997-2.9 5.995 5.995 0 0 0 .336-6.394zm-9.282 8.179a4.475 4.475 0 0 1-2.876-1.04l.141-.081 4.779-2.758a.795.795 0 0 0 .392-.681v-6.737l2.02 1.168a.071.071 0 0 1 .038.052v5.583a4.504 4.504 0 0 1-4.494 4.494zM3.806 18.329a4.472 4.472 0 0 1-.535-3.014l.142.085 4.783 2.759a.771.771 0 0 0 .78 0l5.843-3.369v2.332a.08.08 0 0 1-.033.062L9.74 19.95a4.5 4.5 0 0 1-5.934-1.621zM2.34 7.895a4.485 4.485 0 0 1 2.366-1.973V11.6a.766.766 0 0 0 .388.676l5.815 3.355-2.02 1.168a.076.076 0 0 1-.071 0l-4.83-2.786A4.504 4.504 0 0 1 2.34 7.872zm16.597 3.855-5.833-3.387L15.119 7.2a.076.076 0 0 1 .071 0l4.83 2.791a4.494 4.494 0 0 1-.676 8.105v-5.678a.79.79 0 0 0-.407-.667zm2.01-3.023-.141-.085-4.774-2.782a.776.776 0 0 0-.785 0L9.409 9.23V6.897a.066.066 0 0 1 .028-.061l4.83-2.787a4.5 4.5 0 0 1 6.68 4.66zm-12.64 4.135-2.02-1.168a.08.08 0 0 1-.038-.057V6.075a4.5 4.5 0 0 1 7.375-3.453l-.142.08-4.778 2.758a.795.795 0 0 0-.393.681zm1.097-2.365 2.602-1.5 2.607 1.5v2.999l-2.597 1.5-2.607-1.5z"/></svg>`;
-
-/** Conexiones ortogonales — viewBox 1600×380 */
-const HERO_BUILDER_EDGES = [
-  { d: "M 206 209 H 248 V 188 H 260", tone: "green" },
-  { d: "M 428 188 H 478 V 218 H 500", tone: "green" },
-  { d: "M 620 192 H 652 V 78 H 680", tone: "green" },
-  { d: "M 620 218 H 652 V 154 H 680", tone: "green" },
-  { d: "M 620 244 H 652 V 246 H 680", tone: "green" },
-  { d: "M 838 78 H 878 V 170 H 920", tone: "cyan" },
-  { d: "M 808 154 H 864 V 170 H 920", tone: "cyan" },
-  { d: "M 808 246 H 864 V 198 H 920", tone: "cyan" },
-  { d: "M 1092 170 H 1130 V 182 H 1160", tone: "green" },
-  { d: "M 1288 182 H 1320 V 222 H 1340", tone: "gold" },
-];
-
-function renderHeroBuilderEdgesSvg() {
-  const paths = HERO_BUILDER_EDGES.map(
-    (edge) =>
-      `<path class="mb-hero-builder__edge mb-hero-builder__edge--${edge.tone}" d="${edge.d}"/>`
-  ).join("");
-  return `<svg class="mb-hero-builder__edges" viewBox="0 0 1600 380" preserveAspectRatio="xMidYMid meet" aria-hidden="true">${paths}</svg>`;
-}
-
-function renderHeroBuilderStartNode() {
-  return `
-  <div class="mb-hero-builder__node-item mb-hero-builder__node-item--primary" style="left:20px;top:165px">
-    <div class="node node-start">
-      <h3 class="node-title node-title-start">▶ Inicio del Flujo</h3>
-      <p class="node-desc node-desc-start">Aquí comienza tu flujo.</p>
-      <div class="port out"></div>
-    </div>
-  </div>`;
-}
-
-function renderHeroBuilderContentNode() {
-  return `
-  <div class="mb-hero-builder__node-item" style="left:260px;top:128px">
-    <div class="node content-node">
-      <div class="port in"></div>
-      <div class="content-header">
-        <span class="content-header-title">💬 Contenido</span>
-        <span class="content-status content-status--completo">Completo</span>
-      </div>
-      <div class="content-body">
-        <p class="content-preview">¡Hola! 👋 Info del producto y medios de pago.</p>
-        <div class="content-variants" aria-hidden="true">
-          <span class="content-variant-thumb"></span>
-          <span class="content-variant-thumb"></span>
-        </div>
-      </div>
-      <div class="port out"></div>
-    </div>
-  </div>`;
-}
-
-function renderHeroBuilderMiniContentNode(label, preview, top) {
-  return `
-  <div class="mb-hero-builder__node-item" style="left:680px;top:${top}px">
-    <div class="node content-node content-node--mini">
-      <div class="port in"></div>
-      <div class="content-header">
-        <span class="content-header-title">💬 ${escapeHtml(label)}</span>
-      </div>
-      <div class="content-body">
-        <p class="content-preview">${escapeHtml(preview)}</p>
-      </div>
-      <div class="port out"></div>
-    </div>
-  </div>`;
-}
-
-function renderHeroBuilderOpenAINode() {
-  return `
-  <div class="mb-hero-builder__node-item mb-hero-builder__node-item--primary mb-hero-builder__node-item--hero" style="left:500px;top:158px">
-    <div class="node openai-agent-node">
-      <div class="openai-agent-circle">
-        <span class="openai-agent-status-badge">+ IA Activa</span>
-        <div class="openai-agent-icon-wrap">${HERO_OPENAI_ICON}</div>
-        <h3 class="openai-agent-title">Agente OpenAI</h3>
-        <div class="port in"></div>
-        <div class="port out port--top"></div>
-        <div class="port out"></div>
-        <div class="port out port--bottom"></div>
-      </div>
-    </div>
-  </div>`;
-}
-
-function renderHeroBuilderSeguimientoNode() {
-  return `
-  <div class="mb-hero-builder__node-item" style="left:680px;top:28px">
-    <div class="node seguimiento-v2-node">
-      <div class="port in"></div>
-      <div class="segv2-shell">
-        <div class="segv2-header">
-          <span class="segv2-lock">🔒</span>
-          <div>
-            <div class="segv2-title">Seguimiento CRM V2</div>
-            <span class="segv2-badge">2 pasos</span>
-          </div>
-        </div>
-        <div class="segv2-steps">
-          <div class="segv2-step">1 · Texto seguimiento</div>
-          <div class="segv2-step">2 · Imagen oferta</div>
-        </div>
-      </div>
-      <div class="port out"></div>
-    </div>
-  </div>`;
-}
-
-function renderHeroBuilderLectorNode() {
-  return `
-  <div class="mb-hero-builder__node-item" style="left:920px;top:100px">
-    <div class="node lector-pago-node">
-      <div class="port in"></div>
-      <div class="lector-pago-header">
-        <div class="lector-pago-header-main">
-          <span class="lector-pago-icon">📄</span>
-          <h3 class="node-title">Lector Pago</h3>
-        </div>
-        <span class="lector-pago-status-badge">Esperando</span>
-      </div>
-      <div class="lector-pago-cards-grid">
-        <div class="lector-pago-card">
-          <div class="lector-pago-card-title">MONTO</div>
-          <div class="lector-pago-card-value">49 USD</div>
-        </div>
-        <div class="lector-pago-card">
-          <div class="lector-pago-card-title">MONEDA</div>
-          <div class="lector-pago-card-value">USD</div>
-        </div>
-        <div class="lector-pago-card">
-          <div class="lector-pago-card-title">NOMBRE</div>
-          <div class="lector-pago-card-value">Cliente</div>
-        </div>
-        <div class="lector-pago-card">
-          <div class="lector-pago-card-title">TOLERANCIA</div>
-          <div class="lector-pago-card-value">±2 USD</div>
-        </div>
-      </div>
-      <div class="port out"></div>
-    </div>
-  </div>`;
-}
-
-function renderHeroBuilderEtiquetaNode() {
-  return `
-  <div class="mb-hero-builder__node-item" style="left:1160px;top:148px">
-    <div class="node node-etiqueta">
-      <div class="port in"></div>
-      <h3 class="node-title">🏷️ Etiqueta</h3>
-      <div class="node-etiqueta-select">VIP · Pagó depósito</div>
-      <div class="port out"></div>
-    </div>
-  </div>`;
-}
-
-function renderHeroBuilderConversionNode() {
-  return `
-  <div class="mb-hero-builder__node-item mb-hero-builder__node-item--primary" style="left:1340px;top:168px">
-    <div class="node conversion-node">
-      <div class="conversion-circle">
-        <span class="conversion-badge-event">Evento</span>
-        <div class="conversion-icon" aria-hidden="true">💰</div>
-        <h3 class="conversion-title">Conversión</h3>
-        <p class="conversion-venta">Venta 49 USD</p>
-        <div class="port in"></div>
-      </div>
-    </div>
-  </div>`;
-}
+const BUILDER_VISUAL_SRC = "/assets/login/builder-visual.png";
 
 function renderHeroBuilderDemo() {
-  const nodes = [
-    renderHeroBuilderStartNode(),
-    renderHeroBuilderContentNode(),
-    renderHeroBuilderOpenAINode(),
-    renderHeroBuilderSeguimientoNode(),
-    renderHeroBuilderMiniContentNode("QR", "Envía datos de pago QR", 118),
-    renderHeroBuilderMiniContentNode("Depósito", "Instrucciones bancarias", 210),
-    renderHeroBuilderLectorNode(),
-    renderHeroBuilderEtiquetaNode(),
-    renderHeroBuilderConversionNode(),
-  ].join("");
-
   return `
 <div class="mb-hero-builder" aria-label="Vista previa del constructor visual de MacBot">
-  <div class="mb-hero-builder__shell">
-    <div class="mb-hero-builder__toolbar">
-      <div class="mb-hero-builder__toolbar-left">
-        <span class="mb-hero-builder__toolbar-back">← Flujos</span>
-        <div>
-          <p class="mb-hero-builder__toolbar-title">Ventas WhatsApp</p>
-          <p class="mb-hero-builder__toolbar-hint">Constructor visual · Flujo activo</p>
-        </div>
-      </div>
-      <span class="mb-hero-builder__toolbar-pill">Flujo activo</span>
-    </div>
-    <div class="mb-hero-builder__stage">
-      <div class="mb-hero-builder__scroll">
-        <div class="mb-hero-builder__scale">
-          <div class="mb-hero-builder__canvas-wrap">
-            <div class="mb-hero-builder__grid" aria-hidden="true"></div>
-            ${renderHeroBuilderEdgesSvg()}
-            <div class="mb-hero-builder__nodes">${nodes}</div>
-          </div>
-        </div>
-      </div>
+  <div class="mb-hero-builder__glow" aria-hidden="true"></div>
+  <div class="mb-hero-builder__float">
+    <div class="mb-hero-builder__frame">
+      <img
+        class="mb-hero-builder__shot"
+        src="${BUILDER_VISUAL_SRC}"
+        alt="Builder Visual de MacBot con un flujo de WhatsApp: inicio, contenido, agente OpenAI, seguimiento, lector de pagos, etiqueta y conversión"
+        width="1024"
+        height="438"
+        decoding="async"
+      />
     </div>
   </div>
 </div>`;
