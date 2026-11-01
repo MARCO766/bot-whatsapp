@@ -10,7 +10,7 @@
   box-shadow: 0 0 18px rgba(34, 211, 238, 0.28);
 }
 
-/* Fase 2 — canvas compacto cuadrado (90–110px) */
+/* Silueta compacta en nube. La caja del nodo sigue igual para no mover el puerto. */
 #builderArea .node.seguimiento-v2-node:has(.segv2-canvas-compact),
 #builderArea .node.seguimiento-v2-node.seguimiento-v2-node--compact:has(.segv2-canvas-compact),
 .seguimiento-v2-node.node:has(.segv2-canvas-compact),
@@ -22,16 +22,19 @@
   max-height: 105px !important;
   height: auto !important;
   padding: 0 !important;
-  border-radius: 14px !important;
-  border: 1px solid rgba(34, 211, 238, 0.38) !important;
-  background: #0f1724 !important;
+  border-radius: 0 !important;
+  border: none !important;
+  background: transparent !important;
   box-shadow: none !important;
+  outline: none !important;
+  filter: none !important;
   overflow: visible !important;
+  animation: none !important;
+  transition: none !important;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  transition: border-color 0.15s ease, outline 0.15s ease;
 }
 
 #builderArea .node.seguimiento-v2-node:has(.segv2-canvas-compact):hover,
@@ -39,16 +42,23 @@
 .seguimiento-v2-node.node:has(.segv2-canvas-compact):hover,
 .seguimiento-v2-node.node.seguimiento-v2-node--compact:has(.segv2-canvas-compact):hover {
   transform: none !important;
-  border-color: rgba(56, 189, 248, 0.55) !important;
+  border-color: transparent !important;
   box-shadow: none !important;
+  outline: none !important;
+  filter: none !important;
+  animation: none !important;
+  transition: none !important;
 }
 
 #builderArea .node.seguimiento-v2-node:has(.segv2-canvas-compact).selected,
 #builderArea .node.seguimiento-v2-node.seguimiento-v2-node--compact:has(.segv2-canvas-compact).selected {
-  outline: 2px solid rgba(56, 189, 248, 0.72) !important;
-  outline-offset: 2px;
-  border-color: rgba(56, 189, 248, 0.65) !important;
+  outline: none !important;
+  outline-offset: 0;
+  border-color: transparent !important;
   box-shadow: none !important;
+  filter: none !important;
+  animation: none !important;
+  transition: none !important;
 }
 
 #builderArea .node.seguimiento-v2-node:has(.segv2-canvas-compact) .node-actions,
@@ -72,15 +82,21 @@
 }
 
 #builderArea .node.seguimiento-v2-node:has(.segv2-canvas-compact) > .port.in:hover,
-#builderArea .node.seguimiento-v2-node:has(.segv2-canvas-compact) > .port.out:hover,
-.seguimiento-v2-node:has(.segv2-canvas-compact) > .port.in:hover,
-.seguimiento-v2-node:has(.segv2-canvas-compact) > .port.out:hover {
+.seguimiento-v2-node:has(.segv2-canvas-compact) > .port.in:hover {
   animation: none !important;
   transform: translateY(-50%) scale(1.06) !important;
 }
 
+#builderArea .node.seguimiento-v2-node:has(.segv2-canvas-compact) > .port.out,
+.seguimiento-v2-node:has(.segv2-canvas-compact) > .port.out {
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
 .seguimiento-v2-node:has(.segv2-canvas-compact) .segv2-shell--compact-square,
 .seguimiento-v2-node.seguimiento-v2-node--compact:has(.segv2-canvas-compact) .segv2-shell--compact-square {
+  position: relative;
   width: 100%;
   padding: 0;
   display: flex;
@@ -89,6 +105,22 @@
   align-items: center;
   justify-content: center;
   min-height: 0;
+  background: transparent;
+}
+
+.seguimiento-v2-node:has(.segv2-canvas-compact) .segv2-shell--compact-square::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath fill='%233c3a78' stroke='%238f8cc4' stroke-width='2.4' stroke-linejoin='round' d='M18 64C6 64 4 52 14 47C10 34 24 26 36 34C42 20 64 18 72 32C84 26 98 36 94 50C100 56 96 70 84 72C72 84 26 84 16 72C4 74 2 66 18 64Z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 100% 100%;
+  filter: none;
+  animation: none;
+  transition: none;
 }
 
 .seguimiento-v2-node:has(.segv2-canvas-compact) .segv2-canvas-content,
@@ -104,20 +136,25 @@
 }
 
 .seguimiento-v2-node:has(.segv2-canvas-compact) .segv2-canvas-compact {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2px;
+  gap: 1px;
   width: 100%;
-  padding: 8px 6px 10px;
+  padding: 18px 12px 12px;
   text-align: center;
   min-height: 0;
+  pointer-events: none;
 }
 
 .seguimiento-v2-node:has(.segv2-canvas-compact) .segv2-canvas-compact-icon {
   font-size: 26px;
   line-height: 1;
+  filter: none;
+  text-shadow: none;
 }
 
 .seguimiento-v2-node:has(.segv2-canvas-compact) .segv2-canvas-compact-label {
@@ -130,6 +167,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  text-shadow: none;
 }
 
 .seguimiento-v2-node:has(.segv2-canvas-compact) .segv2-canvas-compact-count {
@@ -137,6 +175,7 @@
   font-weight: 700;
   color: #7dd3fc;
   line-height: 1.15;
+  text-shadow: none;
 }
 
 .seguimiento-v2-node:has(.segv2-canvas-compact) .segv2-canvas-compact-tipos {
