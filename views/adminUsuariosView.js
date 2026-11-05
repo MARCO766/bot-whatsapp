@@ -101,6 +101,22 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
 .mb-admin__date{max-width:150px}
 .mb-admin__lim{font-family:"JetBrains Mono",monospace;font-size:.75rem;color:#94a3b8}
 .mb-admin__lim--inf{color:#39ff14}
+.mb-admin__leads{min-width:148px}
+.mb-admin__leads-figures{
+  font-family:"JetBrains Mono",monospace;font-size:.75rem;color:#e2e8f0;white-space:nowrap;
+}
+.mb-admin__leads-rest{margin-top:2px;font-size:.7rem;color:#94a3b8;white-space:nowrap}
+.mb-admin__leads-rest--inf{color:#39ff14;font-weight:600}
+.mb-admin__leads-rest--zero{color:#f87171;font-weight:600}
+.mb-admin__leads-na{color:#64748b;font-size:.75rem}
+.mb-admin__leads-track{
+  margin-top:6px;height:6px;border-radius:999px;
+  background:rgba(30,41,59,.9);border:1px solid rgba(148,163,184,.12);overflow:hidden;
+}
+.mb-admin__leads-fill{display:block;height:100%;border-radius:999px}
+.mb-admin__leads-fill--ok{background:linear-gradient(90deg,#06b6d4,#22c55e)}
+.mb-admin__leads-fill--warn{background:linear-gradient(90deg,#eab308,#f59e0b)}
+.mb-admin__leads-fill--danger{background:linear-gradient(90deg,#f97316,#ef4444)}
 .mb-admin__btn{
   padding:6px 12px;border-radius:8px;border:none;cursor:pointer;
   font-size:.75rem;font-weight:600;font-family:inherit;
@@ -250,6 +266,7 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
           <th>Activo</th>
           <th>WA</th>
           <th>Contactos</th>
+          <th>Leads restantes</th>
           <th>Flujos</th>
           <th>Vencimiento</th>
           <th>Acciones</th>
@@ -478,6 +495,30 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
     return Number.isFinite(x) ? String(x) : "";
   }
 
+  function leadsCell(leads){
+    if (!leads || leads.disponible !== true) {
+      return '<td data-leads><span class="mb-admin__leads-na">No disponible</span></td>';
+    }
+    if (leads.ilimitado) {
+      return '<td data-leads class="mb-admin__leads">' +
+        '<div class="mb-admin__leads-figures">' + fmtNum(leads.usados) + ' / Ilimitado</div>' +
+        '<div class="mb-admin__leads-rest mb-admin__leads-rest--inf">∞ Ilimitado</div>' +
+      '</td>';
+    }
+    const pct = Number(leads.porcentaje);
+    const width = Number.isFinite(pct) ? Math.min(100, Math.max(0, pct)) : 0;
+    const tono = leads.tono === "danger" || leads.tono === "warn" || leads.tono === "ok" ? leads.tono : "ok";
+    const restCls = Number(leads.restantes) === 0 ? " mb-admin__leads-rest--zero" : "";
+    const widthStyle = width > 0 ? ("width:" + width + "%") : "width:0";
+    return '<td data-leads class="mb-admin__leads">' +
+      '<div class="mb-admin__leads-figures">' + fmtNum(leads.usados) + " / " + fmtNum(leads.limite) + "</div>" +
+      '<div class="mb-admin__leads-rest' + restCls + '">Restantes: ' + fmtNum(leads.restantes) + " · " + (Number.isFinite(pct) ? pct : 0) + "%</div>" +
+      '<div class="mb-admin__leads-track" role="progressbar" aria-valuenow="' + width + '" aria-valuemin="0" aria-valuemax="100">' +
+        '<div class="mb-admin__leads-fill mb-admin__leads-fill--' + tono + '" style="' + widthStyle + '"></div>' +
+      "</div>" +
+    "</td>";
+  }
+
   function rowHtml(u){
     const venceVal = u.fecha_vencimiento ? u.fecha_vencimiento.slice(0, 16) : "";
     const planOpts = PLANES.map(p => '<option value="'+p+'"'+(p===u.plan?' selected':'')+'>'+(PLAN_LABELS[p]||p)+'</option>').join("");
@@ -502,7 +543,7 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
       : "";
     const limitesRow = esMacbotEditable(u)
       ? '<tr class="mb-admin__limites-row" data-limites-for="'+escapeHtml(String(u.id))+'" hidden>' +
-          '<td colspan="10"><div class="mb-admin__limites-panel" data-limites-panel>Cargando…</div></td>' +
+          '<td colspan="11"><div class="mb-admin__limites-panel" data-limites-panel>Cargando…</div></td>' +
         '</tr>'
       : "";
     return '<tr data-id="'+escapeHtml(String(u.id))+'"'+(protegido?' data-protegido="1"':'')+'>' +
@@ -513,6 +554,7 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
       '<td class="mb-admin__activo '+activoCls+'" data-activo-cell>'+activoTxt+'</td>' +
       '<td data-wa>'+fmtLim(u.max_whatsapp)+'</td>' +
       '<td data-ct>'+fmtLim(u.max_contactos)+'</td>' +
+      leadsCell(u.leads) +
       '<td data-fl>'+fmtLim(u.max_flujos)+'</td>' +
       '<td><input type="datetime-local" class="mb-admin__date" data-field="fecha_vencimiento" value="'+venceVal+'"></td>' +
       '<td style="white-space:nowrap">' +
@@ -522,7 +564,7 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
         limitesBtn +
       '</td></tr>' +
       '<tr class="mb-admin__contactos-row" data-contactos-for="'+escapeHtml(String(u.id))+'" hidden>' +
-        '<td colspan="10"><div class="mb-admin__contactos-panel" data-contactos-panel>Cargando…</div></td>' +
+        '<td colspan="11"><div class="mb-admin__contactos-panel" data-contactos-panel>Cargando…</div></td>' +
       '</tr>' +
       limitesRow;
   }
@@ -660,8 +702,35 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
 
   function mergeUsuario(updated){
     const i = usuarios.findIndex(u => sameId(u.id, updated.id));
-    if (i >= 0) usuarios[i] = updated;
+    if (i >= 0) {
+      const prevLeads = usuarios[i].leads;
+      usuarios[i] = updated && updated.leads ? updated : Object.assign({}, updated, { leads: prevLeads });
+    }
     applyFilters();
+  }
+
+  async function refrescarLeadsUsuario(id){
+    try {
+      const res = await fetch("/api/admin/usuarios", { credentials: "same-origin" });
+      const data = await res.json();
+      if (!res.ok || !data.ok || !Array.isArray(data.usuarios)) return;
+      const fresh = data.usuarios.find(function(x){ return sameId(x.id, id); });
+      if (!fresh) return;
+      const i = usuarios.findIndex(function(x){ return sameId(x.id, id); });
+      if (i >= 0) usuarios[i].leads = fresh.leads;
+      let row = null;
+      $tbody.querySelectorAll("tr[data-id]").forEach(function(el){
+        if (sameId(el.getAttribute("data-id"), id)) row = el;
+      });
+      const cell = row && row.querySelector("[data-leads]");
+      if (!cell) return;
+      const holder = document.createElement("table");
+      holder.innerHTML = "<tbody><tr>" + leadsCell(fresh.leads) + "</tr></tbody>";
+      const next = holder.querySelector("[data-leads]");
+      if (next) cell.replaceWith(next);
+    } catch (e) {
+      console.warn("leads refresh", e);
+    }
   }
 
   async function reloadUsuarios(){
@@ -957,6 +1026,7 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
       if (!res.ok || !body.ok) throw new Error(body.error || "Error " + res.status);
       const panel = detail.querySelector("[data-contactos-panel]");
       if (panel) await loadContactosPanel(id, panel);
+      await refrescarLeadsUsuario(id);
       toast("Bloque acreditado");
       await reloadLogs();
     } catch (err) {

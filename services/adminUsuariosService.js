@@ -17,6 +17,7 @@ const {
 } = require("./planesService");
 const { isSchemaMissingError, logSchemaFallback } = require("./supabaseSafe");
 const { esAdminProtegido } = require("../middlewares/adminAuth");
+const { adjuntarLeadsRestantes } = require("./adminLeadsRestantes");
 
 const ADMIN_PROTECTED_ERROR =
   "La cuenta administradora principal está protegida.";
@@ -234,7 +235,8 @@ async function listarUsuarios() {
 
 async function obtenerDashboardAdmin() {
   const [resumen, usuarios] = await Promise.all([obtenerResumenAdmin(), listarUsuarios()]);
-  return { resumen, usuarios };
+  const usuariosConLeads = await adjuntarLeadsRestantes(usuarios);
+  return { resumen, usuarios: usuariosConLeads };
 }
 
 async function fetchUsuarioRowPorId(id) {
@@ -353,6 +355,16 @@ async function actualizarLimitesUsuario(id, body) {
     }
 
     const usuario = mapUsuarioRow(rows[0]);
+    let usuarioConLeads = usuario;
+    try {
+      const [enriquecido] = await adjuntarLeadsRestantes([usuario]);
+      if (enriquecido) usuarioConLeads = enriquecido;
+    } catch (leadsError) {
+      console.log(
+        "[ADMIN_LIMITES_UPDATE] leads:",
+        leadsError?.message || leadsError
+      );
+    }
 
     console.log("[ADMIN_LIMITES_UPDATE] updated", {
       id: usuario.id,
@@ -361,7 +373,7 @@ async function actualizarLimitesUsuario(id, body) {
       max_flujos: usuario.max_flujos,
     });
 
-    return { ok: true, usuario, anterior };
+    return { ok: true, usuario: usuarioConLeads, anterior };
   } catch (error) {
     console.log("[ADMIN_LIMITES_UPDATE] error", {
       message: error.response?.data?.message || error.response?.data?.hint || error.message,
