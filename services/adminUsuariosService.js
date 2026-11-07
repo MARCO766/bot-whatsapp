@@ -15,9 +15,9 @@ const {
   planPersistibleParaDb,
   planesEquivalentes,
 } = require("./planesService");
-const { isSchemaMissingError, logSchemaFallback } = require("./supabaseSafe");
+const { isSchemaMissingError, logSchemaFallback, errorMessage } = require("./supabaseSafe");
 const { esAdminProtegido } = require("../middlewares/adminAuth");
-const { adjuntarLeadsRestantes } = require("./adminLeadsRestantes");
+const { adjuntarLeadsRestantes, resumirLeadsRestantes } = require("./adminLeadsRestantes");
 
 const ADMIN_PROTECTED_ERROR =
   "La cuenta administradora principal está protegida.";
@@ -541,6 +541,275 @@ async function actualizarEstadoUsuario(id, activo) {
   return { ok: true, usuario, anterior };
 }
 
+/**
+ * Delta del ajuste de leads. No acepta el límite absoluto.
+ * Un entero no seguro, un decimal o un tipo distinto se rechazan.
+ * Cero se rechaza con un mensaje propio.
+ */
+function parseDeltaAjusteLeads(delta) {
+  if (typeof delta !== "number" || !Number.isFinite(delta) || !Number.isSafeInteger(delta)) {
+    return { error: "delta debe ser un entero" };
+  }
+  if (delta === 0) {
+    return { error: "delta debe ser distinto de cero" };
+  }
+  return { value: delta };
+}
+
+function sumaEnteraSegura(a, b) {
+  if (!Number.isSafeInteger(a) || !Number.isSafeInteger(b)) return null;
+  if (b > 0 && a > Number.MAX_SAFE_INTEGER - b) return null;
+  if (b < 0 && a < Number.MIN_SAFE_INTEGER - b) return null;
+  return a + b;
+}
+
+/**
+ * Reglas del ajuste, sin lectura ni escritura.
+ * La base nueva es base + delta. El límite efectivo suma los bloques ya pagados.
+ * Una reducción no puede dejar ese límite por debajo de los leads utilizados.
+ */
+function evaluarAjusteCapacidadLeads({ base, bloques, usados, delta }) {
+  if (!Number.isSafeInteger(base) || base < 0) {
+    return { ok: false, status: 400, error: "La capacidad base no admite un ajuste numérico." };
+  }
+  if (!Number.isSafeInteger(bloques) || bloques < 0) {
+    return {
+      ok: false,
+      status: 503,
+      error: "No se pudieron leer los bloques pagados. No se modificó la capacidad.",
+    };
+  }
+  if (!Number.isSafeInteger(usados) || usados < 0) {
+    return {
+      ok: false,
+      status: 503,
+      error: "No se pudo verificar el consumo de leads. No se modificó la capacidad.",
+    };
+  }
+  if (!Number.isSafeInteger(delta) || delta === 0) {
+    return { ok: false, status: 400, error: "delta debe ser un entero distinto de cero" };
+  }
+
+  const limiteAnterior = sumaEnteraSegura(base, bloques);
+  const nuevaBase = sumaEnteraSegura(base, delta);
+  if (limiteAnterior == null || nuevaBase == null) {
+    return { ok: false, status: 400, error: "El ajuste excede el rango permitido." };
+  }
+  const limiteNuevo = sumaEnteraSegura(nuevaBase, bloques);
+  if (limiteNuevo == null) {
+    return { ok: false, status: 400, error: "El ajuste excede el rango permitido." };
+  }
+
+  const reduccionMaximaBase = Math.min(base, Math.max(0, limiteAnterior - usados));
+
+  if (nuevaBase < 0) {
+    return {
+      ok: false,
+      status: 400,
+      error:
+        "La capacidad base no puede quedar negativa. Reducción máxima aplicable por la base: " +
+        reduccionMaximaBase +
+        ".",
+      reduccion_maxima_base: reduccionMaximaBase,
+    };
+  }
+
+  if (delta < 0 && usados > limiteAnterior) {
+    return {
+      ok: false,
+      status: 400,
+      error:
+        "El usuario ya supera su límite actual (" +
+        usados +
+        " utilizados, límite " +
+        limiteAnterior +
+        "). Solo se permiten aumentos.",
+      reduccion_maxima_base: 0,
+    };
+  }
+
+  if (delta < 0 && limiteNuevo < usados) {
+    return {
+      ok: false,
+      status: 400,
+      error:
+        "La reducción dejaría el límite en " +
+        limiteNuevo +
+        ", por debajo de los " +
+        usados +
+        " leads utilizados. Reducción máxima aplicable por la base: " +
+        reduccionMaximaBase +
+        ".",
+      reduccion_maxima_base: reduccionMaximaBase,
+    };
+  }
+
+  return {
+    ok: true,
+    nuevaBase,
+    limiteAnterior,
+    limiteNuevo,
+    reduccionMaximaBase,
+    disponibles: Math.max(0, limiteNuevo - usados),
+  };
+}
+
+const OPERACION_UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function parseOperacionAjusteLeads(value) {
+  const id = String(value ?? "").trim();
+  if (!OPERACION_UUID_RE.test(id)) {
+    return { error: "operacion_id debe ser un UUID" };
+  }
+  return { value: id };
+}
+
+function rpcNoDisponible(error) {
+  const code = String(error?.response?.data?.code || "");
+  const msg = errorMessage(error).toLowerCase();
+  return (
+    isSchemaMissingError(error) ||
+    code === "PGRST202" ||
+    msg.includes("could not find the function") ||
+    (msg.includes("does not exist") && msg.includes("function"))
+  );
+}
+
+async function aplicarAjusteCapacidadLeadsRpc({ usuarioId, operacionId, delta }) {
+  const res = await axios.post(
+    `${SUPABASE_URL}/rest/v1/rpc/aplicar_ajuste_capacidad_leads`,
+    {
+      p_usuario_id: usuarioId,
+      p_operacion_id: operacionId,
+      p_delta: delta,
+    },
+    {
+      headers: headers({ "Content-Type": "application/json" }),
+    }
+  );
+  return res.data;
+}
+
+function usuarioDesdeAjuste(data, usuarioId) {
+  const vigente = data && data.vigente;
+  const pintar = Boolean(vigente && vigente.disponible === true);
+  if (!pintar) return { usuario: null, pintar: false };
+  const leads = resumirLeadsRestantes(Number(vigente.usados), Number(vigente.limite));
+  if (!data.usuario || typeof data.usuario !== "object") {
+    return {
+      usuario: {
+        id: String(usuarioId),
+        max_contactos: Number(vigente.base),
+        leads,
+      },
+      pintar: true,
+    };
+  }
+  const base = mapUsuarioRow(data.usuario);
+  base.max_contactos = Number(vigente.base);
+  base.leads = leads;
+  return { usuario: base, pintar: true };
+}
+
+/**
+ * Suma o resta capacidad de un solo usuario MacBot.
+ * La escritura ocurre solo dentro de aplicar_ajuste_capacidad_leads.
+ * El mismo UUID no vuelve a modificar max_contactos.
+ */
+async function ajustarCapacidadLeads(id, delta, operacionId, deps = {}) {
+  const deltaParsed = parseDeltaAjusteLeads(delta);
+  if (deltaParsed.error) {
+    return { ok: false, status: 400, error: deltaParsed.error };
+  }
+
+  const operacionParsed = parseOperacionAjusteLeads(operacionId);
+  if (operacionParsed.error) {
+    return { ok: false, status: 400, error: operacionParsed.error };
+  }
+
+  const usuarioId = normalizarUsuarioId(id);
+  if (!usuarioId) {
+    return { ok: false, status: 400, error: "id de usuario inválido" };
+  }
+
+  const aplicar =
+    typeof deps.aplicarRpc === "function" ? deps.aplicarRpc : aplicarAjusteCapacidadLeadsRpc;
+
+  let data;
+  try {
+    data = await aplicar({
+      usuarioId,
+      operacionId: operacionParsed.value,
+      delta: deltaParsed.value,
+    });
+    if (typeof data === "string") {
+      data = JSON.parse(data);
+    }
+  } catch (error) {
+    if (rpcNoDisponible(error)) {
+      logSchemaFallback("rpc/aplicar_ajuste_capacidad_leads", error);
+      return {
+        ok: false,
+        status: 503,
+        error: "La función de ajuste todavía no está disponible. No se modificó la capacidad.",
+      };
+    }
+    console.log("[ADMIN_AJUSTE_LEADS] error", {
+      message: error.response?.data?.message || error.response?.data?.hint || error.message,
+      id: usuarioId,
+    });
+    throw error;
+  }
+
+  if (!data || data.ok !== true) {
+    return {
+      ok: false,
+      status: Number(data?.status) || 400,
+      error: data?.error || "No se pudo aplicar el ajuste",
+      code: data?.code,
+      plan: data?.plan,
+      reduccion_maxima_base:
+        data?.reduccion_maxima_base == null ? undefined : Number(data.reduccion_maxima_base),
+    };
+  }
+
+  const repetida = data.repetida === true;
+  const ajuste = data.ajuste || {};
+  const { usuario, pintar } = usuarioDesdeAjuste(data, usuarioId);
+
+  console.log("[ADMIN_AJUSTE_LEADS] " + (repetida ? "replay" : "updated"), {
+    id: usuarioId,
+    operacion_id: operacionParsed.value,
+    delta: ajuste.delta,
+    repetida,
+  });
+
+  return {
+    ok: true,
+    repetida,
+    pintar,
+    usuario,
+    ajuste,
+    vigente: data.vigente || null,
+    detalle: repetida
+      ? null
+      : {
+          usuario_afectado_id: usuario?.id || usuarioId,
+          usuario_afectado_email: usuario?.email || data.usuario?.email || null,
+          operacion_id: operacionParsed.value,
+          delta: Number(ajuste.delta),
+          base_anterior: Number(ajuste.base_anterior),
+          base_nueva: Number(ajuste.base_nueva),
+          bloques: Number(ajuste.bloques),
+          limite_efectivo_anterior: Number(ajuste.limite_anterior),
+          limite_efectivo_nuevo: Number(ajuste.limite_nuevo),
+          leads_utilizados: Number(ajuste.leads_utilizados),
+          leads_disponibles: Number(ajuste.leads_disponibles),
+        },
+  };
+}
+
 module.exports = {
   LIMITES_POR_PLAN,
   ESTRATEGIA_LIMITES,
@@ -555,4 +824,8 @@ module.exports = {
   actualizarPlanUsuario,
   actualizarLimitesUsuario,
   actualizarEstadoUsuario,
+  parseDeltaAjusteLeads,
+  parseOperacionAjusteLeads,
+  evaluarAjusteCapacidadLeads,
+  ajustarCapacidadLeads,
 };

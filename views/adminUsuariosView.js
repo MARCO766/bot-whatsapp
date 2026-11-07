@@ -193,6 +193,10 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
 .mb-admin__log-badge--suspender_usuario{background:rgba(239,68,68,.2);color:#fca5a5}
 .mb-admin__log-badge--acreditar_bloque_contactos{background:rgba(34,197,94,.18);color:#86efac}
 .mb-admin__log-badge--cambio_limites_usuario{background:rgba(251,191,36,.18);color:#fcd34d}
+.mb-admin__log-badge--ajuste_capacidad_leads{background:rgba(34,211,238,.15);color:#67e8f9}
+.mb-admin__ajuste{margin-top:16px;padding-top:14px;border-top:1px solid rgba(51,65,85,.7)}
+.mb-admin__ajuste-title{margin:0 0 8px;font-size:.8rem;font-weight:700;letter-spacing:.04em;color:#e2e8f0}
+.mb-admin__ajuste-preview{margin:8px 0 12px;font-size:.8rem;color:#67e8f9;line-height:1.45}
 .mb-admin__limites-row td{background:rgba(8,15,28,.88)!important;padding:0;border-bottom:1px solid rgba(51,65,85,.7)}
 .mb-admin__limites-panel{padding:16px 18px 20px}
 .mb-admin__limites-title{margin:0 0 12px;font-size:.95rem;font-weight:700;color:#f1f5f9}
@@ -361,7 +365,8 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
       activar_usuario: "Activación",
       suspender_usuario: "Suspensión",
       acreditar_bloque_contactos: "Bloque contactos",
-      cambio_limites_usuario: "Límites usuario"
+      cambio_limites_usuario: "Límites usuario",
+      ajuste_capacidad_leads: "Ajuste de leads"
     };
     return labels[accion] || accion;
   }
@@ -386,6 +391,11 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
           (d.max_whatsapp_anterior ?? "—") + "/" + (d.max_contactos_anterior ?? "—") + "/" + (d.max_flujos_anterior ?? "—") +
           " → " +
           (d.max_whatsapp_nuevo ?? "—") + "/" + (d.max_contactos_nuevo ?? "—") + "/" + (d.max_flujos_nuevo ?? "—") + ".";
+      case "ajuste_capacidad_leads":
+        return admin + " ajustó la capacidad de leads de " + target + " (" +
+          (Number(d.delta) > 0 ? "+" : "") + (d.delta ?? "—") +
+          "). Límite " + (d.limite_efectivo_anterior ?? "—") + " → " + (d.limite_efectivo_nuevo ?? "—") +
+          ". Utilizados: " + (d.leads_utilizados ?? "—") + ".";
       default:
         return admin + " realizó " + (log.accion || "acción") + " sobre " + target + ".";
     }
@@ -656,7 +666,7 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
     let hint = '<p class="mb-admin__limites-hint">Edita la capacidad base de contactos. Los bloques pagados son independientes y se suman en runtime.</p>';
     if (baseOk && bloques > 0) {
       hint +=
-        '<p class="mb-admin__limites-hint">Contactos base: <strong>' + fmtNum(base) + '</strong> · ' +
+        '<p class="mb-admin__limites-hint" data-limites-capacidad>Contactos base: <strong>' + fmtNum(base) + '</strong> · ' +
         'Bloques pagados: <strong>+' + fmtNum(bloques) + '</strong> · ' +
         'Capacidad efectiva: <strong>' + fmtNum(base + bloques) + '</strong></p>';
     }
@@ -680,7 +690,150 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
         '<button type="submit" class="mb-admin__btn mb-admin__btn--save">Guardar límites</button>' +
       '</form>' +
       '<p class="mb-admin__limites-err" data-limites-err hidden></p>' +
-      '<p class="mb-admin__limites-ok" data-limites-ok hidden></p>';
+      '<p class="mb-admin__limites-ok" data-limites-ok hidden></p>' +
+      renderAjusteLeads(u, bloquesData);
+  }
+
+  function reduccionMaximaBase(base, bloques, usados) {
+    return Math.min(base, Math.max(0, base + bloques - usados));
+  }
+
+  function parseDeltaAjusteInput(raw) {
+    const s = String(raw ?? "").trim();
+    if (!/^[+-]?\\d+$/.test(s)) {
+      return { error: "ingresa un entero distinto de cero" };
+    }
+    const n = parseInt(s, 10);
+    if (!Number.isSafeInteger(n) || n === 0) {
+      return { error: "ingresa un entero distinto de cero" };
+    }
+    return { value: n };
+  }
+
+  function renderAjusteLeads(u, bloquesData) {
+    const bloquesConocidos = Boolean(
+      bloquesData && Number.isFinite(Number(bloquesData.capacidad_comprada))
+    );
+    const bloques = bloquesConocidos ? Math.floor(Number(bloquesData.capacidad_comprada)) : null;
+    const baseRemota = bloquesData ? Number(bloquesData.max_contactos_actual) : NaN;
+    const baseNum = Number.isSafeInteger(baseRemota) && baseRemota >= 0
+      ? baseRemota
+      : Number(u.max_contactos);
+    const baseOk = Number.isSafeInteger(baseNum) && baseNum >= 0;
+    const leads = u.leads || null;
+    const ilimitado = Boolean(leads && leads.ilimitado === true);
+    const conteoOk = Boolean(
+      leads &&
+      leads.disponible === true &&
+      !ilimitado &&
+      Number.isFinite(Number(leads.usados)) &&
+      Number(leads.usados) >= 0
+    );
+    const usados = conteoOk ? Math.floor(Number(leads.usados)) : null;
+    const puede = baseOk && bloquesConocidos && bloques >= 0 && conteoOk;
+    const limite = puede ? baseNum + bloques : null;
+    const disponibles = puede ? Math.max(0, limite - usados) : null;
+    const reduccion = puede ? reduccionMaximaBase(baseNum, bloques, usados) : null;
+    let aviso = "";
+    if (!bloquesConocidos) {
+      aviso = "No se pudieron leer los bloques pagados. El ajuste queda deshabilitado.";
+    } else if (ilimitado || !baseOk) {
+      aviso = "Esta cuenta no tiene una capacidad base numérica. El ajuste no aplica.";
+    } else if (!conteoOk) {
+      aviso = "No se pudo leer el consumo de leads. El ajuste queda deshabilitado para no asumir que el consumo es cero.";
+    }
+
+    const stats =
+      '<div class="mb-admin__contactos-stats">' +
+        '<span>Leads utilizados: <strong data-ajuste-usados>' + (usados == null ? "—" : fmtNum(usados)) + "</strong></span>" +
+        '<span>Capacidad base actual: <strong data-ajuste-base>' + (baseOk ? fmtNum(baseNum) : "—") + "</strong></span>" +
+        '<span>Bloques adicionales pagados: <strong data-ajuste-bloques>' + (bloques == null ? "—" : fmtNum(bloques)) + "</strong></span>" +
+        '<span>Límite efectivo actual: <strong data-ajuste-limite>' + (limite == null ? "—" : fmtNum(limite)) + "</strong></span>" +
+        '<span>Leads disponibles: <strong data-ajuste-disponibles>' + (disponibles == null ? "—" : fmtNum(disponibles)) + "</strong></span>" +
+      "</div>" +
+      '<p class="mb-admin__contactos-note" data-ajuste-reduccion>Reducción máxima aplicable por la base: <strong>' +
+        (reduccion == null ? "—" : fmtNum(reduccion)) +
+      "</strong>. Los bloques pagados no se modifican.</p>";
+
+    const controles = puede
+      ? '<div class="mb-admin__limites-field">' +
+          '<label for="ajuste-delta-' + escapeHtml(String(u.id)) + '">Cantidad a agregar o quitar</label>' +
+          '<input type="text" inputmode="numeric" class="mb-admin__limites-input" id="ajuste-delta-' + escapeHtml(String(u.id)) + '" data-ajuste-delta placeholder="500 o -300" autocomplete="off">' +
+        "</div>" +
+        '<p class="mb-admin__ajuste-preview" data-ajuste-preview>Nuevo límite: ingresa una cantidad.</p>' +
+        '<button type="button" class="mb-admin__btn mb-admin__btn--save" data-ajuste-aplicar>APLICAR AJUSTE</button>'
+      : '<p class="mb-admin__contactos-note">' + escapeHtml(aviso) + "</p>";
+
+    return '<section class="mb-admin__ajuste" data-ajuste-box' +
+      ' data-usuario="' + escapeHtml(String(u.id)) + '"' +
+      ' data-base="' + (baseOk ? String(baseNum) : "") + '"' +
+      ' data-bloques="' + (bloques == null ? "" : String(bloques)) + '"' +
+      ' data-usados="' + (usados == null ? "" : String(usados)) + '"' +
+      ' data-conteo="' + (puede ? "1" : "0") + '">' +
+      '<h3 class="mb-admin__ajuste-title">AJUSTE DE CAPACIDAD DE LEADS</h3>' +
+      '<p class="mb-admin__contactos-note">El número es la cantidad que se suma o se resta. No es el límite total. No modifica los leads ya utilizados ni los bloques pagados.</p>' +
+      stats +
+      controles +
+      '<p class="mb-admin__limites-err" data-ajuste-err hidden></p>' +
+      '<p class="mb-admin__limites-ok" data-ajuste-ok hidden></p>' +
+    "</section>";
+  }
+
+  function actualizarPreviewAjuste(box) {
+    const preview = box.querySelector("[data-ajuste-preview]");
+    if (!preview) return;
+    if (box.getAttribute("data-conteo") !== "1") {
+      preview.textContent = "Nuevo límite: no disponible.";
+      return;
+    }
+    const base = Number(box.getAttribute("data-base"));
+    const bloques = Number(box.getAttribute("data-bloques"));
+    const usados = Number(box.getAttribute("data-usados"));
+    const parsed = parseDeltaAjusteInput(box.querySelector("[data-ajuste-delta]")?.value);
+    if (parsed.error) {
+      preview.textContent = "Nuevo límite: " + parsed.error + ".";
+      return;
+    }
+    const delta = parsed.value;
+    const nuevaBase = base + delta;
+    const nuevo = nuevaBase + bloques;
+    const maxima = reduccionMaximaBase(base, bloques, usados);
+    if (nuevaBase < 0) {
+      preview.textContent = "Nuevo límite: rechazado. La base quedaría negativa. Reducción máxima aplicable por la base: " + fmtNum(maxima) + ".";
+      return;
+    }
+    if (delta < 0 && usados > base + bloques) {
+      preview.textContent = "Nuevo límite: rechazado. El consumo ya supera el límite. Solo se pueden agregar leads.";
+      return;
+    }
+    if (delta < 0 && nuevo < usados) {
+      preview.textContent = "Nuevo límite: " + fmtNum(nuevo) + " — rechazado. Quedaría por debajo de los " + fmtNum(usados) + " leads utilizados. Reducción máxima aplicable por la base: " + fmtNum(maxima) + ".";
+      return;
+    }
+    preview.textContent = "Nuevo límite: " + fmtNum(nuevo) + " · Utilizados: " + fmtNum(usados) + " · Disponibles: " + fmtNum(Math.max(0, nuevo - usados));
+  }
+
+  function refrescarCifrasAjuste(box, cifras) {
+    box.setAttribute("data-base", String(cifras.base));
+    box.setAttribute("data-bloques", String(cifras.bloques));
+    box.setAttribute("data-usados", String(cifras.usados));
+    box.setAttribute("data-conteo", "1");
+    const usadosEl = box.querySelector("[data-ajuste-usados]");
+    const baseEl = box.querySelector("[data-ajuste-base]");
+    const bloquesEl = box.querySelector("[data-ajuste-bloques]");
+    const limiteEl = box.querySelector("[data-ajuste-limite]");
+    const dispEl = box.querySelector("[data-ajuste-disponibles]");
+    const redEl = box.querySelector("[data-ajuste-reduccion]");
+    if (usadosEl) usadosEl.textContent = fmtNum(cifras.usados);
+    if (baseEl) baseEl.textContent = fmtNum(cifras.base);
+    if (bloquesEl) bloquesEl.textContent = fmtNum(cifras.bloques);
+    if (limiteEl) limiteEl.textContent = fmtNum(cifras.limite);
+    if (dispEl) dispEl.textContent = fmtNum(cifras.disponibles);
+    if (redEl) {
+      redEl.innerHTML = "Reducción máxima aplicable por la base: <strong>" +
+        fmtNum(reduccionMaximaBase(cifras.base, cifras.bloques, cifras.usados)) +
+        "</strong>. Los bloques pagados no se modifican.";
+    }
   }
 
   async function loadLimitesPanel(id, panel){
@@ -1031,6 +1184,293 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
       await reloadLogs();
     } catch (err) {
       toast(err.message || "No se pudo acreditar", true);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  var operacionesPendientes = {};
+
+  function nuevoOperacionId(){
+    if (window.crypto && typeof window.crypto.randomUUID === "function") {
+      return window.crypto.randomUUID();
+    }
+    var bytes = new Uint8Array(16);
+    if (window.crypto && typeof window.crypto.getRandomValues === "function") {
+      window.crypto.getRandomValues(bytes);
+    } else {
+      for (var i = 0; i < 16; i++) bytes[i] = Math.floor(Math.random() * 256);
+    }
+    bytes[6] = (bytes[6] & 15) | 64;
+    bytes[8] = (bytes[8] & 63) | 128;
+    var hex = [];
+    for (var j = 0; j < 16; j++) hex.push((bytes[j] + 256).toString(16).slice(1));
+    return hex.slice(0, 4).join("") + "-" + hex.slice(4, 6).join("") + "-" +
+      hex.slice(6, 8).join("") + "-" + hex.slice(8, 10).join("") + "-" + hex.slice(10, 16).join("");
+  }
+
+  function mapaOperaciones(box){
+    try {
+      var parsed = JSON.parse(box.getAttribute("data-operaciones") || "{}");
+      return parsed && typeof parsed === "object" ? parsed : {};
+    } catch (e) {
+      return {};
+    }
+  }
+
+  function claveOperacion(box, delta){
+    return String(box.getAttribute("data-usuario") || "") + ":" + String(delta);
+  }
+
+  function claveAlmacenOperacion(box, delta){
+    return "macbot-ajuste-leads:" + claveOperacion(box, delta);
+  }
+
+  function uuidGuardadoValido(valor){
+    return typeof valor === "string" &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(valor);
+  }
+
+  function leerOperacionGuardada(box, delta){
+    try {
+      var valor = window.localStorage.getItem(claveAlmacenOperacion(box, delta));
+      return uuidGuardadoValido(valor) ? valor : "";
+    } catch (e) {
+      return "";
+    }
+  }
+
+  function guardarOperacion(box, delta, opId){
+    try {
+      window.localStorage.setItem(claveAlmacenOperacion(box, delta), opId);
+    } catch (e) {}
+  }
+
+  function borrarOperacionGuardada(box, delta){
+    try {
+      window.localStorage.removeItem(claveAlmacenOperacion(box, delta));
+    } catch (e) {}
+  }
+
+  function uuidParaIntento(box, delta){
+    var clave = claveOperacion(box, delta);
+    if (!operacionesPendientes[clave]) {
+      operacionesPendientes[clave] = leerOperacionGuardada(box, delta) || nuevoOperacionId();
+    }
+    guardarOperacion(box, delta, operacionesPendientes[clave]);
+    var mapa = mapaOperaciones(box);
+    mapa[String(delta)] = operacionesPendientes[clave];
+    box.setAttribute("data-operaciones", JSON.stringify(mapa));
+    return operacionesPendientes[clave];
+  }
+
+  function olvidarOperacion(box, delta){
+    delete operacionesPendientes[claveOperacion(box, delta)];
+    borrarOperacionGuardada(box, delta);
+    var mapa = mapaOperaciones(box);
+    delete mapa[String(delta)];
+    if (Object.keys(mapa).length === 0) box.removeAttribute("data-operaciones");
+    else box.setAttribute("data-operaciones", JSON.stringify(mapa));
+  }
+
+  function pintarCapacidad(id, detail, box, cifras, usuario){
+    var i = usuarios.findIndex(function(x){ return sameId(x.id, id); });
+    if (i >= 0) {
+      if (cifras.base != null) usuarios[i].max_contactos = cifras.base;
+      if (usuario && usuario.leads) usuarios[i].leads = usuario.leads;
+    }
+    var row = null;
+    $tbody.querySelectorAll("tr[data-id]").forEach(function(el){
+      if (sameId(el.getAttribute("data-id"), id)) row = el;
+    });
+    if (row && cifras.base != null) {
+      var ct = row.querySelector("[data-ct]");
+      if (ct) ct.innerHTML = fmtLim(cifras.base);
+      if (usuario && usuario.leads) {
+        var cell = row.querySelector("[data-leads]");
+        if (cell) {
+          var holder = document.createElement("table");
+          holder.innerHTML = "<tbody><tr>" + leadsCell(usuario.leads) + "</tr></tbody>";
+          var next = holder.querySelector("[data-leads]");
+          if (next) cell.replaceWith(next);
+        }
+      }
+    }
+    var baseInput = detail.querySelector('[data-limite="max_contactos"]');
+    if (baseInput && cifras.base != null) baseInput.value = String(cifras.base);
+    var cap = detail.querySelector("[data-limites-capacidad]");
+    if (cap && cifras.base != null) {
+      cap.innerHTML = "Contactos base: <strong>" + fmtNum(cifras.base) + "</strong> · " +
+        "Bloques pagados: <strong>+" + fmtNum(cifras.bloques) + "</strong> · " +
+        "Capacidad efectiva: <strong>" + fmtNum(cifras.limite) + "</strong>";
+    }
+    refrescarCifrasAjuste(box, cifras);
+  }
+
+  async function consultarCapacidadVigente(id){
+    var res = await fetch("/api/admin/usuarios", { credentials: "same-origin" });
+    var data = await res.json();
+    if (!res.ok || !data.ok || !Array.isArray(data.usuarios)) {
+      throw new Error("No se pudo leer la capacidad vigente");
+    }
+    var fresh = data.usuarios.find(function(x){ return sameId(x.id, id); });
+    if (!fresh || !fresh.leads || fresh.leads.disponible !== true || fresh.leads.ilimitado) {
+      throw new Error("No se pudo leer la capacidad vigente");
+    }
+    var bres = await fetch("/api/admin/usuarios/" + encodeURIComponent(id) + "/contactos-bloques", {
+      credentials: "same-origin"
+    });
+    var bdata = await bres.json();
+    if (!bres.ok || !bdata.ok || !Number.isFinite(Number(bdata.capacidad_comprada))) {
+      throw new Error("No se pudo leer la capacidad vigente");
+    }
+    var base = Number(bdata.max_contactos_actual);
+    if (!Number.isSafeInteger(base) || base < 0) base = Number(fresh.max_contactos);
+    return {
+      base: base,
+      bloques: Math.floor(Number(bdata.capacidad_comprada)),
+      usados: Math.floor(Number(fresh.leads.usados)),
+      limite: Math.floor(Number(fresh.leads.limite)),
+      disponibles: Math.floor(Number(fresh.leads.restantes)),
+      usuario: fresh
+    };
+  }
+
+  $tbody.addEventListener("input", function(e){
+    const input = e.target.closest("[data-ajuste-delta]");
+    if (!input || !$tbody.contains(input)) return;
+    const box = input.closest("[data-ajuste-box]");
+    if (box) actualizarPreviewAjuste(box);
+  });
+
+  $tbody.addEventListener("click", async function(e){
+    const btn = e.target.closest("[data-ajuste-aplicar]");
+    if (!btn || !$tbody.contains(btn)) return;
+    const detail = btn.closest("tr.mb-admin__limites-row");
+    const box = btn.closest("[data-ajuste-box]");
+    const id = detail ? String(detail.getAttribute("data-limites-for") || "").trim() : "";
+    const u = usuarios.find(function(x){ return sameId(x.id, id); });
+    const errEl = box && box.querySelector("[data-ajuste-err]");
+    const okEl = box && box.querySelector("[data-ajuste-ok]");
+    if (errEl) { errEl.hidden = true; errEl.textContent = ""; }
+    if (okEl) { okEl.hidden = true; okEl.textContent = ""; }
+    if (!box || !id || !u || box.getAttribute("data-conteo") !== "1") {
+      if (errEl) {
+        errEl.textContent = "No se puede aplicar el ajuste sin el consumo real y la capacidad actual.";
+        errEl.hidden = false;
+      }
+      return;
+    }
+
+    const parsed = parseDeltaAjusteInput(box.querySelector("[data-ajuste-delta]")?.value);
+    if (parsed.error) {
+      actualizarPreviewAjuste(box);
+      if (errEl) { errEl.textContent = "Ingresa un entero distinto de cero. 500 agrega y -300 quita."; errEl.hidden = false; }
+      return;
+    }
+
+    const base = Number(box.getAttribute("data-base"));
+    const bloques = Number(box.getAttribute("data-bloques"));
+    const usados = Number(box.getAttribute("data-usados"));
+    const delta = parsed.value;
+    const nuevaBase = base + delta;
+    const nuevo = nuevaBase + bloques;
+    const maxima = reduccionMaximaBase(base, bloques, usados);
+    if (nuevaBase < 0 || (delta < 0 && (usados > base + bloques || nuevo < usados))) {
+      actualizarPreviewAjuste(box);
+      if (errEl) {
+        errEl.textContent = nuevaBase < 0
+          ? "La base quedaría negativa. Reducción máxima aplicable por la base: " + fmtNum(maxima) + "."
+          : "Esa reducción dejaría el límite por debajo de los leads utilizados. Reducción máxima aplicable por la base: " + fmtNum(maxima) + ".";
+        errEl.hidden = false;
+      }
+      return;
+    }
+
+    const verbo = delta > 0 ? "agregar " + fmtNum(delta) : "quitar " + fmtNum(Math.abs(delta));
+    if (!confirm(
+      "¿Aplicar el ajuste para " + verbo + " leads a " + (u.email || "este usuario") + "?" +
+      "\\n\\nLímite actual: " + fmtNum(base + bloques) +
+      "\\nNuevo límite: " + fmtNum(nuevo) +
+      "\\nLeads utilizados: " + fmtNum(usados) + " (no se modifican)"
+    )) return;
+
+    var opId = uuidParaIntento(box, delta);
+    btn.disabled = true;
+    try {
+      const res = await fetch("/api/admin/usuarios/" + encodeURIComponent(id) + "/ajuste-leads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ delta: delta, operacion_id: opId })
+      });
+      const body = await res.json();
+      if (!res.ok || !body.ok) throw new Error(body.error || "Error " + res.status);
+
+      const deltaInput = box.querySelector("[data-ajuste-delta]");
+      const preview = box.querySelector("[data-ajuste-preview]");
+      if (body.repetida) {
+        olvidarOperacion(box, delta);
+        if (deltaInput) deltaInput.value = "";
+        if (preview) preview.textContent = "Nuevo límite: ingresa una cantidad.";
+        try {
+          var vigente = await consultarCapacidadVigente(id);
+          pintarCapacidad(id, detail, box, vigente, vigente.usuario);
+          if (okEl) {
+            okEl.textContent = "Esta operación ya se había aplicado y no se sumó de nuevo. Capacidad vigente: " +
+              fmtNum(vigente.limite) + ". Utilizados: " + fmtNum(vigente.usados) + ".";
+            okEl.hidden = false;
+          }
+        } catch (lectura) {
+          if (errEl) {
+            errEl.textContent = "Esta operación ya se había aplicado y no se sumó de nuevo. No se pudo leer la capacidad vigente; cierra y vuelve a abrir el panel.";
+            errEl.hidden = false;
+          }
+        }
+        toast("El ajuste ya estaba aplicado");
+        await reloadLogs();
+        return;
+      }
+
+      const vigenteOk = body.vigente && body.vigente.disponible === true;
+      const cifras = vigenteOk ? {
+        base: Number(body.vigente.base),
+        bloques: Number(body.vigente.bloques),
+        usados: Number(body.vigente.usados),
+        limite: Number(body.vigente.limite),
+        disponibles: Number(body.vigente.disponibles)
+      } : {
+        base: Number(body.ajuste && body.ajuste.base_nueva),
+        bloques: Number(body.ajuste && body.ajuste.bloques),
+        usados: Number(body.ajuste && body.ajuste.leads_utilizados),
+        limite: Number(body.ajuste && body.ajuste.limite_nuevo),
+        disponibles: Number(body.ajuste && body.ajuste.leads_disponibles)
+      };
+      pintarCapacidad(id, detail, box, cifras, body.usuario || null);
+      olvidarOperacion(box, delta);
+      if (deltaInput) deltaInput.value = "";
+      if (preview) preview.textContent = "Nuevo límite: ingresa una cantidad.";
+      if (okEl) {
+        okEl.textContent = "Ajuste aplicado. Utilizados: " + fmtNum(cifras.usados) +
+          ". Límite: " + fmtNum(cifras.limite) +
+          ". Disponibles: " + fmtNum(cifras.disponibles) + ".";
+        okEl.hidden = false;
+      }
+      toast("Ajuste de leads aplicado");
+      const contactosRow = findContactosRow(id);
+      if (contactosRow && !contactosRow.hidden) {
+        const panel = contactosRow.querySelector("[data-contactos-panel]");
+        if (panel) {
+          try { await loadContactosPanel(id, panel); } catch (panelErr) {
+            console.warn("ajuste contactos panel", panelErr);
+          }
+        }
+      }
+      await reloadLogs();
+    } catch (err) {
+      const msg = err.message || "No se pudo aplicar el ajuste";
+      if (errEl) { errEl.textContent = msg; errEl.hidden = false; }
+      toast(msg, true);
     } finally {
       btn.disabled = false;
     }

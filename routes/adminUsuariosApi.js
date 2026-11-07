@@ -7,6 +7,7 @@ const {
   actualizarPlanUsuario,
   actualizarLimitesUsuario,
   actualizarEstadoUsuario,
+  ajustarCapacidadLeads,
 } = require("../services/adminUsuariosService");
 const {
   registrarLogsCambioPlan,
@@ -114,6 +115,45 @@ router.patch("/api/admin/usuarios/:id/plan", protegerAdmin, async (req, res) => 
     const msg = error.response?.data?.message || error.message;
     console.log("[ADMIN_PLAN_UPDATE] error", { message: msg });
     res.status(500).json({ ok: false, error: "No se pudo actualizar el plan" });
+  }
+});
+
+router.post("/api/admin/usuarios/:id/ajuste-leads", protegerAdmin, async (req, res) => {
+  try {
+    const result = await ajustarCapacidadLeads(
+      req.params.id,
+      req.body?.delta,
+      req.body?.operacion_id
+    );
+    if (!result.ok) {
+      const body = { ok: false, error: result.error };
+      if (result.reduccion_maxima_base != null) {
+        body.reduccion_maxima_base = result.reduccion_maxima_base;
+      }
+      return res.status(result.status).json(body);
+    }
+    if (!result.repetida) {
+      await registrarAdminLog({
+        adminUsuario: req.session.usuario,
+        usuarioAfectado: result.usuario,
+        accion: "ajuste_capacidad_leads",
+        detalle: {
+          ...result.detalle,
+          admin_email: req.session.usuario?.email || null,
+        },
+      });
+    }
+    res.json({
+      ok: true,
+      repetida: result.repetida === true,
+      pintar: result.pintar === true,
+      ajuste: result.ajuste,
+      vigente: result.vigente,
+      usuario: result.usuario,
+    });
+  } catch (error) {
+    console.log("[adminUsuariosApi] POST ajuste-leads:", error.response?.data || error.message);
+    res.status(500).json({ ok: false, error: "No se pudo aplicar el ajuste de leads" });
   }
 });
 
