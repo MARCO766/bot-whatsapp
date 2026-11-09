@@ -20,6 +20,7 @@ const {
   obtenerPanelAdminContactos,
   acreditarBloqueManual,
 } = require("../services/macbotContactosService");
+const { obtenerIngresosAdmin } = require("../services/adminIngresosService");
 
 router.get("/api/admin/usuarios", protegerAdmin, async (req, res) => {
   try {
@@ -28,6 +29,37 @@ router.get("/api/admin/usuarios", protegerAdmin, async (req, res) => {
   } catch (error) {
     console.log("[adminUsuariosApi] GET usuarios:", error.response?.data || error.message);
     res.status(500).json({ ok: false, error: "No se pudo cargar usuarios" });
+  }
+});
+
+router.get("/api/admin/ingresos", protegerAdmin, async (req, res) => {
+  try {
+    const result = await obtenerIngresosAdmin({
+      periodo: req.query.periodo,
+      desde: req.query.desde,
+      hasta: req.query.hasta,
+    });
+    if (!result.ok) {
+      return res.status(result.status || 400).json({ ok: false, error: result.error });
+    }
+    res.json({
+      ok: true,
+      periodo: result.periodo,
+      desde: result.desde,
+      hasta: result.hasta,
+      zona: result.zona,
+      ingresos: result.ingresos,
+      ventas: result.ventas,
+    });
+  } catch (error) {
+    console.log("[adminUsuariosApi] GET ingresos:", error.response?.data || error.message);
+    const status = error.code === "INGRESOS_DEMASIADAS_FILAS" ? 422 : 500;
+    res.status(status).json({
+      ok: false,
+      error: error.code === "INGRESOS_DEMASIADAS_FILAS"
+        ? error.message
+        : "No se pudieron cargar los ingresos",
+    });
   }
 });
 

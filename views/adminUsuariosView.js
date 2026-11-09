@@ -76,15 +76,38 @@ body.mb-admin{
   border:1px solid rgba(51,65,85,.7);
   background:rgba(15,23,42,.55);
 }
-table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
+table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.75rem}
 .mb-admin__table th{
-  text-align:left;padding:12px 14px;
+  text-align:left;padding:8px 10px;
   background:rgba(30,41,59,.8);color:#94a3b8;font-weight:600;
   border-bottom:1px solid #334155;white-space:nowrap;
 }
-.mb-admin__table td{padding:12px 14px;border-bottom:1px solid rgba(51,65,85,.4);vertical-align:middle}
+.mb-admin__table td{padding:8px 10px;border-bottom:1px solid rgba(51,65,85,.4);vertical-align:middle}
 .mb-admin__table tr:last-child td{border-bottom:none}
-.mb-admin__table tr:hover td{background:rgba(30,41,59,.35)}
+.mb-admin__user-row{cursor:pointer}
+.mb-admin__user-row:hover td{background:rgba(30,41,59,.35)}
+.mb-admin__user-row.is-open td{background:rgba(57,255,20,.06)}
+.mb-admin__ingresos{font-family:"JetBrains Mono",monospace;font-size:.72rem;white-space:nowrap;text-align:right}
+.mb-admin__ingresos-monto{display:block;color:#e2e8f0;line-height:1.35}
+.mb-admin__ingresos-empty{color:#64748b}
+.mb-admin__ingresos-toolbar{margin-top:-4px}
+.mb-admin__periodo{
+  padding:7px 12px;border-radius:999px;border:1px solid #334155;
+  background:#0f172a;color:#cbd5e1;font-size:.75rem;font-weight:600;font-family:inherit;cursor:pointer;
+}
+.mb-admin__periodo.is-active{border-color:rgba(57,255,20,.55);color:#39ff14;background:rgba(57,255,20,.1)}
+.mb-admin__ingresos-custom{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.mb-admin__ingresos-custom[hidden]{display:none}
+.mb-admin__ingresos-date{
+  padding:7px 10px;border-radius:8px;border:1px solid #334155;background:#0f172a;color:#f1f5f9;font-size:.75rem;
+}
+.mb-admin__ingresos-resumen{font-size:.75rem;color:#94a3b8}
+.mb-admin__acciones-row td{background:rgba(8,15,28,.92)!important;padding:0;border-bottom:1px solid rgba(51,65,85,.7)}
+.mb-admin__acciones-panel{padding:12px 14px 14px}
+.mb-admin__acciones-hint{margin:0 0 10px;font-size:.75rem;color:#64748b}
+.mb-admin__acciones-form{display:flex;flex-wrap:wrap;gap:10px 12px;align-items:flex-end}
+.mb-admin__acciones-field{display:flex;flex-direction:column;gap:4px}
+.mb-admin__acciones-field label{font-size:.68rem;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#94a3b8}
 .mb-admin__email{font-family:"JetBrains Mono",monospace;font-size:.78rem;color:#cbd5e1}
 .mb-plan{
   display:inline-block;padding:3px 10px;border-radius:999px;font-size:.7rem;font-weight:600;text-transform:uppercase;
@@ -257,6 +280,18 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
       <option value="agency">Agency</option>
     </select>
   </div>
+  <div class="mb-admin__toolbar mb-admin__ingresos-toolbar" id="ingresosFiltros">
+    <button type="button" class="mb-admin__periodo is-active" data-periodo="hoy">Hoy</button>
+    <button type="button" class="mb-admin__periodo" data-periodo="ayer">Ayer</button>
+    <button type="button" class="mb-admin__periodo" data-periodo="7d">Últimos 7 días</button>
+    <button type="button" class="mb-admin__periodo" data-periodo="custom">Personalizado</button>
+    <div class="mb-admin__ingresos-custom" id="ingresosCustom" hidden>
+      <input type="date" class="mb-admin__ingresos-date" id="ingresosDesde" aria-label="Fecha inicial">
+      <input type="date" class="mb-admin__ingresos-date" id="ingresosHasta" aria-label="Fecha final">
+      <button type="button" class="mb-admin__btn mb-admin__btn--save" id="ingresosAplicar">Aplicar</button>
+    </div>
+    <span class="mb-admin__ingresos-resumen" id="ingresosResumen">Calculando ventas confirmadas…</span>
+  </div>
 
   <div class="mb-admin__table-wrap">
     <div class="mb-admin__loading" id="loading">Cargando usuarios…</div>
@@ -266,14 +301,14 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
           <th>Email</th>
           <th>Nombre</th>
           <th>Plan</th>
-          <th>Estado plan</th>
+          <th>Estado del plan</th>
           <th>Activo</th>
-          <th>WA</th>
+          <th>WhatsApp</th>
           <th>Contactos</th>
           <th>Leads restantes</th>
           <th>Flujos</th>
           <th>Vencimiento</th>
-          <th>Acciones</th>
+          <th>Ingresos</th>
         </tr>
       </thead>
       <tbody id="tbody"></tbody>
@@ -295,6 +330,10 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
   const ESTADOS = ["activo","trial","vencido","suspendido"];
   let usuarios = [];
   let filtered = [];
+  let ingresosMap = null;
+  let ingresosEstado = "loading";
+  let ingresosReq = 0;
+  let ingresosVentas = 0;
 
   const $loading = document.getElementById("loading");
   const $table = document.getElementById("table");
@@ -302,6 +341,12 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
   const $empty = document.getElementById("empty");
   const $search = document.getElementById("search");
   const $filterPlan = document.getElementById("filterPlan");
+  const $ingresosFiltros = document.getElementById("ingresosFiltros");
+  const $ingresosCustom = document.getElementById("ingresosCustom");
+  const $ingresosDesde = document.getElementById("ingresosDesde");
+  const $ingresosHasta = document.getElementById("ingresosHasta");
+  const $ingresosAplicar = document.getElementById("ingresosAplicar");
+  const $ingresosResumen = document.getElementById("ingresosResumen");
   const $toast = document.getElementById("toast");
   const $logsLoading = document.getElementById("logsLoading");
   const $logsList = document.getElementById("logsList");
@@ -530,6 +575,7 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
   }
 
   function rowHtml(u){
+    const uid = escapeHtml(String(u.id));
     const venceVal = u.fecha_vencimiento ? u.fecha_vencimiento.slice(0, 16) : "";
     const planOpts = PLANES.map(p => '<option value="'+p+'"'+(p===u.plan?' selected':'')+'>'+(PLAN_LABELS[p]||p)+'</option>').join("");
     const estOpts = ESTADOS.map(e => '<option value="'+e+'"'+(e===u.estado_plan?' selected':'')+'>'+e+'</option>').join("");
@@ -549,31 +595,45 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
       ? ' <span class="mb-admin__badge-principal">🛡️ ADMIN PRINCIPAL</span>'
       : "";
     const limitesBtn = esMacbotEditable(u)
-      ? ' <button type="button" class="mb-admin__btn mb-admin__btn--ghost" data-action="limites">Límites</button>'
+      ? '<button type="button" class="mb-admin__btn mb-admin__btn--ghost" data-action="limites">Límites</button>'
       : "";
     const limitesRow = esMacbotEditable(u)
-      ? '<tr class="mb-admin__limites-row" data-limites-for="'+escapeHtml(String(u.id))+'" hidden>' +
+      ? '<tr class="mb-admin__limites-row" data-limites-for="'+uid+'" hidden>' +
           '<td colspan="11"><div class="mb-admin__limites-panel" data-limites-panel>Cargando…</div></td>' +
         '</tr>'
       : "";
-    return '<tr data-id="'+escapeHtml(String(u.id))+'"'+(protegido?' data-protegido="1"':'')+'>' +
+    const estadoTxt = u.estado_plan ? escapeHtml(u.estado_plan) : "—";
+    return '<tr class="mb-admin__user-row" data-id="'+uid+'" aria-expanded="false"'+(protegido?' data-protegido="1"':'')+'>' +
       '<td class="mb-admin__email">'+escapeHtml(u.email)+badgePrincipal+'</td>' +
       '<td>'+escapeHtml(u.nombre)+'</td>' +
-      '<td>'+planBadge(u.plan)+' <select class="mb-admin__select" data-field="plan">'+planOpts+'</select></td>' +
-      '<td><select class="mb-admin__select" data-field="estado_plan">'+estOpts+'</select></td>' +
+      '<td>'+planBadge(u.plan)+'</td>' +
+      '<td data-estado-cell>'+estadoTxt+'</td>' +
       '<td class="mb-admin__activo '+activoCls+'" data-activo-cell>'+activoTxt+'</td>' +
       '<td data-wa>'+fmtLim(u.max_whatsapp)+'</td>' +
       '<td data-ct>'+fmtLim(u.max_contactos)+'</td>' +
       leadsCell(u.leads) +
       '<td data-fl>'+fmtLim(u.max_flujos)+'</td>' +
-      '<td><input type="datetime-local" class="mb-admin__date" data-field="fecha_vencimiento" value="'+venceVal+'"></td>' +
-      '<td style="white-space:nowrap">' +
-        '<button type="button" class="mb-admin__btn mb-admin__btn--save" data-action="save">Guardar</button> ' +
-        toggleHtml +
-        ' <button type="button" class="mb-admin__btn mb-admin__btn--ghost" data-action="contactos">Contactos</button>' +
-        limitesBtn +
-      '</td></tr>' +
-      '<tr class="mb-admin__contactos-row" data-contactos-for="'+escapeHtml(String(u.id))+'" hidden>' +
+      '<td data-vence-cell>'+fmtDate(u.fecha_vencimiento)+'</td>' +
+      '<td data-ingresos class="mb-admin__ingresos">'+ingresosInner(u.id)+'</td>' +
+      '</tr>' +
+      '<tr class="mb-admin__acciones-row" data-acciones-for="'+uid+'" hidden>' +
+        '<td colspan="11"><div class="mb-admin__acciones-panel">' +
+          '<p class="mb-admin__acciones-hint">Abrir este panel no modifica el plan ni los límites.</p>' +
+          '<form class="mb-admin__acciones-form" data-acciones-form novalidate>' +
+            '<div class="mb-admin__acciones-field"><label>Plan</label>' +
+              '<select class="mb-admin__select" data-field="plan">'+planOpts+'</select></div>' +
+            '<div class="mb-admin__acciones-field"><label>Estado del plan</label>' +
+              '<select class="mb-admin__select" data-field="estado_plan">'+estOpts+'</select></div>' +
+            '<div class="mb-admin__acciones-field"><label>Vencimiento</label>' +
+              '<input type="datetime-local" class="mb-admin__date" data-field="fecha_vencimiento" value="'+venceVal+'"></div>' +
+            '<button type="button" class="mb-admin__btn mb-admin__btn--save" data-action="save">Guardar</button>' +
+            toggleHtml +
+            '<button type="button" class="mb-admin__btn mb-admin__btn--ghost" data-action="contactos">Contactos</button>' +
+            limitesBtn +
+          '</form>' +
+        '</div></td>' +
+      '</tr>' +
+      '<tr class="mb-admin__contactos-row" data-contactos-for="'+uid+'" hidden>' +
         '<td colspan="11"><div class="mb-admin__contactos-panel" data-contactos-panel>Cargando…</div></td>' +
       '</tr>' +
       limitesRow;
@@ -589,6 +649,7 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
     $table.hidden = filtered.length === 0;
     $empty.hidden = filtered.length > 0;
     bindRowActions();
+    pintarIngresos();
   }
 
   function sameId(a, b){
@@ -655,6 +716,28 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
 
   function findLimitesRow(id){
     return $tbody.querySelector('tr.mb-admin__limites-row[data-limites-for="'+String(id).trim()+'"]');
+  }
+
+  function findAccionesRow(id){
+    return $tbody.querySelector('tr.mb-admin__acciones-row[data-acciones-for="'+String(id).trim()+'"]');
+  }
+
+  function findUserRow(id){
+    let row = null;
+    $tbody.querySelectorAll("tr[data-id]").forEach(function(el){
+      if (sameId(el.getAttribute("data-id"), id)) row = el;
+    });
+    return row;
+  }
+
+  function toggleAcciones(id){
+    const panel = findAccionesRow(id);
+    const tr = findUserRow(id);
+    if (!panel || !tr) return;
+    panel.hidden = !panel.hidden;
+    const abierto = !panel.hidden;
+    tr.classList.toggle("is-open", abierto);
+    tr.setAttribute("aria-expanded", abierto ? "true" : "false");
   }
 
   function renderLimitesPanel(panel, u, bloquesData){
@@ -996,15 +1079,18 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
   function bindRowActions(){
     $tbody.querySelectorAll("tr[data-id]").forEach(tr => {
       const id = String(tr.getAttribute("data-id") || "").trim();
-      const saveBtn = tr.querySelector('[data-action="save"]');
-      const toggleBtn = tr.querySelector('[data-action="toggle"]');
+      const acciones = findAccionesRow(id);
+      if (!acciones) return;
+      const saveBtn = acciones.querySelector('[data-action="save"]');
+      const toggleBtn = acciones.querySelector('[data-action="toggle"]');
       if (!saveBtn || !toggleBtn) return;
-      saveBtn.addEventListener("click", async function(){
+      saveBtn.addEventListener("click", async function(ev){
+        ev.stopPropagation();
         const btn = this;
         btn.disabled = true;
-        const plan = tr.querySelector('[data-field="plan"]').value;
-        const estado_plan = tr.querySelector('[data-field="estado_plan"]').value;
-        const rawDate = tr.querySelector('[data-field="fecha_vencimiento"]').value;
+        const plan = acciones.querySelector('[data-field="plan"]').value;
+        const estado_plan = acciones.querySelector('[data-field="estado_plan"]').value;
+        const rawDate = acciones.querySelector('[data-field="fecha_vencimiento"]').value;
         const fecha_vencimiento = rawDate ? new Date(rawDate).toISOString() : null;
         if (!id) {
           toast("ID de usuario inválido", true);
@@ -1022,7 +1108,8 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
           btn.disabled = false;
         }
       });
-      toggleBtn.addEventListener("click", async function(){
+      toggleBtn.addEventListener("click", async function(ev){
+        ev.stopPropagation();
         const btn = this;
         if (btn.disabled) return;
         const u = usuarios.find(x => sameId(x.id, id));
@@ -1050,9 +1137,10 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
           btn.disabled = false;
         }
       });
-      const contactosBtn = tr.querySelector('[data-action="contactos"]');
+      const contactosBtn = acciones.querySelector('[data-action="contactos"]');
       if (contactosBtn) {
-        contactosBtn.addEventListener("click", async function(){
+        contactosBtn.addEventListener("click", async function(ev){
+          ev.stopPropagation();
           const detail = findContactosRow(id);
           if (!detail) return;
           const opening = detail.hidden;
@@ -1068,9 +1156,10 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
           }
         });
       }
-      const limitesBtn = tr.querySelector('[data-action="limites"]');
+      const limitesBtn = acciones.querySelector('[data-action="limites"]');
       if (limitesBtn) {
-        limitesBtn.addEventListener("click", async function(){
+        limitesBtn.addEventListener("click", async function(ev){
+          ev.stopPropagation();
           const detail = findLimitesRow(id);
           if (!detail) return;
           const opening = detail.hidden;
@@ -1090,6 +1179,10 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
   }
 
   $tbody.addEventListener("submit", async function(e){
+    const accionesForm = e.target.closest("[data-acciones-form]");
+    if (accionesForm && $tbody.contains(accionesForm)) {
+      e.preventDefault();
+    }
     const form = e.target.closest("[data-limites-form]");
     if (!form || !$tbody.contains(form)) return;
     e.preventDefault();
@@ -1143,12 +1236,103 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
     }
   });
 
+  const MONEDA_ORDEN = ["BOB", "USD", "CLP"];
+
+  function ordenarMonedas(keys){
+    const resto = keys.filter(function(k){ return MONEDA_ORDEN.indexOf(k) === -1; }).sort();
+    return MONEDA_ORDEN.filter(function(k){ return keys.indexOf(k) !== -1; }).concat(resto);
+  }
+
+  function fmtMonto(n){
+    const x = Number(n);
+    if (!Number.isFinite(x)) return "—";
+    return x.toLocaleString("es-BO", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  function desgloseDe(id){
+    if (!ingresosMap) return null;
+    const uid = String(id || "").trim();
+    if (Object.prototype.hasOwnProperty.call(ingresosMap, uid)) return ingresosMap[uid];
+    const lower = uid.toLowerCase();
+    const keys = Object.keys(ingresosMap);
+    for (let i = 0; i < keys.length; i++) {
+      if (String(keys[i]).trim().toLowerCase() === lower) return ingresosMap[keys[i]];
+    }
+    return null;
+  }
+
+  function ingresosInner(id){
+    if (ingresosEstado === "loading") return '<span class="mb-admin__ingresos-empty">…</span>';
+    if (ingresosEstado === "error") return '<span class="mb-admin__ingresos-empty">Error</span>';
+    const desglose = desgloseDe(id);
+    const keys = desglose ? Object.keys(desglose) : [];
+    if (!keys.length) return '<span class="mb-admin__ingresos-empty">—</span>';
+    return ordenarMonedas(keys).map(function(moneda){
+      return '<span class="mb-admin__ingresos-monto">' + escapeHtml(fmtMonto(desglose[moneda])) + " " + escapeHtml(moneda) + "</span>";
+    }).join("");
+  }
+
+  function pintarIngresos(){
+    if ($ingresosResumen) {
+      if (ingresosEstado === "loading") $ingresosResumen.textContent = "Calculando ventas confirmadas…";
+      else if (ingresosEstado === "error") $ingresosResumen.textContent = "No se pudieron calcular los ingresos";
+      else if (!ingresosVentas) $ingresosResumen.textContent = "Sin ventas confirmadas en el periodo";
+      else $ingresosResumen.textContent = ingresosVentas + (ingresosVentas === 1 ? " venta confirmada" : " ventas confirmadas");
+    }
+    if (!$tbody) return;
+    $tbody.querySelectorAll("tr[data-id]").forEach(function(tr){
+      const cell = tr.querySelector("[data-ingresos]");
+      if (!cell) return;
+      cell.innerHTML = ingresosInner(tr.getAttribute("data-id"));
+    });
+  }
+
+  function queryIngresos(params){
+    const parts = [];
+    Object.keys(params).forEach(function(key){
+      if (params[key] == null || params[key] === "") return;
+      parts.push(encodeURIComponent(key) + "=" + encodeURIComponent(params[key]));
+    });
+    return parts.join("&");
+  }
+
+  function marcarPeriodoActivo(periodo){
+    $ingresosFiltros.querySelectorAll("[data-periodo]").forEach(function(btn){
+      btn.classList.toggle("is-active", btn.getAttribute("data-periodo") === periodo);
+    });
+  }
+
+  async function loadIngresos(params){
+    const reqId = ++ingresosReq;
+    ingresosEstado = "loading";
+    pintarIngresos();
+    try {
+      const res = await fetch("/api/admin/ingresos?" + queryIngresos(params), { credentials: "same-origin" });
+      const data = await res.json();
+      if (reqId !== ingresosReq) return;
+      if (!res.ok || !data.ok) throw new Error(data.error || "Error " + res.status);
+      ingresosMap = data.ingresos || {};
+      ingresosVentas = Number(data.ventas) || 0;
+      ingresosEstado = "ok";
+      pintarIngresos();
+    } catch (e) {
+      if (reqId !== ingresosReq) return;
+      ingresosMap = {};
+      ingresosVentas = 0;
+      ingresosEstado = "error";
+      pintarIngresos();
+      toast(e.message || "No se pudieron cargar los ingresos", true);
+    }
+  }
+
   async function load(){
     try {
       $loading.hidden = false;
       $loading.textContent = "Cargando usuarios…";
+      const ingresosPromise = loadIngresos({ periodo: "hoy" });
       await reloadUsuarios();
       $loading.hidden = true;
+      await ingresosPromise;
     } catch (e) {
       $loading.textContent = "Error: " + (e.message || "no se pudo cargar");
       toast(e.message, true);
@@ -1157,6 +1341,39 @@ table.mb-admin__table{width:100%;border-collapse:collapse;font-size:.8125rem}
 
   $search.addEventListener("input", applyFilters);
   $filterPlan.addEventListener("change", applyFilters);
+  $ingresosFiltros.addEventListener("click", function(ev){
+    const btn = ev.target.closest("[data-periodo]");
+    if (!btn || !$ingresosFiltros.contains(btn)) return;
+    const periodo = btn.getAttribute("data-periodo");
+    if (periodo === "custom") {
+      $ingresosCustom.hidden = false;
+      return;
+    }
+    $ingresosCustom.hidden = true;
+    marcarPeriodoActivo(periodo);
+    loadIngresos({ periodo: periodo });
+  });
+  $ingresosAplicar.addEventListener("click", function(){
+    const desde = $ingresosDesde.value;
+    const hasta = $ingresosHasta.value;
+    if (!desde || !hasta) {
+      toast("Completa la fecha inicial y la final", true);
+      return;
+    }
+    if (desde > hasta) {
+      toast("La fecha inicial no puede ser posterior a la final", true);
+      return;
+    }
+    marcarPeriodoActivo("custom");
+    loadIngresos({ periodo: "custom", desde: desde, hasta: hasta });
+  });
+  $tbody.addEventListener("click", function(ev){
+    if (ev.target.closest("button, input, select, textarea, a, label, form")) return;
+    if (ev.target.closest("tr.mb-admin__acciones-row, tr.mb-admin__contactos-row, tr.mb-admin__limites-row")) return;
+    const tr = ev.target.closest("tr[data-id]");
+    if (!tr || !$tbody.contains(tr)) return;
+    toggleAcciones(tr.getAttribute("data-id"));
+  });
   $tbody.addEventListener("click", async function(e){
     const btn = e.target.closest("[data-acreditar-sku]");
     if (!btn || !$tbody.contains(btn)) return;
