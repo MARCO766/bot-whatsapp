@@ -334,10 +334,59 @@ async function countClientesEnRango(
   return total ?? 0;
 }
 
-/** Números de lead asociados a un flujo (misma fuente que ventas: seguimientos + conversiones + sesiones IA). */
-async function fetchFlujoClienteNumeros(usuarioId, flujoId, conexionWhatsappId = null) {
-  if (!flujoId) return [];
+/**
+ * Números de un flujo durante una carga de Métricas.
+ * La clave sigue el mismo criterio que buildConexionFilter: null, vacío y
+ * «Todas las líneas» comparten el alcance sin filtro; un id de línea no.
+ * El resultado solo se reutiliza mientras loadResumenBase o loadMetricasBase
+ * siguen en curso. Al terminar se borra, así un filtro nuevo no hereda números viejos.
+ */
+const flujoNumerosInflight = new Map();
+const flujoNumerosMemo = new Map();
+const flujoNumerosRetain = new Map();
 
+function flujoNumerosCacheKey(usuarioId, flujoId, conexionWhatsappId) {
+  const filtro = buildConexionFilter(conexionWhatsappId);
+  const conexion = filtro
+    ? decodeURIComponent(filtro.slice("&conexion_whatsapp_id=eq.".length))
+    : "";
+  return JSON.stringify({
+    u: String(usuarioId),
+    f: String(flujoId),
+    c: conexion,
+  });
+}
+
+function retainFlujoClienteNumeros(usuarioId, flujoId, conexionWhatsappId) {
+  if (!flujoId) return () => {};
+  let key;
+  try {
+    key = flujoNumerosCacheKey(usuarioId, flujoId, conexionWhatsappId);
+    flujoNumerosRetain.set(key, (flujoNumerosRetain.get(key) || 0) + 1);
+  } catch (err) {
+    console.log("[metricas] retain numeros flujo:", err.message);
+    return () => {};
+  }
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    try {
+      const left = (flujoNumerosRetain.get(key) || 1) - 1;
+      if (left <= 0) {
+        flujoNumerosRetain.delete(key);
+        flujoNumerosMemo.delete(key);
+      } else {
+        flujoNumerosRetain.set(key, left);
+      }
+    } catch (err) {
+      console.log("[metricas] release numeros flujo:", err.message);
+    }
+  };
+}
+
+/** Misma unión de siempre. complete=false si alguna tabla falló: ese resultado no se guarda. */
+async function queryFlujoClienteNumeros(usuarioId, flujoId, conexionWhatsappId) {
   const base = buildUsuarioFilter(usuarioId);
   const flujoF = `&flujo_id=eq.${encodeURIComponent(flujoId)}`;
   const connF = buildConexionFilter(conexionWhatsappId);
@@ -353,14 +402,71 @@ async function fetchFlujoClienteNumeros(usuarioId, flujoId, conexionWhatsappId =
     supabaseSelect("ia_sessions", `${base}${flujoF}${connF}`, "cliente_numero"),
   ]);
 
+  let complete = true;
   [segRows, convRows, iaRows].forEach((rows) => {
-    if (!Array.isArray(rows)) return;
+    if (!Array.isArray(rows)) {
+      complete = false;
+      return;
+    }
     rows.forEach((r) => {
       if (r?.cliente_numero) numeros.add(r.cliente_numero);
     });
   });
 
-  return [...numeros];
+  return { numeros: [...numeros], complete };
+}
+
+async function leerFlujoClienteNumeros(usuarioId, flujoId, conexionWhatsappId) {
+  const key = flujoNumerosCacheKey(usuarioId, flujoId, conexionWhatsappId);
+  if ((flujoNumerosRetain.get(key) || 0) > 0) {
+    const memo = flujoNumerosMemo.get(key);
+    if (Array.isArray(memo)) return memo;
+  }
+
+  const existing = flujoNumerosInflight.get(key);
+  if (existing) return existing;
+
+  const promise = queryFlujoClienteNumeros(usuarioId, flujoId, conexionWhatsappId)
+    .then(({ numeros, complete }) => {
+      try {
+        if (complete && (flujoNumerosRetain.get(key) || 0) > 0) {
+          flujoNumerosMemo.set(key, numeros);
+        }
+      } catch (err) {
+        console.log("[metricas] memo numeros flujo:", err.message);
+      }
+      return numeros;
+    })
+    .finally(() => {
+      try {
+        if (flujoNumerosInflight.get(key) === promise) flujoNumerosInflight.delete(key);
+      } catch (err) {
+        console.log("[metricas] inflight numeros flujo:", err.message);
+      }
+    });
+
+  try {
+    flujoNumerosInflight.set(key, promise);
+  } catch (err) {
+    console.log("[metricas] cache numeros flujo:", err.message);
+  }
+  return promise;
+}
+
+/** Números de lead asociados a un flujo (misma fuente que ventas: seguimientos + conversiones + sesiones IA). */
+async function fetchFlujoClienteNumeros(usuarioId, flujoId, conexionWhatsappId = null) {
+  if (!flujoId) return [];
+  try {
+    const numeros = await leerFlujoClienteNumeros(usuarioId, flujoId, conexionWhatsappId);
+    if (!Array.isArray(numeros)) {
+      throw new Error("resultado de numeros de flujo invalido");
+    }
+    return numeros.slice();
+  } catch (err) {
+    console.log("[metricas] cache numeros flujo, consulta directa:", err.message);
+    const { numeros } = await queryFlujoClienteNumeros(usuarioId, flujoId, conexionWhatsappId);
+    return numeros.slice();
+  }
 }
 
 /** Números con conversación/mensaje en una línea WhatsApp. */
@@ -1145,6 +1251,22 @@ async function resolveMetricasBase(usuarioId, query = {}) {
 }
 
 async function loadMetricasBase(usuarioId, query = {}) {
+  const flujoId = query.flujo_id || query.flujoId || null;
+  const conexionWhatsappId =
+    query.conexion_whatsapp_id ?? query.conexionWhatsappId ?? null;
+  const releaseNumeros = retainFlujoClienteNumeros(
+    usuarioId,
+    flujoId,
+    conexionWhatsappId
+  );
+  try {
+    return await loadMetricasBaseEnCurso(usuarioId, query);
+  } finally {
+    releaseNumeros();
+  }
+}
+
+async function loadMetricasBaseEnCurso(usuarioId, query = {}) {
   const rango = parseRango(query);
   const flujoId = query.flujo_id || query.flujoId || null;
   const conexionWhatsappId =
@@ -1237,6 +1359,22 @@ async function loadMetricasBase(usuarioId, query = {}) {
 
 /** Carga agregada solo para resumen — sin arrays completos de métricas base. */
 async function loadResumenBase(usuarioId, query = {}) {
+  const conexionWhatsappId =
+    query.conexion_whatsapp_id ?? query.conexionWhatsappId ?? null;
+  const flujoId = query.flujo_id || query.flujoId || null;
+  const releaseNumeros = retainFlujoClienteNumeros(
+    usuarioId,
+    flujoId,
+    conexionWhatsappId
+  );
+  try {
+    return await loadResumenBaseEnCurso(usuarioId, query);
+  } finally {
+    releaseNumeros();
+  }
+}
+
+async function loadResumenBaseEnCurso(usuarioId, query = {}) {
   const conexionWhatsappId =
     query.conexion_whatsapp_id ?? query.conexionWhatsappId ?? null;
 
