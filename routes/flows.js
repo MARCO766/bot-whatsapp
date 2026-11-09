@@ -2,40 +2,25 @@ const express = require("express");
 const router = express.Router();
 
 const axios = require("axios");
-const multer = require("multer");
-const ffmpeg = require("fluent-ffmpeg");
-const fs = require("fs");
-const os = require("os");
-const path = require("path");
+const {
+  crearUploadMemoria,
+  crearUploadPorTipo,
+  recibirArchivo,
+  limiteSubidaPanel,
+  limiteSubidaInbox,
+  limiteSubidaRm24h,
+} = require("../middlewares/uploadMemoriaLimitada");
+const {
+  LIMITE_IMAGEN_BYTES,
+  LIMITE_VIDEO_BYTES,
+  LIMITE_INBOX_BYTES,
+} = require("../services/mediaRamLimits");
+const { convertirAudioInbox } = require("../services/audioInboxConvert");
 
-const TEMP_DIR = path.join(os.tmpdir(), "macbot-temp");
-fs.mkdirSync(TEMP_DIR, { recursive: true });
-
-function resolveFfmpegExecutable() {
-  const candidates = [
-    process.env.FFMPEG_PATH,
-    "/usr/bin/ffmpeg",
-    require("ffmpeg-static"),
-  ].filter(Boolean);
-
-  for (const candidate of candidates) {
-    try {
-      if (fs.existsSync(candidate)) {
-        return candidate;
-      }
-    } catch (_) {
-      // ignore invalid paths
-    }
-  }
-
-  return "ffmpeg";
-}
-
-ffmpeg.setFfmpegPath(resolveFfmpegExecutable());
-
-const upload = multer({
-  storage: multer.memoryStorage()
-});
+const uploadSubirArchivo = crearUploadPorTipo(limiteSubidaPanel, LIMITE_VIDEO_BYTES);
+const uploadRm24h = crearUploadPorTipo(limiteSubidaRm24h, LIMITE_VIDEO_BYTES);
+const uploadImagenNodo = crearUploadMemoria(LIMITE_IMAGEN_BYTES);
+const uploadInbox = crearUploadPorTipo(limiteSubidaInbox, LIMITE_INBOX_BYTES);
 
 const { protegerPanel } = require("../middlewares/auth");
 const {
@@ -54,7 +39,78 @@ const {
 const { optimizarImagenFlujoStorage } = require("../services/flowImageStorageService");
 const { subirArchivoRm24hMedia } = require("../services/rm24hMediaStorage");
 
-const MAX_IMAGEN_NODO_FLUJO = 2 * 1024 * 1024;
+const MAX_IMAGEN_NODO_FLUJO = LIMITE_IMAGEN_BYTES;
+
+function responderLimiteRm24h(req, res) {
+  const mime = String(req._mediaUploadMime || "").toLowerCase();
+  const tipo = String(req.body?.tipo || "").toLowerCase();
+  let max = 5;
+  if (tipo === "imagen" || (!tipo && mime.startsWith("image/"))) max = 2;
+  else if (tipo === "video" || (!tipo && mime.startsWith("video/"))) max = 15;
+  else if (tipo === "audio" || (!tipo && mime.startsWith("audio/"))) max = 5;
+  return res.status(400).json({
+    error: `El archivo supera el máximo de ${max} MB`,
+  });
+}
+
+function responderLimiteSubirArchivo(req, res) {
+  const file = {
+    mimetype: req._mediaUploadMime,
+    originalname: req._mediaUploadName,
+  };
+  const mime = String(file.mimetype || "").toLowerCase();
+  let error = "El documento debe ser menor a 5MB";
+  if (mime.startsWith("image/") || esArchivoImagen(file)) {
+    error = "La imagen debe ser menor a 2MB";
+  } else if (mime.startsWith("video/")) {
+    error = "El video debe ser menor a 15MB";
+  } else if (mime.startsWith("audio/")) {
+    error = "El audio debe ser menor a 5MB";
+  }
+  return res.status(400).json({ error });
+}
+
+function responderLimiteImagenNodo(_req, res) {
+  return res.status(400).json({
+    error: "⚠️ La imagen supera el límite de 2MB. Usa una imagen más ligera.",
+  });
+}
+
+function responderLimiteInbox(req, res) {
+  const file = {
+    mimetype: req._mediaUploadMime,
+    originalname: req._mediaUploadName,
+  };
+  const mime = String(file.mimetype || "").toLowerCase();
+  if (mime.startsWith("image/") || esArchivoImagen(file)) {
+    return res.send("❌ Imagen máxima 2MB");
+  }
+  if (mime.startsWith("video/")) {
+    if (wantsInboxJson(req)) {
+      return res.status(400).json({
+        ok: false,
+        error: "El video debe ser menor a 15MB",
+      });
+    }
+    return res.send("❌ El video debe ser menor a 15MB");
+  }
+  if (mime.startsWith("audio/")) {
+    if (wantsInboxJson(req)) {
+      return res.status(400).json({
+        ok: false,
+        error: "El audio debe ser menor a 15MB",
+      });
+    }
+    return res.send("❌ El audio debe ser menor a 15MB");
+  }
+  if (wantsInboxJson(req)) {
+    return res.status(400).json({
+      ok: false,
+      error: "El documento debe ser menor a 15MB",
+    });
+  }
+  return res.send("❌ El documento debe ser menor a 15MB");
+}
 const seguimientoRoutes = require("./seguimiento");
 const rt = require("../services/realtimeService");
 const {
@@ -95,7 +151,7 @@ router.use(seguimientoRoutes);
 router.post(
   "/subir-rm24h-media",
   protegerPanel,
-  upload.single("archivo"),
+  recibirArchivo(uploadRm24h, responderLimiteRm24h),
   async (req, res) => {
     try {
       if (!req.file) {
@@ -120,7 +176,7 @@ router.post(
   }
 );
 
-router.post("/subir-archivo", protegerPanel, upload.single("archivo"), async (req, res) => {
+router.post("/subir-archivo", protegerPanel, recibirArchivo(uploadSubirArchivo, responderLimiteSubirArchivo), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: "No se recibió archivo" });
@@ -210,7 +266,7 @@ router.post("/subir-archivo", protegerPanel, upload.single("archivo"), async (re
 router.post(
   "/subir-imagen-nodo-flujo",
   protegerPanel,
-  upload.single("archivo"),
+  recibirArchivo(uploadImagenNodo, responderLimiteImagenNodo),
   async (req, res) => {
     try {
       if (!req.file) {
@@ -460,39 +516,33 @@ else if (mime.startsWith("audio/")) {
 
   tipoWhatsApp = "audio";
 
-  const tempInput = path.join(
-    TEMP_DIR,
-    Date.now() + "-input.webm"
-  );
+  let convertido;
+  try {
+    convertido = await convertirAudioInbox(req.file);
+  } catch (audioErr) {
+    if (audioErr && audioErr.code === "AUDIO_DEMASIADO_GRANDE") {
+      const mensaje = audioErr.message || "El audio debe ser menor a 15MB";
+      if (wantsInboxJson(req)) {
+        return res.status(400).json({ ok: false, error: mensaje });
+      }
+      return res.send("❌ " + mensaje);
+    }
+    if (audioErr && audioErr.code === "AUDIO_COLA_LLENA") {
+      const mensaje =
+        audioErr.message ||
+        "Hay demasiadas conversiones de audio en curso. Inténtalo de nuevo en unos segundos.";
+      if (wantsInboxJson(req)) {
+        return res.status(429).json({ ok: false, error: mensaje });
+      }
+      return res.status(429).send("❌ " + mensaje);
+    }
+    throw audioErr;
+  }
 
-  const tempOutput = path.join(
-    TEMP_DIR,
-    Date.now() + "-output.mp3"
-  );
-
-  fs.writeFileSync(tempInput, req.file.buffer);
-
-  await new Promise((resolve, reject) => {
-    ffmpeg(tempInput)
-      .outputOptions([
-        "-vn",
-        "-ar 44100",
-        "-ac 2",
-        "-b:a 96k"
-      ])
-      .save(tempOutput)
-      .on("end", resolve)
-      .on("error", reject);
-  });
-
-  const audioConvertido = fs.readFileSync(tempOutput);
-
-  req.file.buffer = audioConvertido;
-  req.file.mimetype = "audio/mpeg";
-  req.file.originalname = "audio.mp3";
-
-  fs.unlinkSync(tempInput);
-  fs.unlinkSync(tempOutput);
+  req.file.buffer = convertido.buffer;
+  req.file.mimetype = convertido.mimetype;
+  req.file.originalname = convertido.originalname;
+  req.file.size = convertido.buffer.length;
 
 }
 
@@ -610,7 +660,7 @@ else if (mime.startsWith("audio/")) {
 
 }
 
-router.post("/inbox/responder", protegerPanel, upload.single("archivo"), handleInboxResponder);
+router.post("/inbox/responder", protegerPanel, recibirArchivo(uploadInbox, responderLimiteInbox), handleInboxResponder);
 
 router.post("/guardar-flujo-builder", protegerPanel, verificarLimiteNuevoFlujo, async (req, res) => {
   try {
@@ -1357,3 +1407,4 @@ const numero = body.numero;
 module.exports = router;
 module.exports.handleInboxResponder = handleInboxResponder;
 module.exports.leerConexionWhatsappId = leerConexionWhatsappId;
+module.exports.responderLimiteInbox = responderLimiteInbox;

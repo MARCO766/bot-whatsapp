@@ -1,7 +1,12 @@
 const express = require("express");
-const multer = require("multer");
 
 const { protegerPanel } = require("../middlewares/auth");
+const {
+  crearUploadPorTipo,
+  recibirArchivo,
+  limiteSubidaPanel,
+} = require("../middlewares/uploadMemoriaLimitada");
+const { LIMITE_VIDEO_BYTES } = require("../services/mediaRamLimits");
 const {
   subirArchivoSeguimientoV2Media,
   verificarEstadoStorageSeguimientoV2,
@@ -9,26 +14,18 @@ const {
 
 const router = express.Router();
 
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 15 * 1024 * 1024 },
-});
+const upload = crearUploadPorTipo(limiteSubidaPanel, LIMITE_VIDEO_BYTES);
 
-function manejarErrorMulterSegV2(err, _req, res, next) {
-  if (!err) return next();
-  if (err instanceof multer.MulterError && err.code === "LIMIT_FILE_SIZE") {
-    return res.status(400).json({
-      ok: false,
-      error: "El archivo supera el máximo permitido de 15 MB",
-    });
-  }
-  if (err instanceof multer.MulterError) {
-    return res.status(400).json({
-      ok: false,
-      error: err.message || "Error al subir archivo",
-    });
-  }
-  return next(err);
+function responderLimiteSeguimiento(req, res) {
+  const file = {
+    mimetype: req._mediaUploadMime,
+    originalname: req._mediaUploadName,
+  };
+  const mb = Math.round(limiteSubidaPanel(file) / (1024 * 1024));
+  return res.status(400).json({
+    ok: false,
+    error: `El archivo supera el máximo de ${mb} MB`,
+  });
 }
 
 function leerConexionWhatsappId(req) {
@@ -64,12 +61,15 @@ router.get("/api/seguimiento-v2/storage-status", protegerPanel, async (_req, res
 router.post(
   "/api/seguimiento-v2/upload-media",
   protegerPanel,
-  (req, res, next) => {
-    upload.single("file")(req, res, (err) => {
-      if (err) return manejarErrorMulterSegV2(err, req, res, next);
-      return next();
-    });
-  },
+  recibirArchivo(upload, responderLimiteSeguimiento, {
+    campo: "file",
+    onMulter(err, _req, res) {
+      return res.status(400).json({
+        ok: false,
+        error: err.message || "Error al subir archivo",
+      });
+    },
+  }),
   async (req, res) => {
     try {
       if (!req.file) {

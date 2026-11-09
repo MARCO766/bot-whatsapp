@@ -2,11 +2,16 @@
  * API JSON para Bandeja React — mismos datos que /inbox (Supabase + sesión).
  */
 const express = require("express");
-const multer = require("multer");
 const router = express.Router();
 const axios = require("axios");
-const uploadInbox = multer({ storage: multer.memoryStorage() });
-const { handleInboxResponder } = require("./flows");
+const {
+  crearUploadPorTipo,
+  recibirArchivo,
+  limiteSubidaInbox,
+} = require("../middlewares/uploadMemoriaLimitada");
+const { LIMITE_INBOX_BYTES } = require("../services/mediaRamLimits");
+const uploadInbox = crearUploadPorTipo(limiteSubidaInbox, LIMITE_INBOX_BYTES);
+const { handleInboxResponder, responderLimiteInbox } = require("./flows");
 const {
   loadInboxData,
   loadChatMessages,
@@ -47,7 +52,7 @@ router.get("/api/inbox/session", protegerApi, (req, res) => {
 router.post(
   "/api/inbox/responder",
   protegerApi,
-  uploadInbox.single("archivo"),
+  recibirArchivo(uploadInbox, responderLimiteInbox),
   handleInboxResponder
 );
 

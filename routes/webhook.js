@@ -2,6 +2,17 @@ const express = require("express");
 const router = express.Router();
 
 const axios = require("axios");
+const {
+  LIMITE_AUDIO_BYTES,
+  LIMITE_IMAGEN_BYTES,
+  LIMITE_DOCUMENTO_WEBHOOK_BYTES,
+  TIMEOUT_DESCARGA_MEDIA_MS,
+} = require("../services/mediaRamLimits");
+const {
+  descargarBinarioLimitado,
+  esErrorLimiteTamano,
+  tamanoDeclaradoExcede,
+} = require("../services/descargaBinariaLimitada");
 
 const { enviarLeadMetaSiCorresponde } = require("../services/metaService");
 const {
@@ -49,6 +60,32 @@ const TOKEN = process.env.TOKEN;
 const PHONE_ID = process.env.PHONE_ID;
 
 const mensajesProcesados = new Set();
+
+async function obtenerBinarioMeta(mediaId, token, maxBytes) {
+  const info = await axios.get(`https://graph.facebook.com/v19.0/${mediaId}`, {
+    timeout: TIMEOUT_DESCARGA_MEDIA_MS,
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  const mediaUrl = info.data?.url;
+  if (!mediaUrl) {
+    throw new Error("URL de media no disponible");
+  }
+
+  if (tamanoDeclaradoExcede(info.data?.file_size, maxBytes)) {
+    const err = new Error("archivo demasiado grande");
+    err.code = "LIMITE_TAMANO";
+    throw err;
+  }
+
+  return descargarBinarioLimitado(mediaUrl, {
+    headers: { Authorization: `Bearer ${token}` },
+    maxBytes,
+    timeout: TIMEOUT_DESCARGA_MEDIA_MS,
+  });
+}
 
 /**
  * Filtros PostgREST para PATCH monotónico de estado_envio (un solo request, sin SELECT previo).
@@ -434,27 +471,14 @@ if (message.audio && message.audio.id && conexionWebhook?.token) {
 
   try {
 
-    const audioInfo = await axios.get(
-      `https://graph.facebook.com/v19.0/${message.audio.id}`,
-      {
-        headers: {
-          Authorization: `Bearer ${conexionWebhook.token}`
-        }
-      }
+    const audioData = await obtenerBinarioMeta(
+      message.audio.id,
+      conexionWebhook.token,
+      LIMITE_AUDIO_BYTES
     );
 
-    const audioUrlMeta = audioInfo.data.url;
-
-    const audioFile = await axios.get(audioUrlMeta, {
-      
-      responseType: "arraybuffer",
-      headers: {
-        Authorization: `Bearer ${conexionWebhook.token}`
-      }
-    });
-
     const audioSizeMB =
-  audioFile.data.byteLength / 1024 / 1024;
+  audioData.byteLength / 1024 / 1024;
 
 if (audioSizeMB > 5) {
   console.log("🚫 Audio mayor a 5MB");
@@ -469,7 +493,7 @@ if (audioSizeMB > 5) {
 
     await axios.post(
       `${SUPABASE_URL}/storage/v1/object/archivos/${rutaAudio}`,
-      audioFile.data,
+      audioData,
       {
         headers: {
           apikey: SUPABASE_KEY,
@@ -485,6 +509,11 @@ if (audioSizeMB > 5) {
 
   } catch (error) {
 
+    if (esErrorLimiteTamano(error)) {
+      console.log("🚫 Audio mayor a 5MB");
+      return res.sendStatus(200);
+    }
+
     console.log(
       "ERROR DESCARGANDO AUDIO:",
       error.response?.data || error.message
@@ -498,26 +527,14 @@ if (message.image && message.image.id && conexionWebhook?.token) {
 
   try {
 
-    const imageInfo = await axios.get(
-      `https://graph.facebook.com/v19.0/${message.image.id}`,
-      {
-        headers: {
-          Authorization: `Bearer ${conexionWebhook.token}`
-        }
-      }
+    const imageData = await obtenerBinarioMeta(
+      message.image.id,
+      conexionWebhook.token,
+      LIMITE_IMAGEN_BYTES
     );
 
-    const imageUrlMeta = imageInfo.data.url;
-
-    const imageFile = await axios.get(imageUrlMeta, {
-      responseType: "arraybuffer",
-      headers: {
-        Authorization: `Bearer ${conexionWebhook.token}`
-      }
-    });
-
     const imageSizeMB =
-      imageFile.data.byteLength / 1024 / 1024;
+      imageData.byteLength / 1024 / 1024;
 
     if (imageSizeMB > 2) {
       console.log("🚫 Imagen mayor a 2MB");
@@ -532,7 +549,7 @@ if (message.image && message.image.id && conexionWebhook?.token) {
 
     await axios.post(
       `${SUPABASE_URL}/storage/v1/object/archivos/${rutaImagen}`,
-      imageFile.data,
+      imageData,
       {
         headers: {
           apikey: SUPABASE_KEY,
@@ -550,6 +567,11 @@ if (message.image && message.image.id && conexionWebhook?.token) {
 
   } catch (error) {
 
+    if (esErrorLimiteTamano(error)) {
+      console.log("🚫 Imagen mayor a 2MB");
+      return res.sendStatus(200);
+    }
+
     console.log(
       "ERROR DESCARGANDO IMAGEN:",
       error.response?.data || error.message
@@ -563,26 +585,14 @@ if (message.document && message.document.id && conexionWebhook?.token) {
 
   try {
 
-    const docInfo = await axios.get(
-      `https://graph.facebook.com/v19.0/${message.document.id}`,
-      {
-        headers: {
-          Authorization: `Bearer ${conexionWebhook.token}`
-        }
-      }
+    const docData = await obtenerBinarioMeta(
+      message.document.id,
+      conexionWebhook.token,
+      LIMITE_DOCUMENTO_WEBHOOK_BYTES
     );
 
-    const docUrlMeta = docInfo.data.url;
-
-    const docFile = await axios.get(docUrlMeta, {
-      responseType: "arraybuffer",
-      headers: {
-        Authorization: `Bearer ${conexionWebhook.token}`
-      }
-    });
-
     const docSizeMB =
-      docFile.data.byteLength / 1024 / 1024;
+      docData.byteLength / 1024 / 1024;
 
     if (docSizeMB > 8) {
       console.log("🚫 Documento mayor a 8MB");
@@ -600,7 +610,7 @@ if (message.document && message.document.id && conexionWebhook?.token) {
 
     await axios.post(
       `${SUPABASE_URL}/storage/v1/object/archivos/${rutaDoc}`,
-      docFile.data,
+      docData,
       {
         headers: {
           apikey: SUPABASE_KEY,
@@ -619,6 +629,11 @@ if (message.document && message.document.id && conexionWebhook?.token) {
       message.document.filename || "documento";
 
   } catch (error) {
+
+    if (esErrorLimiteTamano(error)) {
+      console.log("🚫 Documento mayor a 8MB");
+      return res.sendStatus(200);
+    }
 
     console.log(
       "ERROR DESCARGANDO DOCUMENTO:",

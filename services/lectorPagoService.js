@@ -1,5 +1,13 @@
 const axios = require("axios");
 const { enviarTextoWhatsApp } = require("./whatsappService");
+const {
+  LIMITE_IMAGEN_BYTES,
+  TIMEOUT_DESCARGA_MEDIA_MS,
+} = require("./mediaRamLimits");
+const {
+  descargarBinarioLimitado,
+  tamanoDeclaradoExcede,
+} = require("./descargaBinariaLimitada");
 
 const RM_LECTOR_FLUJO_PREFIX = "remarketing:";
 
@@ -514,6 +522,7 @@ async function descargarImagenMeta(mediaId, token) {
   if (!mediaId || !token) return null;
 
   const info = await axios.get(`https://graph.facebook.com/v19.0/${mediaId}`, {
+    timeout: TIMEOUT_DESCARGA_MEDIA_MS,
     headers: { Authorization: `Bearer ${token}` },
   });
 
@@ -521,15 +530,41 @@ async function descargarImagenMeta(mediaId, token) {
   const mimeType = info.data?.mime_type || "image/jpeg";
   if (!mediaUrl) return null;
 
-  const file = await axios.get(mediaUrl, {
-    responseType: "arraybuffer",
+  if (tamanoDeclaradoExcede(info.data?.file_size, LIMITE_IMAGEN_BYTES)) {
+    const err = new Error("archivo demasiado grande");
+    err.code = "LIMITE_TAMANO";
+    throw err;
+  }
+
+  const data = await descargarBinarioLimitado(mediaUrl, {
     headers: { Authorization: `Bearer ${token}` },
+    maxBytes: LIMITE_IMAGEN_BYTES,
+    timeout: TIMEOUT_DESCARGA_MEDIA_MS,
   });
 
-  const base64 = Buffer.from(file.data).toString("base64");
+  const base64 = Buffer.isBuffer(data)
+    ? data.toString("base64")
+    : Buffer.from(data).toString("base64");
   return {
     mimeType,
     dataUrl: `data:${mimeType};base64,${base64}`,
+  };
+}
+
+async function resolverFuenteImagenComprobante({
+  imagePublicUrl,
+  imageMetaId,
+  metaToken,
+  descargar = descargarImagenMeta,
+}) {
+  const urlPublica = String(imagePublicUrl || "").trim();
+  if (urlPublica.startsWith("https://")) {
+    return { imageDataUrl: null, imagePublicUrl: urlPublica };
+  }
+  const media = await descargar(imageMetaId, metaToken);
+  return {
+    imageDataUrl: media?.dataUrl || null,
+    imagePublicUrl: urlPublica || null,
   };
 }
 
@@ -658,10 +693,14 @@ async function procesarImagenLectorPago({
     "Pago invalido. Monto, moneda o nombre no coinciden.";
 
   try {
-    const media = await descargarImagenMeta(imageMetaId, metaToken);
+    const fuente = await resolverFuenteImagenComprobante({
+      imagePublicUrl,
+      imageMetaId,
+      metaToken,
+    });
     const lectura = await analizarComprobanteConVision({
-      imageDataUrl: media?.dataUrl || null,
-      imagePublicUrl: imagePublicUrl || null,
+      imageDataUrl: fuente.imageDataUrl,
+      imagePublicUrl: fuente.imagePublicUrl,
     });
 
     const confianzaOk = tieneConfianzaSuficiente(lectura);
@@ -931,4 +970,5 @@ module.exports = {
   iniciarEsperaLectorPago,
   procesarImagenLectorPago,
   cancelarEsperaLectorPagoPorResetbot,
+  resolverFuenteImagenComprobante,
 };
