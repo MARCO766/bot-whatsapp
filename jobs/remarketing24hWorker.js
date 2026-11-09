@@ -1,11 +1,17 @@
 const { procesarRemarketing24hWorker } = require("../services/remarketing24h/remarketing24hService");
+const { crearPausaSupabase, esFalloSupabase } = require("./workerBackoff");
 
 let workerIniciado = false;
 let procesando = false;
+const pausaSupabase = crearPausaSupabase();
 
 async function ejecutarTickRm24h() {
   if (procesando) {
     console.log("[RM24H_WORKER] tick omitido (tick anterior en curso)");
+    return;
+  }
+  if (pausaSupabase.debeOmitir()) {
+    console.log("[RM24H_WORKER_BACKOFF]", { espera_ms: pausaSupabase.esperaMs() });
     return;
   }
   procesando = true;
@@ -13,8 +19,16 @@ async function ejecutarTickRm24h() {
   try {
     console.log("[RM24H_WORKER] tick");
     const resultado = await procesarRemarketing24hWorker();
+    pausaSupabase.registrarExito();
     console.log("[RM24H_WORKER] tick done", resultado);
   } catch (error) {
+    if (esFalloSupabase(error)) {
+      const esperaMs = pausaSupabase.registrarFallo();
+      console.log("[RM24H_WORKER_BACKOFF_ARMADO]", {
+        espera_ms: esperaMs,
+        motivo: "error_supabase",
+      });
+    }
     console.log("[RM24H_WORKER] error", error.response?.data || error.message);
   } finally {
     procesando = false;

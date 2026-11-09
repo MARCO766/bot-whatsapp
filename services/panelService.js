@@ -54,7 +54,7 @@ async function supabasePing() {
   if (!SUPABASE_URL || !SUPABASE_KEY) return false;
   try {
     const res = await axios.get(`${SUPABASE_URL}/rest/v1/clientes?select=id&limit=1`, {
-      headers: headers({ Prefer: "count=exact", Range: "0-0" }),
+      headers: headers(),
     });
     return res.status >= 200 && res.status < 300;
   } catch {

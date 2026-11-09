@@ -1,9 +1,15 @@
 const { procesarSeguimientosVencidos } = require("../services/seguimiento/executeSeguimiento");
 const { verificarTablaLockDisponible } = require("../services/seguimiento/seguimientoWorkerLock");
+const {
+  crearPausaSupabase,
+  esFalloSupabase,
+  esMotivoPausaSupabase,
+} = require("./workerBackoff");
 
 let workerIniciado = false;
 let procesando = false;
 let intervalId = null;
+const pausaSupabase = crearPausaSupabase();
 
 /** Fallos de config/esquema: apagan el worker. Errores temporales no. */
 const MOTIVOS_LOCK_PERMANENTE = ["sin_supabase", "lock_tabla_ausente"];
@@ -37,12 +43,14 @@ async function startSeguimientoWorker(app) {
   const lockCheck = await verificarTablaLockDisponible();
   if (!lockCheck.ok) {
     if (!esMotivoLockPermanente(lockCheck.motivo)) {
+      const esperaMs = pausaSupabase.registrarFallo();
       console.log("[SEG_WORKER_LOCK_TRANSIENT]", {
         pid: process.pid,
         timestamp: new Date().toISOString(),
         motivo: lockCheck.motivo || "lock_verificacion_fallida",
         fase: "startup",
-        accion: "continuar_arranque_intervalo",
+        accion: "backoff",
+        espera_ms: esperaMs,
       });
     } else {
       console.log("[SEG_WORKER_NO_LOCK_DISABLED]", {
@@ -68,7 +76,14 @@ async function startSeguimientoWorker(app) {
   });
 
   intervalId = setInterval(async () => {
-    if (procesando) return;
+    if (procesando) {
+      console.log("[SEGUIMIENTO_WORKER] tick omitido (tick anterior en curso)");
+      return;
+    }
+    if (pausaSupabase.debeOmitir()) {
+      console.log("[SEG_WORKER_BACKOFF]", { espera_ms: pausaSupabase.esperaMs() });
+      return;
+    }
     procesando = true;
 
     try {
@@ -77,11 +92,15 @@ async function startSeguimientoWorker(app) {
 
       if (resultado.lock === "no_lock_db") {
         if (!esMotivoLockPermanente(resultado.motivo)) {
+          const esperaMs = esMotivoPausaSupabase(resultado.motivo)
+            ? pausaSupabase.registrarFallo()
+            : 0;
           console.log("[SEG_WORKER_LOCK_TRANSIENT]", {
             pid: process.pid,
             motivo: resultado.motivo || "lock_verificacion_fallida",
             fase: "tick",
-            accion: "omitir_ciclo_reintentar",
+            accion: esperaMs ? "backoff" : "omitir_ciclo_reintentar",
+            espera_ms: esperaMs,
           });
           return;
         }
@@ -89,7 +108,20 @@ async function startSeguimientoWorker(app) {
         return;
       }
 
-      if (resultado.lock === "skipped") return;
+      if (resultado.lock === "skipped") {
+        if (esMotivoPausaSupabase(resultado.motivo)) {
+          const esperaMs = pausaSupabase.registrarFallo();
+          console.log("[SEG_WORKER_BACKOFF_ARMADO]", {
+            espera_ms: esperaMs,
+            motivo: resultado.motivo,
+          });
+        } else {
+          pausaSupabase.registrarExito();
+        }
+        return;
+      }
+
+      pausaSupabase.registrarExito();
 
       if (resultado.procesados > 0) {
         console.log(
@@ -101,6 +133,13 @@ async function startSeguimientoWorker(app) {
         );
       }
     } catch (error) {
+      if (esFalloSupabase(error)) {
+        const esperaMs = pausaSupabase.registrarFallo();
+        console.log("[SEG_WORKER_BACKOFF_ARMADO]", {
+          espera_ms: esperaMs,
+          motivo: "error_supabase",
+        });
+      }
       console.log(
         "[SEGUIMIENTO_WORKER] error:",
         error.response?.data || error.message
