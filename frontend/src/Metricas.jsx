@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useMetricas } from "./metricas/useMetricas";
 import { metricasReloadNotice, metricasSectionView } from "./metricas/metricasSectionView";
 import { useMetaAdsStatus } from "./metricas/useMetaAdsStatus";
@@ -98,6 +98,46 @@ function TrendMetric({ label, total, data, keyField, color, formatValue }) {
   );
 }
 
+function ingresosPrincipales(kpis = {}) {
+  const desglose = kpis.ingresosDesglose;
+  if (
+    desglose &&
+    typeof desglose === "object" &&
+    Object.prototype.hasOwnProperty.call(desglose, "BOB")
+  ) {
+    return { monto: desglose.BOB, moneda: "BOB" };
+  }
+  return { monto: kpis.ingresos, moneda: kpis.moneda || "BOB" };
+}
+
+function MetricasDisclosure({ id, title, hint, open, onToggle, children }) {
+  const panelId = `${id}-panel`;
+  return (
+    <div className="panelCard metricasDisclosure">
+      <button
+        type="button"
+        className="metricasDisclosure__toggle"
+        aria-expanded={open}
+        aria-controls={panelId}
+        onClick={onToggle}
+      >
+        <span>
+          <h2 id={id}>{title}</h2>
+          {hint ? <p>{hint}</p> : null}
+        </span>
+        <span className="metricasDisclosure__chevron" aria-hidden="true">
+          {open ? "▾" : "▸"}
+        </span>
+      </button>
+      {open ? (
+        <div className="metricasDisclosure__body" id={panelId}>
+          {children}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function HeatmapGrid({ heatmap }) {
   const horas = heatmap?.horas || [];
   const max = heatmap?.max || 0;
@@ -128,7 +168,10 @@ export default function Metricas() {
   const [customRange, setCustomRange] = useState(null);
   const [periodoToast, setPeriodoToast] = useState("");
   const [flujoId, setFlujoId] = useState("");
-  const [monedaActiva, setMonedaActiva] = useState("BOB");
+  const [premiumOpen, setPremiumOpen] = useState(false);
+  const [diagnosticoOpen, setDiagnosticoOpen] = useState(false);
+  const [tendenciaOpen, setTendenciaOpen] = useState(false);
+  const premiumReloadRef = useRef(null);
   const [metaAdsModalOpen, setMetaAdsModalOpen] = useState(false);
   const [metaAdsCampaignId, setMetaAdsCampaignId] = useState(META_CAMPAIGN_TODAS);
   const {
@@ -151,7 +194,15 @@ export default function Metricas() {
     authError,
     updating,
     reload,
-  } = useMetricas(periodo, flujoId, conexionSeleccionadaId, conexionesLoading, UI_OCULTAR_FASE1, customRange);
+  } = useMetricas(
+    periodo,
+    flujoId,
+    conexionSeleccionadaId,
+    conexionesLoading,
+    UI_OCULTAR_FASE1,
+    customRange,
+    { series: tendenciaOpen, diagnostico: diagnosticoOpen }
+  );
   const resumenView = metricasSectionView({
     hasData: resumen != null,
     pending: pending.resumen,
@@ -235,13 +286,9 @@ export default function Metricas() {
 
   const mainCards = useMemo(
     () => {
-      const desglose = kpis.ingresosDesglose;
-      const hasMoneda =
-        desglose &&
-        typeof desglose === "object" &&
-        Object.prototype.hasOwnProperty.call(desglose, monedaActiva);
-      const ingresosMonto = hasMoneda ? desglose[monedaActiva] : kpis.ingresos;
-      const ingresosMoneda = hasMoneda ? monedaActiva : kpis.moneda;
+      const ingresos = ingresosPrincipales(kpis);
+      const ingresosMonto = ingresos.monto;
+      const ingresosMoneda = ingresos.moneda;
 
       return [
       {
@@ -278,7 +325,7 @@ export default function Metricas() {
       },
     ];
     },
-    [kpis, monedaActiva]
+    [kpis]
   );
 
   const performanceCards = useMemo(
@@ -394,21 +441,6 @@ export default function Metricas() {
             {flujoNombre ? ` Filtrando: ${flujoNombre}.` : ""}
           </p>
         </div>
-
-        <div className="heroScore">
-          {resumenView === "loading" ? (
-            <Skeleton className="scoreSkel" />
-          ) : (
-            <>
-              <div className="scoreRing">
-                <strong>{salud.score}</strong>
-                <span>/100</span>
-              </div>
-              <b>{salud.label}</b>
-              <small>Salud del embudo</small>
-            </>
-          )}
-        </div>
       </section>
 
       <ConexionLineaTabs
@@ -444,7 +476,15 @@ export default function Metricas() {
         </div>
 
         <div className="controlActions">
-          <button type="button" className="refreshBtn" onClick={reload} disabled={anyPending}>
+          <button
+            type="button"
+            className="refreshBtn"
+            onClick={() => {
+              reload();
+              premiumReloadRef.current?.();
+            }}
+            disabled={anyPending}
+          >
             {anyPending ? (updating ? "Actualizando…" : "Cargando…") : "Actualizar"}
           </button>
           <div className="liveBadge">
@@ -496,8 +536,9 @@ export default function Metricas() {
         flujoId={flujoId}
         conexionSeleccionadaId={conexionSeleccionadaId}
         conexionesLoading={conexionesLoading}
-        monedaActiva={monedaActiva}
-        onMonedaChange={setMonedaActiva}
+        open={premiumOpen}
+        onToggle={() => setPremiumOpen((value) => !value)}
+        reloadRef={premiumReloadRef}
       />
 
       {periodoToast ? <div className="metricasPeriodoToast">{periodoToast}</div> : null}
@@ -570,13 +611,13 @@ export default function Metricas() {
             </div>
           )}
 
-          <div className="panelCard panelCard--trend">
-            <div className="panelTop panelTop--compact">
-              <div>
-                <h2>Tendencia diaria</h2>
-                <p>Leads, ventas e ingresos por día en el periodo.</p>
-              </div>
-            </div>
+          <MetricasDisclosure
+            id="metricas-tendencia-title"
+            title="Tendencia diaria"
+            hint="Leads, ventas e ingresos por día en el periodo."
+            open={tendenciaOpen}
+            onToggle={() => setTendenciaOpen((value) => !value)}
+          >
             {seriesView === "loading" ? (
               <Skeleton className="chartSkel" />
             ) : seriesView === "error" ? (
@@ -615,7 +656,7 @@ export default function Metricas() {
                 )}
               </>
             )}
-          </div>
+          </MetricasDisclosure>
 
           {!UI_OCULTAR_FASE1.heatmapHorario && (
             <div className="panelCard">
@@ -635,10 +676,29 @@ export default function Metricas() {
             </div>
           )}
 
-          <div className="panelCard panelCard--diag">
-            <div className="panelTop panelTop--compact">
-              <h2>Diagnóstico inteligente</h2>
-            </div>
+          <MetricasDisclosure
+            id="metricas-diagnostico-title"
+            title="Diagnóstico y salud del embudo"
+            hint="Score del resumen, alertas y recomendación del periodo."
+            open={diagnosticoOpen}
+            onToggle={() => setDiagnosticoOpen((value) => !value)}
+          >
+            {resumenView === "loading" ? (
+              <Skeleton className="scoreSkel" />
+            ) : resumenView === "error" ? (
+              <p className="sectionWarn">{sectionError.resumen}</p>
+            ) : (
+              <div className="metricasSaludInline">
+                <div className="scoreRing">
+                  <strong>{salud.score}</strong>
+                  <span>/100</span>
+                </div>
+                <div>
+                  <b>{salud.label}</b>
+                  <small>Salud del embudo</small>
+                </div>
+              </div>
+            )}
             {diagnosticoView === "loading" ? (
               <Skeleton className="diagSkel" />
             ) : diagnosticoView === "error" ? (
@@ -646,19 +706,28 @@ export default function Metricas() {
             ) : diagnosticoView === "idle" ? null : (
               <>
                 <ReloadNotice message={diagnosticoNotice} />
-              <div className="diagnostico diagnostico--premium">
-                {(diagnostico?.items || []).map((d, i) => (
-                  <div className={`diagItem ${d.tipo}`} key={i}>
-                    <span className="diagIcon" aria-hidden="true">
-                      {d.tipo === "ok" ? "✓" : d.tipo === "alerta" ? "!" : "i"}
-                    </span>
-                    <p>{d.texto}</p>
+                <div className="diagnostico diagnostico--premium">
+                  {(diagnostico?.items || []).map((d, i) => (
+                    <div className={`diagItem ${d.tipo}`} key={i}>
+                      <span className="diagIcon" aria-hidden="true">
+                        {d.tipo === "ok" ? "✓" : d.tipo === "alerta" ? "!" : "i"}
+                      </span>
+                      <p>{d.texto}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="insightCard">
+                  <span className="insightEmoji" aria-hidden="true">
+                    💡
+                  </span>
+                  <div className="insightBody">
+                    <strong>{insightTitulo}</strong>
+                    <p>{diagnostico?.recomendacion || "Revisa seguimientos y respuestas."}</p>
                   </div>
-                ))}
-              </div>
+                </div>
               </>
             )}
-          </div>
+          </MetricasDisclosure>
         </div>
 
         <aside className="dashAside">
@@ -699,27 +768,6 @@ export default function Metricas() {
                     <strong>{formatNum(s.val)}</strong>
                   </div>
                 ))}
-              </div>
-              </>
-            )}
-          </div>
-
-          <div className="panelCard panelCard--insight">
-            {diagnosticoView === "loading" ? (
-              <Skeleton className="recSkel" />
-            ) : diagnosticoView === "error" ? (
-              <p className="sectionWarn">{sectionError.diagnostico}</p>
-            ) : diagnosticoView === "idle" ? null : (
-              <>
-                <ReloadNotice message={diagnosticoNotice} />
-              <div className="insightCard">
-                <span className="insightEmoji" aria-hidden="true">
-                  💡
-                </span>
-                <div className="insightBody">
-                  <strong>{insightTitulo}</strong>
-                  <p>{diagnostico?.recomendacion || "Revisa seguimientos y respuestas."}</p>
-                </div>
               </div>
               </>
             )}
@@ -856,6 +904,14 @@ const styles = `
 .dashBottom { display: grid; grid-template-columns: 1fr minmax(260px, 300px); gap: 14px; align-items: start; }
 .dashMain, .dashAside { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .panelCard { border-radius: 22px; padding: 16px 18px; background: rgba(15,23,42,.72); border: 1px solid rgba(148,163,184,.14); animation: fadeUp .35s ease both; }
+.metricasDisclosure__toggle { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.metricasDisclosure__toggle h2 { margin: 0 0 4px; font-size: 17px; letter-spacing: -.2px; }
+.metricasDisclosure__toggle p { margin: 0; color: #94a3b8; font-size: 12px; line-height: 1.4; }
+.metricasDisclosure__chevron { flex: 0 0 auto; color: #67e8f9; font-size: 16px; font-weight: 900; }
+.metricasDisclosure__body { margin-top: 12px; }
+.metricasSaludInline { display: flex; align-items: center; gap: 14px; margin-bottom: 12px; }
+.metricasSaludInline b { display: block; color: #86efac; }
+.metricasSaludInline small { display: block; color: #94a3b8; }
 .panelCard--compact { padding: 14px 16px; }
 .panelCard--trend { padding-bottom: 14px; }
 .panelCard--diag { padding-bottom: 14px; }

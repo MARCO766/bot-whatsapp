@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useRevenueBreakdown } from "../useRevenueBreakdown";
 import {
   pickDefaultMoneda,
@@ -29,16 +29,21 @@ export default function RevenuePremiumSection({
   flujoId = "",
   conexionSeleccionadaId = null,
   conexionesLoading = false,
-  monedaActiva = "BOB",
-  onMonedaChange,
+  open = false,
+  onToggle,
+  reloadRef,
 }) {
+  const openRef = useRef(open);
+  openRef.current = open;
   const { data, loading, updating, error, reload } = useRevenueBreakdown(
     periodo,
     flujoId,
     conexionSeleccionadaId,
     conexionesLoading,
-    customRange
+    customRange,
+    open
   );
+  const [monedaLocal, setMonedaLocal] = useState("BOB");
 
   const monedas = useMemo(
     () => sortMonedasRevenue(Object.keys(data?.porMoneda || {})),
@@ -46,40 +51,63 @@ export default function RevenuePremiumSection({
   );
 
   useEffect(() => {
-    if (!monedas.length || typeof onMonedaChange !== "function") return;
-    if (!monedas.includes(monedaActiva)) {
-      onMonedaChange(pickDefaultMoneda(data?.porMoneda));
-    }
-  }, [monedas, monedaActiva, data?.porMoneda, onMonedaChange]);
+    if (!reloadRef) return undefined;
+    reloadRef.current = () => {
+      if (!openRef.current) return undefined;
+      return reload();
+    };
+    return () => {
+      reloadRef.current = null;
+    };
+  }, [reload, reloadRef]);
 
-  const bucket = data?.porMoneda?.[monedaActiva];
+  useEffect(() => {
+    if (!monedas.length) return;
+    if (!monedas.includes(monedaLocal)) {
+      setMonedaLocal(pickDefaultMoneda(data?.porMoneda));
+    }
+  }, [monedas, monedaLocal, data?.porMoneda]);
+
+  const bucket = data?.porMoneda?.[monedaLocal];
   const kpis = bucket?.kpis;
-  const showSkeleton = loading && !data;
-  const sinMonedas = !showSkeleton && !error && monedas.length === 0;
+  const showSkeleton = open && !data && !error;
+  const sinMonedas = open && !showSkeleton && !loading && !error && monedas.length === 0;
   const reloadNotice = data && !loading && !updating && error ? error : null;
 
   return (
     <section className="revenuePremiumSection panelCard" aria-labelledby="revenue-premium-title">
       <style>{sectionStyles}</style>
 
-      <div className="revenuePremiumHead">
-        <div className="revenuePremiumTitleBlock">
+      <button
+        type="button"
+        className="revenueDisclosure"
+        aria-expanded={open}
+        aria-controls="revenue-premium-panel"
+        onClick={onToggle}
+      >
+        <span className="revenuePremiumTitleBlock">
           <h2 id="revenue-premium-title">💰 Ingresos Premium</h2>
           <p className="revenuePremiumHint">
             Inteligencia de ventas por flujo y remarketing
             {updating ? " · Actualizando…" : ""}
           </p>
-        </div>
-        <div className="revenuePremiumControls">
-          {monedas.length > 0 && (
-            <RevenueMonedaTabs
-              monedas={monedas}
-              value={monedaActiva}
-              onChange={onMonedaChange}
-              disabled={showSkeleton || (!!error && !data)}
-            />
-          )}
-        </div>
+        </span>
+        <span className="revenueDisclosure__chevron" aria-hidden="true">
+          {open ? "▾" : "▸"}
+        </span>
+      </button>
+
+      {open ? (
+      <div id="revenue-premium-panel">
+      <div className="revenuePremiumControls">
+        {monedas.length > 0 && (
+          <RevenueMonedaTabs
+            monedas={monedas}
+            value={monedaLocal}
+            onChange={setMonedaLocal}
+            disabled={showSkeleton || (!!error && !data)}
+          />
+        )}
       </div>
 
       {error && !data ? (
@@ -100,14 +128,14 @@ export default function RevenuePremiumSection({
               No se pudo actualizar esta sección. {reloadNotice}
             </p>
           ) : null}
-          <RevenueKpiStrip kpis={kpis} moneda={monedaActiva} loading={showSkeleton} />
+          <RevenueKpiStrip kpis={kpis} moneda={monedaLocal} loading={showSkeleton} />
 
-          <RevenueDonutChart kpis={kpis} moneda={monedaActiva} loading={showSkeleton} />
+          <RevenueDonutChart kpis={kpis} moneda={monedaLocal} loading={showSkeleton} />
 
           <RevenueTipoComparisonChart
             flujoBucket={bucket?.flujo}
             remarketingBucket={bucket?.remarketing}
-            moneda={monedaActiva}
+            moneda={monedaLocal}
             loading={showSkeleton}
           />
 
@@ -116,20 +144,22 @@ export default function RevenuePremiumSection({
               title="Flujo normal"
               subtitle="Ventas del embudo principal"
               origenBucket={bucket?.flujo}
-              moneda={monedaActiva}
+              moneda={monedaLocal}
               loading={showSkeleton}
             />
             <RevenueBreakdownColumn
               title="Remarketing"
               subtitle="Recuperación y ventas RM"
               origenBucket={bucket?.remarketing}
-              moneda={monedaActiva}
+              moneda={monedaLocal}
               loading={showSkeleton}
               rmRevenuePct={kpis?.porcentajeIngresosRemarketing}
             />
           </div>
         </>
       )}
+      </div>
+      ) : null}
     </section>
   );
 }
@@ -140,6 +170,35 @@ const sectionStyles = `
   padding: 14px 16px;
   border-radius: 20px;
   animation: fadeUp .35s ease both;
+}
+.revenueDisclosure {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 12px;
+  padding: 0 0 12px;
+  border: 0;
+  border-bottom: 1px solid rgba(148,163,184,.08);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.revenueDisclosure h2 {
+  margin: 0 0 3px;
+  font-size: 20px;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+.revenueDisclosure__chevron {
+  flex: 0 0 auto;
+  color: #67e8f9;
+  font-size: 16px;
+  font-weight: 900;
 }
 .revenuePremiumHead {
   display: flex;
@@ -182,6 +241,7 @@ const sectionStyles = `
   align-items: center;
   justify-content: flex-end;
   flex: 0 1 auto;
+  margin-bottom: 12px;
 }
 .revenuePremiumSection .revenueMonedaTabs {
   gap: 6px;
