@@ -674,6 +674,74 @@ async function countSeguimientosPorEstadoEnRango(
   return counts;
 }
 
+function buildConexionInFilter(ids) {
+  const list = ids.map((id) => encodeURIComponent(String(id))).join(",");
+  return `&conexion_whatsapp_id=in.(${list})`;
+}
+
+async function sumarMensajesPorLinea(usuarioId, desdeIso, hastaIso, ids, direccion) {
+  const partes = await Promise.all(
+    ids.map((id) =>
+      countMensajesEnRango(usuarioId, desdeIso, hastaIso, null, id, direccion)
+    )
+  );
+  return partes.reduce((total, n) => total + (Number(n) || 0), 0);
+}
+
+async function countConversionesEnLineas(usuarioId, desdeIso, hastaIso, ids) {
+  const filter = `${buildUsuarioFilter(usuarioId)}${buildConexionInFilter(ids)}&${buildDateFilter(desdeIso, hastaIso)}`;
+  const total = await supabaseCount("crm_conversiones", filter);
+  return total ?? 0;
+}
+
+async function countSeguimientosPorEstadoEnLineas(usuarioId, desdeIso, hastaIso, ids) {
+  const agrupado = `${buildUsuarioFilter(usuarioId)}${buildConexionInFilter(ids)}&${buildDateFilter(desdeIso, hastaIso)}`;
+  const estados = ["pendiente", "enviado", "cancelado", "respondido"];
+  const counts = { pendiente: 0, enviado: 0, cancelado: 0, respondido: 0 };
+
+  await Promise.all(
+    estados.map(async (est) => {
+      const n = await supabaseCount("seguimientos_programados", `${agrupado}&estado=eq.${est}`);
+      // null: el agrupado falló. El cero es un conteo válido y no se reemplaza.
+      if (n !== null) {
+        counts[est] = n;
+        return;
+      }
+      const partes = await Promise.all(
+        ids.map((id) =>
+          supabaseCount(
+            "seguimientos_programados",
+            `${buildUsuarioFilter(usuarioId)}${buildConexionFilter(id)}&${buildDateFilter(desdeIso, hastaIso)}&estado=eq.${est}`
+          )
+        )
+      );
+      counts[est] = partes.reduce((total, parte) => total + (parte ?? 0), 0);
+    })
+  );
+
+  return counts;
+}
+
+/**
+ * La misma lectura de valor y moneda que el resumen por línea.
+ * Prefer: count=exact cambia el orden de esas filas y, con ello, la moneda principal.
+ * Si la página no viene llena, el número de filas es el conteo exacto.
+ * Si viene llena, un HEAD evita contar de menos sin tocar el orden.
+ */
+async function ventasEIngresosLinea(usuarioId, desdeIso, hastaIso, conexionWhatsappId) {
+  const filter = `${buildUsuarioFilter(usuarioId)}${buildConexionFilter(conexionWhatsappId)}&${buildDateFilter(desdeIso, hastaIso)}`;
+  const limit = 50000;
+  const rows = await supabaseSelect("crm_conversiones", filter, "valor,moneda", limit);
+  if (!Array.isArray(rows)) {
+    return { ventas: 0, ingresos: { monto: 0, moneda: "BOB", desglose: {} } };
+  }
+  const ingresos = sumarIngresos(rows);
+  const paginaLlena = rows.length >= limit || rows.length >= 1000;
+  if (!paginaLlena) return { ventas: rows.length, ingresos };
+  const ventas = (await supabaseCount("crm_conversiones", filter)) ?? 0;
+  return { ventas, ingresos };
+}
+
 async function fetchMensajesEnRango(usuarioId, desdeIso, hastaIso, flujoId, conexionWhatsappId = null) {
   let filter = `${buildUsuarioFilter(usuarioId)}${buildConexionFilter(conexionWhatsappId)}&${buildDateFilter(desdeIso, hastaIso)}`;
   const rows = await supabaseSelect(
@@ -1357,6 +1425,127 @@ async function loadMetricasBaseEnCurso(usuarioId, query = {}) {
   };
 }
 
+/** Fan-out anterior: una carga completa por línea. Sigue usándose cuando hay flujo. */
+async function loadResumenTodasPorFanout(usuarioId, query, ids) {
+  const [metaAdsConectado, bases] = await Promise.all([
+    checkMetaAdsConectado(usuarioId),
+    Promise.all(
+      ids.map((id) =>
+        loadResumenBase(usuarioId, {
+          ...query,
+          conexion_whatsapp_id: id,
+          conexionWhatsappId: id,
+          _skipMetaAdsCheck: true,
+        })
+      )
+    ),
+  ]);
+  return { ...mergeResumenPorLineas(bases), metaAdsConectado };
+}
+
+async function resumenParcialDeLinea(usuarioId, rango, anterior, conexionWhatsappId) {
+  const [leads, leadsAnt, conversaciones, conversacionesAnt, respuestas, ventasIngresos] =
+    await Promise.all([
+      countClientesEnRango(usuarioId, rango.desde, rango.hasta, null, conexionWhatsappId),
+      countClientesEnRango(usuarioId, anterior.desde, anterior.hasta, null, conexionWhatsappId),
+      countConversacionesEnRango(usuarioId, rango.desde, rango.hasta, null, conexionWhatsappId),
+      countConversacionesEnRango(
+        usuarioId,
+        anterior.desde,
+        anterior.hasta,
+        null,
+        conexionWhatsappId
+      ),
+      countRespuestasEnRango(usuarioId, rango.desde, rango.hasta, null, conexionWhatsappId),
+      ventasEIngresosLinea(usuarioId, rango.desde, rango.hasta, conexionWhatsappId),
+    ]);
+
+  return {
+    leads,
+    leadsAnt,
+    conversaciones,
+    conversacionesAnt,
+    respuestas,
+    ventas: ventasIngresos.ventas,
+    ingresos: ventasIngresos.ingresos,
+  };
+}
+
+/**
+ * Todas las líneas sin flujo. Seguimientos y ventas anteriores se leen una vez
+ * para la lista de conexiones. Ventas e ingresos del período salen de una lectura
+ * por línea. Los mensajes siguen por línea: un conteo único de las dos llega a
+ * cancelarse y devolvería cero. Leads, conversaciones y respuestas no se agrupan.
+ */
+async function loadResumenTodasLineasAgrupado(usuarioId, query, ids) {
+  const rango = parseRango(query);
+  const anterior = rangoAnterior(rango.desde, rango.hasta, rango.periodo);
+  const lineasPromise = Promise.all(
+    ids.map((id) => resumenParcialDeLinea(usuarioId, rango, anterior, id))
+  );
+
+  const [metaAdsConectado, lineas, salientes, entrantes, ventasAnt, segEstados] =
+    await Promise.all([
+      checkMetaAdsConectado(usuarioId),
+      lineasPromise,
+      sumarMensajesPorLinea(usuarioId, rango.desde, rango.hasta, ids, "saliente"),
+      sumarMensajesPorLinea(usuarioId, rango.desde, rango.hasta, ids, "entrante"),
+      countConversionesEnLineas(usuarioId, anterior.desde, anterior.hasta, ids),
+      countSeguimientosPorEstadoEnLineas(usuarioId, rango.desde, rango.hasta, ids),
+    ]);
+
+  const bases = lineas.map((line) => ({
+    rango,
+    flujoId: null,
+    metaAdsConectado: false,
+    kpis: {
+      leads: line.leads,
+      conversaciones: line.conversaciones,
+      mensajesEnviados: 0,
+      respuestas: line.respuestas,
+      mensajesEntrantes: 0,
+      ventas: line.ventas,
+      ingresos: line.ingresos.monto,
+      moneda: line.ingresos.moneda,
+      ingresosDesglose: line.ingresos.desglose,
+      seguimientosActivos: 0,
+      seguimientosEnviados: 0,
+      seguimientosCancelados: 0,
+      seguimientosRespondidos: 0,
+      tasaCierre: 0,
+      conversion: 0,
+      tendenciaLeads: null,
+      tendenciaConversaciones: null,
+      tendenciaVentas: null,
+    },
+    _ant: {
+      leads: line.leadsAnt,
+      conversaciones: line.conversacionesAnt,
+      ventas: 0,
+    },
+  }));
+
+  const merged = mergeResumenPorLineas(bases);
+  const kpis = {
+    ...merged.kpis,
+    mensajesEnviados: salientes,
+    mensajesEntrantes: entrantes,
+    seguimientosActivos: segEstados.pendiente,
+    seguimientosEnviados: segEstados.enviado,
+    seguimientosCancelados: segEstados.cancelado,
+    seguimientosRespondidos: segEstados.respondido,
+    tendenciaVentas: calcTendencia(merged.kpis.ventas, ventasAnt),
+  };
+
+  return {
+    rango: merged.rango,
+    flujoId: merged.flujoId,
+    kpis,
+    salud: computeSalud({ ...kpis, seguimientosActivos: kpis.seguimientosActivos }),
+    metaAdsConectado,
+  };
+}
+
 /** Carga agregada solo para resumen — sin arrays completos de métricas base. */
 async function loadResumenBase(usuarioId, query = {}) {
   const conexionWhatsappId =
@@ -1417,21 +1606,11 @@ async function loadResumenBaseEnCurso(usuarioId, query = {}) {
         metaAdsConectado,
       };
     }
-    // Meta Ads es por usuario (no por línea): 1 check ≡ N checks + .some()
-    const [metaAdsConectado, bases] = await Promise.all([
-      checkMetaAdsConectado(usuarioId),
-      Promise.all(
-        ids.map((id) =>
-          loadResumenBase(usuarioId, {
-            ...query,
-            conexion_whatsapp_id: id,
-            conexionWhatsappId: id,
-            _skipMetaAdsCheck: true,
-          })
-        )
-      ),
-    ]);
-    return { ...mergeResumenPorLineas(bases), metaAdsConectado };
+    const flujoId = query.flujo_id || query.flujoId || null;
+    if (flujoId) {
+      return loadResumenTodasPorFanout(usuarioId, query, ids);
+    }
+    return loadResumenTodasLineasAgrupado(usuarioId, query, ids);
   }
 
   const rango = parseRango(query);
