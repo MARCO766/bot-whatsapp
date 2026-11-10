@@ -92,6 +92,247 @@ async function supabaseSelect(table, filterQuery, selectFields = "*", limit = 50
   }
 }
 
+/**
+ * Tamaño pedido a PostgREST. Una página de este tamaño sigue.
+ * Una más corta cierra solo si el Content-Range no dice que el servidor
+ * recortó el rango. 50.000 filas no es un corte: se sigue hasta el final.
+ * No se sube ningún timeout.
+ */
+const PAGINA_FILAS_METRICAS = 1000;
+/** Tope de seguridad contra un Range ignorado. No publica las filas leídas. */
+const PAGINAS_MAX_METRICAS = 2000;
+
+function contentRangeDe(resHeaders) {
+  if (!resHeaders) return "";
+  return String(resHeaders["content-range"] || resHeaders["Content-Range"] || "").trim();
+}
+
+/**
+ * id es la clave primaria en mensajes (select=id ya usado en los conteos),
+ * seguimientos_programados, crm_conversiones e ia_sessions.
+ * creado_en no es único. El mismo order=id.asc va en todas las páginas.
+ */
+const ORDEN_PAGINACION_METRICAS = {
+  mensajes: "id.asc",
+  seguimientos_programados: "id.asc",
+  crm_conversiones: "id.asc",
+  ia_sessions: "id.asc",
+};
+
+function filtroConOrdenEstable(table, filterQuery) {
+  const orden = ORDEN_PAGINACION_METRICAS[table];
+  if (!orden) return null;
+  const partes = String(filterQuery || "")
+    .replace(/^[?&]/, "")
+    .split("&")
+    .filter((parte) => parte && !parte.startsWith("order="));
+  partes.push(`order=${orden}`);
+  return partes.join("&");
+}
+
+function selectConId(selectFields) {
+  const partes = String(selectFields || "*")
+    .split(",")
+    .map((campo) => campo.trim())
+    .filter(Boolean);
+  if (partes.includes("*") || partes.includes("id")) return partes.join(",");
+  return ["id", ...partes].join(",");
+}
+
+/**
+ * Formatos aceptados: inicio-fin/total, inicio-fin con total desconocido,
+ * o estrella/0 para un conjunto vacío. estrella/N con filas no describe un rango.
+ */
+function parseContentRangeMetricas(contentRange) {
+  const raw = String(contentRange || "").trim();
+  if (!raw) return { ok: false };
+  const estrella = raw.match(/^\*\/(\*|\d+)$/);
+  if (estrella) {
+    if (estrella[1] === "*") return { ok: false };
+    const total = Number(estrella[1]);
+    if (!Number.isInteger(total) || total < 0) return { ok: false };
+    return { ok: true, vacio: true, total };
+  }
+  const match = raw.match(/^(\d+)-(\d+)\/(\*|\d+)$/);
+  if (!match) return { ok: false };
+  const start = Number(match[1]);
+  const end = Number(match[2]);
+  if (!Number.isInteger(start) || !Number.isInteger(end) || end < start) return { ok: false };
+  if (match[3] === "*") return { ok: true, vacio: false, start, end, total: null };
+  const total = Number(match[3]);
+  if (!Number.isInteger(total) || total < 0 || end >= total) return { ok: false };
+  return { ok: true, vacio: false, start, end, total };
+}
+
+function lecturaCompleta(filas) {
+  return { completo: true, filas, motivo: null };
+}
+
+function lecturaIncompleta(motivo) {
+  return { completo: false, filas: null, motivo };
+}
+
+function idDeFila(fila) {
+  if (!fila || typeof fila !== "object" || Array.isArray(fila)) return "";
+  if (fila.id == null) return "";
+  const id = String(fila.id).trim();
+  return id;
+}
+
+/**
+ * PGRST205 y 42P01 dicen que la relación no está.
+ * Un 404 suelto, una columna ausente, un permiso o un timeout no lo son.
+ */
+function crmConversionesTablaInexistente(err) {
+  const code = String(err?.response?.data?.code || "");
+  const msg = errorMessage(err).toLowerCase();
+  if (code === "42703" || code === "PGRST204" || msg.includes("column")) return false;
+  if (code === "PGRST205" || code === "42P01") return true;
+  if (msg.includes("could not find the table")) return true;
+  if (msg.includes("relation") && msg.includes("does not exist")) return true;
+  return false;
+}
+
+function reunirPaginas(lotes, tamano = PAGINA_FILAS_METRICAS) {
+  if (!Array.isArray(lotes)) return { completo: false, filas: null, motivo: "error" };
+  const filas = [];
+  for (const lote of lotes) {
+    if (!Array.isArray(lote) || lote.length > tamano) {
+      return { completo: false, filas: null, motivo: "error" };
+    }
+    if (lote.length === 0) return { completo: true, filas, motivo: null };
+    filas.push(...lote);
+    if (lote.length < tamano) return { completo: true, filas, motivo: null };
+  }
+  return { completo: false, filas: null, motivo: "incompleto" };
+}
+
+function rechazarLecturaIncompleta(tabla) {
+  const error = new Error(
+    `[metricas] lectura de ${tabla} fallida o incompleta. No se publica un conteo parcial ni un cero por error.`
+  );
+  error.code = "METRICAS_LECTURA_INCOMPLETA";
+  throw error;
+}
+
+/**
+ * 416 cierra solo si el total anunciado ya se cubrió, si el primer rango
+ * no tiene filas, o si las páginas anteriores fueron contiguas y nadie
+ * anunció un total todavía pendiente. Un total a medio cubrir se rechaza.
+ */
+function cerrarCon416(responseHeaders, offset, filas, totalAnunciado) {
+  if (filas.length !== offset) return lecturaIncompleta("error");
+  const cr = parseContentRangeMetricas(contentRangeDe(responseHeaders));
+  if (cr.ok && cr.vacio) {
+    if (cr.total === 0) {
+      if (offset === 0 && filas.length === 0) return lecturaCompleta([]);
+      return lecturaIncompleta("error");
+    }
+    if (offset >= cr.total && filas.length === cr.total) {
+      if (totalAnunciado != null && totalAnunciado !== cr.total) return lecturaIncompleta("error");
+      return lecturaCompleta(filas);
+    }
+    return lecturaIncompleta("error");
+  }
+  if (cr.ok && !cr.vacio) return lecturaIncompleta("error");
+  if (offset === 0 && filas.length === 0) return lecturaCompleta([]);
+  if (totalAnunciado != null && offset >= totalAnunciado && filas.length === totalAnunciado) {
+    return lecturaCompleta(filas);
+  }
+  if (totalAnunciado != null) return lecturaIncompleta("error");
+  if (offset > 0) return lecturaCompleta(filas);
+  return lecturaIncompleta("error");
+}
+
+/**
+ * Cada página tiene que empezar en el offset pedido y traer tantas filas
+ * como anuncia Content-Range. Un hueco, un solape, un id repetido o un
+ * total sin cubrir descarta lo ya leído. A las 2.000 páginas también.
+ */
+async function supabaseSelectCompleto(table, filterQuery, selectFields = "*") {
+  const filtro = filtroConOrdenEstable(table, filterQuery);
+  if (!filtro) return lecturaIncompleta("error");
+  const campos = selectConId(selectFields);
+  const filas = [];
+  const ids = new Set();
+  let offset = 0;
+  let totalAnunciado = null;
+  for (let pagina = 0; pagina < PAGINAS_MAX_METRICAS; pagina += 1) {
+    const hasta = offset + PAGINA_FILAS_METRICAS - 1;
+    const url = `${SUPABASE_URL}/rest/v1/${table}?select=${encodeURIComponent(campos)}&${filtro}`;
+    let res;
+    try {
+      res = await axios.get(url, {
+        headers: headers({ Range: `${offset}-${hasta}` }),
+      });
+    } catch (e) {
+      if (e.response?.status === 416) {
+        return cerrarCon416(e.response.headers, offset, filas, totalAnunciado);
+      }
+      if (
+        table === "crm_conversiones" &&
+        offset === 0 &&
+        filas.length === 0 &&
+        crmConversionesTablaInexistente(e)
+      ) {
+        logSchemaFallback(table, e);
+        return lecturaCompleta([]);
+      }
+      console.log(`[metricas] select ${table}:`, e.response?.data || e.message);
+      return lecturaIncompleta("error");
+    }
+    const lote = res.data;
+    if (!Array.isArray(lote)) return lecturaIncompleta("error");
+    const cr = parseContentRangeMetricas(contentRangeDe(res.headers));
+    if (!cr.ok) return lecturaIncompleta("error");
+    if (lote.length === 0) {
+      if (!cr.vacio) return lecturaIncompleta("error");
+      if (cr.total === 0) {
+        if (offset === 0 && filas.length === 0) return lecturaCompleta([]);
+        return lecturaIncompleta("error");
+      }
+      if (filas.length !== offset) return lecturaIncompleta("error");
+      if (totalAnunciado != null && totalAnunciado !== cr.total) return lecturaIncompleta("error");
+      if (offset === cr.total && filas.length === cr.total) return lecturaCompleta(filas);
+      return lecturaIncompleta("error");
+    }
+    if (cr.vacio) return lecturaIncompleta("error");
+    if (cr.start !== offset) return lecturaIncompleta("error");
+    const anunciadas = cr.end - cr.start + 1;
+    if (lote.length !== anunciadas) return lecturaIncompleta("error");
+    if (cr.total != null && totalAnunciado != null && cr.total !== totalAnunciado) {
+      return lecturaIncompleta("error");
+    }
+    if (cr.total != null) totalAnunciado = cr.total;
+    if (totalAnunciado != null && cr.end >= totalAnunciado) return lecturaIncompleta("error");
+    for (const fila of lote) {
+      const id = idDeFila(fila);
+      if (!id || ids.has(id)) return lecturaIncompleta("error");
+      ids.add(id);
+    }
+    filas.push(...lote);
+    const siguiente = cr.end + 1;
+    if (filas.length !== siguiente) return lecturaIncompleta("error");
+    if (totalAnunciado != null && siguiente === totalAnunciado) return lecturaCompleta(filas);
+    if (totalAnunciado != null && siguiente > totalAnunciado) return lecturaIncompleta("error");
+    offset = siguiente;
+  }
+  console.log(
+    `[metricas] ${table} no cerró la lectura tras ${PAGINAS_MAX_METRICAS} páginas. No se publica un parcial.`
+  );
+  return lecturaIncompleta("incompleto");
+}
+
+function distintosDeFilas(filas, { soloEntrantes = false } = {}) {
+  const vistos = new Set();
+  (filas || []).forEach((fila) => {
+    if (soloEntrantes && fila?.direccion !== "entrante") return;
+    if (!telefonoCuentaParaDistinto(fila?.cliente_numero)) return;
+    vistos.add(fila.cliente_numero);
+  });
+  return vistos.size;
+}
+
 async function supabaseRpc(functionName, params) {
   const url = `${SUPABASE_URL}/rest/v1/rpc/${functionName}`;
   try {
@@ -123,7 +364,8 @@ function cuerpoRpcJson(data) {
 /**
  * Lectura de RPC que conserva el JSON completo (objeto, lista o número).
  * Serie y diagnóstico la usan solo con METRICAS_RPC_SERIES_DIAGNOSTICO=1.
- * Sin esa variable, ninguna ruta la llama. supabaseRpc sigue siendo el lector numérico.
+ * metricas_resumen_conteos la usa solo con METRICAS_RPC_RESUMEN_CONTEOS=1.
+ * Sin esas variables, ninguna ruta la llama. supabaseRpc sigue siendo el lector numérico.
  * null = la función no está en la base.
  */
 async function supabaseRpcJson(functionName, params) {
@@ -141,6 +383,205 @@ async function supabaseRpcJson(functionName, params) {
     const detail = errorMessage(e) || e.message;
     throw new Error(`[metricas] RPC ${functionName} falló: ${detail}`);
   }
+}
+
+/**
+ * Apagada salvo METRICAS_RPC_RESUMEN_CONTEOS=1.
+ * El resumen de producción no llama a metricas_resumen_conteos.
+ * Si la RPC falta, falla, hace timeout o devuelve una fila incompleta,
+ * se usa el cálculo anterior. Ese fallo no se convierte en cero.
+ */
+function metricasRpcResumenConteosActiva() {
+  return String(process.env.METRICAS_RPC_RESUMEN_CONTEOS || "").trim() === "1";
+}
+
+const CAMPOS_FILA_RESUMEN_CONTEOS = [
+  "salientes",
+  "entrantes",
+  "respuestas",
+  "clientes_con_mensaje",
+  "conversaciones",
+  "conversaciones_anterior",
+];
+
+function normalizarIdConexion(id) {
+  if (id == null) return "";
+  return String(id).trim().toLowerCase();
+}
+
+function enteroConteo(valor) {
+  if (typeof valor === "boolean" || valor == null) return null;
+  if (typeof valor === "string" && valor.trim() === "") return null;
+  const n = typeof valor === "number" ? valor : Number(valor);
+  if (!Number.isSafeInteger(n) || n < 0) return null;
+  return n;
+}
+
+/** null y '' no entran en un distinto. Un espacio sí entra, igual que el filtro JS. */
+function telefonoCuentaParaDistinto(numero) {
+  return numero != null && numero !== "";
+}
+
+/** Extremos inclusivos: creado_en >= desde y creado_en <= hasta. */
+function instanteEnRangoInclusivo(iso, desdeIso, hastaIso) {
+  const t = new Date(iso).getTime();
+  const desde = new Date(desdeIso).getTime();
+  const hasta = new Date(hastaIso).getTime();
+  if (![t, desde, hasta].every(Number.isFinite)) return false;
+  return t >= desde && t <= hasta;
+}
+
+/**
+ * Misma regla que metricas_resumen_conteos.
+ * Con flujo, conversaciones es el distinto de mensajes.
+ * Sin flujo, un conteo de tabla mayor que cero gana; cero usa el distinto.
+ */
+function conversacionesSegunRegla(flujoActivo, conteoTabla, clientesConMensaje) {
+  if (flujoActivo) return clientesConMensaje;
+  if (Number(conteoTabla) > 0) return conteoTabla;
+  return clientesConMensaje;
+}
+
+/**
+ * Referencia en memoria de una fila de metricas_resumen_conteos.
+ * flujoNumeros null: sin filtro de flujo. Un Set o array, aunque esté vacío, sí filtra.
+ */
+function simularConteoLinea(mensajes, conversaciones, params) {
+  const flujo =
+    params.flujoNumeros == null ? null : new Set(params.flujoNumeros);
+  const deLinea = (desdeIso, hastaIso) =>
+    (mensajes || []).filter(
+      (m) =>
+        m.usuario_id === params.usuarioId &&
+        m.conexion_whatsapp_id === params.conexionId &&
+        instanteEnRangoInclusivo(m.creado_en, desdeIso, hastaIso) &&
+        (flujo == null || flujo.has(m.cliente_numero))
+    );
+  const distintosSi = (rows, pred) => {
+    const vistos = new Set();
+    rows.forEach((m) => {
+      if (!pred(m) || !telefonoCuentaParaDistinto(m.cliente_numero)) return;
+      vistos.add(m.cliente_numero);
+    });
+    return vistos.size;
+  };
+  const contarTabla = (desdeIso, hastaIso) =>
+    (conversaciones || []).filter(
+      (c) =>
+        c.usuario_id === params.usuarioId &&
+        c.conexion_whatsapp_id === params.conexionId &&
+        instanteEnRangoInclusivo(c.creado_en, desdeIso, hastaIso)
+    ).length;
+  const actual = deLinea(params.desde, params.hasta);
+  const clientes = distintosSi(actual, () => true);
+  const hayAnterior = params.desdeAnterior && params.hastaAnterior;
+  const anterior = hayAnterior ? deLinea(params.desdeAnterior, params.hastaAnterior) : [];
+  const clientesAnterior = distintosSi(anterior, () => true);
+  return {
+    conexion_whatsapp_id: params.conexionId,
+    salientes: actual.filter((m) => m.direccion === "saliente").length,
+    entrantes: actual.filter((m) => m.direccion === "entrante").length,
+    respuestas: distintosSi(actual, (m) => m.direccion === "entrante"),
+    clientes_con_mensaje: clientes,
+    conversaciones: conversacionesSegunRegla(
+      flujo != null,
+      contarTabla(params.desde, params.hasta),
+      clientes
+    ),
+    conversaciones_anterior: hayAnterior
+      ? conversacionesSegunRegla(
+          flujo != null,
+          contarTabla(params.desdeAnterior, params.hastaAnterior),
+          clientesAnterior
+        )
+      : 0,
+  };
+}
+
+function filasResumenConteosPorConexion(filas, conexionIds) {
+  if (!Array.isArray(filas)) return null;
+  const pedidos = [
+    ...new Set((conexionIds || []).map(normalizarIdConexion).filter(Boolean)),
+  ];
+  if (!pedidos.length) return null;
+  const mapa = new Map();
+  for (const fila of filas) {
+    if (!fila || typeof fila !== "object" || Array.isArray(fila)) return null;
+    const id = normalizarIdConexion(fila.conexion_whatsapp_id);
+    if (!id || mapa.has(id)) return null;
+    const normalizada = { conexion_whatsapp_id: id };
+    for (const campo of CAMPOS_FILA_RESUMEN_CONTEOS) {
+      const n = enteroConteo(fila[campo]);
+      if (n == null) return null;
+      normalizada[campo] = n;
+    }
+    mapa.set(id, normalizada);
+  }
+  for (const id of pedidos) {
+    if (!mapa.has(id)) return null;
+  }
+  return mapa;
+}
+
+function sumarFilasResumenConteos(mapa, conexionIds) {
+  const ids = [
+    ...new Set((conexionIds || []).map(normalizarIdConexion).filter(Boolean)),
+  ];
+  if (!mapa || !ids.length) return null;
+  const suma = {
+    salientes: 0,
+    entrantes: 0,
+    respuestas: 0,
+    conversaciones: 0,
+    conversacionesAnterior: 0,
+  };
+  for (const id of ids) {
+    const fila = mapa.get(id);
+    if (!fila) return null;
+    suma.salientes += fila.salientes;
+    suma.entrantes += fila.entrantes;
+    suma.respuestas += fila.respuestas;
+    suma.conversaciones += fila.conversaciones;
+    suma.conversacionesAnterior += fila.conversaciones_anterior;
+  }
+  return suma;
+}
+
+/**
+ * null: bandera apagada, RPC ausente, error, timeout o filas incompletas.
+ * El llamador sigue con countMensajesEnRango, countRespuestasEnRango
+ * y countConversacionesEnRango. No rellena esos indicadores con cero.
+ */
+async function leerResumenConteosONull(usuarioId, conexionIds, rango, anterior, flujoId) {
+  if (!metricasRpcResumenConteosActiva()) return null;
+  const ids = [
+    ...new Set((conexionIds || []).map(normalizarIdConexion).filter(Boolean)),
+  ];
+  if (!usuarioId || !ids.length || !rango?.desde || !rango?.hasta) return null;
+  let data;
+  try {
+    data = await supabaseRpcJson("metricas_resumen_conteos", {
+      p_usuario_id: usuarioId,
+      p_conexiones: ids,
+      p_desde: rango.desde,
+      p_hasta: rango.hasta,
+      p_desde_anterior: anterior?.desde || null,
+      p_hasta_anterior: anterior?.hasta || null,
+      p_flujo_id: flujoId || null,
+    });
+  } catch (e) {
+    console.log(
+      `[metricas] metricas_resumen_conteos falló: ${errorMessage(e) || e.message}. Se usa el cálculo actual.`
+    );
+    return null;
+  }
+  if (data == null) return null;
+  const mapa = filasResumenConteosPorConexion(data, ids);
+  if (!mapa) {
+    console.log("[metricas] metricas_resumen_conteos incompleta. Se usa el cálculo actual.");
+    return null;
+  }
+  return mapa;
 }
 
 function buildDateFilter(desdeIso, hastaIso, field = "creado_en") {
@@ -270,7 +711,7 @@ async function fetchClientesEnRango(
 ) {
   let filter = `${buildUsuarioFilter(usuarioId)}&${buildDateFilter(desdeIso, hastaIso)}&estado=neq.bloqueado`;
   const rows = await supabaseSelect("clientes", filter, "id,numero,creado_en");
-  if (!Array.isArray(rows)) return [];
+  if (!Array.isArray(rows)) rechazarLecturaIncompleta("clientes");
 
   if (!flujoId) {
     if (!buildConexionFilter(conexionWhatsappId)) return rows;
@@ -305,7 +746,7 @@ async function countClientesEnRango(
       const chunk = numeros.slice(i, i + 80);
       const inList = chunk.map((n) => encodeURIComponent(n)).join(",");
       const n = await supabaseCount("clientes", `${baseFilter}&numero=in.(${inList})`);
-      if (n === null) return 0;
+      if (n === null) rechazarLecturaIncompleta("clientes");
       total += n;
     }
     return total;
@@ -392,35 +833,34 @@ async function queryFlujoClienteNumeros(usuarioId, flujoId, conexionWhatsappId) 
   const connF = buildConexionFilter(conexionWhatsappId);
   const numeros = new Set();
 
-  const [segRows, convRows, iaRows] = await Promise.all([
-    supabaseSelect(
+  const lecturas = await Promise.all([
+    supabaseSelectCompleto(
       "seguimientos_programados",
       `${base}${flujoF}${connF}`,
       "cliente_numero"
     ),
-    supabaseSelect("crm_conversiones", `${base}${flujoF}${connF}`, "cliente_numero"),
-    supabaseSelect("ia_sessions", `${base}${flujoF}${connF}`, "cliente_numero"),
+    supabaseSelectCompleto("crm_conversiones", `${base}${flujoF}${connF}`, "cliente_numero"),
+    supabaseSelectCompleto("ia_sessions", `${base}${flujoF}${connF}`, "cliente_numero"),
   ]);
 
-  let complete = true;
-  [segRows, convRows, iaRows].forEach((rows) => {
-    if (!Array.isArray(rows)) {
-      complete = false;
-      return;
-    }
-    rows.forEach((r) => {
+  if (lecturas.some((resultado) => !resultado?.completo || !Array.isArray(resultado.filas))) {
+    return { numeros: null, complete: false, paginacionIncompleta: true };
+  }
+
+  lecturas.forEach((resultado) => {
+    resultado.filas.forEach((r) => {
       if (r?.cliente_numero) numeros.add(r.cliente_numero);
     });
   });
 
-  return { numeros: [...numeros], complete };
+  return { numeros: [...numeros], complete: true, paginacionIncompleta: false };
 }
 
 async function leerFlujoClienteNumeros(usuarioId, flujoId, conexionWhatsappId) {
   const key = flujoNumerosCacheKey(usuarioId, flujoId, conexionWhatsappId);
   if ((flujoNumerosRetain.get(key) || 0) > 0) {
     const memo = flujoNumerosMemo.get(key);
-    if (Array.isArray(memo)) return memo;
+    if (memo?.complete && Array.isArray(memo.numeros)) return memo;
   }
 
   const existing = flujoNumerosInflight.get(key);
@@ -428,14 +868,22 @@ async function leerFlujoClienteNumeros(usuarioId, flujoId, conexionWhatsappId) {
 
   const promise = queryFlujoClienteNumeros(usuarioId, flujoId, conexionWhatsappId)
     .then(({ numeros, complete }) => {
+      if (!complete || !Array.isArray(numeros)) {
+        rechazarLecturaIncompleta("números de flujo");
+      }
+      const estado = {
+        numeros,
+        paginacionIncompleta: false,
+        complete: true,
+      };
       try {
-        if (complete && (flujoNumerosRetain.get(key) || 0) > 0) {
-          flujoNumerosMemo.set(key, numeros);
+        if ((flujoNumerosRetain.get(key) || 0) > 0) {
+          flujoNumerosMemo.set(key, estado);
         }
       } catch (err) {
         console.log("[metricas] memo numeros flujo:", err.message);
       }
-      return numeros;
+      return estado;
     })
     .finally(() => {
       try {
@@ -454,19 +902,43 @@ async function leerFlujoClienteNumeros(usuarioId, flujoId, conexionWhatsappId) {
 }
 
 /** Números de lead asociados a un flujo (misma fuente que ventas: seguimientos + conversiones + sesiones IA). */
+async function estadoNumerosDeFlujo(usuarioId, flujoId, conexionWhatsappId = null) {
+  if (!flujoId) return { numeros: [], paginacionIncompleta: false, complete: true };
+  try {
+    const estado = await leerFlujoClienteNumeros(usuarioId, flujoId, conexionWhatsappId);
+    if (!estado?.complete || !Array.isArray(estado.numeros)) {
+      rechazarLecturaIncompleta("números de flujo");
+    }
+    return estado;
+  } catch (err) {
+    if (err?.code === "METRICAS_LECTURA_INCOMPLETA") throw err;
+    console.log("[metricas] cache numeros flujo, consulta directa:", err.message);
+    const directo = await queryFlujoClienteNumeros(usuarioId, flujoId, conexionWhatsappId);
+    if (!directo.complete || !Array.isArray(directo.numeros)) {
+      rechazarLecturaIncompleta("números de flujo");
+    }
+    return {
+      numeros: directo.numeros,
+      paginacionIncompleta: false,
+      complete: true,
+    };
+  }
+}
+
 async function fetchFlujoClienteNumeros(usuarioId, flujoId, conexionWhatsappId = null) {
   if (!flujoId) return [];
-  try {
-    const numeros = await leerFlujoClienteNumeros(usuarioId, flujoId, conexionWhatsappId);
-    if (!Array.isArray(numeros)) {
-      throw new Error("resultado de numeros de flujo invalido");
-    }
-    return numeros.slice();
-  } catch (err) {
-    console.log("[metricas] cache numeros flujo, consulta directa:", err.message);
-    const { numeros } = await queryFlujoClienteNumeros(usuarioId, flujoId, conexionWhatsappId);
-    return numeros.slice();
+  const estado = await estadoNumerosDeFlujo(usuarioId, flujoId, conexionWhatsappId);
+  if (!estado?.complete || !Array.isArray(estado.numeros)) {
+    rechazarLecturaIncompleta("números de flujo");
   }
+  return estado.numeros.slice();
+}
+
+function numerosDeFlujoParaConteo(estado) {
+  if (!estado?.complete || estado.paginacionIncompleta || !Array.isArray(estado.numeros)) {
+    rechazarLecturaIncompleta("números de flujo");
+  }
+  return estado.numeros;
 }
 
 /** Números con conversación/mensaje en una línea WhatsApp. */
@@ -506,10 +978,13 @@ async function countMensajesEnRango(
 
   if (!flujoId) {
     const total = await supabaseCount("mensajes", `${baseFilter}${dirF}`);
-    return total ?? 0;
+    if (total === null) rechazarLecturaIncompleta("mensajes");
+    return total;
   }
 
-  const numeros = await fetchFlujoClienteNumeros(usuarioId, flujoId, conexionWhatsappId);
+  const numeros = numerosDeFlujoParaConteo(
+    await estadoNumerosDeFlujo(usuarioId, flujoId, conexionWhatsappId)
+  );
   if (!numeros.length) return 0;
 
   let total = 0;
@@ -517,10 +992,18 @@ async function countMensajesEnRango(
     const chunk = numeros.slice(i, i + 80);
     const inList = chunk.map((n) => encodeURIComponent(n)).join(",");
     const n = await supabaseCount("mensajes", `${baseFilter}${dirF}&cliente_numero=in.(${inList})`);
-    if (n === null) return 0;
+    if (n === null) rechazarLecturaIncompleta("mensajes");
     total += n;
   }
   return total;
+}
+
+async function filasMensajeCompletas(filter) {
+  const resultado = await supabaseSelectCompleto("mensajes", filter, "cliente_numero");
+  if (!resultado?.completo || !Array.isArray(resultado.filas)) {
+    rechazarLecturaIncompleta("mensajes");
+  }
+  return resultado.filas;
 }
 
 async function countDistinctClientesMensajesEnRango(
@@ -533,26 +1016,21 @@ async function countDistinctClientesMensajesEnRango(
   const baseFilter = `${buildUsuarioFilter(usuarioId)}${buildConexionFilter(conexionWhatsappId)}&${buildDateFilter(desdeIso, hastaIso)}`;
 
   if (!flujoId) {
-    const rows = await supabaseSelect("mensajes", baseFilter, "cliente_numero");
-    if (!Array.isArray(rows)) return 0;
-    return new Set(rows.map((m) => m.cliente_numero).filter(Boolean)).size;
+    return distintosDeFilas(await filasMensajeCompletas(baseFilter));
   }
 
-  const numeros = await fetchFlujoClienteNumeros(usuarioId, flujoId, conexionWhatsappId);
+  const numeros = numerosDeFlujoParaConteo(
+    await estadoNumerosDeFlujo(usuarioId, flujoId, conexionWhatsappId)
+  );
   if (!numeros.length) return 0;
 
   const seen = new Set();
   for (let i = 0; i < numeros.length; i += 80) {
     const chunk = numeros.slice(i, i + 80);
     const inList = chunk.map((n) => encodeURIComponent(n)).join(",");
-    const rows = await supabaseSelect(
-      "mensajes",
-      `${baseFilter}&cliente_numero=in.(${inList})`,
-      "cliente_numero"
-    );
-    if (!Array.isArray(rows)) continue;
+    const rows = await filasMensajeCompletas(`${baseFilter}&cliente_numero=in.(${inList})`);
     rows.forEach((r) => {
-      if (r.cliente_numero) seen.add(r.cliente_numero);
+      if (telefonoCuentaParaDistinto(r.cliente_numero)) seen.add(r.cliente_numero);
     });
   }
   return seen.size;
@@ -600,26 +1078,21 @@ async function countRespuestasEnRango(
   const baseFilter = `${buildUsuarioFilter(usuarioId)}${buildConexionFilter(conexionWhatsappId)}&${buildDateFilter(desdeIso, hastaIso)}&direccion=eq.entrante`;
 
   if (!flujoId) {
-    const rows = await supabaseSelect("mensajes", baseFilter, "cliente_numero");
-    if (!Array.isArray(rows)) return 0;
-    return new Set(rows.map((r) => r.cliente_numero).filter(Boolean)).size;
+    return distintosDeFilas(await filasMensajeCompletas(baseFilter));
   }
 
-  const numeros = await fetchFlujoClienteNumeros(usuarioId, flujoId, conexionWhatsappId);
+  const numeros = numerosDeFlujoParaConteo(
+    await estadoNumerosDeFlujo(usuarioId, flujoId, conexionWhatsappId)
+  );
   if (!numeros.length) return 0;
 
   const seen = new Set();
   for (let i = 0; i < numeros.length; i += 80) {
     const chunk = numeros.slice(i, i + 80);
     const inList = chunk.map((n) => encodeURIComponent(n)).join(",");
-    const rows = await supabaseSelect(
-      "mensajes",
-      `${baseFilter}&cliente_numero=in.(${inList})`,
-      "cliente_numero"
-    );
-    if (!Array.isArray(rows)) continue;
+    const rows = await filasMensajeCompletas(`${baseFilter}&cliente_numero=in.(${inList})`);
     rows.forEach((r) => {
-      if (r.cliente_numero) seen.add(r.cliente_numero);
+      if (telefonoCuentaParaDistinto(r.cliente_numero)) seen.add(r.cliente_numero);
     });
   }
   return seen.size;
@@ -758,34 +1231,6 @@ async function fetchMensajesEnRango(usuarioId, desdeIso, hastaIso, flujoId, cone
   );
   if (!numeros.size) return [];
   return rows.filter((m) => numeros.has(m.cliente_numero));
-}
-
-async function fetchConversacionesEnRango(
-  usuarioId,
-  desdeIso,
-  hastaIso,
-  flujoId,
-  conexionWhatsappId = null,
-  mensajesPreload = null
-) {
-  const uid = encodeURIComponent(usuarioId);
-  const dateF = buildDateFilter(desdeIso, hastaIso);
-  const connF = buildConexionFilter(conexionWhatsappId);
-
-  if (!flujoId) {
-    const count = await supabaseCount("conversaciones", `usuario_id=eq.${uid}${connF}&${dateF}`);
-    if (count !== null && count > 0) return count;
-
-    const msgs =
-      mensajesPreload ??
-      (await fetchMensajesEnRango(usuarioId, desdeIso, hastaIso, null, conexionWhatsappId));
-    return new Set(msgs.map((m) => m.cliente_numero).filter(Boolean)).size;
-  }
-
-  const msgs =
-    mensajesPreload ??
-    (await fetchMensajesEnRango(usuarioId, desdeIso, hastaIso, flujoId, conexionWhatsappId));
-  return new Set(msgs.map((m) => m.cliente_numero).filter(Boolean)).size;
 }
 
 async function fetchConversionesEnRango(usuarioId, desdeIso, hastaIso, flujoId, conexionWhatsappId = null) {
@@ -1059,22 +1504,6 @@ async function checkMetaAdsConectado(usuarioId) {
   }
 }
 
-function countMensajesPorDireccion(mensajes) {
-  let salientes = 0;
-  let entrantes = 0;
-  const clientesRespuesta = new Set();
-
-  mensajes.forEach((m) => {
-    if (m.direccion === "saliente") salientes += 1;
-    if (m.direccion === "entrante") {
-      entrantes += 1;
-      if (m.cliente_numero) clientesRespuesta.add(m.cliente_numero);
-    }
-  });
-
-  return { salientes, entrantes, clientesRespuesta: clientesRespuesta.size };
-}
-
 function sumarIngresos(conversiones) {
   const totales = sumarVentasPorMoneda(conversiones);
   const monedas = Object.keys(totales);
@@ -1342,7 +1771,18 @@ async function loadMetricasBaseEnCurso(usuarioId, query = {}) {
   logMetricasMulti(conexionWhatsappId, "loadMetricasBase");
   const anterior = rangoAnterior(rango.desde, rango.hasta, rango.periodo);
 
-  const [clientes, mensajes, conversiones, seguimientos, flujos, metaAdsConectado] = await Promise.all([
+  const conteosPromise = isResumenTodasLasLineas(conexionWhatsappId)
+    ? Promise.resolve(null)
+    : leerResumenConteosONull(
+        usuarioId,
+        [conexionWhatsappId],
+        rango,
+        anterior,
+        flujoId
+      );
+
+  const [clientes, mensajes, conversiones, seguimientos, flujos, metaAdsConectado, conteosMap] =
+    await Promise.all([
     fetchClientesEnRango(
       usuarioId,
       rango.desde,
@@ -1355,9 +1795,13 @@ async function loadMetricasBaseEnCurso(usuarioId, query = {}) {
     fetchSeguimientosEnRango(usuarioId, rango.desde, rango.hasta, flujoId, conexionWhatsappId),
     fetchFlujosListMetricas(usuarioId),
     checkMetaAdsConectado(usuarioId),
+    conteosPromise,
   ]);
 
-  const [clientesAnt, conversionesAnt, conversaciones, conversacionesAnt] = await Promise.all([
+  const filaConteo =
+    conteosMap && conteosMap.get(normalizarIdConexion(conexionWhatsappId));
+
+  const [clientesAnt, conversionesAnt, conteosLinea] = await Promise.all([
     fetchClientesEnRango(
       usuarioId,
       anterior.desde,
@@ -1366,24 +1810,61 @@ async function loadMetricasBaseEnCurso(usuarioId, query = {}) {
       conexionWhatsappId
     ),
     fetchConversionesEnRango(usuarioId, anterior.desde, anterior.hasta, flujoId, conexionWhatsappId),
-    fetchConversacionesEnRango(
-      usuarioId,
-      rango.desde,
-      rango.hasta,
-      flujoId,
-      conexionWhatsappId,
-      mensajes
-    ),
-    fetchConversacionesEnRango(usuarioId, anterior.desde, anterior.hasta, flujoId, conexionWhatsappId),
+    filaConteo
+      ? Promise.resolve(null)
+      : Promise.all([
+          countMensajesEnRango(
+            usuarioId,
+            rango.desde,
+            rango.hasta,
+            flujoId,
+            conexionWhatsappId,
+            "saliente"
+          ),
+          countMensajesEnRango(
+            usuarioId,
+            rango.desde,
+            rango.hasta,
+            flujoId,
+            conexionWhatsappId,
+            "entrante"
+          ),
+          countRespuestasEnRango(
+            usuarioId,
+            rango.desde,
+            rango.hasta,
+            flujoId,
+            conexionWhatsappId
+          ),
+          countConversacionesEnRango(
+            usuarioId,
+            rango.desde,
+            rango.hasta,
+            flujoId,
+            conexionWhatsappId
+          ),
+          countConversacionesEnRango(
+            usuarioId,
+            anterior.desde,
+            anterior.hasta,
+            flujoId,
+            conexionWhatsappId
+          ),
+        ]),
   ]);
 
-  const { salientes, entrantes, clientesRespuesta } = countMensajesPorDireccion(mensajes);
+  const salientes = filaConteo ? filaConteo.salientes : conteosLinea[0];
+  const entrantes = filaConteo ? filaConteo.entrantes : conteosLinea[1];
+  const respuestas = filaConteo ? filaConteo.respuestas : conteosLinea[2];
+  const conversaciones = filaConteo ? filaConteo.conversaciones : conteosLinea[3];
+  const conversacionesAnt = filaConteo
+    ? filaConteo.conversaciones_anterior
+    : conteosLinea[4];
   const segEstados = countSeguimientosPorEstado(seguimientos);
   const ingresos = sumarIngresos(conversiones);
 
   const leads = clientes.length;
   const ventas = conversiones.length;
-  const respuestas = clientesRespuesta;
   const tasaCierre = pct(ventas, conversaciones);
   const conversion = pct(ventas, leads);
 
@@ -1425,7 +1906,10 @@ async function loadMetricasBaseEnCurso(usuarioId, query = {}) {
   };
 }
 
-/** Fan-out anterior: una carga completa por línea. Sigue usándose cuando hay flujo. */
+/**
+ * Todas las líneas con flujo no llama a la RPC. La suma por conexión no
+ * equivale al distinto global que siguen usando embudo y diagnóstico.
+ */
 async function loadResumenTodasPorFanout(usuarioId, query, ids) {
   const [metaAdsConectado, bases] = await Promise.all([
     checkMetaAdsConectado(usuarioId),
@@ -1436,6 +1920,8 @@ async function loadResumenTodasPorFanout(usuarioId, query, ids) {
           conexion_whatsapp_id: id,
           conexionWhatsappId: id,
           _skipMetaAdsCheck: true,
+          _conteosYaResueltos: true,
+          _conteosCompartidos: null,
         })
       )
     ),
@@ -1443,20 +1929,27 @@ async function loadResumenTodasPorFanout(usuarioId, query, ids) {
   return { ...mergeResumenPorLineas(bases), metaAdsConectado };
 }
 
-async function resumenParcialDeLinea(usuarioId, rango, anterior, conexionWhatsappId) {
+async function resumenParcialDeLinea(usuarioId, rango, anterior, conexionWhatsappId, conteo) {
+  const fila = conteo || null;
   const [leads, leadsAnt, conversaciones, conversacionesAnt, respuestas, ventasIngresos] =
     await Promise.all([
       countClientesEnRango(usuarioId, rango.desde, rango.hasta, null, conexionWhatsappId),
       countClientesEnRango(usuarioId, anterior.desde, anterior.hasta, null, conexionWhatsappId),
-      countConversacionesEnRango(usuarioId, rango.desde, rango.hasta, null, conexionWhatsappId),
-      countConversacionesEnRango(
-        usuarioId,
-        anterior.desde,
-        anterior.hasta,
-        null,
-        conexionWhatsappId
-      ),
-      countRespuestasEnRango(usuarioId, rango.desde, rango.hasta, null, conexionWhatsappId),
+      fila
+        ? Promise.resolve(fila.conversaciones)
+        : countConversacionesEnRango(usuarioId, rango.desde, rango.hasta, null, conexionWhatsappId),
+      fila
+        ? Promise.resolve(fila.conversaciones_anterior)
+        : countConversacionesEnRango(
+            usuarioId,
+            anterior.desde,
+            anterior.hasta,
+            null,
+            conexionWhatsappId
+          ),
+      fila
+        ? Promise.resolve(fila.respuestas)
+        : countRespuestasEnRango(usuarioId, rango.desde, rango.hasta, null, conexionWhatsappId),
       ventasEIngresosLinea(usuarioId, rango.desde, rango.hasta, conexionWhatsappId),
     ]);
 
@@ -1472,24 +1965,39 @@ async function resumenParcialDeLinea(usuarioId, rango, anterior, conexionWhatsap
 }
 
 /**
- * Todas las líneas sin flujo. Seguimientos y ventas anteriores se leen una vez
- * para la lista de conexiones. Ventas e ingresos del período salen de una lectura
- * por línea. Los mensajes siguen por línea: un conteo único de las dos llega a
- * cancelarse y devolvería cero. Leads, conversaciones y respuestas no se agrupan.
+ * Todas las líneas sin flujo. No usa la RPC: embudo y diagnóstico cuentan
+ * el distinto global, y esa suma por línea no está demostrada como equivalente.
+ * Seguimientos y ventas anteriores se leen una vez para la lista de conexiones.
+ * Ventas e ingresos del período salen de una lectura por línea.
+ * Leads, conversaciones y respuestas se suman por el mismo arreglo de ids.
  */
 async function loadResumenTodasLineasAgrupado(usuarioId, query, ids) {
   const rango = parseRango(query);
   const anterior = rangoAnterior(rango.desde, rango.hasta, rango.periodo);
+  const conteos = null;
+  const sumaConteos = conteos ? sumarFilasResumenConteos(conteos, ids) : null;
   const lineasPromise = Promise.all(
-    ids.map((id) => resumenParcialDeLinea(usuarioId, rango, anterior, id))
+    ids.map((id) =>
+      resumenParcialDeLinea(
+        usuarioId,
+        rango,
+        anterior,
+        id,
+        conteos ? conteos.get(normalizarIdConexion(id)) : null
+      )
+    )
   );
 
   const [metaAdsConectado, lineas, salientes, entrantes, ventasAnt, segEstados] =
     await Promise.all([
       checkMetaAdsConectado(usuarioId),
       lineasPromise,
-      sumarMensajesPorLinea(usuarioId, rango.desde, rango.hasta, ids, "saliente"),
-      sumarMensajesPorLinea(usuarioId, rango.desde, rango.hasta, ids, "entrante"),
+      sumaConteos
+        ? Promise.resolve(sumaConteos.salientes)
+        : sumarMensajesPorLinea(usuarioId, rango.desde, rango.hasta, ids, "saliente"),
+      sumaConteos
+        ? Promise.resolve(sumaConteos.entrantes)
+        : sumarMensajesPorLinea(usuarioId, rango.desde, rango.hasta, ids, "entrante"),
       countConversionesEnLineas(usuarioId, anterior.desde, anterior.hasta, ids),
       countSeguimientosPorEstadoEnLineas(usuarioId, rango.desde, rango.hasta, ids),
     ]);
@@ -1618,6 +2126,26 @@ async function loadResumenBaseEnCurso(usuarioId, query = {}) {
   logMetricasMulti(conexionWhatsappId, "loadResumenBase");
   const anterior = rangoAnterior(rango.desde, rango.hasta, rango.periodo);
   const skipMetaAdsCheck = query._skipMetaAdsCheck === true;
+  let conteos;
+  if (query._conteosYaResueltos) {
+    conteos = query._conteosCompartidos || null;
+    if (conteos && !conteos.get(normalizarIdConexion(conexionWhatsappId))) {
+      throw new Error(
+        "[metricas] conteo compartido sin esta conexión. No se mezcla con el cálculo anterior."
+      );
+    }
+  } else {
+    conteos = await leerResumenConteosONull(
+      usuarioId,
+      [conexionWhatsappId],
+      rango,
+      anterior,
+      flujoId
+    );
+  }
+  const filaConteo = conteos
+    ? conteos.get(normalizarIdConexion(conexionWhatsappId))
+    : null;
 
   const [
     leads,
@@ -1635,31 +2163,41 @@ async function loadResumenBaseEnCurso(usuarioId, query = {}) {
   ] = await Promise.all([
     countClientesEnRango(usuarioId, rango.desde, rango.hasta, flujoId, conexionWhatsappId),
     countClientesEnRango(usuarioId, anterior.desde, anterior.hasta, flujoId, conexionWhatsappId),
-    countConversacionesEnRango(usuarioId, rango.desde, rango.hasta, flujoId, conexionWhatsappId),
-    countConversacionesEnRango(
-      usuarioId,
-      anterior.desde,
-      anterior.hasta,
-      flujoId,
-      conexionWhatsappId
-    ),
-    countMensajesEnRango(
-      usuarioId,
-      rango.desde,
-      rango.hasta,
-      flujoId,
-      conexionWhatsappId,
-      "saliente"
-    ),
-    countMensajesEnRango(
-      usuarioId,
-      rango.desde,
-      rango.hasta,
-      flujoId,
-      conexionWhatsappId,
-      "entrante"
-    ),
-    countRespuestasEnRango(usuarioId, rango.desde, rango.hasta, flujoId, conexionWhatsappId),
+    filaConteo
+      ? Promise.resolve(filaConteo.conversaciones)
+      : countConversacionesEnRango(usuarioId, rango.desde, rango.hasta, flujoId, conexionWhatsappId),
+    filaConteo
+      ? Promise.resolve(filaConteo.conversaciones_anterior)
+      : countConversacionesEnRango(
+          usuarioId,
+          anterior.desde,
+          anterior.hasta,
+          flujoId,
+          conexionWhatsappId
+        ),
+    filaConteo
+      ? Promise.resolve(filaConteo.salientes)
+      : countMensajesEnRango(
+          usuarioId,
+          rango.desde,
+          rango.hasta,
+          flujoId,
+          conexionWhatsappId,
+          "saliente"
+        ),
+    filaConteo
+      ? Promise.resolve(filaConteo.entrantes)
+      : countMensajesEnRango(
+          usuarioId,
+          rango.desde,
+          rango.hasta,
+          flujoId,
+          conexionWhatsappId,
+          "entrante"
+        ),
+    filaConteo
+      ? Promise.resolve(filaConteo.respuestas)
+      : countRespuestasEnRango(usuarioId, rango.desde, rango.hasta, flujoId, conexionWhatsappId),
     countConversionesEnRango(usuarioId, rango.desde, rango.hasta, flujoId, conexionWhatsappId),
     countConversionesEnRango(
       usuarioId,
@@ -2211,4 +2749,16 @@ module.exports = {
   supabaseRpcJson,
   armarSerieDesdeRpc,
   armarDiagnosticoDesdeRpc,
+  metricasRpcResumenConteosActiva,
+  telefonoCuentaParaDistinto,
+  instanteEnRangoInclusivo,
+  conversacionesSegunRegla,
+  simularConteoLinea,
+  filasResumenConteosPorConexion,
+  sumarFilasResumenConteos,
+  leerResumenConteosONull,
+  PAGINA_FILAS_METRICAS,
+  PAGINAS_MAX_METRICAS,
+  reunirPaginas,
+  distintosDeFilas,
 };

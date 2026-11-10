@@ -41,6 +41,8 @@ const state = {
   rpcLeads: 4,
   onIa: null,
   numerosEnTodasLasTablas: false,
+  schemaAusente: null,
+  columnaAusente: null,
 };
 
 function eqParam(url, name) {
@@ -73,11 +75,42 @@ function counted(n) {
 
 function isNumerosQuery(url) {
   return (
-    url.includes("select=cliente_numero") &&
+    url.includes("cliente_numero") &&
+    url.includes("order=id.asc") &&
     (url.includes("/seguimientos_programados") ||
       url.includes("/crm_conversiones") ||
       url.includes("/ia_sessions"))
   );
+}
+
+function httpError(status, data) {
+  const err = new Error(data?.message || "error simulado");
+  err.response = { status, data, headers: {} };
+  return err;
+}
+
+function paginaNumeros(tabla, list, config) {
+  const numeros = Array.isArray(list) ? list : [];
+  const range = String(config?.headers?.Range || "0-999");
+  const start = parseInt(range.split("-")[0], 10) || 0;
+  if (numeros.length === 0) {
+    if (start === 0) return { data: [], headers: { "content-range": "*/0" } };
+    throw httpError(416, { message: "range" });
+  }
+  if (start >= numeros.length) {
+    throw httpError(416, { message: "range" });
+  }
+  const endPedido = parseInt(range.split("-")[1], 10);
+  const pedido = Number.isFinite(endPedido) ? endPedido - start + 1 : numeros.length - start;
+  const slice = numeros.slice(start, start + pedido);
+  const last = start + slice.length - 1;
+  return {
+    data: slice.map((cliente_numero, i) => ({
+      id: `${tabla}-${start + i}`,
+      cliente_numero,
+    })),
+    headers: { "content-range": `${start}-${last}/${numeros.length}` },
+  };
 }
 
 function iaCalls() {
@@ -116,15 +149,25 @@ function installStub() {
     if (state.onIa && target.includes("/ia_sessions")) {
       await state.onIa(target);
     }
-    if (state.failTables && isNumerosQuery(target)) {
+    if (isNumerosQuery(target)) {
       const table = ["/seguimientos_programados", "/crm_conversiones", "/ia_sessions"].find((name) =>
         target.includes(name)
       );
-      if (state.failTables.has(table)) {
+      if (state.schemaAusente && state.schemaAusente.has(table)) {
+        throw httpError(404, {
+          code: "PGRST205",
+          message: `Could not find the table public.${table.slice(1)} in the schema cache`,
+        });
+      }
+      if (state.columnaAusente && state.columnaAusente.has(table)) {
+        throw httpError(400, {
+          code: "42703",
+          message: `column cliente_numero of relation ${table.slice(1)} does not exist`,
+        });
+      }
+      if (state.failTables && state.failTables.has(table)) {
         throw new Error(`fallo simulado ${table}`);
       }
-    }
-    if (isNumerosQuery(target)) {
       const numeros = state.resolver
         ? state.resolver({
             user: eqParam(target, "usuario_id"),
@@ -137,7 +180,7 @@ function installStub() {
         state.numerosEnTodasLasTablas || target.includes("/seguimientos_programados")
           ? numeros
           : [];
-      return rows(source.map((cliente_numero) => ({ cliente_numero })));
+      return paginaNumeros(table, source, config);
     }
     if (target.includes("/clientes") && target.includes("numero=in.(")) {
       return counted(inList(target).length);
@@ -176,6 +219,8 @@ function reset(extra = {}) {
   state.rpcLeads = 4;
   state.onIa = null;
   state.numerosEnTodasLasTablas = false;
+  state.schemaAusente = null;
+  state.columnaAusente = null;
   Object.assign(state, extra);
 }
 
@@ -231,6 +276,7 @@ async function conFlujoUnaLinea() {
   ]);
 
   assert.equal(iaCalls().length, 1);
+  assert.ok(iaCalls()[0].url.includes("order=id.asc"));
   assert.equal(resumen.kpis.leads, 2);
   assert.equal(sumLeads(serie), 2);
   assert.equal(diagnostico.ok, true);
@@ -446,7 +492,7 @@ function assertCadaTabla(veces, detalle) {
   });
 }
 
-async function incompletoNoSeGuarda(tabla, leadsEsperados) {
+async function fuenteObligatoriaRechaza(tabla) {
   reset({
     failTables: new Set([tabla]),
     resolver() {
@@ -454,37 +500,69 @@ async function incompletoNoSeGuarda(tabla, leadsEsperados) {
     },
   });
   const query = { periodo: "7d", flujo_id: FLOW, conexion_whatsapp_id: LINE_A };
-  const primero = await computeResumen(USER, query);
-  assert.equal(primero.ok, true);
-  assert.equal(primero.kpis.leads, leadsEsperados);
+  await assert.rejects(
+    () => computeResumen(USER, query),
+    (error) => error.code === "METRICAS_LECTURA_INCOMPLETA"
+  );
   assertCadaTabla(1, `primera carga ${tabla}`);
 
-  const segundo = await computeResumen(USER, query);
-  assert.equal(segundo.ok, true);
-  assert.deepEqual(segundo.kpis, primero.kpis);
+  await assert.rejects(
+    () => computeResumen(USER, query),
+    (error) => error.code === "METRICAS_LECTURA_INCOMPLETA"
+  );
   assertCadaTabla(2, `siguiente carga ${tabla}`);
 }
 
 async function fallaDeSupabase() {
-  await incompletoNoSeGuarda("/seguimientos_programados", 0);
-  await incompletoNoSeGuarda("/crm_conversiones", 1);
-  await incompletoNoSeGuarda("/ia_sessions", 1);
+  await fuenteObligatoriaRechaza("/seguimientos_programados");
+  await fuenteObligatoriaRechaza("/crm_conversiones");
+  await fuenteObligatoriaRechaza("/ia_sessions");
 
   reset({
     failTables: new Set(TABLAS_NUMEROS),
   });
   const query = { periodo: "7d", flujo_id: FLOW, conexion_whatsapp_id: LINE_A };
-  const primero = await computeResumen(USER, query);
-  assert.equal(primero.ok, true);
-  assert.equal(primero.kpis.leads, 0);
-  assert.equal(primero.kpis.ventas, 0);
+  await assert.rejects(
+    () => computeResumen(USER, query),
+    (error) => error.code === "METRICAS_LECTURA_INCOMPLETA"
+  );
   assertCadaTabla(1, "tres tablas caídas, primera carga");
-
-  const segundo = await computeResumen(USER, query);
-  assert.equal(segundo.ok, true);
-  assert.deepEqual(segundo.kpis, primero.kpis);
+  await assert.rejects(
+    () => computeResumen(USER, query),
+    (error) => error.code === "METRICAS_LECTURA_INCOMPLETA"
+  );
   assertCadaTabla(2, "tres tablas caídas, siguiente carga");
-  console.log("✓ fallo de una tabla o de las tres: el resultado no se guarda y la carga siguiente vuelve a consultar");
+
+  reset({
+    schemaAusente: new Set(["/crm_conversiones"]),
+    resolver() {
+      return ["591111"];
+    },
+  });
+  const conFallback = await computeResumen(USER, query);
+  assert.equal(conFallback.ok, true);
+  assert.equal(conFallback.kpis.leads, 1);
+  assert.equal(conFallback.kpis.ventas, 0);
+  const otra = await computeResumen(USER, query);
+  assert.deepEqual(otra.kpis, conFallback.kpis);
+  assertCadaTabla(2, "tabla inexistente no se memoriza entre cargas");
+
+  reset({
+    columnaAusente: new Set(["/crm_conversiones"]),
+    resolver() {
+      return ["591111"];
+    },
+  });
+  await assert.rejects(
+    () => computeResumen(USER, query),
+    (error) => error.code === "METRICAS_LECTURA_INCOMPLETA"
+  );
+  await assert.rejects(
+    () => computeResumen(USER, query),
+    (error) => error.code === "METRICAS_LECTURA_INCOMPLETA"
+  );
+  assertCadaTabla(2, "columna ausente no se guarda");
+  console.log("✓ fuente obligatoria fallida rechaza el conjunto; la tabla inexistente sigue el fallback; la carga siguiente vuelve a consultar");
 }
 
 async function arraysVaciosYCargaNueva() {
@@ -522,8 +600,35 @@ async function fallaDeCache() {
     const numeros = await fetchFlujoClienteNumeros(USER, "flujo-cache-rota", LINE_A);
     assert.deepEqual(numeros, ["591111"]);
     assert.equal(iaCalls().length, 1);
+    const otra = await fetchFlujoClienteNumeros(USER, "flujo-cache-rota", LINE_A);
+    assert.deepEqual(otra, ["591111"]);
+    assert.equal(iaCalls().length, 2);
+
+    calls.length = 0;
+    state.failTables = new Set(["/ia_sessions"]);
+    const queryRota = {
+      periodo: "7d",
+      flujo_id: "flujo-cache-rota",
+      conexion_whatsapp_id: LINE_A,
+    };
+    await assert.rejects(
+      () => computeResumen(USER, queryRota),
+      (error) => error.code === "METRICAS_LECTURA_INCOMPLETA"
+    );
+    const trasPrimera = new Map(TABLAS_NUMEROS.map((tabla) => [tabla, numerosCalls(tabla).length]));
+    await assert.rejects(
+      () => computeResumen(USER, queryRota),
+      (error) => error.code === "METRICAS_LECTURA_INCOMPLETA"
+    );
+    TABLAS_NUMEROS.forEach((tabla) => {
+      assert.ok(trasPrimera.get(tabla) >= 1, `primera carga consultó ${tabla}`);
+      assert.ok(
+        numerosCalls(tabla).length > trasPrimera.get(tabla),
+        `caché rota no reutiliza un parcial ${tabla}`
+      );
+    });
   } finally {
     Map.prototype.set = originalSet;
   }
-  console.log("✓ fallo de la caché: la consulta directa sigue devolviendo los números");
+  console.log("✓ fallo de la caché: no guarda un parcial y la consulta siguiente vuelve a leer");
 }
