@@ -743,7 +743,7 @@ test("49.999, 50.000 y más filas se leen enteras con la bandera apagada", async
     }
 
     reset({
-      lecturaMensajes: { total: 2500, cap: 400, cierre: "416" },
+      lecturaMensajes: { total: 2500, cap: 400, rango: "total", cierre: "416" },
       salientes: 11,
       conversaciones: 4,
     });
@@ -900,6 +900,94 @@ test("números de flujo incompletos o una fuente caída no publican leads parcia
     }
   } finally {
     restoreStub();
+  }
+});
+
+test("una página corta con total desconocido cierra y no pide otra", async () => {
+  delete process.env.METRICAS_RPC_RESUMEN_CONTEOS;
+  installStub();
+  try {
+    const query = { periodo: "7d", conexion_whatsapp_id: LINE_A };
+    const paginasDe = () =>
+      calls.filter((call) => call.url.includes("/mensajes") && call.url.includes("cliente_numero"));
+
+    for (const caso of [
+      { header: "0-18/*", count: 19 },
+      { header: "0-96/*", count: 97 },
+    ]) {
+      reset({
+        lecturaMensajes: { secuencia: [{ start: 0, header: caso.header, count: caso.count }] },
+        salientes: 11,
+        conversaciones: 4,
+      });
+      const resumen = await computeResumen(USER_PEQUENO, query);
+      assert.equal(resumen.kpis.respuestas, caso.count);
+      assert.equal(resumen.kpis.leads, 4);
+      assert.equal(resumen.kpis.ventas, 0);
+      assert.equal(resumen.kpis.ingresos, 0);
+      assert.equal(resumen.kpis.seguimientosActivos, 0);
+      assert.equal(postsRpc().length, 0);
+      assert.deepEqual(
+        paginasDe().map((call) => call.range),
+        ["0-999"]
+      );
+    }
+
+    reset({
+      lecturaMensajes: {
+        secuencia: [
+          { start: 0, header: "0-999/*", count: 1000 },
+          { start: 1000, header: "1000-1004/*", count: 5 },
+        ],
+      },
+      salientes: 11,
+      conversaciones: 4,
+    });
+    const llena = await computeResumen(USER_PEQUENO, query);
+    assert.equal(llena.kpis.respuestas, 1005);
+    assert.deepEqual(
+      paginasDe().map((call) => call.range),
+      ["0-999", "1000-1999"]
+    );
+
+    reset({
+      lecturaMensajes: { secuencia: [{ start: 0, header: "0-999/1000", count: 1000 }] },
+      salientes: 11,
+      conversaciones: 4,
+    });
+    const numerica = await computeResumen(USER_PEQUENO, query);
+    assert.equal(numerica.kpis.respuestas, 1000);
+    assert.deepEqual(
+      paginasDe().map((call) => call.range),
+      ["0-999"]
+    );
+
+    for (const caso of [
+      { nombre: "rango no coincide", header: "0-18/*", count: 18 },
+      { nombre: "content-range invalido", header: "*/*", count: 19 },
+      { nombre: "error http", status: 500, count: 19 },
+    ]) {
+      reset({
+        lecturaMensajes: {
+          secuencia: [{ start: 0, header: caso.header, count: caso.count, status: caso.status }],
+        },
+        salientes: 11,
+        conversaciones: 4,
+      });
+      await assert.rejects(
+        () => computeResumen(USER_PEQUENO, query),
+        (error) => error && error.code === "METRICAS_LECTURA_INCOMPLETA",
+        caso.nombre
+      );
+      assert.deepEqual(
+        paginasDe().map((call) => call.range),
+        ["0-999"]
+      );
+      assert.equal(postsRpc().length, 0);
+    }
+  } finally {
+    restoreStub();
+    delete process.env.METRICAS_RPC_RESUMEN_CONTEOS;
   }
 });
 

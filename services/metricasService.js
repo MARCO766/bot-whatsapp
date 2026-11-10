@@ -93,10 +93,10 @@ async function supabaseSelect(table, filterQuery, selectFields = "*", limit = 50
 }
 
 /**
- * Tamaño pedido a PostgREST. Una página de este tamaño sigue.
- * Una más corta cierra solo si el Content-Range no dice que el servidor
- * recortó el rango. 50.000 filas no es un corte: se sigue hasta el final.
- * No se sube ningún timeout.
+ * Tamaño pedido a PostgREST. Una página de este tamaño sigue,
+ * también cuando el total es *. Una más corta con inicio-fin/* y
+ * tantas filas como anuncia el rango es el final: no se pide otra.
+ * Un total numérico sigue hasta cubrirlo. No se sube ningún timeout.
  */
 const PAGINA_FILAS_METRICAS = 1000;
 /** Tope de seguridad contra un Range ignorado. No publica las filas leídas. */
@@ -315,6 +315,13 @@ async function supabaseSelectCompleto(table, filterQuery, selectFields = "*") {
     if (filas.length !== siguiente) return lecturaIncompleta("error");
     if (totalAnunciado != null && siguiente === totalAnunciado) return lecturaCompleta(filas);
     if (totalAnunciado != null && siguiente > totalAnunciado) return lecturaIncompleta("error");
+    if (
+      totalAnunciado == null &&
+      lote.length < PAGINA_FILAS_METRICAS &&
+      lote.length === anunciadas
+    ) {
+      return lecturaCompleta(filas);
+    }
     offset = siguiente;
   }
   console.log(
