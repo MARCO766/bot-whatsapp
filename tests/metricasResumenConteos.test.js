@@ -152,8 +152,18 @@ function paginaMensajes(config) {
   return { data, headers: { "content-range": contentRange } };
 }
 
-function paginaFlujo(tabla, config) {
-  const lectura = state.flujoLectura[tabla] || { total: 0 };
+function lecturaDeTablaFlujo(tabla, url) {
+  if (state.flujoLecturaPorConexion) {
+    const match = String(url || "").match(/conexion_whatsapp_id=eq\.([^&]*)/);
+    const conn = match ? decodeURIComponent(match[1]) : "__todas__";
+    const grupo = state.flujoLecturaPorConexion[conn] || {};
+    return grupo[tabla] || { total: 0 };
+  }
+  return (state.flujoLectura && state.flujoLectura[tabla]) || { total: 0 };
+}
+
+function paginaFlujo(tabla, config, url) {
+  const lectura = lecturaDeTablaFlujo(tabla, url);
   if (lectura.fallo) {
     throw httpError(lectura.estado || 500, {
       code: lectura.codigo,
@@ -165,9 +175,20 @@ function paginaFlujo(tabla, config) {
   if (lectura.failAt != null && start === lectura.failAt) {
     throw httpError(500, { message: `fallo ${tabla}` });
   }
+  if (Array.isArray(lectura.numeros)) {
+    return paginaDesdeLista(
+      lectura.numeros.map((numero, i) => ({
+        id: `${tabla}-id-${i}`,
+        cliente_numero: numero,
+      })),
+      config
+    );
+  }
   const total = lectura.total || 0;
   if (start >= total) {
-    if (start === 0 && total === 0) return { data: [], headers: { "content-range": "*/0" } };
+    if (start === 0 && total === 0) {
+      return { data: [], headers: { "content-range": lectura.vacio || "*/0" } };
+    }
     throw httpError(416, { message: "range" }, { "content-range": `*/${total}` });
   }
   const cap = lectura.cap || PAGINA_FILAS_METRICAS;
@@ -199,7 +220,7 @@ function installStub() {
   axios.get = async (url, config) => {
     const target = String(url);
     const range = config?.headers?.Range || "";
-    calls.push({ url: target, method: "GET", range });
+    calls.push({ url: target, method: "GET", range, headers: config?.headers || {} });
     if (target.includes("/conexiones_whatsapp") && target.includes("select=id")) {
       return rows([{ id: LINE_A }, { id: LINE_B }]);
     }
@@ -231,16 +252,34 @@ function installStub() {
       return counted(anterior ? state.conversacionesAnterior : state.conversaciones);
     }
     const tablaFlujo = tablaDeNumeros(target);
-    if (tablaFlujo && state.flujoLectura && target.includes("cliente_numero")) {
-      return paginaFlujo(tablaFlujo, config);
+    if (
+      tablaFlujo &&
+      (state.flujoLectura || state.flujoLecturaPorConexion) &&
+      target.includes("cliente_numero")
+    ) {
+      return paginaFlujo(tablaFlujo, config, target);
+    }
+    if (Array.isArray(state.conversionesFilas) && target.includes("/crm_conversiones")) {
+      if (target.includes("valor")) {
+        return {
+          data: state.conversionesFilas,
+          headers: { "content-range": `*/${state.conversionesFilas.length}` },
+        };
+      }
+      if (target.includes("select=id") && !target.includes("cliente_numero")) {
+        return counted(state.conversionesFilas.length);
+      }
     }
     return rows([]);
   };
-  axios.post = async (url, body) => {
+  axios.post = async (url, body, config) => {
     const target = String(url);
-    calls.push({ url: target, method: "POST", body });
+    calls.push({ url: target, method: "POST", body, headers: config?.headers || {} });
     if (target.includes("count_leads_por_linea")) {
       return { data: state.leads, headers: {} };
+    }
+    if (target.includes("metricas_numeros_de_flujo")) {
+      return respuestaNumerosRpc(target, body, config);
     }
     if (!target.includes("metricas_resumen_conteos")) {
       return { data: null, headers: {} };
@@ -278,6 +317,9 @@ function reset(extra = {}) {
   state.lecturaMensajes = null;
   state.falloSalientes = false;
   state.flujoLectura = null;
+  state.flujoLecturaPorConexion = null;
+  state.numerosRpc = null;
+  state.conversionesFilas = null;
   state.rpcFilas = [
     filaRpc(LINE_A, {
       salientes: 5,
@@ -293,6 +335,92 @@ function reset(extra = {}) {
 
 function postsRpc() {
   return calls.filter((call) => call.url.includes("metricas_resumen_conteos"));
+}
+
+function postsNumerosRpc() {
+  return calls.filter((call) => call.url.includes("metricas_numeros_de_flujo"));
+}
+
+function paginaNumerosRpc(pedido, url) {
+  const consulta = new URL(String(url), "https://example.supabase.co").searchParams;
+  const inicio = Number(consulta.get("offset"));
+  const pedidoLimite = Number(consulta.get("limit"));
+  const offset = Number.isFinite(inicio) ? inicio : 0;
+  const limite = Number.isFinite(pedidoLimite) && pedidoLimite > 0 ? pedidoLimite : PAGINA_FILAS_METRICAS;
+  const fuente = Array.isArray(pedido.numeros) ? pedido.numeros : null;
+  const totalReal = fuente ? fuente.length : pedido.total || 0;
+  const totalAnunciado =
+    typeof pedido.totalEn === "function"
+      ? pedido.totalEn(offset)
+      : pedido.totalAnunciado != null
+        ? pedido.totalAnunciado
+        : totalReal;
+  if (pedido.falloEn != null && offset === pedido.falloEn) {
+    throw httpError(pedido.falloStatus || 500, { message: "fallo de pagina rpc" });
+  }
+  if (offset === 0 && totalReal === 0 && pedido.vacio416) {
+    throw httpError(416, { message: "range" }, { "content-range": "*/0" });
+  }
+  if (offset >= totalReal) {
+    if (offset === 0 && totalReal === 0) {
+      return { data: [], headers: { "content-range": pedido.vacio || "*/0" } };
+    }
+    throw httpError(416, { message: "range" }, { "content-range": `*/${totalAnunciado}` });
+  }
+  const count = Math.min(Math.max(limite, 0), totalReal - offset);
+  const prefijo = pedido.prefijo || "rpc";
+  let data = fuente
+    ? fuente.slice(offset, offset + count).map((numero) => ({ numero }))
+    : Array.from({ length: count }, (_, i) => ({ numero: `${prefijo}-${offset + i}` }));
+  if (pedido.duplicarEn != null && offset === pedido.duplicarEn && data.length) {
+    data = data.slice();
+    data[0] = { numero: `${prefijo}-0` };
+  }
+  const last = offset + data.length - 1;
+  const header =
+    typeof pedido.rangoEn === "function"
+      ? pedido.rangoEn(offset, last, totalAnunciado)
+      : `${offset}-${last}/${totalAnunciado}`;
+  return { data, headers: { "content-range": header } };
+}
+
+function respuestaNumerosRpc(url, body) {
+  const pedido = state.numerosRpc;
+  if (pedido === "timeout") {
+    throw httpError(500, {
+      code: "57014",
+      message: "canceling statement due to statement timeout",
+    });
+  }
+  if (pedido === "ausente") {
+    throw httpError(404, {
+      code: "PGRST202",
+      message: "Could not find the function public.metricas_numeros_de_flujo",
+    });
+  }
+  if (pedido && typeof pedido === "object" && pedido.porConexion) {
+    const clave =
+      body && body.p_conexion_whatsapp_id != null ? body.p_conexion_whatsapp_id : "__todas__";
+    const spec = pedido.porConexion[clave];
+    if (!spec) return { data: [], headers: { "content-range": "*/0" } };
+    return paginaNumerosRpc(spec, url);
+  }
+  if (pedido && typeof pedido === "object" && (pedido.paginar || Array.isArray(pedido.numeros))) {
+    return paginaNumerosRpc(pedido, url);
+  }
+  if (pedido && typeof pedido === "object") {
+    return {
+      data: pedido.data,
+      headers: pedido.range ? { "content-range": pedido.range } : {},
+    };
+  }
+  return { data: null, headers: {} };
+}
+
+function lecturasNumerosFlujo() {
+  return calls.filter(
+    (call) => call.method === "GET" && tablaDeNumeros(call.url) && call.url.includes("cliente_numero")
+  );
 }
 
 function conteosMensajes() {
@@ -1249,6 +1377,673 @@ test("el usuario de la sesión no se reemplaza por un id del cliente", async () 
     assert.notEqual(postsRpc()[0].body.p_usuario_id, USER_GRANDE);
     assert.equal(resumen.kpis.mensajesEnviados, 11);
     assert.notEqual(resumen.kpis.mensajesEnviados, 0);
+  } finally {
+    restoreStub();
+    delete process.env.METRICAS_RPC_RESUMEN_CONTEOS;
+  }
+});
+
+const TEL_AJENO = "59170009999";
+
+function lecturaFallbackCorta() {
+  return {
+    seguimientos: { total: 1 },
+    conversiones: { total: 1 },
+    ia: { total: 0 },
+  };
+}
+
+function numerosRpcValidos(filas) {
+  const last = filas.length - 1;
+  return {
+    data: filas,
+    range: filas.length === 0 ? "*/0" : `0-${last}/${filas.length}`,
+  };
+}
+
+test("una línea lee números de flujo por rpc", async () => {
+  process.env.METRICAS_RPC_RESUMEN_CONTEOS = "1";
+  installStub();
+  try {
+    reset({
+      numerosRpc: numerosRpcValidos([{ numero: "591111" }, { numero: "591222" }]),
+    });
+    const numeros = await fetchFlujoClienteNumeros(USER_PEQUENO, FLUJO, LINE_A);
+    assert.deepEqual(numeros, ["591111", "591222"]);
+    assert.equal(postsNumerosRpc().length, 1);
+    assert.equal(postsNumerosRpc()[0].body.p_usuario_id, USER_PEQUENO);
+    assert.equal(postsNumerosRpc()[0].body.p_flujo_id, FLUJO);
+    assert.equal(postsNumerosRpc()[0].body.p_conexion_whatsapp_id, LINE_A);
+    assertPaginaRpc(postsNumerosRpc()[0], 0);
+    assert.equal(lecturasNumerosFlujo().length, 0);
+  } finally {
+    restoreStub();
+    delete process.env.METRICAS_RPC_RESUMEN_CONTEOS;
+  }
+});
+
+test("todas las líneas con flujo leen números de flujo por rpc", async () => {
+  process.env.METRICAS_RPC_RESUMEN_CONTEOS = "1";
+  installStub();
+  try {
+    reset({
+      numerosRpc: numerosRpcValidos([{ numero: "591000" }]),
+    });
+    for (const conexion of [null, "", "__todas__", "  __todas__  "]) {
+      calls.length = 0;
+      const numeros = await fetchFlujoClienteNumeros(USER_GRANDE, FLUJO, conexion);
+      assert.deepEqual(numeros, ["591000"]);
+      assert.equal(postsNumerosRpc().length, 1);
+      assert.equal(postsNumerosRpc()[0].body.p_usuario_id, USER_GRANDE);
+      assert.equal(postsNumerosRpc()[0].body.p_flujo_id, FLUJO);
+      assert.equal(postsNumerosRpc()[0].body.p_conexion_whatsapp_id, null);
+      assert.equal(lecturasNumerosFlujo().length, 0);
+    }
+
+    calls.length = 0;
+    const resumen = await computeResumen(USER_GRANDE, { periodo: "7d", flujo_id: FLUJO });
+    const conexiones = postsNumerosRpc()
+      .map((call) => call.body.p_conexion_whatsapp_id)
+      .sort();
+    assert.deepEqual(conexiones, [LINE_A, LINE_B]);
+    assert.equal(postsRpc().length, 0);
+    assert.equal(lecturasNumerosFlujo().length, 0);
+    assert.equal(resumen.kpis.ventas, 0);
+    assert.equal(resumen.kpis.ingresos, 0);
+    assert.equal(resumen.kpis.moneda, "BOB");
+  } finally {
+    restoreStub();
+    delete process.env.METRICAS_RPC_RESUMEN_CONTEOS;
+  }
+});
+
+test("rpc de números fallida usa el paginador", async () => {
+  process.env.METRICAS_RPC_RESUMEN_CONTEOS = "1";
+  installStub();
+  const originalLog = console.log;
+  const logs = [];
+  console.log = (...args) => {
+    logs.push(args.map((item) => String(item)).join(" "));
+  };
+  try {
+    for (const fallo of ["timeout", "ausente"]) {
+      logs.length = 0;
+      reset({
+        numerosRpc: fallo,
+        flujoLectura: lecturaFallbackCorta(),
+      });
+      const numeros = await fetchFlujoClienteNumeros(USER_PEQUENO, FLUJO, LINE_A);
+      assert.deepEqual(numeros, ["seguimientos-0", "conversiones-0"]);
+      assert.equal(postsNumerosRpc().length, 1);
+      assert.equal(postsNumerosRpc()[0].body.p_conexion_whatsapp_id, LINE_A);
+      assert.equal(lecturasNumerosFlujo().length, 3);
+      const causa = fallo === "timeout" ? "timeout" : "rpc no disponible";
+      assert.ok(logs.some((linea) => linea.includes(`[metricas] numeros de flujo rpc: ${causa}`)));
+      assert.ok(logs.every((linea) => !linea.includes("statement timeout")));
+      assert.ok(logs.every((linea) => !linea.includes("Could not find")));
+    }
+  } finally {
+    console.log = originalLog;
+    restoreStub();
+    delete process.env.METRICAS_RPC_RESUMEN_CONTEOS;
+  }
+});
+
+test("rpc de números sin respuesta válida no publica esa lista", async () => {
+  process.env.METRICAS_RPC_RESUMEN_CONTEOS = "1";
+  installStub();
+  const originalLog = console.log;
+  const logs = [];
+  console.log = (...args) => {
+    logs.push(args.map((item) => String(item)).join(" "));
+  };
+  try {
+    const invalidas = [
+      { data: null, range: "*/0" },
+      { data: { numero: TEL_AJENO }, range: "0-0/1" },
+      { data: [{ numero: 591 }], range: "0-0/1" },
+      { data: [{ numero: "" }], range: "0-0/1" },
+      { data: [{ numero: TEL_AJENO }, { numero: TEL_AJENO }], range: "0-1/2" },
+      { data: [{ numero: TEL_AJENO }], range: "0-0/9" },
+      { data: [{ numero: TEL_AJENO }], range: "" },
+    ];
+    for (const numerosRpc of invalidas) {
+      logs.length = 0;
+      reset({
+        numerosRpc,
+        flujoLectura: lecturaFallbackCorta(),
+      });
+      const numeros = await fetchFlujoClienteNumeros(USER_PEQUENO, FLUJO, null);
+      assert.deepEqual(numeros, ["seguimientos-0", "conversiones-0"]);
+      assert.ok(!numeros.includes(TEL_AJENO));
+      assert.equal(postsNumerosRpc()[0].body.p_conexion_whatsapp_id, null);
+      assert.equal(lecturasNumerosFlujo().length, 3);
+      assert.ok(logs.some((linea) => linea.startsWith("[metricas] numeros de flujo rpc:")));
+      assert.ok(logs.every((linea) => !linea.includes(TEL_AJENO)));
+    }
+  } finally {
+    console.log = originalLog;
+    restoreStub();
+    delete process.env.METRICAS_RPC_RESUMEN_CONTEOS;
+  }
+});
+
+test("fallback incompleto de números de flujo rechaza el resultado", async () => {
+  process.env.METRICAS_RPC_RESUMEN_CONTEOS = "1";
+  installStub();
+  const originalLog = console.log;
+  const logs = [];
+  console.log = (...args) => {
+    logs.push(args.map((item) => String(item)).join(" "));
+  };
+  try {
+    reset({
+      numerosRpc: "timeout",
+      flujoLectura: {
+        seguimientos: { total: 2 },
+        conversiones: { fallo: true },
+        ia: { total: 1 },
+      },
+    });
+    await assert.rejects(
+      () => fetchFlujoClienteNumeros(USER_PEQUENO, FLUJO, LINE_A),
+      (error) => error && error.code === "METRICAS_LECTURA_INCOMPLETA"
+    );
+    assert.ok(logs.some((linea) => linea.includes("numeros de flujo rpc: timeout")));
+    assert.ok(
+      logs.some((linea) =>
+        linea.includes("numeros de flujo fallback: crm_conversiones:error")
+      )
+    );
+    assert.ok(logs.every((linea) => !linea.includes("seguimientos-0")));
+    assert.ok(logs.every((linea) => !linea.includes("seguimientos-1")));
+  } finally {
+    console.log = originalLog;
+    restoreStub();
+    delete process.env.METRICAS_RPC_RESUMEN_CONTEOS;
+  }
+});
+
+test("todas las líneas sin flujo no consultan números de flujo", async () => {
+  process.env.METRICAS_RPC_RESUMEN_CONTEOS = "1";
+  installStub();
+  try {
+    reset({
+      numerosRpc: numerosRpcValidos([{ numero: TEL_AJENO }]),
+    });
+    const resumen = await computeResumen(USER_GRANDE, { periodo: "7d" });
+    assert.equal(postsNumerosRpc().length, 0);
+    assert.equal(lecturasNumerosFlujo().length, 0);
+    assert.equal(postsRpc().length, 0);
+    assert.equal(resumen.kpis.mensajesEnviados, 22);
+    assert.equal(resumen.kpis.ventas, 0);
+    assert.equal(resumen.kpis.ingresos, 0);
+    assert.equal(resumen.kpis.moneda, "BOB");
+  } finally {
+    restoreStub();
+    delete process.env.METRICAS_RPC_RESUMEN_CONTEOS;
+  }
+});
+
+test("ventas e ingresos no dependen de la rpc de números", async () => {
+  installStub();
+  try {
+    const conversionesFilas = [
+      { valor: 10, moneda: "BOB" },
+      { valor: 5.5, moneda: "BOB" },
+    ];
+    const query = { periodo: "7d", conexion_whatsapp_id: LINE_A, flujo_id: FLUJO };
+
+    process.env.METRICAS_RPC_RESUMEN_CONTEOS = "1";
+    reset({
+      numerosRpc: numerosRpcValidos([{ numero: TEL_AJENO }]),
+      conversionesFilas,
+      rpcFilas: [
+        filaRpc(LINE_A, {
+          salientes: 5,
+          entrantes: 2,
+          respuestas: 1,
+          clientes_con_mensaje: 2,
+          conversaciones: 4,
+          conversaciones_anterior: 2,
+        }),
+      ],
+    });
+    const conRpc = await computeResumen(USER_PEQUENO, query);
+    assert.equal(postsNumerosRpc().length, 1);
+    assert.equal(lecturasNumerosFlujo().length, 0);
+    assert.equal(conRpc.kpis.ventas, 2);
+    assert.equal(conRpc.kpis.ingresos, 15.5);
+    assert.equal(conRpc.kpis.moneda, "BOB");
+    assert.equal(conRpc.kpis.ingresosDesglose.BOB, 15.5);
+
+    delete process.env.METRICAS_RPC_RESUMEN_CONTEOS;
+    reset({
+      conversionesFilas,
+      flujoLectura: lecturaFallbackCorta(),
+    });
+    const sinRpc = await computeResumen(USER_PEQUENO, query);
+    assert.equal(postsNumerosRpc().length, 0);
+    assert.equal(sinRpc.kpis.ventas, conRpc.kpis.ventas);
+    assert.equal(sinRpc.kpis.ingresos, conRpc.kpis.ingresos);
+    assert.equal(sinRpc.kpis.moneda, conRpc.kpis.moneda);
+    assert.deepEqual(sinRpc.kpis.ingresosDesglose, conRpc.kpis.ingresosDesglose);
+  } finally {
+    restoreStub();
+    delete process.env.METRICAS_RPC_RESUMEN_CONTEOS;
+  }
+});
+
+function numerosGenerados(total, prefijo = "rpc") {
+  return Array.from({ length: total }, (_, i) => `${prefijo}-${i}`);
+}
+
+function listaEntre(desde, hasta) {
+  const numeros = [];
+  for (let i = desde; i < hasta; i += 1) numeros.push(`n-${i}`);
+  return numeros;
+}
+
+function parametrosRpc(url) {
+  return new URL(String(url)).searchParams;
+}
+
+function offsetsRpcEsperados(total) {
+  const paginas = Math.max(1, Math.ceil(total / PAGINA_FILAS_METRICAS));
+  return Array.from({ length: paginas }, (_, i) => String(i * PAGINA_FILAS_METRICAS));
+}
+
+function assertPaginaRpc(call, offset) {
+  const consulta = parametrosRpc(call.url);
+  assert.equal(consulta.get("select"), "numero");
+  assert.equal(consulta.get("order"), "numero.asc");
+  assert.equal(consulta.get("limit"), String(PAGINA_FILAS_METRICAS));
+  assert.equal(consulta.get("offset"), String(offset));
+  assert.equal(call.headers.Prefer, "count=exact");
+  assert.equal(call.headers.Range, undefined);
+}
+
+test("rpc paginada devuelve todos los números de flujo", async () => {
+  process.env.METRICAS_RPC_RESUMEN_CONTEOS = "1";
+  installStub();
+  try {
+    for (const total of [0, 709, 1000, 1001, 2786, 5283, 5284]) {
+      reset({ numerosRpc: { paginar: true, total, prefijo: "rpc" } });
+      const numeros = await fetchFlujoClienteNumeros(USER_PEQUENO, FLUJO, LINE_A);
+      assert.deepEqual(numeros, numerosGenerados(total), `total ${total}`);
+      assert.equal(new Set(numeros).size, total);
+      const posts = postsNumerosRpc();
+      assert.deepEqual(
+        posts.map((call) => parametrosRpc(call.url).get("offset")),
+        offsetsRpcEsperados(total),
+        `offsets ${total}`
+      );
+      posts.forEach((call, indice) => {
+        assertPaginaRpc(call, indice * PAGINA_FILAS_METRICAS);
+        assert.equal(call.body.p_usuario_id, USER_PEQUENO);
+        assert.equal(call.body.p_flujo_id, FLUJO);
+        assert.equal(call.body.p_conexion_whatsapp_id, LINE_A);
+      });
+      assert.equal(lecturasNumerosFlujo().length, 0, `sin fallback ${total}`);
+    }
+
+    reset({ numerosRpc: { paginar: true, total: 0, vacio416: true } });
+    assert.deepEqual(await fetchFlujoClienteNumeros(USER_PEQUENO, FLUJO, LINE_A), []);
+    assert.equal(postsNumerosRpc().length, 1);
+    assertPaginaRpc(postsNumerosRpc()[0], 0);
+    assert.equal(lecturasNumerosFlujo().length, 0);
+  } finally {
+    restoreStub();
+    delete process.env.METRICAS_RPC_RESUMEN_CONTEOS;
+  }
+});
+
+test("rpc paginada no publica un parcial", async () => {
+  process.env.METRICAS_RPC_RESUMEN_CONTEOS = "1";
+  installStub();
+  const originalLog = console.log;
+  const logs = [];
+  console.log = (...args) => {
+    logs.push(args.map((item) => String(item)).join(" "));
+  };
+  try {
+    const casos = [
+      {
+        nombre: "error http",
+        numerosRpc: { paginar: true, total: 2786, falloEn: 1000 },
+        motivo: "http 500",
+      },
+      {
+        nombre: "total cambia",
+        numerosRpc: {
+          paginar: true,
+          total: 2000,
+          totalEn: (start) => (start === 0 ? 2000 : 2500),
+        },
+        motivo: "total cambio entre paginas",
+      },
+      {
+        nombre: "numero duplicado",
+        numerosRpc: { paginar: true, total: 1500, duplicarEn: 1000 },
+        motivo: "numero repetido",
+      },
+      {
+        nombre: "offset distinto",
+        numerosRpc: {
+          paginar: true,
+          total: 1500,
+          rangoEn: (offset, last, total) =>
+            offset === 0 ? `${offset}-${last}/${total}` : `0-999/${total}`,
+        },
+        motivo: "content-range no empieza en el offset",
+      },
+    ];
+    for (const caso of casos) {
+      logs.length = 0;
+      reset({
+        numerosRpc: caso.numerosRpc,
+        flujoLectura: lecturaFallbackCorta(),
+      });
+      const numeros = await fetchFlujoClienteNumeros(USER_PEQUENO, FLUJO, LINE_A);
+      assert.deepEqual(numeros, ["seguimientos-0", "conversiones-0"], caso.nombre);
+      assert.ok(
+        numeros.every((numero) => !String(numero).startsWith("rpc-")),
+        caso.nombre
+      );
+      assert.ok(postsNumerosRpc().length >= 2, caso.nombre);
+      assert.equal(lecturasNumerosFlujo().length, 3, caso.nombre);
+      assert.ok(
+        logs.some((linea) => linea.includes(`[metricas] numeros de flujo rpc: ${caso.motivo}`)),
+        caso.nombre
+      );
+      assert.ok(logs.every((linea) => !linea.includes("rpc-")), caso.nombre);
+    }
+
+    logs.length = 0;
+    reset({
+      numerosRpc: { paginar: true, total: 1500, falloEn: 0 },
+      flujoLectura: {
+        seguimientos: { total: 2 },
+        conversiones: { fallo: true },
+        ia: { total: 1 },
+      },
+    });
+    await assert.rejects(
+      () => fetchFlujoClienteNumeros(USER_PEQUENO, FLUJO, LINE_A),
+      (error) => error && error.code === "METRICAS_LECTURA_INCOMPLETA"
+    );
+    assert.ok(logs.some((linea) => linea.includes("numeros de flujo rpc: http 500")));
+    assert.ok(logs.some((linea) => linea.includes("numeros de flujo fallback: crm_conversiones:error")));
+    assert.ok(logs.every((linea) => !linea.includes("rpc-")));
+  } finally {
+    console.log = originalLog;
+    restoreStub();
+    delete process.env.METRICAS_RPC_RESUMEN_CONTEOS;
+  }
+});
+
+test("fallback de números acepta vacío con total y rechaza estrella sin total", async () => {
+  installStub();
+  try {
+    delete process.env.METRICAS_RPC_RESUMEN_CONTEOS;
+    reset({
+      flujoLectura: {
+        seguimientos: { total: 2 },
+        conversiones: { total: 0 },
+        ia: { total: 3 },
+      },
+    });
+    const unaVacia = await fetchFlujoClienteNumeros(USER_PEQUENO, FLUJO, LINE_A);
+    assert.deepEqual(unaVacia, [
+      "seguimientos-0",
+      "seguimientos-1",
+      "ia-0",
+      "ia-1",
+      "ia-2",
+    ]);
+    const lecturas = lecturasNumerosFlujo();
+    assert.equal(lecturas.length, 3);
+    lecturas.forEach((call) => {
+      assert.equal(call.headers.Prefer, "count=exact");
+      assert.equal(call.range, "0-999");
+      assert.ok(call.url.includes(`usuario_id=eq.${encodeURIComponent(USER_PEQUENO)}`));
+      assert.ok(call.url.includes(`flujo_id=eq.${encodeURIComponent(FLUJO)}`));
+      assert.ok(call.url.includes(`conexion_whatsapp_id=eq.${encodeURIComponent(LINE_A)}`));
+      assert.ok(call.url.includes("order=id.asc"));
+    });
+
+    reset({
+      flujoLectura: {
+        seguimientos: { total: 0 },
+        conversiones: { total: 0 },
+        ia: { total: 0 },
+      },
+    });
+    assert.deepEqual(await fetchFlujoClienteNumeros(USER_PEQUENO, FLUJO, null), []);
+    const vacias = lecturasNumerosFlujo();
+    assert.equal(vacias.length, 3);
+    vacias.forEach((call) => {
+      assert.equal(call.headers.Prefer, "count=exact");
+      assert.ok(!call.url.includes("conexion_whatsapp_id="));
+      assert.ok(call.url.includes(`usuario_id=eq.${encodeURIComponent(USER_PEQUENO)}`));
+      assert.ok(call.url.includes(`flujo_id=eq.${encodeURIComponent(FLUJO)}`));
+    });
+
+    reset({
+      flujoLectura: {
+        seguimientos: { total: 1001 },
+        conversiones: { total: 0 },
+        ia: { total: 0 },
+      },
+    });
+    const largos = await fetchFlujoClienteNumeros(USER_PEQUENO, FLUJO, LINE_A);
+    assert.equal(largos.length, 1001);
+    assert.equal(largos[0], "seguimientos-0");
+    assert.equal(largos[1000], "seguimientos-1000");
+    const seguimientos = lecturasNumerosFlujo().filter((call) =>
+      call.url.includes("/seguimientos_programados")
+    );
+    assert.deepEqual(
+      seguimientos.map((call) => call.range),
+      ["0-999", "1000-1999"]
+    );
+    seguimientos.forEach((call) => assert.equal(call.headers.Prefer, "count=exact"));
+
+    reset({
+      flujoLectura: {
+        seguimientos: { total: 0, vacio: "*/*" },
+        conversiones: { total: 1 },
+        ia: { total: 0 },
+      },
+    });
+    await assert.rejects(
+      () => fetchFlujoClienteNumeros(USER_PEQUENO, FLUJO, LINE_A),
+      (error) => error && error.code === "METRICAS_LECTURA_INCOMPLETA"
+    );
+
+    reset({
+      flujoLectura: {
+        seguimientos: { total: 1500, failAt: 1000 },
+        conversiones: { total: 0 },
+        ia: { total: 0 },
+      },
+    });
+    await assert.rejects(
+      () => fetchFlujoClienteNumeros(USER_PEQUENO, FLUJO, LINE_A),
+      (error) => error && error.code === "METRICAS_LECTURA_INCOMPLETA"
+    );
+  } finally {
+    restoreStub();
+    delete process.env.METRICAS_RPC_RESUMEN_CONTEOS;
+  }
+});
+
+test("dos conexiones y todas las líneas no mezclan números de flujo", async () => {
+  process.env.METRICAS_RPC_RESUMEN_CONTEOS = "1";
+  installStub();
+  try {
+    reset({
+      numerosRpc: {
+        porConexion: {
+          [LINE_A]: { total: 1001, prefijo: "linea-a" },
+          [LINE_B]: { total: 2, prefijo: "linea-b" },
+          __todas__: { total: 709, prefijo: "todas" },
+        },
+      },
+    });
+
+    const una = await fetchFlujoClienteNumeros(USER_PEQUENO, FLUJO, LINE_A);
+    assert.equal(una.length, 1001);
+    assert.ok(una.every((numero) => numero.startsWith("linea-a-")));
+    assert.equal(new Set(una).size, 1001);
+    assert.deepEqual(
+      postsNumerosRpc().map((call) => parametrosRpc(call.url).get("offset")),
+      ["0", "1000"]
+    );
+    postsNumerosRpc().forEach((call, indice) => {
+      assertPaginaRpc(call, indice * PAGINA_FILAS_METRICAS);
+      assert.equal(call.body.p_usuario_id, USER_PEQUENO);
+      assert.equal(call.body.p_flujo_id, FLUJO);
+      assert.equal(call.body.p_conexion_whatsapp_id, LINE_A);
+    });
+
+    calls.length = 0;
+    const otra = await fetchFlujoClienteNumeros(USER_PEQUENO, FLUJO, LINE_B);
+    assert.deepEqual(otra, ["linea-b-0", "linea-b-1"]);
+    assert.equal(postsNumerosRpc().length, 1);
+    assert.equal(postsNumerosRpc()[0].body.p_conexion_whatsapp_id, LINE_B);
+    assertPaginaRpc(postsNumerosRpc()[0], 0);
+    assert.ok(otra.every((numero) => !numero.startsWith("linea-a-")));
+
+    calls.length = 0;
+    const todas = await fetchFlujoClienteNumeros(USER_PEQUENO, FLUJO, "__todas__");
+    assert.equal(todas.length, 709);
+    assert.ok(todas.every((numero) => numero.startsWith("todas-")));
+    assert.equal(postsNumerosRpc().length, 1);
+    assert.equal(postsNumerosRpc()[0].body.p_conexion_whatsapp_id, null);
+    assertPaginaRpc(postsNumerosRpc()[0], 0);
+    assert.equal(lecturasNumerosFlujo().length, 0);
+
+    delete process.env.METRICAS_RPC_RESUMEN_CONTEOS;
+    reset({
+      flujoLecturaPorConexion: {
+        [LINE_A]: {
+          seguimientos: { total: 1 },
+          conversiones: { total: 0 },
+          ia: { total: 0 },
+        },
+        [LINE_B]: {
+          seguimientos: { total: 2 },
+          conversiones: { total: 0 },
+          ia: { total: 0 },
+        },
+        __todas__: {
+          seguimientos: { total: 4 },
+          conversiones: { total: 0 },
+          ia: { total: 0 },
+        },
+      },
+    });
+    const fallbackA = await fetchFlujoClienteNumeros(USER_PEQUENO, FLUJO, LINE_A);
+    const fallbackB = await fetchFlujoClienteNumeros(USER_PEQUENO, FLUJO, LINE_B);
+    const fallbackTodas = await fetchFlujoClienteNumeros(USER_PEQUENO, FLUJO, null);
+    assert.deepEqual(fallbackA, ["seguimientos-0"]);
+    assert.deepEqual(fallbackB, ["seguimientos-0", "seguimientos-1"]);
+    assert.equal(fallbackTodas.length, 4);
+    assert.ok(!fallbackA.includes("seguimientos-1"));
+    const getsA = lecturasNumerosFlujo().filter((call) =>
+      call.url.includes(`conexion_whatsapp_id=eq.${encodeURIComponent(LINE_A)}`)
+    );
+    const getsB = lecturasNumerosFlujo().filter((call) =>
+      call.url.includes(`conexion_whatsapp_id=eq.${encodeURIComponent(LINE_B)}`)
+    );
+    const getsTodas = lecturasNumerosFlujo().filter((call) => !call.url.includes("conexion_whatsapp_id="));
+    assert.equal(getsA.length, 3);
+    assert.equal(getsB.length, 3);
+    assert.equal(getsTodas.length, 3);
+    [...getsA, ...getsB, ...getsTodas].forEach((call) => {
+      assert.equal(call.headers.Prefer, "count=exact");
+      assert.ok(call.url.includes(`usuario_id=eq.${encodeURIComponent(USER_PEQUENO)}`));
+      assert.ok(call.url.includes(`flujo_id=eq.${encodeURIComponent(FLUJO)}`));
+    });
+  } finally {
+    restoreStub();
+    delete process.env.METRICAS_RPC_RESUMEN_CONTEOS;
+  }
+});
+
+test("rpc paginada y fallback coinciden y no cambian ventas", async () => {
+  installStub();
+  try {
+    const seguimientos = listaEntre(0, 400);
+    const conversiones = listaEntre(350, 600);
+    const ia = listaEntre(600, 709);
+    const union = listaEntre(0, 709);
+    const conversionesFilas = [
+      { valor: 10, moneda: "BOB" },
+      { valor: 5.5, moneda: "BOB" },
+    ];
+    const query = { periodo: "7d", conexion_whatsapp_id: LINE_A, flujo_id: FLUJO };
+
+    process.env.METRICAS_RPC_RESUMEN_CONTEOS = "1";
+    reset({ numerosRpc: { paginar: true, numeros: union } });
+    const porRpc = await fetchFlujoClienteNumeros(USER_PEQUENO, FLUJO, LINE_A);
+    assert.deepEqual(porRpc, union);
+    assert.equal(postsNumerosRpc().length, 1);
+    assertPaginaRpc(postsNumerosRpc()[0], 0);
+    assert.equal(postsNumerosRpc()[0].body.p_conexion_whatsapp_id, LINE_A);
+    assert.equal(lecturasNumerosFlujo().length, 0);
+
+    delete process.env.METRICAS_RPC_RESUMEN_CONTEOS;
+    reset({
+      flujoLectura: {
+        seguimientos: { numeros: seguimientos },
+        conversiones: { numeros: conversiones },
+        ia: { numeros: ia },
+      },
+    });
+    const porFallback = await fetchFlujoClienteNumeros(USER_PEQUENO, FLUJO, LINE_A);
+    assert.deepEqual([...porFallback].sort(), [...union].sort());
+    assert.equal(porFallback.length, 709);
+    assert.equal(lecturasNumerosFlujo().length, 3);
+    lecturasNumerosFlujo().forEach((call) => {
+      assert.equal(call.headers.Prefer, "count=exact");
+      assert.ok(call.url.includes(`usuario_id=eq.${encodeURIComponent(USER_PEQUENO)}`));
+      assert.ok(call.url.includes(`flujo_id=eq.${encodeURIComponent(FLUJO)}`));
+      assert.ok(call.url.includes(`conexion_whatsapp_id=eq.${encodeURIComponent(LINE_A)}`));
+    });
+
+    process.env.METRICAS_RPC_RESUMEN_CONTEOS = "1";
+    reset({
+      numerosRpc: { paginar: true, total: 1001, prefijo: "rpc" },
+      conversionesFilas,
+    });
+    const resumenRpc = await computeResumen(USER_PEQUENO, query);
+    assert.equal(resumenRpc.kpis.ventas, 2);
+    assert.equal(resumenRpc.kpis.ingresos, 15.5);
+    assert.equal(resumenRpc.kpis.moneda, "BOB");
+    assert.equal(resumenRpc.kpis.ingresosDesglose.BOB, 15.5);
+    assert.deepEqual(
+      postsNumerosRpc().map((call) => parametrosRpc(call.url).get("offset")),
+      ["0", "1000"]
+    );
+    postsNumerosRpc().forEach((call, indice) => assertPaginaRpc(call, indice * PAGINA_FILAS_METRICAS));
+
+    delete process.env.METRICAS_RPC_RESUMEN_CONTEOS;
+    reset({
+      conversionesFilas,
+      flujoLectura: {
+        seguimientos: { total: 1001 },
+        conversiones: { total: 0 },
+        ia: { total: 0 },
+      },
+    });
+    const resumenFallback = await computeResumen(USER_PEQUENO, query);
+    assert.equal(postsNumerosRpc().length, 0);
+    assert.equal(resumenFallback.kpis.ventas, resumenRpc.kpis.ventas);
+    assert.equal(resumenFallback.kpis.ingresos, resumenRpc.kpis.ingresos);
+    assert.equal(resumenFallback.kpis.moneda, resumenRpc.kpis.moneda);
+    assert.deepEqual(resumenFallback.kpis.ingresosDesglose, resumenRpc.kpis.ingresosDesglose);
   } finally {
     restoreStub();
     delete process.env.METRICAS_RPC_RESUMEN_CONTEOS;

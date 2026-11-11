@@ -249,7 +249,7 @@ function cerrarCon416(responseHeaders, offset, filas, totalAnunciado) {
  * como anuncia Content-Range. Un hueco, un solape, un id repetido o un
  * total sin cubrir descarta lo ya leído. A las 2.000 páginas también.
  */
-async function supabaseSelectCompleto(table, filterQuery, selectFields = "*") {
+async function supabaseSelectCompleto(table, filterQuery, selectFields = "*", opciones = {}) {
   const filtro = filtroConOrdenEstable(table, filterQuery);
   if (!filtro) return lecturaIncompleta("error");
   const campos = selectConId(selectFields);
@@ -257,13 +257,16 @@ async function supabaseSelectCompleto(table, filterQuery, selectFields = "*") {
   const ids = new Set();
   let offset = 0;
   let totalAnunciado = null;
+  const countExact = opciones?.countExact === true;
   for (let pagina = 0; pagina < PAGINAS_MAX_METRICAS; pagina += 1) {
     const hasta = offset + PAGINA_FILAS_METRICAS - 1;
     const url = `${SUPABASE_URL}/rest/v1/${table}?select=${encodeURIComponent(campos)}&${filtro}`;
     let res;
     try {
+      const paginaHeaders = { Range: `${offset}-${hasta}` };
+      if (countExact) paginaHeaders.Prefer = "count=exact";
       res = await axios.get(url, {
-        headers: headers({ Range: `${offset}-${hasta}` }),
+        headers: headers(paginaHeaders),
       });
     } catch (e) {
       if (e.response?.status === 416) {
@@ -833,24 +836,247 @@ function retainFlujoClienteNumeros(usuarioId, flujoId, conexionWhatsappId) {
   };
 }
 
-/** Misma unión de siempre. complete=false si alguna tabla falló: ese resultado no se guarda. */
-async function queryFlujoClienteNumeros(usuarioId, flujoId, conexionWhatsappId) {
+/**
+ * null, vacío y «Todas las líneas» no llevan conexión.
+ * Un id de línea se envía tal cual, sin codificar: el cuerpo es JSON.
+ */
+function conexionParaNumerosRpc(conexionWhatsappId) {
+  const raw = conexionWhatsappId == null ? "" : String(conexionWhatsappId).trim();
+  if (!raw || raw === CONEXION_TODAS) return null;
+  return raw;
+}
+
+function logNumerosFlujo(origen, causa) {
+  const texto = String(causa || "desconocida")
+    .replace(/[^\w\s,:*\/.-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 160);
+  console.log(`[metricas] numeros de flujo ${origen}: ${texto || "desconocida"}`);
+}
+
+/** Código y estado, nunca el mensaje de Postgres: puede repetir teléfonos o ids. */
+function causaErrorRpcNumeros(err) {
+  const status = Number(err?.response?.status);
+  const code = String(err?.response?.data?.code || "").trim();
+  const msg = errorMessage(err).toLowerCase();
+  if (msg.includes("timeout")) return "timeout";
+  if (status === 404 || code === "PGRST202" || isSchemaMissingError(err)) return "rpc no disponible";
+  const estado = Number.isInteger(status) && status > 0 ? `http ${status}` : "error de red";
+  const codigo = /^[A-Za-z0-9]{4,12}$/.test(code) ? ` ${code}` : "";
+  return `${estado}${codigo}`;
+}
+
+/**
+ * Una página de la RPC solo vale si empieza en el offset pedido, el total
+ * no cambia y cada numero es nuevo. Un bloque trae como máximo 1000 filas.
+ * La página no se acumula si falla: el llamador descarta lo ya leído.
+ */
+function paginaNumerosDeFlujo(data, responseHeaders, offset, totalPrevio, vistos) {
+  if (!Array.isArray(data)) return { ok: false, motivo: "respuesta no es una lista" };
+  if (data.length > PAGINA_FILAS_METRICAS) {
+    return { ok: false, motivo: "pagina mayor que el bloque" };
+  }
+  const cr = parseContentRangeMetricas(contentRangeDe(responseHeaders));
+  if (!cr.ok) return { ok: false, motivo: "content-range ausente o invalido" };
+
+  if (data.length === 0) {
+    if (!cr.vacio) return { ok: false, motivo: "content-range no cubre la lista" };
+    if (totalPrevio != null && totalPrevio !== cr.total) {
+      return { ok: false, motivo: "total cambio entre paginas" };
+    }
+    if (cr.total !== offset) return { ok: false, motivo: "content-range no cubre la lista" };
+    return { ok: true, numeros: [], siguiente: offset, total: cr.total, fin: true };
+  }
+
+  if (cr.vacio) return { ok: false, motivo: "content-range no cubre la lista" };
+  if (cr.start !== offset) return { ok: false, motivo: "content-range no empieza en el offset" };
+  const anunciadas = cr.end - cr.start + 1;
+  if (data.length !== anunciadas) {
+    return { ok: false, motivo: "content-range no coincide con las filas" };
+  }
+  if (cr.total == null) return { ok: false, motivo: "content-range sin total" };
+  if (totalPrevio != null && cr.total !== totalPrevio) {
+    return { ok: false, motivo: "total cambio entre paginas" };
+  }
+
+  const numeros = [];
+  const enPagina = new Set();
+  for (const fila of data) {
+    if (!fila || typeof fila !== "object" || Array.isArray(fila)) {
+      return { ok: false, motivo: "fila sin numero" };
+    }
+    const numero = fila.numero;
+    if (typeof numero !== "string") return { ok: false, motivo: "fila sin numero" };
+    if (numero === "") return { ok: false, motivo: "numero vacio" };
+    if (enPagina.has(numero) || vistos.has(numero)) {
+      return { ok: false, motivo: "numero repetido" };
+    }
+    enPagina.add(numero);
+    numeros.push(numero);
+  }
+
+  const siguiente = cr.end + 1;
+  if (offset + numeros.length !== siguiente) {
+    return { ok: false, motivo: "content-range no coincide con las filas" };
+  }
+  if (siguiente > cr.total) return { ok: false, motivo: "content-range incompleto" };
+  return {
+    ok: true,
+    numeros,
+    siguiente,
+    total: cr.total,
+    fin: siguiente === cr.total,
+  };
+}
+
+/**
+ * 416 cierra la RPC solo cuando el total ya leído coincide con el anunciado.
+ * Un rango vacío al inicio es una lista de cero. Un total a medio cubrir no.
+ */
+function cierre416NumerosRpc(responseHeaders, offset, totalPrevio, cantidad) {
+  if (cantidad !== offset) return { ok: false, motivo: "rango fuera de limite" };
+  const cr = parseContentRangeMetricas(contentRangeDe(responseHeaders));
+  if (!cr.ok || !cr.vacio) return { ok: false, motivo: "rango fuera de limite" };
+  if (totalPrevio != null && totalPrevio !== cr.total) {
+    return { ok: false, motivo: "total cambio entre paginas" };
+  }
+  if (cr.total !== cantidad) return { ok: false, motivo: "content-range no cubre la lista" };
+  return { ok: true, total: cr.total };
+}
+
+/**
+ * null: la RPC no está, falló o la lista no está completa. El llamador usa el paginador.
+ * Cada página se pide en la URL con limit, offset y order=numero.asc.
+ * Prefer: count=exact pide el total. Si el total cambia, hay un duplicado
+ * o una página falla, no se publica el parcial.
+ */
+async function leerNumerosDeFlujoPorRpc(usuarioId, flujoId, conexionWhatsappId) {
+  const body = {
+    p_usuario_id: usuarioId,
+    p_flujo_id: flujoId,
+    p_conexion_whatsapp_id: conexionParaNumerosRpc(conexionWhatsappId),
+  };
+  const numeros = [];
+  const vistos = new Set();
+  let offset = 0;
+  let totalAnunciado = null;
+
+  for (let pagina = 0; pagina < PAGINAS_MAX_METRICAS; pagina += 1) {
+    const consulta = new URLSearchParams();
+    consulta.set("select", "numero");
+    consulta.set("order", "numero.asc");
+    consulta.set("limit", String(PAGINA_FILAS_METRICAS));
+    consulta.set("offset", String(offset));
+    const url = `${SUPABASE_URL}/rest/v1/rpc/metricas_numeros_de_flujo?${consulta.toString()}`;
+    let res;
+    try {
+      res = await axios.post(url, body, {
+        headers: headers({
+          "Content-Type": "application/json",
+          Prefer: "count=exact",
+        }),
+      });
+    } catch (err) {
+      if (err.response?.status === 416) {
+        const cierre = cierre416NumerosRpc(err.response.headers, offset, totalAnunciado, numeros.length);
+        if (!cierre.ok) {
+          logNumerosFlujo("rpc", cierre.motivo);
+          return null;
+        }
+        return { numeros, complete: true, paginacionIncompleta: false };
+      }
+      logNumerosFlujo("rpc", causaErrorRpcNumeros(err));
+      return null;
+    }
+
+    const leido = paginaNumerosDeFlujo(
+      cuerpoRpcJson(res?.data),
+      res?.headers,
+      offset,
+      totalAnunciado,
+      vistos
+    );
+    if (!leido.ok) {
+      logNumerosFlujo("rpc", leido.motivo);
+      return null;
+    }
+    for (const numero of leido.numeros) {
+      vistos.add(numero);
+      numeros.push(numero);
+    }
+    if (numeros.length !== leido.siguiente) {
+      logNumerosFlujo("rpc", "content-range no coincide con las filas");
+      return null;
+    }
+    totalAnunciado = leido.total;
+    if (leido.fin) {
+      if (totalAnunciado !== numeros.length) {
+        logNumerosFlujo("rpc", "content-range incompleto");
+        return null;
+      }
+      return { numeros, complete: true, paginacionIncompleta: false };
+    }
+    if (leido.siguiente <= offset) {
+      logNumerosFlujo("rpc", "content-range no avanza");
+      return null;
+    }
+    offset = leido.siguiente;
+  }
+
+  logNumerosFlujo("rpc", "demasiadas paginas");
+  return null;
+}
+
+function detalleLecturaNumeros(lecturas) {
+  const tablas = ["seguimientos_programados", "crm_conversiones", "ia_sessions"];
+  return tablas
+    .map((tabla, i) => {
+      const resultado = lecturas[i];
+      if (resultado?.completo && Array.isArray(resultado.filas)) return "";
+      const motivo = resultado?.motivo === "incompleto" ? "incompleto" : "error";
+      return `${tabla}:${motivo}`;
+    })
+    .filter(Boolean)
+    .join(", ");
+}
+
+/**
+ * Misma unión de siempre. count=exact pide el total de las tres tablas.
+ * Un vacío confirmado cierra en cero. Una estrella sin total no cierra.
+ * Un error no se convierte en lista vacía.
+ * complete=false si alguna tabla falló: ese resultado no se guarda.
+ */
+async function queryFlujoClienteNumerosPaginado(usuarioId, flujoId, conexionWhatsappId, respaldo) {
   const base = buildUsuarioFilter(usuarioId);
   const flujoF = `&flujo_id=eq.${encodeURIComponent(flujoId)}`;
   const connF = buildConexionFilter(conexionWhatsappId);
   const numeros = new Set();
+  const lecturaExacta = { countExact: true };
 
   const lecturas = await Promise.all([
     supabaseSelectCompleto(
       "seguimientos_programados",
       `${base}${flujoF}${connF}`,
-      "cliente_numero"
+      "cliente_numero",
+      lecturaExacta
     ),
-    supabaseSelectCompleto("crm_conversiones", `${base}${flujoF}${connF}`, "cliente_numero"),
-    supabaseSelectCompleto("ia_sessions", `${base}${flujoF}${connF}`, "cliente_numero"),
+    supabaseSelectCompleto(
+      "crm_conversiones",
+      `${base}${flujoF}${connF}`,
+      "cliente_numero",
+      lecturaExacta
+    ),
+    supabaseSelectCompleto(
+      "ia_sessions",
+      `${base}${flujoF}${connF}`,
+      "cliente_numero",
+      lecturaExacta
+    ),
   ]);
 
   if (lecturas.some((resultado) => !resultado?.completo || !Array.isArray(resultado.filas))) {
+    if (respaldo) logNumerosFlujo("fallback", detalleLecturaNumeros(lecturas));
     return { numeros: null, complete: false, paginacionIncompleta: true };
   }
 
@@ -861,6 +1087,21 @@ async function queryFlujoClienteNumeros(usuarioId, flujoId, conexionWhatsappId) 
   });
 
   return { numeros: [...numeros], complete: true, paginacionIncompleta: false };
+}
+
+/**
+ * Con METRICAS_RPC_RESUMEN_CONTEOS=1 lee metricas_numeros_de_flujo.
+ * Todas las líneas van con p_conexion_whatsapp_id null. Una línea, con su id.
+ * Si la RPC falta, falla o no trae la lista completa, sigue el paginador.
+ * Ese fallo no se guarda ni se publica como cero.
+ */
+async function queryFlujoClienteNumeros(usuarioId, flujoId, conexionWhatsappId) {
+  if (metricasRpcResumenConteosActiva()) {
+    const porRpc = await leerNumerosDeFlujoPorRpc(usuarioId, flujoId, conexionWhatsappId);
+    if (porRpc) return porRpc;
+    return queryFlujoClienteNumerosPaginado(usuarioId, flujoId, conexionWhatsappId, true);
+  }
+  return queryFlujoClienteNumerosPaginado(usuarioId, flujoId, conexionWhatsappId, false);
 }
 
 async function leerFlujoClienteNumeros(usuarioId, flujoId, conexionWhatsappId) {
