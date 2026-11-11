@@ -113,7 +113,11 @@ router.get("/api/metricas/flujos-lista", protegerApi, async (req, res) => {
     const flujos = await fetchFlujosListMetricas(req.session.usuario.id);
     res.json({
       ok: true,
-      flujos: flujos.map((f) => ({ id: f.id, nombre: f.nombre })),
+      flujos: flujos.map((f) => ({
+        id: f.id,
+        nombre: f.nombre,
+        conexion_whatsapp_id: f.conexion_whatsapp_id || null,
+      })),
     });
   } catch (error) {
     console.log("[metricasApi] flujos-lista:", error.message);

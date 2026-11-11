@@ -18,6 +18,12 @@ import { useMetaAdsCampaigns } from "./metricas/useMetaAdsCampaigns";
 import ConexionLineaTabs from "./components/conexion/ConexionLineaTabs";
 import { useMetricasConexion } from "./hooks/useMetricasConexion";
 import { CONEXION_TODAS } from "./utils/conexionesInbox";
+import {
+  esTodasLasLineas,
+  flujoPermitido,
+  flujosDeConexion,
+  ingresosAgrupadosPorMoneda,
+} from "./metricas/filtrosMetricas";
 
 /** Fase 1 — ocultar secciones en UI; lógica, fetch y componentes siguen intactos */
 const UI_OCULTAR_FASE1 = {
@@ -284,11 +290,31 @@ export default function Metricas() {
   const kpis = resumen?.kpis || {};
   const salud = resumen?.salud || { score: 0, label: "Sin datos" };
 
+  const todasLasLineas = esTodasLasLineas(conexionSeleccionadaId);
+  const flujosDeLinea = useMemo(
+    () => flujosDeConexion(flujosLista, conexionSeleccionadaId),
+    [flujosLista, conexionSeleccionadaId]
+  );
+
+  useEffect(() => {
+    if (conexionSeleccionadaId == null) return;
+    const permitido = flujoPermitido(flujosLista, conexionSeleccionadaId, flujoId);
+    if (permitido !== flujoId) setFlujoId(permitido);
+  }, [conexionSeleccionadaId, flujoId, flujosLista]);
+
+  const onSeleccionarConexion = (id) => {
+    const permitido = flujoPermitido(flujosLista, id, flujoId);
+    if (permitido !== flujoId) setFlujoId(permitido);
+    seleccionarConexion(id);
+  };
+
   const mainCards = useMemo(
     () => {
       const ingresos = ingresosPrincipales(kpis);
       const ingresosMonto = ingresos.monto;
       const ingresosMoneda = ingresos.moneda;
+      const ingresosPorMoneda =
+        todasLasLineas && !flujoId ? ingresosAgrupadosPorMoneda(kpis.ingresosDesglose) : [];
 
       return [
       {
@@ -318,14 +344,20 @@ export default function Metricas() {
       {
         titulo: "Ingresos",
         valor: formatMoney(ingresosMonto, ingresosMoneda),
-        detalle: kpis.ventas > 0 ? `Desde ${kpis.ventas} venta(s)` : "Sin ventas en el periodo",
+        porMoneda: ingresosPorMoneda,
+        detalle:
+          ingresosPorMoneda.length > 0
+            ? "Totales por moneda, sin conversión"
+            : kpis.ventas > 0
+              ? `Desde ${kpis.ventas} venta(s)`
+              : "Sin ventas en el periodo",
         icono: "🚀",
         color: "orange",
         tendencia: null,
       },
     ];
     },
-    [kpis]
+    [kpis, todasLasLineas, flujoId]
   );
 
   const performanceCards = useMemo(
@@ -384,16 +416,15 @@ export default function Metricas() {
 
   const insightTitulo = salud.score >= 60 ? "Embudo saludable" : "Optimiza el embudo";
 
-  const flujoNombre = flujosLista.find((f) => f.id === flujoId)?.nombre;
+  const flujoNombre = flujosDeLinea.find((f) => f.id === flujoId)?.nombre;
   const conexionActiva = conexionesInbox.find(
     (c) => String(c.id) === String(conexionSeleccionadaId)
   );
-  const lineaLabel =
-    conexionSeleccionadaId === CONEXION_TODAS
-      ? "Todas las líneas"
-      : conexionActiva
-        ? etiquetaTabConexion(conexionActiva)
-        : null;
+  const lineaLabel = todasLasLineas
+    ? "Todas las líneas"
+    : conexionActiva
+      ? etiquetaTabConexion(conexionActiva)
+      : null;
 
   const customRangeLabel =
     periodo === "custom" && customRange ? formatCustomRangeDisplay(customRange) : "";
@@ -446,7 +477,7 @@ export default function Metricas() {
       <ConexionLineaTabs
         conexionesInbox={conexionesInbox}
         conexionSeleccionadaId={conexionSeleccionadaId}
-        onSeleccionar={seleccionarConexion}
+        onSeleccionar={onSeleccionarConexion}
         etiquetaTabConexion={etiquetaTabConexion}
       />
 
@@ -454,9 +485,13 @@ export default function Metricas() {
         <div className="selectorBox">
           <label htmlFor="flujo-campana-select">Flujo / campaña</label>
           <FlujoCampanaSelect
-            value={flujoId}
-            onChange={setFlujoId}
-            options={flujosLista}
+            value={todasLasLineas ? "" : flujoId}
+            onChange={(id) => {
+              if (todasLasLineas) return;
+              setFlujoId(flujoPermitido(flujosLista, conexionSeleccionadaId, id));
+            }}
+            options={flujosDeLinea}
+            disabled={todasLasLineas}
           />
         </div>
 
@@ -523,7 +558,18 @@ export default function Metricas() {
                   <div className="icon">{card.icono}</div>
                   <TrendBadge value={card.tendencia} />
                 </div>
-                <h2>{card.valor}</h2>
+                {card.porMoneda?.length ? (
+                  <div className="ingresosMonedas">
+                    {card.porMoneda.map((fila) => (
+                      <div key={fila.moneda} className="ingresosMonedaFila">
+                        <span>{fila.moneda}</span>
+                        <strong>{formatMoney(fila.monto, fila.moneda)}</strong>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <h2>{card.valor}</h2>
+                )}
                 <strong>{card.titulo}</strong>
                 <p>{card.detalle}</p>
               </div>
@@ -900,6 +946,10 @@ const styles = `
 .trend.down { background: rgba(239,68,68,.15); color: #fca5a5; }
 .trend.muted { color: #94a3b8; background: rgba(255,255,255,.06); }
 .mainCard h2 { margin: 16px 0 6px; font-size: 32px; position: relative; }
+.ingresosMonedas { margin: 14px 0 6px; display: flex; flex-direction: column; gap: 6px; position: relative; }
+.ingresosMonedaFila { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.ingresosMonedaFila span { font-size: 12px; font-weight: 800; letter-spacing: .04em; color: #fdba74; }
+.ingresosMonedaFila strong { font-size: 18px; }
 .mainCard p { margin: 4px 0 0; color: #94a3b8; font-size: 13px; position: relative; }
 .dashBottom { display: grid; grid-template-columns: 1fr minmax(260px, 300px); gap: 14px; align-items: start; }
 .dashMain, .dashAside { display: flex; flex-direction: column; gap: 12px; min-width: 0; }

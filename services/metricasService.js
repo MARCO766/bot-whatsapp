@@ -696,7 +696,7 @@ function logMetricasMulti(conexionWhatsappId, ctx = "") {
   );
 }
 
-const FLUJOS_LIST_SELECT_METRICAS = "id,nombre";
+const FLUJOS_LIST_SELECT_METRICAS = "id,nombre,conexion_whatsapp_id";
 const FLUJOS_LIST_SELECT_DEFAULT = "id,nombre,creado_en,data";
 
 async function fetchFlujosList(usuarioId, selectFields = FLUJOS_LIST_SELECT_DEFAULT) {
@@ -1359,6 +1359,21 @@ async function countConversionesEnRango(
   return total ?? 0;
 }
 
+/**
+ * Lee valor y moneda de todas las ventas que cumplen el filtro.
+ * Usa el paginador por id: una página fallida, repetida o incompleta
+ * no devuelve filas y no se suma un importe parcial.
+ */
+async function leerConversionesParaIngresos(filter) {
+  const lectura = await supabaseSelectCompleto("crm_conversiones", filter, "valor,moneda", {
+    countExact: true,
+  });
+  if (!lectura?.completo || !Array.isArray(lectura.filas)) {
+    rechazarLecturaIncompleta("crm_conversiones");
+  }
+  return lectura.filas;
+}
+
 async function sumIngresosConversionesEnRango(
   usuarioId,
   desdeIso,
@@ -1368,9 +1383,8 @@ async function sumIngresosConversionesEnRango(
 ) {
   let filter = `${buildUsuarioFilter(usuarioId)}${buildConexionFilter(conexionWhatsappId)}&${buildDateFilter(desdeIso, hastaIso)}`;
   if (flujoId) filter += `&flujo_id=eq.${encodeURIComponent(flujoId)}`;
-  const rows = await supabaseSelect("crm_conversiones", filter, "valor,moneda");
-  if (!Array.isArray(rows)) return { monto: 0, moneda: "BOB", desglose: {} };
-  return sumarIngresos(rows);
+  const rows = await leerConversionesParaIngresos(filter);
+  return { ...sumarIngresos(rows), ventas: rows.length };
 }
 
 async function countSeguimientosPorEstadoEnRango(
@@ -1444,23 +1458,14 @@ async function countSeguimientosPorEstadoEnLineas(usuarioId, desdeIso, hastaIso,
 }
 
 /**
- * La misma lectura de valor y moneda que el resumen por línea.
- * Prefer: count=exact cambia el orden de esas filas y, con ello, la moneda principal.
- * Si la página no viene llena, el número de filas es el conteo exacto.
- * Si viene llena, un HEAD evita contar de menos sin tocar el orden.
+ * Ventas e ingresos de una línea, con todas las páginas de crm_conversiones.
+ * El conteo es el de las filas leídas: cada id entra una sola vez.
+ * La moneda principal sigue siendo la primera del desglose, sin conversión.
  */
 async function ventasEIngresosLinea(usuarioId, desdeIso, hastaIso, conexionWhatsappId) {
   const filter = `${buildUsuarioFilter(usuarioId)}${buildConexionFilter(conexionWhatsappId)}&${buildDateFilter(desdeIso, hastaIso)}`;
-  const limit = 50000;
-  const rows = await supabaseSelect("crm_conversiones", filter, "valor,moneda", limit);
-  if (!Array.isArray(rows)) {
-    return { ventas: 0, ingresos: { monto: 0, moneda: "BOB", desglose: {} } };
-  }
-  const ingresos = sumarIngresos(rows);
-  const paginaLlena = rows.length >= limit || rows.length >= 1000;
-  if (!paginaLlena) return { ventas: rows.length, ingresos };
-  const ventas = (await supabaseCount("crm_conversiones", filter)) ?? 0;
-  return { ventas, ingresos };
+  const rows = await leerConversionesParaIngresos(filter);
+  return { ventas: rows.length, ingresos: sumarIngresos(rows) };
 }
 
 async function fetchMensajesEnRango(usuarioId, desdeIso, hastaIso, flujoId, conexionWhatsappId = null) {
@@ -2403,7 +2408,6 @@ async function loadResumenBaseEnCurso(usuarioId, query = {}) {
     salientes,
     entrantes,
     respuestas,
-    ventas,
     ventasAnt,
     ingresos,
     segEstados,
@@ -2446,7 +2450,6 @@ async function loadResumenBaseEnCurso(usuarioId, query = {}) {
     filaConteo
       ? Promise.resolve(filaConteo.respuestas)
       : countRespuestasEnRango(usuarioId, rango.desde, rango.hasta, flujoId, conexionWhatsappId),
-    countConversionesEnRango(usuarioId, rango.desde, rango.hasta, flujoId, conexionWhatsappId),
     countConversionesEnRango(
       usuarioId,
       anterior.desde,
@@ -2471,6 +2474,7 @@ async function loadResumenBaseEnCurso(usuarioId, query = {}) {
     skipMetaAdsCheck ? Promise.resolve(false) : checkMetaAdsConectado(usuarioId),
   ]);
 
+  const ventas = ingresos.ventas;
   const tasaCierre = pct(ventas, conversaciones);
   const conversion = pct(ventas, leads);
 

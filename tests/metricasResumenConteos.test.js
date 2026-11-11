@@ -82,6 +82,27 @@ function filasDeRango(start, count, prefijo) {
   }));
 }
 
+function paginaConversionesValor(lista, config) {
+  const list = (Array.isArray(lista) ? lista : []).map((row, i) => ({
+    id: row?.id != null && String(row.id).trim() !== "" ? row.id : `conv-${i}`,
+    valor: row?.valor,
+    moneda: row?.moneda,
+  }));
+  const range = String(config?.headers?.Range || "0-999");
+  const start = parseInt(range.split("-")[0], 10) || 0;
+  if (start >= list.length) {
+    if (start === 0 && list.length === 0) {
+      return { data: [], headers: { "content-range": "*/0" } };
+    }
+    throw httpError(416, { message: "range" }, { "content-range": `*/${list.length}` });
+  }
+  const endPedido = parseInt(range.split("-")[1], 10);
+  const pedido = Number.isFinite(endPedido) ? endPedido - start + 1 : list.length - start;
+  const slice = list.slice(start, start + pedido);
+  const last = start + slice.length - 1;
+  return { data: slice, headers: { "content-range": `${start}-${last}/${list.length}` } };
+}
+
 function paginaDesdeLista(lista, config) {
   const list = Array.isArray(lista) ? lista : [];
   const range = String(config?.headers?.Range || "0-999");
@@ -261,10 +282,7 @@ function installStub() {
     }
     if (Array.isArray(state.conversionesFilas) && target.includes("/crm_conversiones")) {
       if (target.includes("valor")) {
-        return {
-          data: state.conversionesFilas,
-          headers: { "content-range": `*/${state.conversionesFilas.length}` },
-        };
+        return paginaConversionesValor(state.conversionesFilas, config);
       }
       if (target.includes("select=id") && !target.includes("cliente_numero")) {
         return counted(state.conversionesFilas.length);
