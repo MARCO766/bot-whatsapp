@@ -175,7 +175,7 @@ async function startServer() {
   console.log("✅ API Onboarding montada en GET /api/onboarding/estado y POST /api/onboarding/bienvenida");
   console.log("✅ API Clientes montada en /api/clientes");
   console.log("✅ API IA montada en POST /api/ai/run");
-  console.log("✅ Cron interno montado en POST /api/internal/cron/rm24h (seguimientos HTTP deshabilitado)");
+  console.log("✅ Cron interno montado en POST /api/internal/cron/rm24h y /limpieza-media (dry-run, apagado por defecto)");
   console.log("✅ API Seguimiento V2 montada en POST /api/seguimiento-v2/upload-media");
   console.log("✅ API Auth montada en POST /api/auth/login, GET /api/auth/me, POST /api/auth/logout");
 

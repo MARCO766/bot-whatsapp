@@ -59,6 +59,8 @@ COPY --chown=macbot:nodejs \
 COPY --chown=macbot:nodejs routes ./routes
 COPY --chown=macbot:nodejs config ./config
 COPY --chown=macbot:nodejs services ./services
+# Solo el cron de limpieza. El resto de scripts/ y tmp/ no entran en la imagen.
+COPY --chown=macbot:nodejs scripts/limpieza-media-cron.js ./scripts/limpieza-media-cron.js
 COPY --chown=macbot:nodejs middlewares ./middlewares
 COPY --chown=macbot:nodejs jobs ./jobs
 COPY --chown=macbot:nodejs utils ./utils
