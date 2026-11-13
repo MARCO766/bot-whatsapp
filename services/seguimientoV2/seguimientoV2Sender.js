@@ -11,6 +11,9 @@ const {
 const { logSegV2Test, logSegV2TestVariant } = require("./seguimientoV2TestLog");
 const { MOTIVO_VENTANA_WHATSAPP_CERRADA } = require("./constants");
 const { evaluarVentana24hSeguimientoV2 } = require("./seguimientoV2Ventana24h");
+const {
+  asegurarCopiaConversacionSeguimientoV2,
+} = require("./seguimientoV2MediaStorage");
 
 function buildOpcionesEnvioV2(item) {
   const conexionId = obtenerConexionItem(item);
@@ -29,6 +32,23 @@ function buildOpcionesEnvioV2(item) {
     pasoIndex: item.paso_index ?? null,
     clienteNumero: item.cliente_numero ?? null,
   };
+}
+
+function copiaConversacionLista(copia) {
+  const url = String(copia?.publicUrl || "");
+  return Boolean(
+    copia &&
+      copia.lista &&
+      url.includes("/object/public/archivos/whatsapp/") &&
+      url.includes("/segv2/")
+  );
+}
+
+function motivoSinStorage(motivo) {
+  return String(motivo || "error_envio").replace(
+    /https?:\/\/[^\s"'<>]*\/storage\/v1\/[^\s"'<>]*/gi,
+    "[url]"
+  );
 }
 
 function normalizarTipoMedia(tipo) {
@@ -125,17 +145,36 @@ async function enviarSeguimientoV2(item, opts = {}) {
       const tipoMedia =
         tipo === "image" ? "image" : tipo === "video" ? "video" : tipo === "audio" ? "audio" : "document";
       const filename = String(item.media_filename || item.filename || "").trim();
-      const opcionesMedia = filename ? { ...opciones, filename } : opciones;
-      resultado = await enviarMedia(numero, tipoMedia, mediaUrl, caption, opcionesMedia);
+      const asegurarCopia =
+        deps.asegurarCopiaConversacionSeguimientoV2 || asegurarCopiaConversacionSeguimientoV2;
+      const copia = await asegurarCopia({
+        mediaUrl,
+        usuarioId: item.usuario_id,
+        conexionWhatsappId: conexionId,
+        clienteNumero: numero,
+        tipo: tipoMedia,
+      });
+      const usarCopia = copiaConversacionLista(copia);
+      const urlEnviar = usarCopia ? copia.publicUrl : mediaUrl;
+      const opcionesMedia = { ...opciones };
+      if (filename) opcionesMedia.filename = filename;
+      if (usarCopia) {
+        opcionesMedia.contenidoInbox = caption;
+        if (copia.enlaceListo) opcionesMedia.segv2EnlaceListo = true;
+      }
+      resultado = await enviarMedia(numero, tipoMedia, urlEnviar, caption, opcionesMedia);
     }
   } catch (err) {
+    const motivo = motivoSinStorage(
+      err.response?.data?.message || err.message || "error_envio"
+    );
     console.log("[SEG_V2_FAIL]", {
       seguimiento_v2_id: seguimientoV2Id,
-      motivo: err.response?.data?.message || err.message,
+      motivo,
     });
     return {
       ok: false,
-      motivo: err.response?.data?.message || err.message || "error_envio",
+      motivo,
     };
   }
 

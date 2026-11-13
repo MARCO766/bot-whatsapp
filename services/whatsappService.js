@@ -1121,6 +1121,29 @@ function construirPayloadMediaWhatsApp(numeroDestino, tipoApi, mediaUrl, caption
   return null;
 }
 
+function textoRegistradoMedia(caption, urlOriginal, opciones) {
+  if (opciones?.origen === "seguimiento_v2" && opciones.contenidoInbox !== undefined) {
+    let texto = opciones.contenidoInbox == null ? "" : String(opciones.contenidoInbox);
+    const url = String(urlOriginal || "");
+    if (url && texto.includes(url)) return "";
+    if (/\/storage\/v1\/object\/(?:public|sign|authenticated)\/archivos\/whatsapp\//i.test(texto)) {
+      return "";
+    }
+    return texto;
+  }
+  return caption || urlOriginal;
+}
+
+function enlaceImagenSeguimientoV2Listo(opciones, url) {
+  if (opciones?.origen !== "seguimiento_v2" || opciones?.segv2EnlaceListo !== true) return false;
+  const valor = String(url || "");
+  return (
+    esUrlPublicaHttps(valor) &&
+    valor.includes("/storage/v1/object/public/archivos/whatsapp/") &&
+    valor.includes("/segv2/")
+  );
+}
+
 function aplicarCamposInsertSeguimiento(insertPayload, inbox) {
   if (inbox.origen === "seguimiento_v2") {
     insertPayload.conexion_whatsapp_id = inbox.conexionWhatsappId;
@@ -1165,7 +1188,11 @@ async function enviarMediaWhatsApp(numero, tipo, mediaUrl, caption = "", opcione
         return false;
       }
 
-      urlEnvio = await resolverLinkImagenWhatsApp(urlOriginal, opcionesEnvio);
+      if (enlaceImagenSeguimientoV2Listo(opcionesEnvio, urlOriginal)) {
+        urlEnvio = urlOriginal;
+      } else {
+        urlEnvio = await resolverLinkImagenWhatsApp(urlOriginal, opcionesEnvio);
+      }
 
       if (urlEnvio !== urlOriginal) {
         console.log("????? URL FINAL PARA META (JPEG):", urlEnvio);
@@ -1265,7 +1292,7 @@ async function enviarMediaWhatsApp(numero, tipo, mediaUrl, caption = "", opcione
     const insertPayload = normalizarBodyMensajeSupabase({
       usuarioId: opcionesEnvio.usuarioId,
       numero: numeroDestino,
-      texto: caption || urlOriginal,
+      texto: textoRegistradoMedia(caption, urlOriginal, opcionesEnvio),
       wamid: whatsappMessageId,
       tipo: tipoApi,
       imagen_url: urlEnvio,
@@ -1507,4 +1534,6 @@ module.exports = {
   registrarMensajeSalienteEnInbox,
   enviarMediaWhatsApp,
   enviarBotonesWhatsApp,
+  textoRegistradoMedia,
+  enlaceImagenSeguimientoV2Listo,
 };
