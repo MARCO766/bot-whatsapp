@@ -681,84 +681,131 @@ function clienteLock(pasos) {
   };
 }
 
-const OPCION_LOCK = { url: "https://proj.supabase.co", key: "test-key", ahora: AHORA };
+const OPCION_LOCK = {
+  url: "https://proj.supabase.co",
+  key: "test-key",
+  ahora: AHORA,
+  relojPostgres: AHORA,
+};
 
 async function testCandado() {
   const lock = require("../services/limpiezaMedia/limpiezaMediaLock");
   const ausente = clienteLock({
-    get: Object.assign(new Error("relation limpieza_media_lock does not exist"), {
+    post: Object.assign(new Error("relation limpieza_media_lock does not exist"), {
       response: { status: 404, data: { code: "42P01", message: "relation limpieza_media_lock does not exist" } },
     }),
   });
   const tabla = await lock.adquirirLockLimpiezaMedia({ ...OPCION_LOCK, cliente: ausente });
   assert.strictEqual(tabla.acquired, false);
   assert.strictEqual(tabla.motivo, "lock_tabla_ausente");
-  assert.strictEqual(ausente.llamadas.some((llamada) => llamada.metodo !== "get"), false);
+  assert.strictEqual(ausente.llamadas.every((llamada) => llamada.metodo === "post"), true);
+  assert.ok(ausente.llamadas[0].url.includes("/rpc/limpieza_media_adquirir"));
 
   const ocupado = clienteLock({
-    get: { data: [] },
-    patch: { data: [] },
-    post: Object.assign(new Error("duplicado"), { response: { status: 409, data: { code: "23505" } } }),
+    post: { data: { ok: false, motivo: "candado_ocupado", ahora: AHORA.toISOString() } },
   });
   const tomado = await lock.adquirirLockLimpiezaMedia({ ...OPCION_LOCK, cliente: ocupado });
   assert.strictEqual(tomado.acquired, false);
   assert.strictEqual(tomado.motivo, "candado_ocupado");
+  assert.deepStrictEqual(Object.keys(ocupado.llamadas[0].body).sort(), ["p_ttl_seconds", "p_worker"]);
 
   const perdido = await lock.renovarLockLimpiezaMedia("limpieza-dueno", {
     ...OPCION_LOCK,
-    cliente: clienteLock({ patch: { data: [] } }),
+    cliente: clienteLock({
+      post: { data: { ok: false, motivo: "candado_perdido", ahora: AHORA.toISOString() } },
+    }),
   });
   assert.strictEqual(perdido.ok, false);
   assert.strictEqual(perdido.motivo, "candado_perdido");
 
   const dueno = "limpieza-dueno";
   const liberador = clienteLock({
-    patch: (url, body) => ({ data: [{ locked_by: body.locked_by, locked_until: body.locked_until }] }),
+    post: {
+      data: {
+        ok: true,
+        motivo: "liberado",
+        locked_by: null,
+        locked_until: AHORA.toISOString(),
+        ahora: AHORA.toISOString(),
+      },
+    },
   });
   const suelto = await lock.liberarLockLimpiezaMedia(dueno, { ...OPCION_LOCK, cliente: liberador });
   assert.strictEqual(suelto.ok, true);
-  assert.ok(liberador.llamadas[0].url.includes(`locked_by=eq.${encodeURIComponent(dueno)}`));
-  assert.strictEqual(liberador.llamadas[0].body.locked_by, null);
-  assert.strictEqual(liberador.llamadas[0].body.locked_until, AHORA.toISOString());
+  assert.ok(liberador.llamadas[0].url.includes("/rpc/limpieza_media_liberar"));
+  assert.strictEqual(liberador.llamadas[0].body.p_worker, dueno);
+  assert.strictEqual(liberador.llamadas.some((llamada) => llamada.metodo === "patch"), false);
   ok("candado: tabla ausente, ocupado, renovación perdida y liberación por propietario");
 }
 
-function memoriaLock(inicial) {
+function memoriaLock(inicial, reloj = AHORA) {
   let fila = { ...inicial };
   const llamadas = [];
-  function coincide(url) {
-    if (!url.includes("id=eq.global")) return false;
-    const dueno = /locked_by=eq\.([^&]+)/.exec(url);
-    if (dueno && fila.locked_by !== decodeURIComponent(dueno[1])) return false;
-    const gt = /locked_until\.gt\.([^&)]+)/.exec(url);
-    if (gt && !(Date.parse(fila.locked_until) > Date.parse(decodeURIComponent(gt[1])))) return false;
-    const lte = /locked_until\.lte\.([^&)]+)/.exec(url);
-    if (lte) {
-      const limite = Date.parse(decodeURIComponent(lte[1]));
-      const nulo = url.includes("locked_until.is.null") && fila.locked_until == null;
-      if (!(nulo || Date.parse(fila.locked_until) <= limite)) return false;
+  function ahoraIso() {
+    return new Date(reloj.getTime()).toISOString();
+  }
+  function vigente(instante) {
+    return fila.locked_by != null && Number.isFinite(Date.parse(fila.locked_until)) && Date.parse(fila.locked_until) > instante;
+  }
+  function aplicar(nombre, body) {
+    const worker = body?.p_worker;
+    const ttl = Number(body?.p_ttl_seconds) * 1000;
+    const instante = reloj.getTime();
+    const ahora = ahoraIso();
+    if (nombre === "limpieza_media_renovar") {
+      if (fila.locked_by !== worker || !vigente(instante)) {
+        return { ok: false, motivo: "candado_perdido", ahora, locked_by: fila.locked_by, locked_until: fila.locked_until };
+      }
+      const until = new Date(instante + ttl).toISOString();
+      fila = { ...fila, locked_until: until, updated_at: ahora };
+      return { ok: true, motivo: "renovado", ahora, locked_by: worker, locked_until: until };
     }
-    return true;
+    if (nombre === "limpieza_media_liberar") {
+      if (fila.locked_by !== worker) {
+        return { ok: false, motivo: "candado_ajeno", ahora, locked_by: fila.locked_by, locked_until: fila.locked_until };
+      }
+      fila = { ...fila, locked_by: null, locked_until: ahora, updated_at: ahora };
+      return { ok: true, motivo: "liberado", ahora, locked_by: null, locked_until: ahora };
+    }
+    if (nombre === "limpieza_media_verificar") {
+      if (fila.locked_by !== worker || !vigente(instante)) {
+        return { ok: false, motivo: "candado_perdido", ahora };
+      }
+      return { ok: true, motivo: "vigente", ahora, locked_by: worker, locked_until: fila.locked_until };
+    }
+    if (nombre === "limpieza_media_adquirir") {
+      if (fila.locked_by === worker && vigente(instante)) {
+        const until = new Date(instante + ttl).toISOString();
+        fila = { ...fila, locked_until: until, updated_at: ahora };
+        return { ok: true, motivo: "adquirido", ahora, locked_by: worker, locked_until: until };
+      }
+      if (fila.locked_by === worker) {
+        return {
+          ok: false,
+          motivo: "candado_vencido_no_recuperable",
+          ahora,
+          locked_by: fila.locked_by,
+          locked_until: fila.locked_until,
+        };
+      }
+      if (vigente(instante)) {
+        return { ok: false, motivo: "candado_ocupado", ahora, locked_by: fila.locked_by, locked_until: fila.locked_until };
+      }
+      const until = new Date(instante + ttl).toISOString();
+      fila = { ...fila, locked_by: worker, locked_until: until, updated_at: ahora };
+      return { ok: true, motivo: "adquirido", ahora, locked_by: worker, locked_until: until };
+    }
+    return { ok: false, motivo: "rpc_desconocida", ahora };
   }
   return {
     llamadas,
     fila() {
       return fila;
     },
-    async get(url) {
-      llamadas.push({ metodo: "get", url });
-      return { data: [{ id: fila.id }] };
-    },
-    async patch(url, body) {
-      llamadas.push({ metodo: "patch", url, body });
-      if (!coincide(url)) return { data: [] };
-      fila = { ...fila, ...body };
-      return { data: [{ ...fila }] };
-    },
-    async post() {
-      const error = new Error("duplicado");
-      error.response = { status: 409, data: { code: "23505" } };
-      throw error;
+    async post(url, body) {
+      llamadas.push({ metodo: "post", url, body });
+      const nombre = String(url).split("/rpc/")[1];
+      return { data: aplicar(nombre, body) };
     },
   };
 }
@@ -795,7 +842,7 @@ async function testCandadoCarreraYMigracion() {
   assert.strictEqual(tardia.ok, false);
   assert.strictEqual(tardia.motivo, "candado_perdido");
   assert.strictEqual(mem.fila().locked_by, null);
-  assert.ok(mem.llamadas.some((llamada) => llamada.metodo === "patch" && llamada.url.includes("locked_until=gt.")));
+  assert.ok(mem.llamadas.some((llamada) => llamada.url.includes("/rpc/limpieza_media_renovar")));
 
   const siguiente = await lock.adquirirLockLimpiezaMedia({
     ...opciones,
@@ -818,6 +865,17 @@ async function testCandadoCarreraYMigracion() {
   assert.ok(!/grant\s+[^;]*\bdelete\b/i.test(sql));
   assert.ok(!/\bto\s+anon\b/i.test(sql));
   assert.ok(!/\bto\s+authenticated\b/i.test(sql));
+  const relojSql = fs.readFileSync(
+    path.join(__dirname, "../supabase/migrations/limpieza_media_lock_reloj.sql"),
+    "utf8"
+  );
+  assert.ok(relojSql.includes("clock_timestamp()"));
+  assert.ok(relojSql.includes("locked_by = p_worker"));
+  assert.ok(relojSql.includes("locked_until > v_now"));
+  assert.ok(relojSql.includes("candado_vencido_no_recuperable"));
+  assert.ok(/grant execute on function public\.limpieza_media_renovar\(text, integer\) to service_role/i.test(relojSql));
+  assert.ok(/revoke all on function public\.limpieza_media_adquirir\(text, integer\) from anon/i.test(relojSql));
+  assert.ok(!/delete\s+from\s+public\.mensajes/i.test(relojSql));
   ok("candado: renovación tardía, dueño ajeno, liberación ajena, vencido y RLS");
 }
 
@@ -886,12 +944,22 @@ function testBarrerasYCron() {
     "utf8"
   );
   assert.ok(cron.includes("ELIMINACION_REAL_BLOQUEADA"));
+  assert.ok(cron.includes("validarInmediatoEliminacion"));
+  assert.ok(cron.includes("eliminacionRealPermitida"));
+  assert.ok(cron.indexOf("validarInmediatoEliminacion") < cron.indexOf("solicitarBorradoReal()"));
   assert.ok(cron.includes("solicitarBorradoReal()"));
   assert.ok(!cron.includes("axios.delete"));
   assert.ok(!cron.includes(".remove("));
   assert.ok(ruta.includes("adquirirLockLimpiezaMedia"));
+  assert.ok(ruta.includes("eliminacionRealPermitida"));
   assert.ok(ruta.includes('eliminacionReal: "bloqueada"'));
+  assert.ok(!ruta.includes("solicitarBorradoReal"));
+  assert.ok(!ruta.includes("validarInmediatoEliminacion"));
   assert.ok(!ruta.includes("axios.delete"));
+  assert.ok(!ruta.includes("eliminarSoloObjetoStorage"));
+  assert.ok(!ruta.includes("limpiezaMediaEliminar"));
+  assert.ok(!cron.includes("eliminarSoloObjetoStorage"));
+  assert.ok(!cron.includes("limpiezaMediaEliminar"));
   ok("borrado real bloqueado en el cron y en la ruta manual");
 }
 
@@ -901,6 +969,719 @@ function testRutaCron() {
   assert.ok(paths.includes("/limpieza-media"));
   assert.ok(paths.includes("/rm24h"));
   ok("ruta de cron registrada");
+}
+
+function testIlikeEscapado() {
+  const filtro = reglas.filtroIlike(["imagen_url", "contenido"], "whatsapp/u/mi_foto%.jpg");
+  assert.ok(filtro.includes(encodeURIComponent("mi\\_foto\\%.jpg")));
+  assert.ok(!filtro.includes("mi_foto%.jpg"));
+  assert.strictEqual(
+    reglas.citaRutaCompleta("whatsapp/u/miXfoto.jpg", "archivos/whatsapp/u/mi_foto.jpg"),
+    false
+  );
+  assert.strictEqual(
+    reglas.citaRutaCompleta(
+      "https://proj.supabase.co/storage/v1/object/public/archivos/whatsapp/u/mi_foto.jpg",
+      "archivos/whatsapp/u/mi_foto.jpg"
+    ),
+    true
+  );
+  assert.strictEqual(reglas.paginaIlikeIncompleta([1, 2, 3, 4, 5], 5), true);
+  assert.strictEqual(reglas.paginaIlikeIncompleta([1, 2], 5), false);
+  ok("ilike escapa _ y % y una página llena no cuenta como completa");
+}
+
+function lectorReferencias(escenas) {
+  const consultas = [];
+  return {
+    consultas,
+    async leer(ruta) {
+      consultas.push(ruta);
+      const escena = escenas.find((item) => ruta.includes(item.incluye));
+      return escena ? escena.filas : [];
+    },
+  };
+}
+
+async function testPaginaIlikeYNombreConGuionBajo() {
+  const clave = "archivos/whatsapp/u/mi_foto.jpg";
+  const lector = lectorReferencias([
+    { incluye: "remarketing_global_24h", filas: Array.from({ length: 5 }, () => ({ mensaje_remarketing: "otro" })) },
+  ]);
+  await assert.rejects(
+    () => servicio.tieneReferenciaProtegidaReal({ clave }, { leer: lector.leer }),
+    /consulta truncada/
+  );
+  assert.ok(lector.consultas.some((ruta) => ruta.includes(encodeURIComponent("mi\\_foto.jpg"))));
+
+  const veredicto = await servicio.revalidarCandidato(clave, {
+    ahora: AHORA,
+    protegidas: new Set(),
+    io: ioRevalidacion({
+      async leerMenciones() {
+        return [fila("u", "c", "1", { imagen_url: `${URL}whatsapp/u/mi_foto.jpg` })];
+      },
+      async tieneReferenciaProtegida() {
+        throw new Error("consulta truncada");
+      },
+    }),
+  });
+  assert.strictEqual(veredicto.motivo, "consulta_fallida");
+  assert.strictEqual(veredicto.apto, false);
+  ok("página ilike llena y nombre con _ excluyen el archivo");
+}
+
+async function testJsonDespuesDeCargarProteccion() {
+  const clave = "archivos/whatsapp/u/foto.jpg";
+  const url = `${URL}whatsapp/u/foto.jpg`;
+  const lector = lectorReferencias([
+    { incluye: "flujos_builder?", filas: [{ data: { url } }] },
+  ]);
+  const citada = await servicio.tieneReferenciaProtegidaReal({ clave }, { leer: lector.leer });
+  assert.strictEqual(citada, true);
+  assert.ok(lector.consultas.some((ruta) => ruta.includes("/flujos_builder?")));
+
+  const veredicto = await servicio.revalidarCandidato(clave, {
+    ahora: AHORA,
+    protegidas: new Set(),
+    io: ioRevalidacion({
+      async tieneReferenciaProtegida(consulta) {
+        return servicio.tieneReferenciaProtegidaReal(consulta, { leer: lector.leer });
+      },
+    }),
+  });
+  assert.strictEqual(veredicto.motivo, "referenciada");
+  assert.strictEqual(veredicto.apto, false);
+  ok("una referencia JSON posterior a cargarProteccion excluye el archivo");
+}
+
+async function testEntranteEntreValidacionYBorrado() {
+  let lecturas = 0;
+  let borrados = 0;
+  const io = ioRevalidacion({
+    async leerUltimoEntrante() {
+      lecturas += 1;
+      return lecturas === 1
+        ? reglas.parseCreadoEnUtc(HACE_40_DIAS)
+        : reglas.parseCreadoEnUtc(HACE_10_DIAS);
+    },
+    async candadoVigente() {
+      return { ok: true };
+    },
+    async borrar() {
+      borrados += 1;
+    },
+  });
+  const primero = await servicio.revalidarCandidato("archivos/whatsapp/u/foto.jpg", {
+    ahora: AHORA,
+    io,
+  });
+  const ultimo = await servicio.validarInmediatoEliminacion("archivos/whatsapp/u/foto.jpg", {
+    ahora: AHORA,
+    workerId: "limpieza-worker",
+    io,
+  });
+  assert.strictEqual(primero.apto, true);
+  assert.strictEqual(ultimo.motivo, "hilo_activo");
+  assert.strictEqual(ultimo.apto, false);
+  assert.strictEqual(ultimo.abortar, false);
+  assert.strictEqual(borrados, 0);
+  assert.strictEqual(servicio.eliminacionRealPermitida(), false);
+  ok("un entrante entre la validación y el borrado excluye el archivo");
+}
+
+async function testCandadoPerdidoDuranteRevalidacion() {
+  let borrados = 0;
+  const io = ioRevalidacion({
+    async candadoVigente() {
+      return { ok: false, motivo: "candado_perdido" };
+    },
+    async borrar() {
+      borrados += 1;
+    },
+  });
+  const veredicto = await servicio.validarInmediatoEliminacion("archivos/whatsapp/u/foto.jpg", {
+    ahora: AHORA,
+    workerId: "limpieza-worker",
+    io,
+  });
+  assert.strictEqual(veredicto.apto, false);
+  assert.strictEqual(veredicto.abortar, true);
+  assert.strictEqual(veredicto.motivo, "candado_perdido");
+  assert.strictEqual(borrados, 0);
+
+  const sinWorker = await servicio.validarInmediatoEliminacion("archivos/whatsapp/u/foto.jpg", {
+    ahora: AHORA,
+    io: ioRevalidacion({
+      async candadoVigente() {
+        return { ok: true };
+      },
+    }),
+  });
+  assert.strictEqual(sinWorker.abortar, true);
+  ok("perder el candado durante la revalidación aborta y no borra");
+}
+
+function testRutaSegv2Ambigua() {
+  const limite = reglas.limiteInactividadMs(AHORA, 30);
+  const clave = "archivos/whatsapp/u/segv2/c/591/extra/abc.png";
+  const uso = { hilos: new Set(["u|c|591"]), usuarios: new Set(["u"]), incompleto: false };
+  const hilos = new Map([["u|c|591", { ultimoEntranteMs: reglas.parseCreadoEnUtc(HACE_40_DIAS) }]]);
+  assert.strictEqual(
+    reglas.motivoConRuta(uso, hilos, new Set(), limite, clave),
+    "ruta_segv2_irregular"
+  );
+  const veredicto = reglas.veredictoRevalidacion({
+    clave,
+    existe: true,
+    menciones: [fila("u", "c", "591", { imagen_url: `${URL}whatsapp/u/segv2/c/591/extra/abc.png` })],
+    ultimoEntranteMs: reglas.parseCreadoEnUtc(HACE_40_DIAS),
+    citada: false,
+    error: null,
+    protegidas: new Set(),
+    nombresProtegidos: new Set(),
+    limiteMs: limite,
+  });
+  assert.strictEqual(veredicto.motivo, "ruta_segv2_irregular");
+  assert.strictEqual(veredicto.apto, false);
+  ok("una ruta segv2 de siete segmentos queda ambigua");
+}
+
+async function testArchivoSubidoSinMensaje() {
+  const datos = fuentesVacias();
+  datos.entrantes = [
+    fila("u", "c", "591", { direccion: "entrante", creado_en: HACE_40_DIAS }),
+  ];
+  datos.storage = {
+    whatsapp: [{ name: "u", id: null }],
+    "whatsapp/u": [{ name: "segv2", id: null }],
+    "whatsapp/u/segv2": [{ name: "c", id: null }],
+    "whatsapp/u/segv2/c": [{ name: "591", id: null }],
+    "whatsapp/u/segv2/c/591": [{ name: "nuevo.png", id: "z", metadata: { size: 40 } }],
+  };
+  const result = await servicio.ejecutarLimpiezaMedia({
+    env: { LIMPIEZA_MEDIA_ACTIVA: "true", ELIMINACION_REAL: "true" },
+    ahora: AHORA,
+    estado: servicio.crearEstado(),
+    io: crearIo(datos, [], []),
+    informe: true,
+    maxMs: 10000,
+    maxPaginas: 80,
+    pageSize: 10,
+  });
+  assert.strictEqual(result.candidatos, 0);
+  assert.strictEqual(result.eliminacionReal, "bloqueada");
+  const copia = result.informe.objetos.find((objeto) => objeto.clave.endsWith("/nuevo.png"));
+  assert.strictEqual(copia.motivo, "sin_referencia");
+  assert.strictEqual(copia.categoria, "ambiguo");
+
+  const suelto = await servicio.revalidarCandidato(
+    "archivos/whatsapp/u/segv2/c/591/nuevo.png",
+    {
+      ahora: AHORA,
+      io: ioRevalidacion({
+        async leerMenciones() {
+          return [];
+        },
+      }),
+    }
+  );
+  assert.strictEqual(suelto.motivo, "sin_referencia");
+  assert.strictEqual(suelto.apto, false);
+  ok("un archivo subido sin mensaje registrado no se elimina");
+}
+
+async function testEndpointManualNoBorra() {
+  const lock = require("../services/limpiezaMedia/limpiezaMediaLock");
+  const originalAdquirir = lock.adquirirLockLimpiezaMedia;
+  const originalLiberar = lock.liberarLockLimpiezaMedia;
+  const originalEjecutar = servicio.ejecutarLimpiezaMedia;
+  const originalFlag = servicio.ELIMINACION_REAL_BLOQUEADA;
+  const handler = handlerLimpieza();
+  const entorno = {
+    ELIMINACION_REAL: process.env.ELIMINACION_REAL,
+    LIMPIEZA_MEDIA_BORRAR: process.env.LIMPIEZA_MEDIA_BORRAR,
+  };
+  let ejecuciones = 0;
+  let adquisiciones = 0;
+  try {
+    process.env.ELIMINACION_REAL = "true";
+    process.env.LIMPIEZA_MEDIA_BORRAR = "true";
+    assert.strictEqual(servicio.eliminacionRealPermitida(), false);
+    assert.throws(() => servicio.solicitarBorradoReal(), /bloqueada/);
+
+    servicio.ELIMINACION_REAL_BLOQUEADA = false;
+    lock.adquirirLockLimpiezaMedia = async () => {
+      adquisiciones += 1;
+      return { acquired: true, workerId: "no-debe" };
+    };
+    const bloqueado = respuestaCron();
+    await handler({ body: { eliminar: true } }, bloqueado);
+    assert.strictEqual(bloqueado.statusCode, 403);
+    assert.strictEqual(bloqueado.body.eliminacionReal, "bloqueada");
+    assert.strictEqual(adquisiciones, 0);
+
+    servicio.ELIMINACION_REAL_BLOQUEADA = true;
+    servicio.ejecutarLimpiezaMedia = async () => {
+      ejecuciones += 1;
+      return { modo: "simulacion", eliminacionReal: "bloqueada", completo: false };
+    };
+    lock.adquirirLockLimpiezaMedia = async () => ({ acquired: true, workerId: "limpieza-manual" });
+    lock.liberarLockLimpiezaMedia = async () => ({ ok: true });
+    const simulado = respuestaCron();
+    await handler({ body: { eliminar: true } }, simulado);
+    assert.strictEqual(simulado.statusCode, 200);
+    assert.strictEqual(simulado.body.modo, "dry-run");
+    assert.strictEqual(simulado.body.eliminacionReal, "bloqueada");
+    assert.strictEqual(ejecuciones, 1);
+    assert.strictEqual(servicio.ELIMINACION_REAL_BLOQUEADA, true);
+  } finally {
+    servicio.ELIMINACION_REAL_BLOQUEADA = originalFlag;
+    servicio.ejecutarLimpiezaMedia = originalEjecutar;
+    lock.adquirirLockLimpiezaMedia = originalAdquirir;
+    lock.liberarLockLimpiezaMedia = originalLiberar;
+    global.__limpiezaMediaCronRunning = false;
+    if (entorno.ELIMINACION_REAL == null) delete process.env.ELIMINACION_REAL;
+    else process.env.ELIMINACION_REAL = entorno.ELIMINACION_REAL;
+    if (entorno.LIMPIEZA_MEDIA_BORRAR == null) delete process.env.LIMPIEZA_MEDIA_BORRAR;
+    else process.env.LIMPIEZA_MEDIA_BORRAR = entorno.LIMPIEZA_MEDIA_BORRAR;
+  }
+  ok("el endpoint manual sigue en simulación aunque cambie el entorno");
+}
+
+async function testCandadoUsaRelojPostgres() {
+  const lock = require("../services/limpiezaMedia/limpiezaMediaLock");
+  const futuro = new Date(AHORA.getTime() + 24 * 60 * 60 * 1000);
+  const dueno = "limpieza-dueno";
+  const vigente = memoriaLock({
+    id: "global",
+    locked_by: dueno,
+    locked_until: new Date(AHORA.getTime() + 60 * 1000).toISOString(),
+    updated_at: AHORA.toISOString(),
+  });
+  const renovado = await lock.renovarLockLimpiezaMedia(dueno, {
+    ...OPCION_LOCK,
+    ahora: futuro,
+    cliente: vigente,
+  });
+  assert.strictEqual(renovado.ok, true);
+  assert.ok(vigente.llamadas.some((llamada) => llamada.url.includes("/rpc/limpieza_media_renovar")));
+  assert.ok(!JSON.stringify(vigente.llamadas[0].body).includes(futuro.toISOString()));
+
+  const vencidoHasta = new Date(AHORA.getTime() - 1000).toISOString();
+  const vencido = memoriaLock({
+    id: "global",
+    locked_by: dueno,
+    locked_until: vencidoHasta,
+    updated_at: AHORA.toISOString(),
+  });
+  const trampa = await lock.renovarLockLimpiezaMedia(dueno, {
+    ...OPCION_LOCK,
+    ahora: futuro,
+    cliente: vencido,
+  });
+  assert.strictEqual(trampa.ok, false);
+  assert.strictEqual(trampa.motivo, "candado_perdido");
+  assert.strictEqual(vencido.fila().locked_until, vencidoHasta);
+  assert.strictEqual(vencido.fila().locked_by, dueno);
+  assert.strictEqual(vencido.llamadas.some((llamada) => llamada.metodo === "patch"), false);
+
+  const ajeno = memoriaLock({
+    id: "global",
+    locked_by: dueno,
+    locked_until: new Date(AHORA.getTime() + 10 * 60 * 1000).toISOString(),
+    updated_at: AHORA.toISOString(),
+  });
+  const robo = await lock.adquirirLockLimpiezaMedia({
+    ...OPCION_LOCK,
+    ahora: futuro,
+    cliente: ajeno,
+    workerId: "limpieza-ladron",
+  });
+  assert.strictEqual(robo.acquired, false);
+  assert.strictEqual(robo.motivo, "candado_ocupado");
+  assert.strictEqual(ajeno.fila().locked_by, dueno);
+
+  const recuperacion = await lock.adquirirLockLimpiezaMedia({
+    ...OPCION_LOCK,
+    ahora: futuro,
+    cliente: vencido,
+    workerId: dueno,
+  });
+  assert.strictEqual(recuperacion.acquired, false);
+  assert.strictEqual(recuperacion.motivo, "candado_vencido_no_recuperable");
+  assert.strictEqual(vencido.fila().locked_by, dueno);
+  assert.strictEqual(vencido.fila().locked_until, vencidoHasta);
+
+  const sinReloj = clienteLock({
+    post: { data: { ok: true, locked_by: "limpieza-sin-reloj" } },
+  });
+  const sinHora = await lock.adquirirLockLimpiezaMedia({
+    url: OPCION_LOCK.url,
+    key: OPCION_LOCK.key,
+    cliente: sinReloj,
+    workerId: "limpieza-sin-reloj",
+  });
+  assert.strictEqual(sinHora.acquired, false);
+  assert.strictEqual(sinHora.motivo, "reloj_postgres_ausente");
+  assert.strictEqual(sinReloj.llamadas.some((llamada) => llamada.metodo === "patch"), false);
+  ok("el candado vigente se decide con now de Postgres y un worker atrasado no renueva");
+}
+
+function vallaDePrueba({ entrante, bloqueaInsertos = true, lecturas }) {
+  let n = 0;
+  let espera = false;
+  const valores = lecturas || [entrante, entrante, entrante, entrante];
+  const valla = {
+    bloqueaInsertos,
+    sesionAbierta: true,
+    entranteObservadoMs: entrante,
+    async leerUltimoEntrante() {
+      const valor = valores[Math.min(n, valores.length - 1)];
+      n += 1;
+      return valor;
+    },
+    async hayEspera() {
+      return espera;
+    },
+    marcarEspera() {
+      espera = true;
+    },
+    async cerrar() {
+      valla.sesionAbierta = false;
+    },
+  };
+  return valla;
+}
+
+function planCandidato(valla) {
+  return { eliminar: true, motivo: "candidato", valla, entranteMs: valla.entranteObservadoMs };
+}
+
+async function testEntranteDuranteYAntesDeEliminar() {
+  const eliminar = require("../services/limpiezaMedia/limpiezaMediaEliminar");
+  const clave = "archivos/whatsapp/u/foto.jpg";
+  const enCurso = vallaDePrueba({ entrante: reglas.parseCreadoEnUtc(HACE_40_DIAS) });
+  enCurso.marcarEspera();
+  let borrados = 0;
+  const durante = await eliminar.planificarEliminacion(clave, {
+    validar: async () => ({ apto: true, abortar: false, motivo: "candidato" }),
+    abrirValla: async () => enCurso,
+    borrarObjeto: async () => {
+      borrados += 1;
+      return { eliminado: true };
+    },
+  });
+  assert.strictEqual(durante.eliminar, false);
+  assert.strictEqual(durante.motivo, "entrante_en_curso");
+  assert.strictEqual(borrados, 0);
+
+  const inmediato = vallaDePrueba({
+    entrante: reglas.parseCreadoEnUtc(HACE_40_DIAS),
+    lecturas: [reglas.parseCreadoEnUtc(HACE_40_DIAS), reglas.parseCreadoEnUtc(HACE_10_DIAS)],
+  });
+  const antes = await eliminar.planificarEliminacion(clave, {
+    validar: async () => ({ apto: true, abortar: false, motivo: "candidato" }),
+    abrirValla: async () => inmediato,
+  });
+  assert.strictEqual(antes.eliminar, false);
+  assert.strictEqual(antes.motivo, "entrante_inmediato");
+  assert.strictEqual(inmediato.sesionAbierta, false);
+
+  const valla = vallaDePrueba({ entrante: reglas.parseCreadoEnUtc(HACE_40_DIAS) });
+  const plan = planCandidato(valla);
+  let restaurado = 0;
+  const corrido = await eliminar.ejecutarBorradoSobrePlan(plan, clave, {
+    async borrarObjeto() {
+      valla.marcarEspera();
+      return { eliminado: true, status: 200 };
+    },
+    async restaurarObjeto() {
+      restaurado += 1;
+      return { ok: true };
+    },
+  });
+  assert.strictEqual(corrido.eliminado, false);
+  assert.strictEqual(corrido.motivo, "proteccion_con_vencimiento");
+  assert.strictEqual(corrido.storage, false);
+  assert.strictEqual(restaurado, 0);
+  assert.strictEqual(valla.sesionAbierta, false);
+  ok("un entrante durante la valla o justo antes del borrado protege el archivo");
+}
+
+async function testCasosDePlanYBorradoBloqueado() {
+  const eliminar = require("../services/limpiezaMedia/limpiezaMediaEliminar");
+  const antiguo = reglas.parseCreadoEnUtc(HACE_40_DIAS);
+  const clave = "archivos/whatsapp/u/foto.jpg";
+  const opcionesBase = {
+    ahora: AHORA,
+    protegidas: new Set(),
+    workerId: "limpieza-plan",
+    abrirValla: async () => vallaDePrueba({ entrante: antiguo }),
+  };
+
+  const perdido = await eliminar.planificarEliminacion(clave, {
+    ...opcionesBase,
+    io: ioRevalidacion({
+      async candadoVigente() {
+        return { ok: false, motivo: "candado_perdido" };
+      },
+    }),
+  });
+  assert.strictEqual(perdido.eliminar, false);
+  assert.strictEqual(perdido.abortar, true);
+  assert.strictEqual(perdido.motivo, "candado_perdido");
+
+  const citada = await eliminar.planificarEliminacion(clave, {
+    ...opcionesBase,
+    io: ioRevalidacion({
+      async tieneReferenciaProtegida() {
+        return true;
+      },
+      async candadoVigente() {
+        return { ok: true };
+      },
+    }),
+  });
+  assert.strictEqual(citada.motivo, "referenciada");
+  assert.strictEqual(citada.eliminar, false);
+
+  const compartida = await eliminar.planificarEliminacion(clave, {
+    ...opcionesBase,
+    io: ioRevalidacion({
+      async leerMenciones() {
+        return [
+          fila("u", "c", "1", { imagen_url: `${URL}whatsapp/u/foto.jpg` }),
+          fila("u", "c", "2", { imagen_url: `${URL}whatsapp/u/foto.jpg` }),
+        ];
+      },
+      async candadoVigente() {
+        return { ok: true };
+      },
+    }),
+  });
+  assert.strictEqual(compartida.motivo, "compartida");
+
+  const plantilla = await eliminar.planificarEliminacion(
+    "seguimiento-v2-media/u/plantilla.png",
+    {
+      ...opcionesBase,
+      io: ioRevalidacion({
+        async candadoVigente() {
+          return { ok: true };
+        },
+      }),
+    }
+  );
+  assert.strictEqual(plantilla.motivo, "bucket_protegido");
+  assert.strictEqual(eliminar.destinoStorage("seguimiento-v2-media/u/plantilla.png"), null);
+  assert.strictEqual(eliminar.destinoStorage("rm24h-media/rm24h/test.jpg"), null);
+
+  const huerfano = await eliminar.planificarEliminacion(clave, {
+    ...opcionesBase,
+    io: ioRevalidacion({
+      async leerMenciones() {
+        return [];
+      },
+      async candadoVigente() {
+        return { ok: true };
+      },
+    }),
+  });
+  assert.strictEqual(huerfano.motivo, "sin_referencia");
+
+  const copia = "archivos/whatsapp/u/segv2/c/59170000000/nota.jpg";
+  const copiaPlan = await eliminar.planificarEliminacion(copia, {
+    ahora: AHORA,
+    protegidas: new Set(),
+    workerId: "limpieza-plan",
+    io: ioRevalidacion({
+      async leerMenciones() {
+        return [fila("u", "c", "59170000000", { imagen_url: `${URL}whatsapp/u/segv2/c/59170000000/nota.jpg` })];
+      },
+      async candadoVigente() {
+        return { ok: true };
+      },
+    }),
+  });
+  assert.strictEqual(copiaPlan.eliminar, false);
+  assert.strictEqual(copiaPlan.motivo, "intervalo_no_garantizado");
+
+  const copiaLista = await eliminar.planificarEliminacion(copia, {
+    ...opcionesBase,
+    io: ioRevalidacion({
+      async leerMenciones() {
+        return [fila("u", "c", "59170000000", { imagen_url: `${URL}whatsapp/u/segv2/c/59170000000/nota.jpg` })];
+      },
+      async candadoVigente() {
+        return { ok: true };
+      },
+    }),
+  });
+  assert.strictEqual(copiaLista.eliminar, false);
+  assert.strictEqual(copiaLista.motivo, "proteccion_con_vencimiento");
+
+  const ambigua = eliminar.solicitudBorradoStorage(
+    "archivos/whatsapp/u/segv2/c/591/extra/nota.jpg",
+    "https://proj.supabase.co"
+  );
+  assert.strictEqual(ambigua, null);
+  const solicitud = eliminar.solicitudBorradoStorage(copia, "https://proj.supabase.co");
+  assert.strictEqual(solicitud.method, "DELETE");
+  assert.ok(solicitud.url.includes("/storage/v1/object/archivos/whatsapp/u/segv2/c/59170000000/nota.jpg"));
+  assert.ok(!solicitud.url.includes("/rest/v1/"));
+  ok("candado, JSON, compartido, plantilla, huérfano y copia V2 no se borran sin valla");
+}
+
+async function testErrorConcurrenciaReintentoYEndpoint() {
+  const eliminar = require("../services/limpiezaMedia/limpiezaMediaEliminar");
+  const lock = require("../services/limpiezaMedia/limpiezaMediaLock");
+  const clave = "archivos/whatsapp/u/foto.jpg";
+  const vallaError = vallaDePrueba({ entrante: 1 });
+  vallaError.entranteObservadoMs = 1;
+  const fallo = await eliminar.ejecutarBorradoSobrePlan(planCandidato(vallaError), clave, {
+    async borrarObjeto() {
+      const error = new Error("storage caido");
+      error.response = { status: 500 };
+      throw error;
+    },
+  });
+  assert.strictEqual(fallo.eliminado, false);
+  assert.strictEqual(fallo.motivo, "proteccion_con_vencimiento");
+  assert.strictEqual(fallo.storage, false);
+
+  let existe = true;
+  const storage = [];
+  const rest = [];
+  async function borrarObjeto() {
+    storage.push("delete");
+    if (!existe) return { eliminado: true, idempotente: true, status: 404 };
+    existe = false;
+    return { eliminado: true, status: 200 };
+  }
+  const primero = await eliminar.ejecutarBorradoSobrePlan(
+    planCandidato(vallaDePrueba({ entrante: 1 })),
+    clave,
+    { borrarObjeto }
+  );
+  const segundo = await eliminar.ejecutarBorradoSobrePlan(
+    planCandidato(vallaDePrueba({ entrante: 1 })),
+    clave,
+    { borrarObjeto }
+  );
+  assert.strictEqual(primero.motivo, "proteccion_con_vencimiento");
+  assert.strictEqual(segundo.motivo, "proteccion_con_vencimiento");
+  assert.strictEqual(primero.storage, false);
+  assert.strictEqual(storage.length, 0);
+  assert.strictEqual(rest.length, 0);
+
+  existe = true;
+  let intentos = 0;
+  const reintento = async () => {
+    intentos += 1;
+    if (intentos === 1) throw new Error("timeout");
+    return borrarObjeto();
+  };
+  const caido = await eliminar.ejecutarBorradoSobrePlan(
+    planCandidato(vallaDePrueba({ entrante: 1 })),
+    clave,
+    { borrarObjeto: reintento }
+  );
+  const repetido = await eliminar.ejecutarBorradoSobrePlan(
+    planCandidato(vallaDePrueba({ entrante: 1 })),
+    clave,
+    { borrarObjeto: reintento }
+  );
+  assert.strictEqual(caido.motivo, "proteccion_con_vencimiento");
+  assert.strictEqual(repetido.motivo, "proteccion_con_vencimiento");
+  assert.strictEqual(existe, true);
+
+  const mem = memoriaLock({
+    id: "global",
+    locked_by: null,
+    locked_until: new Date(AHORA.getTime() - 1000).toISOString(),
+    updated_at: AHORA.toISOString(),
+  });
+  const primeroLock = await lock.adquirirLockLimpiezaMedia({
+    ...OPCION_LOCK,
+    cliente: mem,
+    workerId: "limpieza-a",
+  });
+  const segundoLock = await lock.adquirirLockLimpiezaMedia({
+    ...OPCION_LOCK,
+    cliente: mem,
+    workerId: "limpieza-b",
+  });
+  assert.strictEqual(primeroLock.acquired, true);
+  assert.strictEqual(segundoLock.acquired, false);
+  assert.strictEqual(segundoLock.motivo, "candado_ocupado");
+  assert.strictEqual(mem.fila().locked_by, "limpieza-a");
+
+  const cliente = {
+    llamadas: [],
+    async delete(url) {
+      this.llamadas.push(url);
+      throw new Error("no debe borrar");
+    },
+  };
+  const manual = await eliminar.eliminarSoloObjetoStorage(clave, {
+    url: "https://proj.supabase.co",
+    cliente,
+    borrarObjeto: async () => {
+      throw new Error("no debe borrar");
+    },
+  });
+  assert.strictEqual(manual.eliminado, false);
+  assert.strictEqual(manual.motivo, "bloqueada");
+  assert.strictEqual(manual.storage, false);
+  assert.strictEqual(cliente.llamadas.length, 0);
+
+  const original = servicio.ELIMINACION_REAL_BLOQUEADA;
+  const entorno = process.env.ELIMINACION_REAL;
+  try {
+    servicio.ELIMINACION_REAL_BLOQUEADA = false;
+    process.env.ELIMINACION_REAL = "true";
+    const forzadoSinMarca = await eliminar.borrarObjetoStorage(clave, {
+      url: "https://proj.supabase.co",
+      cliente,
+    });
+    assert.strictEqual(forzadoSinMarca.motivo, "marca_no_verificada");
+    assert.strictEqual(forzadoSinMarca.storage, false);
+    const marcaForzada = require("../services/limpiezaMedia/limpiezaMediaMarca");
+    const registroForzado = marcaForzada.crearRegistroDePrueba();
+    const vallaForzada = await marcaForzada.abrirMarcaDePrueba({
+      registro: registroForzado,
+      hilo: "u|c|591",
+      owner: "cl:w1",
+      entranteMs: 1,
+    });
+    await vallaForzada.promoverABorrando();
+    const forzado = await eliminar.borrarObjetoStorage(clave, {
+      url: "https://proj.supabase.co",
+      cliente,
+      marca: vallaForzada,
+    });
+    assert.strictEqual(forzado.motivo, "bloqueada");
+    assert.strictEqual(forzado.storage, false);
+    assert.strictEqual(cliente.llamadas.length, 0);
+    assert.strictEqual(servicio.eliminacionRealPermitida(), false);
+  } finally {
+    servicio.ELIMINACION_REAL_BLOQUEADA = original;
+    if (entorno == null) delete process.env.ELIMINACION_REAL;
+    else process.env.ELIMINACION_REAL = entorno;
+  }
+
+  const src = fs.readFileSync(
+    path.join(__dirname, "../services/limpiezaMedia/limpiezaMediaEliminar.js"),
+    "utf8"
+  );
+  const ruta = fs.readFileSync(path.join(__dirname, "../routes/internalCronApi.js"), "utf8");
+  assert.ok(src.includes("/storage/v1/object/archivos/"));
+  assert.ok(!src.includes("/rest/v1/"));
+  assert.ok(src.indexOf('motivo: "bloqueada"') < src.indexOf("cliente.delete"));
+  assert.ok(!ruta.includes("eliminarSoloObjetoStorage"));
+  assert.ok(!ruta.includes("axios.delete"));
+  ok("error de storage, carreras, reintento, idempotencia y endpoint siguen sin borrar");
 }
 
 async function main() {
@@ -922,6 +1703,18 @@ async function main() {
   await testRutaUsaCandado();
   testBarrerasYCron();
   testRutaCron();
+  testIlikeEscapado();
+  await testPaginaIlikeYNombreConGuionBajo();
+  await testJsonDespuesDeCargarProteccion();
+  await testEntranteEntreValidacionYBorrado();
+  await testCandadoPerdidoDuranteRevalidacion();
+  testRutaSegv2Ambigua();
+  await testArchivoSubidoSinMensaje();
+  await testEndpointManualNoBorra();
+  await testCandadoUsaRelojPostgres();
+  await testEntranteDuranteYAntesDeEliminar();
+  await testCasosDePlanYBorradoBloqueado();
+  await testErrorConcurrenciaReintentoYEndpoint();
   console.log(`${passed} pruebas ok`);
 }
 

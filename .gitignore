@@ -1,5 +1,6 @@
 .env
 tmp/
+tests/herramientas/node_modules/
 macbot-android/.gradle/
 macbot-android/build/
 macbot-android/app/build/

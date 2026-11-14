@@ -432,6 +432,20 @@ function resumenSinRutas(detalle) {
   return copia;
 }
 
+function escaparComodinIlike(texto) {
+  return String(texto || "").replace(/\\/g, "\\\\").replace(/[%_]/g, (caracter) => `\\${caracter}`);
+}
+
+function filtroIlike(columnas, texto) {
+  const literal = encodeURIComponent(escaparComodinIlike(texto));
+  const partes = columnas.map((columna) => `${columna}.ilike.*${literal}*`);
+  return `or=(${partes.join(",")})`;
+}
+
+function paginaIlikeIncompleta(filas, limite) {
+  return Array.isArray(filas) && filas.length >= limite;
+}
+
 module.exports = {
   BUCKET_ORIGINAL_SEGUIMIENTO,
   BUCKETS_EXCLUIDOS,
@@ -463,6 +477,9 @@ module.exports = {
   motivoConRuta,
   parseCreadoEnUtc,
   registrarEntrante,
+  escaparComodinIlike,
+  filtroIlike,
+  paginaIlikeIncompleta,
   resumenSinRutas,
   rutaConversacionValida,
   rutaListada,

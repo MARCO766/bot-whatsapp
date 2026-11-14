@@ -31,6 +31,71 @@ function isUniqueViolation(err) {
   return /duplicate|unique|whatsapp_message_id/i.test(msg) && status >= 400;
 }
 
+function esTimeoutClaim(err) {
+  if (!err) return false;
+  const code = String(err.code || "");
+  if (code === "ECONNABORTED" || code === "ETIMEDOUT") return true;
+  return /timeout/i.test(String(err.message || ""));
+}
+
+function esPerdidaDeConexion(err) {
+  const code = String(err?.code || "");
+  if (["ECONNRESET", "EPIPE", "ENETUNREACH", "EHOSTUNREACH"].includes(code)) return true;
+  return /socket hang up/i.test(String(err?.message || ""));
+}
+
+function esResultadoIncierto(err) {
+  if (esTimeoutClaim(err) || esPerdidaDeConexion(err)) return true;
+  const status = Number(err?.response?.status);
+  return status >= 500;
+}
+
+function esRechazoAntesDeGuardar(err) {
+  if (!err || esResultadoIncierto(err) || isUniqueViolation(err)) return false;
+  const code = String(err.code || "");
+  if (code === "ECONNREFUSED" || code === "ENOTFOUND" || code === "EAI_AGAIN") return true;
+  const status = Number(err?.response?.status);
+  return status >= 400 && status < 500;
+}
+
+function clasificarFalloClaim(err) {
+  if (isUniqueViolation(err)) {
+    return { claimed: false, duplicate: true, confirmado: true, incierto: false, guardado: false };
+  }
+  if (esResultadoIncierto(err)) {
+    return {
+      claimed: false,
+      duplicate: false,
+      incierto: true,
+      confirmado: false,
+      guardado: null,
+      error: true,
+      reason: "claim_incierto",
+    };
+  }
+  if (esRechazoAntesDeGuardar(err)) {
+    return {
+      claimed: false,
+      duplicate: false,
+      incierto: false,
+      confirmado: false,
+      guardado: false,
+      error: true,
+      rechazado: true,
+      reason: "claim_rechazado",
+    };
+  }
+  return {
+    claimed: false,
+    duplicate: false,
+    incierto: true,
+    confirmado: false,
+    guardado: null,
+    error: true,
+    reason: "claim_incierto",
+  };
+}
+
 async function buscarPorWamid(whatsappMessageId, deps = {}) {
   const http = deps.axios || axios;
   const base = deps.supabaseUrl || SUPABASE_URL;
@@ -80,6 +145,10 @@ async function reclamarMensajeEntrantePorWamid(fila, deps = {}) {
       return { claimed: false, duplicate: true, row: existente };
     }
   } catch (errLookup) {
+    const falloLookup = clasificarFalloClaim(errLookup);
+    if (falloLookup.incierto || falloLookup.duplicate) {
+      return { ...falloLookup, fase: "lookup" };
+    }
     console.log(
       "[WA_CLAIM] lookup previo falló — se intenta INSERT",
       errLookup.response?.data || errLookup.message
@@ -91,13 +160,17 @@ async function reclamarMensajeEntrantePorWamid(fila, deps = {}) {
       headers: supabaseHeaders({ Prefer: "return=representation" }),
     });
     const row = Array.isArray(res.data) ? res.data[0] : res.data;
-    return { claimed: true, duplicate: false, row: row || null };
+    return { claimed: true, duplicate: false, confirmado: true, incierto: false, guardado: true, row: row || null };
   } catch (err) {
-    if (isUniqueViolation(err)) {
+    const fallo = clasificarFalloClaim(err);
+    if (fallo.duplicate) {
       console.log("[WA_CLAIM] UNIQUE conflict — skip reproceso", {
         wamid: wamid.slice(0, 16) + "…",
       });
-      return { claimed: false, duplicate: true, row: null };
+      return { ...fallo, row: null, fase: "insert" };
+    }
+    if (fallo.incierto || fallo.rechazado) {
+      return { ...fallo, fase: "insert" };
     }
     throw err;
   }
@@ -107,4 +180,6 @@ module.exports = {
   reclamarMensajeEntrantePorWamid,
   buscarPorWamid,
   isUniqueViolation,
+  clasificarFalloClaim,
+  esResultadoIncierto,
 };

@@ -146,6 +146,65 @@ async function testFalloProcesamientoTrasClaimDocumentado() {
   ok("fallo post-claim → retry no reprocesa (sin recuperación automática)");
 }
 
+async function testTimeoutLookupNoInserta() {
+  const deps = mockStore();
+  let posts = 0;
+  deps.axios.get = async () => {
+    const error = new Error("timeout of 500ms exceeded");
+    error.code = "ECONNABORTED";
+    throw error;
+  };
+  deps.axios.post = async () => {
+    posts += 1;
+    return { data: [] };
+  };
+  const resultado = await reclamarMensajeEntrantePorWamid(
+    { whatsapp_message_id: "wamid.TO", direccion: "entrante" },
+    deps
+  );
+  assert.strictEqual(resultado.incierto, true);
+  assert.strictEqual(resultado.guardado, null);
+  assert.strictEqual(resultado.claimed, false);
+  assert.strictEqual(resultado.fase, "lookup");
+  assert.strictEqual(posts, 0);
+  ok("timeout de lookup es incierto y no inserta");
+}
+
+async function testConexionPerdidaEnInsert() {
+  const deps = mockStore();
+  deps.axios.post = async () => {
+    const error = new Error("socket hang up");
+    error.code = "ECONNRESET";
+    throw error;
+  };
+  const resultado = await reclamarMensajeEntrantePorWamid(
+    { whatsapp_message_id: "wamid.RESET", direccion: "entrante" },
+    deps
+  );
+  assert.strictEqual(resultado.incierto, true);
+  assert.strictEqual(resultado.guardado, null);
+  assert.strictEqual(resultado.fase, "insert");
+  assert.strictEqual(resultado.claimed, false);
+  ok("pérdida de conexión en el insert queda incierta");
+}
+
+async function testRechazoAntesDeGuardar() {
+  const deps = mockStore();
+  deps.axios.post = async () => {
+    const error = new Error("connect ECONNREFUSED");
+    error.code = "ECONNREFUSED";
+    throw error;
+  };
+  const resultado = await reclamarMensajeEntrantePorWamid(
+    { whatsapp_message_id: "wamid.REF", direccion: "entrante" },
+    deps
+  );
+  assert.strictEqual(resultado.incierto, false);
+  assert.strictEqual(resultado.guardado, false);
+  assert.strictEqual(resultado.reason, "claim_rechazado");
+  ok("conexión rechazada antes del insert no se trata como guardado incierto");
+}
+
 function testIsUniqueViolation() {
   const err = new Error("x");
   err.response = { status: 409, data: { code: "23505" } };
@@ -159,6 +218,9 @@ function testIsUniqueViolation() {
   await testUniqueConflictEnInsert();
   await testSinWamid();
   await testFalloProcesamientoTrasClaimDocumentado();
+  await testTimeoutLookupNoInserta();
+  await testConexionPerdidaEnInsert();
+  await testRechazoAntesDeGuardar();
   testIsUniqueViolation();
   console.log(`\n${passed} tests OK`);
 })().catch((err) => {

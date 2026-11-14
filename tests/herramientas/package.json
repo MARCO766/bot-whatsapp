@@ -1,0 +1,8 @@
+{
+  "name": "limpieza-media-pruebas",
+  "private": true,
+  "description": "Dependencia solo para las pruebas locales de limpieza multimedia. No forma parte del servidor.",
+  "dependencies": {
+    "pg": "^8.16.3"
+  }
+}

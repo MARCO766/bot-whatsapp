@@ -5,9 +5,9 @@
  * No borra objetos ni filas. No define LIMPIEZA_MEDIA_ACTIVA en la plataforma:
  * la bandera solo entra como argumento de esta ejecución.
  *
- * Las columnas jsonb de flujos, sesiones y logs no admiten un ilike seguro por
- * PostgREST. Esas fuentes se releen completas con el mismo lector del inventario.
- * Si esa relectura falla o queda incompleta, el proceso sale con código 1.
+ * Las columnas jsonb se releen por archivo en la validación inmediata.
+ * Un ilike con página llena excluye el objeto. El candado se vuelve a
+ * comprobar después de esa lectura. Si se pierde, el proceso sale con código 1.
  */
 require("dotenv").config();
 const reglas = require("../services/limpiezaMedia/reglas");
@@ -115,6 +115,11 @@ async function main() {
       return 1;
     }
 
+    if (servicio.ELIMINACION_REAL_BLOQUEADA !== true || servicio.eliminacionRealPermitida()) {
+      console.error("[LIMPIEZA_MEDIA_CRON] detenido", { motivo: "borrado_real_bloqueado" });
+      return 1;
+    }
+
     const candidatos = (result.informe?.objetos || []).filter(
       (objeto) => objeto.categoria === "candidato" && objeto.motivo === "candidato"
     );
@@ -124,15 +129,20 @@ async function main() {
       exigirCandado(estado);
       let veredicto;
       try {
-        veredicto = await servicio.revalidarCandidato(candidato.clave, {
+        veredicto = await servicio.validarInmediatoEliminacion(candidato.clave, {
           protegidas: fresca.protegidas,
           nombresProtegidos: fresca.nombresProtegidos,
+          workerId: candado.workerId,
         });
       } catch (error) {
-        veredicto = { motivo: "consulta_fallida", apto: false };
+        veredicto = { motivo: "consulta_fallida", apto: false, abortar: false };
         console.error("[LIMPIEZA_MEDIA_CRON] revalidacion fallida", error.message);
       }
-      if (veredicto.apto && !servicio.ELIMINACION_REAL_BLOQUEADA) {
+      if (veredicto.abortar) {
+        marcarPerdida(estado, { ok: false, motivo: veredicto.motivo || "candado_perdido" });
+        exigirCandado(estado);
+      }
+      if (veredicto.apto === true && servicio.eliminacionRealPermitida()) {
         servicio.solicitarBorradoReal();
       }
       porMotivo[veredicto.motivo] = (porMotivo[veredicto.motivo] || 0) + 1;

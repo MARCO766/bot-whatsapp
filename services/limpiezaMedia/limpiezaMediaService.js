@@ -5,8 +5,13 @@
 const axios = require("axios");
 const { isSchemaMissingError } = require("../supabaseSafe");
 const reglas = require("./reglas");
+const { verificarLockLimpiezaMedia } = require("./limpiezaMediaLock");
 
 const ELIMINACION_REAL_BLOQUEADA = true;
+const LIMITE_MENCIONES = 100;
+const LIMITE_TEXTO = 5;
+const LIMITE_JSON = 500;
+const MAX_PAGINAS_JSON = 200;
 
 const FUENTES = [
   "flujos_builder",
@@ -45,6 +50,17 @@ const SELECT_FUENTE = {
 };
 
 const CARPETAS_INICIALES = ["whatsapp-meta", "whatsapp"];
+
+const FUENTES_JSON = [
+  { tabla: "flujos_builder", columnas: ["data", "datos"] },
+  { tabla: "flujos_builder_versiones", columnas: ["data_snapshot"] },
+  { tabla: "remarketing_global_24h", columnas: ["config_snapshot"] },
+  { tabla: "seguimientos_programados", columnas: ["mensaje_payload"] },
+  { tabla: "ia_sessions", columnas: ["flow_context", "chat_history", "last_replies"] },
+  { tabla: "seguimientos_v2_logs", columnas: ["detalle"] },
+  { tabla: "crm_historial_cliente", columnas: ["metadata"] },
+  { tabla: "admin_logs", columnas: ["detalle"] },
+];
 
 const CONSULTAS_TEXTO = [
   {
@@ -139,6 +155,10 @@ function solicitarBorradoReal() {
   throw error;
 }
 
+function eliminacionRealPermitida() {
+  return false;
+}
+
 function headersSupabase() {
   const key = process.env.SUPABASE_SECRET_KEY;
   return {
@@ -216,6 +236,7 @@ const ioReal = {
   leerMenciones: (...args) => leerMencionesReal(...args),
   leerUltimoEntrante: (...args) => leerUltimoEntranteReal(...args),
   tieneReferenciaProtegida: (...args) => tieneReferenciaProtegidaReal(...args),
+  candadoVigente: ({ workerId }) => verificarLockLimpiezaMedia(workerId),
 };
 
 function absorberAnalisis(estado, analisis) {
@@ -674,9 +695,11 @@ async function getRest(ruta) {
   return Array.isArray(res.data) ? res.data : [];
 }
 
-function filtroIlike(columnas, texto) {
-  const partes = columnas.map((columna) => `${columna}.ilike.*${texto}*`);
-  return `or=(${partes.join(",")})`;
+function exigirPaginaCompleta(filas, limite) {
+  if (reglas.paginaIlikeIncompleta(filas, limite)) {
+    throw new Error("consulta truncada");
+  }
+  return filas;
 }
 
 async function leerMencionesReal({ clave }) {
@@ -685,9 +708,9 @@ async function leerMencionesReal({ clave }) {
     throw new Error("ruta no filtrable");
   }
   const filas = await getRest(
-    `/rest/v1/mensajes?select=usuario_id,conexion_whatsapp_id,cliente_numero,imagen_url,contenido&${filtroIlike(["imagen_url", "contenido"], ruta)}&limit=100`
+    `/rest/v1/mensajes?select=usuario_id,conexion_whatsapp_id,cliente_numero,imagen_url,contenido&${reglas.filtroIlike(["imagen_url", "contenido"], ruta)}&limit=${LIMITE_MENCIONES}`
   );
-  if (filas.length >= 100) throw new Error("menciones truncadas");
+  exigirPaginaCompleta(filas, LIMITE_MENCIONES);
   return filas.filter(
     (fila) =>
       reglas.citaRutaCompleta(fila?.imagen_url, clave) ||
@@ -710,24 +733,47 @@ async function leerUltimoEntranteReal(fila) {
   return reglas.parseCreadoEnUtc(filas[0].creado_en);
 }
 
-async function tieneReferenciaProtegidaReal({ clave }) {
+async function buscarReferenciaJson(clave, leer) {
+  for (const fuente of FUENTES_JSON) {
+    let offset = 0;
+    for (let vuelta = 0; vuelta < MAX_PAGINAS_JSON; vuelta += 1) {
+      const filas = await leer(
+        `/rest/v1/${fuente.tabla}?select=${fuente.columnas.join(",")}&order=id.asc&limit=${LIMITE_JSON}&offset=${offset}`
+      );
+      if (!Array.isArray(filas)) throw new Error("fuente json ilegible");
+      if (filas.some((fila) => reglas.citaRutaCompleta(reglas.textoDeFila(fila), clave))) {
+        return true;
+      }
+      if (filas.length < LIMITE_JSON) break;
+      offset += filas.length;
+      if (vuelta === MAX_PAGINAS_JSON - 1) throw new Error("fuente json truncada");
+    }
+  }
+  return false;
+}
+
+async function tieneReferenciaProtegidaReal({ clave }, deps = {}) {
+  const leer = deps.leer || getRest;
   const ruta = reglas.sinBucket(clave);
   const archivo = reglas.nombreArchivo(clave);
   if (!reglas.segmentoFiltroSeguro(ruta) || !reglas.segmentoFiltroSeguro(archivo)) {
     throw new Error("referencia no filtrable");
   }
-  const porNombre = await getRest(
+  const porNombre = await leer(
     `/rest/v1/seguimientos_v2?select=media_filename&media_filename=eq."${archivo}"&limit=1`
   );
+  if (!Array.isArray(porNombre)) throw new Error("referencia ilegible");
   if (porNombre.some((fila) => String(fila?.media_filename || "") === archivo)) return true;
   for (const consulta of CONSULTAS_TEXTO) {
     const select = consulta.columnas.join(",");
-    const filas = await getRest(
-      `/rest/v1/${consulta.tabla}?select=${select}&${filtroIlike(consulta.columnas, ruta)}&limit=5`
+    const filas = await leer(
+      `/rest/v1/${consulta.tabla}?select=${select}&${reglas.filtroIlike(consulta.columnas, ruta)}&limit=${LIMITE_TEXTO}`
     );
+    if (!Array.isArray(filas)) throw new Error("referencia ilegible");
+    exigirPaginaCompleta(filas, LIMITE_TEXTO);
     if (filas.some((fila) => reglas.citaRutaCompleta(reglas.textoDeFila(fila), clave))) return true;
   }
-  return false;
+  return buscarReferenciaJson(clave, leer);
 }
 
 async function cargarProteccion(opciones = {}) {
@@ -749,6 +795,15 @@ async function cargarProteccion(opciones = {}) {
     proteccionIncompleta: estado.proteccionIncompleta,
     fuenteIlegible: estado.fuenteIlegible,
   };
+}
+
+async function mencionesCitadas(io, clave) {
+  const crudas = await io.leerMenciones({ clave });
+  return (Array.isArray(crudas) ? crudas : []).filter(
+    (fila) =>
+      reglas.citaRutaCompleta(fila?.imagen_url, clave) ||
+      reglas.citaRutaCompleta(fila?.contenido, clave)
+  );
 }
 
 async function revalidarCandidato(clave, opciones = {}) {
@@ -775,32 +830,71 @@ async function revalidarCandidato(clave, opciones = {}) {
     return reglas.veredictoRevalidacion(base);
   }
 
+  let unico = null;
   try {
     base.existe = await io.existeObjeto({ clave });
-    const crudas = await io.leerMenciones({ clave });
-    base.menciones = (Array.isArray(crudas) ? crudas : []).filter(
-      (fila) =>
-        reglas.citaRutaCompleta(fila?.imagen_url, clave) ||
-        reglas.citaRutaCompleta(fila?.contenido, clave)
-    );
-    const unico = hiloUnico(base.menciones);
-    if (unico) base.ultimoEntranteMs = await io.leerUltimoEntrante(unico);
+    base.menciones = await mencionesCitadas(io, clave);
     if (base.existe === true && base.menciones.length > 0) {
       base.citada = await io.tieneReferenciaProtegida({ clave });
+      base.menciones = await mencionesCitadas(io, clave);
     }
+    unico = hiloUnico(base.menciones);
+    if (unico) base.ultimoEntranteMs = await io.leerUltimoEntrante(unico);
   } catch (error) {
     base.error = error;
   }
-  return reglas.veredictoRevalidacion(base);
+  const veredicto = reglas.veredictoRevalidacion(base);
+  if (unico) {
+    veredicto.hilo = reglas.claveHilo(
+      unico.usuario_id,
+      unico.conexion_whatsapp_id,
+      unico.cliente_numero
+    );
+  }
+  return veredicto;
+}
+
+async function validarInmediatoEliminacion(clave, opciones = {}) {
+  const io = opciones.io || ioReal;
+  const veredicto = await revalidarCandidato(clave, opciones);
+  let candado = { ok: false, motivo: "candado_perdido" };
+  try {
+    if (!opciones.workerId) {
+      candado = { ok: false, motivo: "candado_perdido" };
+    } else if (io.candadoVigente) {
+      candado = await io.candadoVigente({ workerId: opciones.workerId });
+    } else {
+      candado = await verificarLockLimpiezaMedia(opciones.workerId);
+    }
+  } catch (error) {
+    candado = { ok: false, motivo: "candado_perdido" };
+  }
+  if (!candado || candado.ok !== true) {
+    return {
+      motivo: candado?.motivo || "candado_perdido",
+      apto: false,
+      abortar: true,
+    };
+  }
+  return {
+    motivo: veredicto.motivo,
+    apto: veredicto.apto === true,
+    abortar: false,
+    hilo: veredicto.hilo || null,
+  };
 }
 
 module.exports = {
   ELIMINACION_REAL_BLOQUEADA,
   FUENTES,
+  FUENTES_JSON,
   cargarProteccion,
   crearEstado,
   ejecutarLimpiezaMedia,
+  eliminacionRealPermitida,
   reiniciarProgreso,
   revalidarCandidato,
   solicitarBorradoReal,
+  tieneReferenciaProtegidaReal,
+  validarInmediatoEliminacion,
 };

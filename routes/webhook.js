@@ -52,6 +52,16 @@ const { readTimingFromRow } = require("../services/conexionRespuestaTimingConfig
 const {
   reclamarMensajeEntrantePorWamid,
 } = require("../services/webhookInboundClaim");
+const {
+  TOPE_CONSULTA_MS,
+  coordinarPersistenciaEntrante,
+  esMarcaDeLimpieza,
+  permiteConfirmacionEntrante,
+  proteccionEntranteActiva,
+  soltarMarcaEntrante,
+  statusHttpEntrante,
+  statusSiMensajeGuardado,
+} = require("../services/limpiezaMedia/limpiezaMediaEntrante");
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY;
@@ -261,6 +271,37 @@ router.get('/webhook', (req, res) => {
 
 // 📩 RECIBIR MENSAJES
 router.post('/webhook', async (req, res) => {
+  let vallaEntrante = null;
+  let entranteConfirmado = false;
+  let messageIdEntrante = null;
+  let intentoPersistencia = false;
+  let usuarioIdWebhook = null;
+  let conexionWhatsappId = null;
+  let from = null;
+  async function soltarVallaEntrante() {
+    const actual = vallaEntrante;
+    vallaEntrante = null;
+    return soltarMarcaEntrante(actual);
+  }
+  function registrarMarcaRetenida(suelta) {
+    console.log("[LIMPIEZA_MEDIA] marca entrante retenida tras guardar", {
+      motivo: suelta?.motivo || "liberacion_fallida",
+      owner: suelta?.owner || null,
+      usuarioId: usuarioIdWebhook,
+      conexionId: conexionWhatsappId || null,
+      numero: from,
+      wamid: messageIdEntrante,
+      estadoConservado: "entrante",
+      liberaMarcaAjena: false,
+      eliminaMarcaBorrando: false,
+    });
+  }
+  function responderSoltar(suelta, statusSiLibre) {
+    if (entranteConfirmado && suelta?.retenida === true) registrarMarcaRetenida(suelta);
+    const status = statusSiMensajeGuardado(entranteConfirmado, suelta, statusSiLibre);
+    if (status === 503 && messageIdEntrante) mensajesProcesados.delete(messageIdEntrante);
+    return res.sendStatus(status);
+  }
   try {
     console.log("[WEBHOOK ENTRANTE]", {
       tieneBody: !!req.body,
@@ -272,7 +313,6 @@ router.post('/webhook', async (req, res) => {
     const phoneNumberIdWebhook = value?.metadata?.phone_number_id;
     console.log("PHONE_ID WEBHOOK:", phoneNumberIdWebhook);
 
-let usuarioIdWebhook = null;
 let conexionWebhook = null;
 
 if (phoneNumberIdWebhook) {
@@ -365,13 +405,14 @@ if (!value || !value.messages || !value.messages[0]) {
 
     const message = value.messages[0];
 const nombre = value.contacts?.[0]?.profile?.name || "amiga";
+messageIdEntrante = message.id || null;
 if (mensajesProcesados.has(message.id)) {
   return res.sendStatus(200);
 }
 mensajesProcesados.add(message.id);
 
     
-    const from = message.from;
+    from = message.from;
 
     const creadoEn = message.timestamp
   ? new Date(Number(message.timestamp) * 1000).toISOString()
@@ -649,7 +690,7 @@ if (message.type !== "unsupported") {
   contenidoInbox = text;
 }
 
-const conexionWhatsappId = conexionWebhook?.id || null;
+conexionWhatsappId = conexionWebhook?.id || null;
 
 const { esPrimerMensaje, motivo: motivoPrimerMensaje } = await calcularEsPrimerMensaje(
   usuarioIdWebhook,
@@ -665,27 +706,70 @@ console.log("[FIRST_MESSAGE_CHECK]", {
 });
 
 // A2: claim durable por wamid (tabla mensajes existente).
-// Si ya existe → reintento Meta / otra instancia: ACK sin reprocesar bot.
-const claim = await reclamarMensajeEntrantePorWamid({
-  cliente_numero: from,
-  usuario_id: usuarioIdWebhook,
-  direccion: "entrante",
-  tipo: message.type,
-  contenido: contenidoInbox || "",
-  imagen_url: mediaUrlFinal || null,
-  whatsapp_message_id: message.id || null,
-  ...(conexionWhatsappId ? { conexion_whatsapp_id: conexionWhatsappId } : {}),
+// La marca de la conversación se consulta antes del INSERT. Si está en
+// borrando, no se inserta y Meta recibe 503. Sin la tabla instalada, el
+// mensaje se guarda degradado y la limpieza no puede borrar.
+intentoPersistencia = true;
+const coordinado = await coordinarPersistenciaEntrante({
+  usuarioId: usuarioIdWebhook,
+  conexionId: conexionWhatsappId,
+  numero: from,
+  wamid: message.id || null,
+  permitirRed: true,
+  activa: proteccionEntranteActiva(),
+  cachearAusencia: true,
+  timeoutMs: TOPE_CONSULTA_MS,
+  persistir: () => reclamarMensajeEntrantePorWamid({
+    cliente_numero: from,
+    usuario_id: usuarioIdWebhook,
+    direccion: "entrante",
+    tipo: message.type,
+    contenido: contenidoInbox || "",
+    imagen_url: mediaUrlFinal || null,
+    whatsapp_message_id: message.id || null,
+    ...(conexionWhatsappId ? { conexion_whatsapp_id: conexionWhatsappId } : {}),
+  }),
 });
-if (claim.duplicate) {
+vallaEntrante = coordinado.valla && !esMarcaDeLimpieza(coordinado.valla) ? coordinado.valla : null;
+if (coordinado.incierto) {
+  console.log("[WEBHOOK] claim incierto", {
+    motivo: coordinado.motivo || "claim_incierto",
+    fase: coordinado.fase || null,
+    messageId: message.id ? String(message.id).slice(0, 16) + "…" : null,
+    guardado: null,
+    recuperacion: false,
+  });
+  await soltarVallaEntrante();
+  return res.sendStatus(statusHttpEntrante(coordinado));
+}
+if (coordinado.reintentar) {
+  const aviso = coordinado.proteccion
+    ? "[WEBHOOK] entrante sin persistir"
+    : "[WEBHOOK] claim entrante falló:";
+  console.log(aviso, {
+    motivo: coordinado.motivo,
+    messageId: message.id ? String(message.id).slice(0, 16) + "…" : null,
+  });
+  await soltarVallaEntrante();
+  const statusReintento = statusHttpEntrante(coordinado);
+  if (statusReintento === 503 && messageIdEntrante) mensajesProcesados.delete(messageIdEntrante);
+  if (statusReintento === 503) return res.sendStatus(503);
+  return res.sendStatus(statusReintento);
+}
+if (coordinado.duplicado) {
   console.log("[WEBHOOK] wamid duplicado — 200 sin reproceso", {
     messageId: message.id ? String(message.id).slice(0, 16) + "…" : null,
   });
-  return res.sendStatus(200);
+  const sueltaDuplicado = await soltarVallaEntrante();
+  if (sueltaDuplicado?.retenida === true) registrarMarcaRetenida(sueltaDuplicado);
+  return res.sendStatus(statusHttpEntrante(coordinado, sueltaDuplicado));
 }
-if (claim.error && !claim.claimed) {
-  console.log("[WEBHOOK] claim entrante falló:", claim.reason || "unknown");
-  return res.sendStatus(200);
+if (!coordinado.guardado) {
+  console.log("[WEBHOOK] claim entrante falló:", coordinado.motivo || "unknown");
+  const sueltaClaim = await soltarVallaEntrante();
+  return res.sendStatus(statusHttpEntrante(coordinado, sueltaClaim));
 }
+entranteConfirmado = true;
 
 rt.nuevoMensaje(req, usuarioIdWebhook, {
     cliente_numero: from,
@@ -774,8 +858,19 @@ if (conversacionActual) {
 
 if (message.type === "interactive" && message.interactive?.button_reply) {
   const reply = message.interactive.button_reply;
+  const marcaBoton = coordinado.marcaDurable
+    ? { instalada: true, estado: coordinado.estado, sostenida: coordinado.estado === "entrante" }
+    : coordinado.marcaInstalada
+      ? { instalada: true, registro: coordinado.valla?.registro }
+      : { instalada: false, motivo: coordinado.motivoDurable || "marca_no_disponible" };
+  const permisoBoton = permiteConfirmacionEntrante({
+    marca: marcaBoton,
+    usuarioId: usuarioIdWebhook,
+    conexionId: conexionWhatsappId,
+    numero: from,
+  });
 
-  if (String(reply.id || "").startsWith("seg_")) {
+  if (permisoBoton.ok && String(reply.id || "").startsWith("seg_")) {
     await registrarRespuestaBotonSeguimiento({
       clienteNumero: from,
       usuarioId: usuarioIdWebhook,
@@ -783,7 +878,7 @@ if (message.type === "interactive" && message.interactive?.button_reply) {
       botonId: reply.id,
       botonTexto: reply.title || reply.id,
       whatsappMessageId: message.id,
-    });
+    }, { marca: marcaBoton });
   }
 }
 
@@ -797,7 +892,8 @@ if (esComandoResetFlujo(textoParaActivador)) {
     `[RESETBOT_IN] numero=${from} usuarioId=${usuarioIdWebhook} conexionWhatsappId=${conexionWhatsappId}`
   );
   await resetearFlujoLead(from, usuarioIdWebhook, conexionWhatsappId);
-  return res.sendStatus(200);
+  const sueltaReset = await soltarVallaEntrante();
+  return responderSoltar(sueltaReset, 200);
 }
 
 const guardPausa = await manejarGuardPausaBot({
@@ -808,7 +904,8 @@ const guardPausa = await manejarGuardPausaBot({
   origen: "webhook",
 });
 if (!guardPausa.continuar) {
-  return res.sendStatus(200);
+  const sueltaPausa = await soltarVallaEntrante();
+  return responderSoltar(sueltaPausa, 200);
 }
 if (guardPausa.reactivado) {
   rt.conversacionActualizada(req, usuarioIdWebhook, {
@@ -846,11 +943,14 @@ if (message.type === "document") {
 }
 
 // A1: ACK temprano a Meta ANTES de demora/flujo (evita retries por webhook largo).
-// Recuperación: si el proceso muere tras claim+ACK y antes de responder, el
-// reintento verá wamid duplicado y NO reejecutará el bot (posible reply perdido).
-if (!res.headersSent) {
-  res.sendStatus(200);
-}
+// La marca se suelta aquí. Si soltar falla y el mensaje ya está guardado, el
+// bot sigue. No se reintenta el flujo ni se libera una marca ajena o borrando.
+const sueltaAck = await soltarVallaEntrante();
+if (entranteConfirmado && sueltaAck?.retenida === true) registrarMarcaRetenida(sueltaAck);
+const statusAck = statusSiMensajeGuardado(entranteConfirmado, sueltaAck, 200);
+if (statusAck === 503 && messageIdEntrante) mensajesProcesados.delete(messageIdEntrante);
+if (!res.headersSent) res.sendStatus(statusAck);
+if (statusAck === 503) return;
 
 const respuestaTimingSnapshot = readTimingFromRow(conexionWebhook);
 const reqRef = req;
@@ -914,7 +1014,15 @@ return;
 
   } catch (error) {
     console.log("ERROR:", error.response?.data || error.message);
-    if (!res.headersSent) res.sendStatus(200);
+    const sueltaError = await soltarVallaEntrante();
+    if (entranteConfirmado && sueltaError?.retenida === true) registrarMarcaRetenida(sueltaError);
+    const statusError = entranteConfirmado
+      ? statusSiMensajeGuardado(true, sueltaError, 200)
+      : proteccionEntranteActiva() && intentoPersistencia
+        ? 503
+        : 200;
+    if (statusError === 503 && messageIdEntrante) mensajesProcesados.delete(messageIdEntrante);
+    if (!res.headersSent) return res.sendStatus(statusError);
   }
 });
 

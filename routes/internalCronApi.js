@@ -5,7 +5,7 @@
 const express = require("express");
 const router = express.Router();
 const { procesarRemarketing24hWorker } = require("../services/remarketing24h/remarketing24hService");
-const { ejecutarLimpiezaMedia } = require("../services/limpiezaMedia/limpiezaMediaService");
+const limpiezaServicio = require("../services/limpiezaMedia/limpiezaMediaService");
 const limpiezaLock = require("../services/limpiezaMedia/limpiezaMediaLock");
 
 function extraerBearerToken(req) {
@@ -84,6 +84,18 @@ router.post("/rm24h", verificarCronSecret, async (req, res) => {
  * Usa el mismo candado durable. Si no puede adquirirlo, no inicia otra pasada.
  */
 router.post("/limpieza-media", verificarCronSecret, async (req, res) => {
+  if (
+    limpiezaServicio.ELIMINACION_REAL_BLOQUEADA !== true ||
+    limpiezaServicio.eliminacionRealPermitida()
+  ) {
+    return res.status(403).json({
+      ok: false,
+      modo: "simulacion",
+      eliminacionReal: "bloqueada",
+      error: "El endpoint manual no elimina archivos",
+    });
+  }
+
   if (global.__limpiezaMediaCronRunning) {
     return res.status(409).json({
       ok: false,
@@ -123,7 +135,7 @@ router.post("/limpieza-media", verificarCronSecret, async (req, res) => {
         motivo: vigilancia.perdido.motivo,
       });
     }
-    const result = await ejecutarLimpiezaMedia({
+    const result = await limpiezaServicio.ejecutarLimpiezaMedia({
       reiniciar: req.body?.reiniciar === true,
     });
     if (vigilancia.perdido) {
