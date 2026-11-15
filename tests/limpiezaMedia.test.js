@@ -121,7 +121,114 @@ function testRutas() {
   assert.deepStrictEqual(reglas.extraerRutasProtegidasDesdeTexto(escapada), [
     "archivos/whatsapp/u/flujo.webp",
   ]);
+
+  const suelta = '{"nota":"whatsapp/u/nota.ogg"}';
+  const meta = "whatsapp-meta/u/a.jpg";
+  assert.ok(reglas.extraerRutasSueltas(suelta).includes("archivos/whatsapp/u/nota.ogg"));
+  assert.strictEqual(reglas.citaRutaCompleta(suelta, "archivos/whatsapp/u/nota.ogg"), true);
+  assert.ok(reglas.extraerRutasSueltas(meta).includes("archivos/whatsapp-meta/u/a.jpg"));
+  assert.strictEqual(reglas.citaRutaCompleta(meta, "archivos/whatsapp-meta/u/a.jpg"), true);
+  assert.deepStrictEqual(reglas.extraerRutasSueltas("xwhatsapp/u/nota.ogg"), []);
+  const traversal = reglas.extraerRutasSueltas("whatsapp/u/../nota.ogg");
+  assert.ok(!traversal.some((clave) => clave.includes("..")));
+  assert.ok(!traversal.includes("archivos/whatsapp/u/nota.ogg"));
+  const repetida = reglas.extraerRutasSueltas("whatsapp/u/nota.ogg y whatsapp/u/nota.ogg");
+  assert.strictEqual(repetida.filter((clave) => clave === "archivos/whatsapp/u/nota.ogg").length, 1);
+  assert.strictEqual(new Set(repetida).size, repetida.length);
+  assert.ok(reglas.extraerRutasSueltas(`${URL}whatsapp/u/nota.ogg`).includes(claveNota));
+  assert.strictEqual(reglas.citaRutaCompleta(`${URL}whatsapp/u/nota.ogg`, claveNota), true);
   ok("rutas públicas, firmadas, autenticadas y buckets ajenos");
+}
+
+function rutasValidasQueCitaReconoce(texto) {
+  const src = String(texto || "");
+  const claves = [];
+  const vistos = new Set();
+  for (const prefijo of ["whatsapp-meta/", "whatsapp/"]) {
+    let desde = 0;
+    while (desde < src.length) {
+      const pos = src.indexOf(prefijo, desde);
+      if (pos < 0) break;
+      if (pos === 0 || /[^a-zA-Z0-9]/.test(src[pos - 1])) {
+        for (let fin = pos + prefijo.length; fin <= src.length; fin += 1) {
+          const despues = src[fin] || "";
+          if (!despues || /[^a-zA-Z0-9]/.test(despues)) {
+            const token = src.slice(pos, fin);
+            const partes = token.split("/");
+            const valida = !token.startsWith("/")
+              && !token.includes("\\")
+              && !token.includes("*")
+              && !partes.some((parte) => parte === "" || parte === "." || parte === "..")
+              && (token.startsWith("whatsapp/") || token.startsWith("whatsapp-meta/"));
+            const clave = `archivos/${token}`;
+            if (valida && reglas.citaRutaCompleta(src, clave) && !vistos.has(clave)) {
+              vistos.add(clave);
+              claves.push(clave);
+            }
+          }
+          if (fin >= src.length || !/[a-zA-Z0-9._/-]/.test(src[fin])) break;
+        }
+      }
+      desde = pos + 1;
+    }
+  }
+  return claves;
+}
+
+function assertCubreCita(texto) {
+  const extraidas = reglas.extraerRutasSueltas(texto);
+  const conjunto = new Set(extraidas);
+  assert.strictEqual(conjunto.size, extraidas.length, texto);
+  for (const clave of extraidas) {
+    assert.strictEqual(reglas.citaRutaCompleta(texto, clave), true, clave);
+  }
+  for (const clave of rutasValidasQueCitaReconoce(texto)) {
+    assert.ok(conjunto.has(clave), `${clave} falta en ${texto}`);
+  }
+}
+
+function testRutasSueltasCoincidenConCita() {
+  const clave = "archivos/whatsapp/u/foto.jpg";
+  const casos = [
+    "whatsapp/u/foto.jpg",
+    "whatsapp/u/foto.jpg/",
+    "whatsapp/u/foto.jpg/otra",
+    "whatsapp/u/foto.jpg_extra",
+    "whatsapp/u/foto.jpg-extra",
+    "whatsapp/u/foto.jpg.",
+    '"whatsapp/u/foto.jpg"',
+    "whatsapp/u/foto.jpg ",
+    `${URL}whatsapp/u/foto.jpg`,
+    `${URL}whatsapp/u/foto.jpg?token=1`,
+  ];
+  for (const texto of casos) {
+    assert.ok(reglas.extraerRutasSueltas(texto).includes(clave), texto);
+    assert.strictEqual(reglas.citaRutaCompleta(texto, clave), true, texto);
+    assertCubreCita(texto);
+  }
+  assert.ok(reglas.extraerRutasSueltas("whatsapp/u/foto.jpg/otra").includes("archivos/whatsapp/u/foto.jpg/otra"));
+  assert.ok(reglas.extraerRutasSueltas("whatsapp/u/foto.jpg_extra").includes("archivos/whatsapp/u/foto.jpg_extra"));
+  assert.ok(reglas.extraerRutasSueltas("whatsapp/u/foto.jpg-extra").includes("archivos/whatsapp/u/foto.jpg-extra"));
+  assert.deepStrictEqual(reglas.extraerRutasSueltas("xwhatsapp/u/foto.jpg"), []);
+  assert.strictEqual(reglas.citaRutaCompleta("xwhatsapp/u/foto.jpg", clave), false);
+
+  const varias = JSON.stringify({
+    suelta: "whatsapp/u/foto.jpg",
+    anidada: "whatsapp/u/foto.jpg/otra",
+    meta: "whatsapp-meta/u/a.jpg",
+    url: `${URL}whatsapp/u/foto.jpg`,
+    falsa: "xwhatsapp/u/foto.jpg",
+  });
+  const extraidas = reglas.extraerRutasSueltas(varias);
+  assert.strictEqual(extraidas.filter((item) => item === clave).length, 1);
+  assert.ok(extraidas.includes("archivos/whatsapp/u/foto.jpg/otra"));
+  assert.ok(extraidas.includes("archivos/whatsapp-meta/u/a.jpg"));
+  assert.ok(!extraidas.some((item) => item.includes("xwhatsapp")));
+  assert.strictEqual(new Set(extraidas).size, extraidas.length);
+  assertCubreCita(varias);
+  assert.strictEqual(reglas.DIAS_INACTIVIDAD, 30);
+  assert.strictEqual(servicio.ELIMINACION_REAL_BLOQUEADA, true);
+  ok("cada ruta reconocida por cita queda protegida, también con barra o sufijo");
 }
 
 function testClasificacion() {
@@ -223,9 +330,21 @@ function fixture() {
 
 function crearIo(datos, resumenes, llamadas) {
   return {
-    async leerFuente({ fuente, offset, limit }) {
+    async leerFuente({ fuente, offset, limit, despuesDeId, porId }) {
       llamadas.push(`fuente:${fuente}`);
       const filas = datos[fuente] || [];
+      if (porId === true) {
+        const ordenadas = filas
+          .map((fila, indice) => {
+            if (fila && fila.id != null && /^[0-9a-zA-Z-]+$/.test(String(fila.id))) return fila;
+            return { ...fila, id: String(indice + 1).padStart(8, "0") };
+          })
+          .sort((a, b) => (String(a.id) < String(b.id) ? -1 : String(a.id) > String(b.id) ? 1 : 0));
+        const siguientes = despuesDeId
+          ? ordenadas.filter((fila) => String(fila.id) > String(despuesDeId))
+          : ordenadas;
+        return siguientes.slice(0, limit);
+      }
       return filas.slice(offset, offset + limit);
     },
     async leerMensajes({ fase, offset, limit }) {
@@ -623,6 +742,11 @@ async function testRevalidacion() {
   });
   assert.strictEqual(rota.motivo, "consulta_fallida");
   assert.strictEqual(rota.apto, false);
+  assert.strictEqual(rota.detalle.fase, "existencia_objeto");
+  assert.strictEqual(rota.detalle.consulta, "storage.existencia");
+  assert.strictEqual(rota.detalle.mensaje, "storage no respondió");
+  assert.strictEqual(rota.detalle.status, null);
+  assert.strictEqual(rota.detalle.codigo, null);
 
   let consultas = 0;
   const ioBloqueado = ioRevalidacion({
@@ -946,10 +1070,17 @@ function testBarrerasYCron() {
   assert.ok(cron.includes("ELIMINACION_REAL_BLOQUEADA"));
   assert.ok(cron.includes("validarInmediatoEliminacion"));
   assert.ok(cron.includes("eliminacionRealPermitida"));
-  assert.ok(cron.indexOf("validarInmediatoEliminacion") < cron.indexOf("solicitarBorradoReal()"));
-  assert.ok(cron.includes("solicitarBorradoReal()"));
+  assert.ok(cron.includes("limpiezaMediaEliminar"));
+  assert.ok(cron.includes("planificarEliminacion"));
+  assert.ok(cron.includes("ejecutarBorradoSobrePlan"));
+  const cuerpo = cron.slice(cron.indexOf("async function procesarCandidatoRevalidado"));
+  assert.ok(cuerpo.indexOf("if (eliminacionSigueBloqueada())") < cuerpo.indexOf("planificarEliminacion"));
+  assert.ok(cuerpo.indexOf("planificarEliminacion") < cuerpo.indexOf("ejecutarBorradoSobrePlan"));
+  assert.ok(cron.includes('modo: "dry-run"'));
   assert.ok(!cron.includes("axios.delete"));
   assert.ok(!cron.includes(".remove("));
+  assert.ok(!cron.includes("imagen_url"));
+  assert.ok(!cron.includes("eliminarSoloObjetoStorage"));
   assert.ok(ruta.includes("adquirirLockLimpiezaMedia"));
   assert.ok(ruta.includes("eliminacionRealPermitida"));
   assert.ok(ruta.includes('eliminacionReal: "bloqueada"'));
@@ -958,8 +1089,10 @@ function testBarrerasYCron() {
   assert.ok(!ruta.includes("axios.delete"));
   assert.ok(!ruta.includes("eliminarSoloObjetoStorage"));
   assert.ok(!ruta.includes("limpiezaMediaEliminar"));
-  assert.ok(!cron.includes("eliminarSoloObjetoStorage"));
-  assert.ok(!cron.includes("limpiezaMediaEliminar"));
+  assert.ok(!cron.includes("axios.delete"));
+  assert.ok(cron.includes("progreso.jsonCursor"));
+  assert.ok(cron.includes("omitirJson: true"));
+  assert.ok(cron.includes("referenciasJson"));
   ok("borrado real bloqueado en el cron y en la ruta manual");
 }
 
@@ -1028,31 +1161,360 @@ async function testPaginaIlikeYNombreConGuionBajo() {
   });
   assert.strictEqual(veredicto.motivo, "consulta_fallida");
   assert.strictEqual(veredicto.apto, false);
+  assert.strictEqual(veredicto.detalle.fase, "referencias_protegidas");
+  assert.strictEqual(veredicto.detalle.consulta, "referencias_protegidas");
+  assert.strictEqual(veredicto.detalle.mensaje, "consulta truncada");
+
+  const porTabla = await servicio.revalidarCandidato(clave, {
+    ahora: AHORA,
+    protegidas: new Set(),
+    io: ioRevalidacion({
+      async leerMenciones() {
+        return [fila("u", "c", "1", { imagen_url: `${URL}whatsapp/u/mi_foto.jpg` })];
+      },
+      async tieneReferenciaProtegida(pedido) {
+        return servicio.tieneReferenciaProtegidaReal(pedido, { leer: lector.leer });
+      },
+    }),
+  });
+  assert.strictEqual(porTabla.motivo, "consulta_fallida");
+  assert.strictEqual(porTabla.detalle.fase, "referencias_protegidas");
+  assert.strictEqual(porTabla.detalle.consulta, "remarketing_global_24h");
+  assert.strictEqual(porTabla.detalle.mensaje, "consulta truncada");
   ok("página ilike llena y nombre con _ excluyen el archivo");
 }
 
 async function testJsonDespuesDeCargarProteccion() {
   const clave = "archivos/whatsapp/u/foto.jpg";
   const url = `${URL}whatsapp/u/foto.jpg`;
-  const lector = lectorReferencias([
-    { incluye: "flujos_builder?", filas: [{ data: { url } }] },
-  ]);
-  const citada = await servicio.tieneReferenciaProtegidaReal({ clave }, { leer: lector.leer });
-  assert.strictEqual(citada, true);
-  assert.ok(lector.consultas.some((ruta) => ruta.includes("/flujos_builder?")));
+  const datos = fuentesVacias();
+  datos.flujos_builder = [{ id: "b1", data: { url } }];
+  const lecturas = [];
+  const estado = servicio.crearEstado();
+  const result = await servicio.ejecutarLimpiezaMedia({
+    env: { LIMPIEZA_MEDIA_ACTIVA: "true" },
+    ahora: AHORA,
+    estado,
+    io: crearIo(datos, [], lecturas),
+    maxMs: 10000,
+    maxPaginas: 80,
+    pageSize: 2,
+  });
+  assert.strictEqual(result.completo, true);
+  assert.ok(estado.referenciasJson.has(clave));
+  const lecturasBuilder = lecturas.filter((item) => item === "fuente:flujos_builder").length;
+  const lecturasLogs = lecturas.filter((item) => item === "fuente:seguimientos_v2_logs").length;
+  assert.ok(lecturasBuilder >= 1);
+  assert.ok(lecturasLogs >= 1);
 
+  const tablasJson = new Set(servicio.FUENTES_JSON.map((item) => item.tabla));
+  let relecturasJson = 0;
+  const fresca = await servicio.cargarProteccion({
+    io: {
+      async leerFuente({ fuente }) {
+        if (tablasJson.has(fuente)) relecturasJson += 1;
+        return [];
+      },
+    },
+    pageSize: 2,
+    omitirJson: true,
+    maxPaginas: 40,
+  });
+  for (const item of estado.referenciasJson) fresca.protegidas.add(item);
+  assert.strictEqual(relecturasJson, 0);
+  assert.strictEqual(fresca.proteccionIncompleta, false);
+  assert.ok(fresca.protegidas.has(clave));
+
+  let consultasJson = 0;
   const veredicto = await servicio.revalidarCandidato(clave, {
     ahora: AHORA,
-    protegidas: new Set(),
+    protegidas: fresca.protegidas,
     io: ioRevalidacion({
-      async tieneReferenciaProtegida(consulta) {
-        return servicio.tieneReferenciaProtegidaReal(consulta, { leer: lector.leer });
+      async tieneReferenciaProtegida(pedido) {
+        return servicio.tieneReferenciaProtegidaReal(pedido, {
+          leer(ruta) {
+            const texto = String(ruta);
+            if (texto.includes("flujos_builder") || texto.includes("seguimientos_v2_logs")) {
+              consultasJson += 1;
+            }
+            return [];
+          },
+        });
       },
     }),
   });
   assert.strictEqual(veredicto.motivo, "referenciada");
   assert.strictEqual(veredicto.apto, false);
-  ok("una referencia JSON posterior a cargarProteccion excluye el archivo");
+  assert.strictEqual(consultasJson, 0);
+  assert.strictEqual(lecturas.filter((item) => item === "fuente:flujos_builder").length, lecturasBuilder);
+  assert.strictEqual(lecturas.filter((item) => item === "fuente:seguimientos_v2_logs").length, lecturasLogs);
+  ok("una referencia JSON se reutiliza sin volver a leer la fuente");
+}
+
+function ioJson(leerFuente) {
+  return {
+    leerFuente,
+    async leerMensajes() {
+      return [];
+    },
+    async listarStorage() {
+      return [];
+    },
+  };
+}
+
+async function testPaginacionJsonUnaVez() {
+  assert.strictEqual(reglas.DIAS_INACTIVIDAD, 30);
+  assert.strictEqual(servicio.ELIMINACION_REAL_BLOQUEADA, true);
+  assert.strictEqual(servicio.eliminacionRealPermitida(), false);
+
+  const datos = fuentesVacias();
+  datos.flujos_builder = [1, 2, 3, 4, 5].map((n) => ({
+    id: String(n).padStart(4, "0"),
+    data: n === 5 ? { nota: "whatsapp/u/ultima.jpg" } : {},
+  }));
+  const estadoCorto = servicio.crearEstado();
+  const ioCorto = crearIo(datos, [], []);
+  const opcionesCortas = {
+    env: { LIMPIEZA_MEDIA_ACTIVA: "true" },
+    ahora: AHORA,
+    estado: estadoCorto,
+    io: ioCorto,
+    maxMs: 10000,
+    maxPaginas: 1,
+    pageSize: 2,
+  };
+  const primero = await servicio.ejecutarLimpiezaMedia(opcionesCortas);
+  const marca = (resultado, progreso) => [
+    resultado.fase,
+    progreso.fuenteIndex,
+    progreso.offset,
+    progreso.jsonCursor || "",
+    progreso.carpetaIndex,
+    progreso.listadoOffset,
+    resultado.paginasEnEstaPasada,
+  ].join(":");
+  const marca1 = marca(primero, estadoCorto);
+  const cursor1 = estadoCorto.jsonCursor;
+  const segundo = await servicio.ejecutarLimpiezaMedia(opcionesCortas);
+  const marca2 = marca(segundo, estadoCorto);
+  assert.notStrictEqual(marca1, marca2);
+  assert.ok(cursor1);
+  assert.ok(String(estadoCorto.jsonCursor) > String(cursor1));
+  let actual = segundo;
+  for (let i = 0; i < 40 && !actual.completo; i += 1) {
+    actual = await servicio.ejecutarLimpiezaMedia(opcionesCortas);
+  }
+  assert.strictEqual(actual.completo, true);
+  assert.strictEqual(actual.proteccionIncompleta, false);
+  assert.ok(estadoCorto.referenciasJson.has("archivos/whatsapp/u/ultima.jpg"));
+  assert.strictEqual(
+    reglas.citaRutaCompleta('{"nota":"whatsapp/u/ultima.jpg"}', "archivos/whatsapp/u/ultima.jpg"),
+    true
+  );
+
+  const TOTAL = 399793;
+  const LIMITE = 500;
+  const desdeUrl = "archivos/whatsapp/u/desde-url.jpg";
+  const suelta = "archivos/whatsapp/u/solo-suelta.jpg";
+  const meta = "archivos/whatsapp-meta/u/meta.jpg";
+  const masAlla = "archivos/whatsapp/u/mas-alla.jpg";
+  const repeticionesSuelta = { n: 0 };
+  let lecturasLogs = 0;
+  const estado = servicio.crearEstado();
+  const result = await servicio.ejecutarLimpiezaMedia({
+    env: { LIMPIEZA_MEDIA_ACTIVA: "true" },
+    ahora: AHORA,
+    estado,
+    io: ioJson(async ({ fuente, limit, despuesDeId, porId }) => {
+      if (fuente !== "seguimientos_v2_logs") return [];
+      assert.strictEqual(porId, true);
+      assert.strictEqual(limit, LIMITE);
+      lecturasLogs += 1;
+      const inicio = despuesDeId ? Number(despuesDeId) + 1 : 1;
+      const filas = [];
+      for (let n = inicio; n <= TOTAL && filas.length < limit; n += 1) {
+        const id = String(n).padStart(6, "0");
+        let detalle = {};
+        if (n === 1 || n === 2) detalle = { url: `${URL}whatsapp/u/desde-url.jpg` };
+        if (n === 3 || n === 4) {
+          detalle = { nota: "whatsapp/u/solo-suelta.jpg" };
+          repeticionesSuelta.n += 1;
+        }
+        if (n === 5) detalle = { nota: "xwhatsapp/u/no.jpg" };
+        if (n === 6) detalle = { nota: "whatsapp-meta/u/meta.jpg" };
+        if (n === TOTAL) detalle = { nota: "whatsapp/u/mas-alla.jpg" };
+        filas.push({ id, detalle });
+      }
+      return filas;
+    }),
+    maxMs: 60000,
+    maxPaginas: 2000,
+    pageSize: LIMITE,
+  });
+  assert.strictEqual(result.completo, true);
+  assert.strictEqual(result.proteccionIncompleta, false);
+  assert.strictEqual(lecturasLogs, 800);
+  assert.ok(lecturasLogs > 200);
+  assert.strictEqual(repeticionesSuelta.n, 2);
+  assert.ok(estado.referenciasJson.has(desdeUrl));
+  assert.ok(estado.referenciasJson.has(suelta));
+  assert.ok(estado.referenciasJson.has(meta));
+  assert.ok(estado.referenciasJson.has(masAlla));
+  assert.ok(!estado.referenciasJson.has("archivos/whatsapp/u/no.jpg"));
+  assert.strictEqual([...estado.referenciasJson].filter((clave) => clave === suelta).length, 1);
+  assert.strictEqual([...estado.referenciasJson].filter((clave) => clave === desdeUrl).length, 1);
+  assert.strictEqual(reglas.citaRutaCompleta(`${URL}whatsapp/u/desde-url.jpg`, desdeUrl), true);
+  assert.strictEqual(reglas.citaRutaCompleta("whatsapp/u/solo-suelta.jpg", suelta), true);
+  assert.strictEqual(reglas.citaRutaCompleta("whatsapp/u/mas-alla.jpg", masAlla), true);
+  ok("más de 399792 registros, rutas sueltas, urls y duplicados");
+
+  const tablasJson = new Set(servicio.FUENTES_JSON.map((item) => item.tabla));
+  let relecturasJson = 0;
+  const fresca = await servicio.cargarProteccion({
+    io: {
+      async leerFuente({ fuente }) {
+        if (tablasJson.has(fuente)) relecturasJson += 1;
+        return [];
+      },
+    },
+    pageSize: LIMITE,
+    omitirJson: true,
+    maxPaginas: 40,
+  });
+  for (const clave of estado.referenciasJson) fresca.protegidas.add(clave);
+  assert.strictEqual(relecturasJson, 0);
+  assert.ok(fresca.protegidas.has(masAlla));
+
+  let consultasLogs = 0;
+  async function leerSinLogs(ruta) {
+    if (String(ruta).includes("seguimientos_v2_logs")) consultasLogs += 1;
+    return [];
+  }
+  function ioCandidato(clave) {
+    return ioRevalidacion({
+      async leerMenciones() {
+        return [fila("u", "c", "1", { imagen_url: `${URL}${reglas.sinBucket(clave)}` })];
+      },
+      async tieneReferenciaProtegida(pedido) {
+        return servicio.tieneReferenciaProtegidaReal(pedido, { leer: leerSinLogs });
+      },
+    });
+  }
+  const protegida = await servicio.revalidarCandidato(masAlla, {
+    ahora: AHORA,
+    protegidas: fresca.protegidas,
+    io: ioCandidato(masAlla),
+  });
+  const repetida = await servicio.revalidarCandidato(desdeUrl, {
+    ahora: AHORA,
+    protegidas: fresca.protegidas,
+    io: ioCandidato(desdeUrl),
+  });
+  const libre = await servicio.revalidarCandidato("archivos/whatsapp/u/libre.jpg", {
+    ahora: AHORA,
+    protegidas: fresca.protegidas,
+    io: ioCandidato("archivos/whatsapp/u/libre.jpg"),
+  });
+  assert.strictEqual(protegida.motivo, "referenciada");
+  assert.strictEqual(protegida.apto, false);
+  assert.strictEqual(repetida.motivo, "referenciada");
+  assert.strictEqual(libre.motivo, "candidato");
+  assert.strictEqual(libre.apto, true);
+  assert.strictEqual(consultasLogs, 0);
+  assert.strictEqual(lecturasLogs, 800);
+  ok("una ruta suelta exclusiva protege el archivo sin releer el json");
+
+  const llamadasError = [];
+  const error = await servicio.ejecutarLimpiezaMedia({
+    env: { LIMPIEZA_MEDIA_ACTIVA: "true" },
+    ahora: AHORA,
+    estado: servicio.crearEstado(),
+    io: ioJson(async ({ fuente, porId }) => {
+      llamadasError.push(fuente);
+      if (fuente !== "seguimientos_v2_logs") return [];
+      assert.strictEqual(porId, true);
+      const previas = llamadasError.filter((item) => item === fuente).length;
+      if (previas === 1) {
+        return [
+          { id: "a1", detalle: { nota: "whatsapp/u/antes.jpg" } },
+          { id: "a2", detalle: {} },
+        ];
+      }
+      throw new Error("fallo de red a mitad de pagina");
+    }),
+    maxMs: 10000,
+    maxPaginas: 80,
+    pageSize: 2,
+  });
+  assert.strictEqual(error.completo, false);
+  assert.strictEqual(error.proteccionIncompleta, true);
+  assert.strictEqual(error.fuenteIlegible, "seguimientos_v2_logs");
+  assert.strictEqual(error.fase, "listo");
+  assert.strictEqual(error.candidatos, 0);
+  assert.ok(!llamadasError.includes("crm_historial_cliente"));
+  ok("un error a mitad de la paginación detiene la limpieza");
+
+  const llamadasIncompleta = [];
+  const incompleta = await servicio.ejecutarLimpiezaMedia({
+    env: { LIMPIEZA_MEDIA_ACTIVA: "true" },
+    ahora: AHORA,
+    estado: servicio.crearEstado(),
+    io: ioJson(async ({ fuente }) => {
+      llamadasIncompleta.push(fuente);
+      if (fuente !== "seguimientos_v2_logs") return [];
+      const previas = llamadasIncompleta.filter((item) => item === fuente).length;
+      if (previas === 1) {
+        return [
+          { id: "b1", detalle: { nota: "whatsapp/u/previa.jpg" } },
+          { id: "b2", detalle: {} },
+        ];
+      }
+      return [null];
+    }),
+    maxMs: 10000,
+    maxPaginas: 80,
+    pageSize: 2,
+  });
+  assert.strictEqual(incompleta.completo, false);
+  assert.strictEqual(incompleta.proteccionIncompleta, true);
+  assert.strictEqual(incompleta.fuenteIlegible, "seguimientos_v2_logs");
+  assert.strictEqual(incompleta.candidatos, 0);
+  assert.ok(!llamadasIncompleta.includes("crm_historial_cliente"));
+  ok("una página final incompleta detiene la limpieza");
+
+  const axios = require("axios");
+  const getOriginal = axios.get;
+  const urlPrevia = process.env.SUPABASE_URL;
+  process.env.SUPABASE_URL = "https://example.test";
+  let lecturasReales = 0;
+  axios.get = async (ruta) => {
+    lecturasReales += 1;
+    if (String(ruta).includes("/rest/v1/flujos_builder?")) {
+      return { data: { inesperado: true } };
+    }
+    return { data: [] };
+  };
+  try {
+    const cuerpo = await servicio.ejecutarLimpiezaMedia({
+      env: { LIMPIEZA_MEDIA_ACTIVA: "true" },
+      ahora: AHORA,
+      estado: servicio.crearEstado(),
+      maxMs: 10000,
+      maxPaginas: 5,
+      pageSize: 2,
+    });
+    assert.strictEqual(cuerpo.completo, false);
+    assert.strictEqual(cuerpo.proteccionIncompleta, true);
+    assert.strictEqual(cuerpo.fuenteIlegible, "flujos_builder");
+    assert.strictEqual(cuerpo.candidatos, 0);
+    assert.strictEqual(lecturasReales, 1);
+  } finally {
+    axios.get = getOriginal;
+    if (urlPrevia == null) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = urlPrevia;
+  }
+  ok("un cuerpo que no es una página detiene la limpieza");
 }
 
 async function testEntranteEntreValidacionYBorrado() {
@@ -1684,9 +2146,461 @@ async function testErrorConcurrenciaReintentoYEndpoint() {
   ok("error de storage, carreras, reintento, idempotencia y endpoint siguen sin borrar");
 }
 
+async function testCronPlanificaSinBorrar() {
+  const cron = require("../scripts/limpieza-media-cron");
+  const eliminar = require("../services/limpiezaMedia/limpiezaMediaEliminar");
+  const clave = "archivos/whatsapp/u/foto.jpg";
+  let storage = 0;
+  let planes = 0;
+  const candidato = { clave, categoria: "candidato", motivo: "candidato", bytes: 40 };
+  const protegido = { clave, categoria: "protegido", motivo: "referenciada", bytes: 40 };
+  const compartido = { clave: "archivos/whatsapp/u/compartida.jpg", categoria: "candidato", motivo: "candidato", bytes: 10 };
+
+  const sinClasificar = await cron.procesarCandidatoRevalidado(protegido, {
+    validar: async () => {
+      throw new Error("no debe revalidar un protegido");
+    },
+  });
+  assert.strictEqual(sinClasificar.motivo, "no_candidato");
+  assert.strictEqual(sinClasificar.storage, false);
+  assert.strictEqual(sinClasificar.modo, "dry-run");
+
+  const ambiguo = await cron.procesarCandidatoRevalidado(compartido, {
+    validar: async () => ({ apto: false, motivo: "compartida", abortar: false }),
+  });
+  assert.strictEqual(ambiguo.motivo, "compartida");
+  assert.strictEqual(ambiguo.eliminado, false);
+  assert.strictEqual(ambiguo.storage, false);
+
+  const originalPlan = eliminar.planificarEliminacion;
+  const originalEjecutar = eliminar.ejecutarBorradoSobrePlan;
+  const originalBloqueada = servicio.ELIMINACION_REAL_BLOQUEADA;
+  const originalPermitida = servicio.eliminacionRealPermitida;
+  eliminar.planificarEliminacion = async () => {
+    storage += 1;
+    planes += 1;
+    return { eliminar: true, valla: { bloqueaInsertos: true, sesionAbierta: true } };
+  };
+  eliminar.ejecutarBorradoSobrePlan = async () => {
+    storage += 1;
+    return { eliminado: true, storage: true };
+  };
+  let bloqueado;
+  try {
+    bloqueado = await cron.procesarCandidatoRevalidado(candidato, {
+      workerId: "limpieza-worker",
+      permitirRed: true,
+      validar: async () => ({ apto: true, motivo: "candidato", abortar: false, hilo: "u|c|591" }),
+      abrirValla: async () => {
+        planes += 1;
+        return { bloqueaInsertos: true, sesionAbierta: true };
+      },
+    });
+    assert.strictEqual(bloqueado.motivo, "bloqueada");
+    assert.strictEqual(bloqueado.eliminado, false);
+    assert.strictEqual(bloqueado.storage, false);
+    assert.strictEqual(bloqueado.marca, false);
+    assert.strictEqual(bloqueado.modo, "dry-run");
+    assert.strictEqual(planes, 0);
+    assert.strictEqual(storage, 0);
+
+    const cancelado = await cron.procesarCandidatoRevalidado(
+      { clave: "archivos/whatsapp/u/nuevo.jpg", categoria: "candidato", motivo: "candidato" },
+      {
+        workerId: "limpieza-worker",
+        permitirRed: true,
+        validar: async () => ({ apto: false, motivo: "hilo_activo", abortar: false }),
+        abrirValla: async () => {
+          planes += 1;
+          return { bloqueaInsertos: true };
+        },
+      }
+    );
+    assert.strictEqual(cancelado.motivo, "hilo_activo");
+    assert.strictEqual(cancelado.eliminado, false);
+    assert.strictEqual(cancelado.storage, false);
+    assert.strictEqual(cancelado.marca, false);
+    assert.strictEqual(planes, 0);
+
+    const noLlega = await cron.procesarCandidatoRevalidado(
+      { clave, categoria: "ambiguo", motivo: "sin_referencia" },
+      {}
+    );
+    assert.strictEqual(noLlega.motivo, "no_candidato");
+    assert.strictEqual(noLlega.marca, false);
+    assert.strictEqual(storage, 0);
+
+    servicio.ELIMINACION_REAL_BLOQUEADA = false;
+    servicio.eliminacionRealPermitida = () => true;
+    eliminar.planificarEliminacion = async () => {
+      planes += 1;
+      return { eliminar: false, motivo: "entrante_inmediato", abortar: false };
+    };
+    const futuro = await cron.procesarCandidatoRevalidado(candidato, {
+      workerId: "limpieza-worker",
+      permitirRed: true,
+      validar: async () => ({ apto: true, motivo: "candidato", abortar: false, hilo: "u|c|591" }),
+    });
+    assert.strictEqual(futuro.modo, "real");
+    assert.strictEqual(futuro.motivo, "entrante_inmediato");
+    assert.strictEqual(futuro.eliminado, false);
+    assert.strictEqual(futuro.storage, false);
+    assert.strictEqual(futuro.marca, false);
+    assert.strictEqual(planes, 1);
+    assert.strictEqual(storage, 0);
+  } finally {
+    servicio.ELIMINACION_REAL_BLOQUEADA = originalBloqueada;
+    servicio.eliminacionRealPermitida = originalPermitida;
+    eliminar.planificarEliminacion = originalPlan;
+    eliminar.ejecutarBorradoSobrePlan = originalEjecutar;
+  }
+  assert.strictEqual(servicio.ELIMINACION_REAL_BLOQUEADA, true);
+  assert.strictEqual(servicio.eliminacionRealPermitida(), false);
+  console.log("[LIMPIEZA_MEDIA_CRON] resumen de prueba", bloqueado);
+  ok("el dry-run revalida candidatos sin abrir marca ni borrar");
+}
+
+async function testFalloIndividualDetieneYLiberaCandado() {
+  const cron = require("../scripts/limpieza-media-cron");
+  const eliminar = require("../services/limpiezaMedia/limpiezaMediaEliminar");
+  const uno = "archivos/whatsapp/u/uno.jpg";
+  const dos = "archivos/whatsapp/u/dos.jpg";
+  const tres = "archivos/whatsapp/u/tres.jpg";
+  const candidatos = [uno, dos, tres].map((clave) => ({
+    clave,
+    categoria: "candidato",
+    motivo: "candidato",
+    bytes: 10,
+  }));
+  const originalPlan = eliminar.planificarEliminacion;
+  const originalEjecutar = eliminar.ejecutarBorradoSobrePlan;
+  let planes = 0;
+  eliminar.planificarEliminacion = async () => {
+    planes += 1;
+    return { eliminar: true, valla: { bloqueaInsertos: true, sesionAbierta: true } };
+  };
+  eliminar.ejecutarBorradoSobrePlan = async () => {
+    planes += 1;
+    return { eliminado: true, storage: true };
+  };
+  try {
+    const vistos = [];
+    const estado = { perdido: null };
+    let codigo = 0;
+    let recorrido = null;
+    let workerLiberado = null;
+    try {
+      recorrido = await cron.recorrerCandidatos(candidatos, {
+        workerId: "limpieza-worker",
+        validar: async (clave) => {
+          vistos.push(clave);
+          if (clave === dos) throw new Error("lectura de menciones");
+          return { apto: true, motivo: "candidato", abortar: false, hilo: "u|c|591" };
+        },
+        abrirValla: async () => {
+          planes += 1;
+          return { bloqueaInsertos: true, sesionAbierta: true };
+        },
+      });
+      if (recorrido.abortar) {
+        estado.perdido = { motivo: recorrido.motivo || "candado_perdido" };
+        throw new Error(recorrido.motivo || "candado_perdido");
+      }
+      if (recorrido.detener) {
+        codigo = recorrido.codigo;
+      }
+    } finally {
+      const cierre = await cron.finalizarCandado(estado, "limpieza-worker", async (workerId) => {
+        workerLiberado = workerId;
+        return { ok: true };
+      });
+      assert.strictEqual(cierre.liberado, true);
+    }
+
+    assert.strictEqual(codigo, 1);
+    assert.strictEqual(recorrido.detener, true);
+    assert.strictEqual(recorrido.abortar, false);
+    assert.strictEqual(recorrido.clave, dos);
+    assert.strictEqual(recorrido.motivo, "consulta_fallida");
+    assert.strictEqual(recorrido.detalle, "lectura de menciones");
+    assert.deepStrictEqual(vistos, [uno, dos]);
+    assert.strictEqual(recorrido.storage, false);
+    assert.strictEqual(recorrido.marca, false);
+    assert.strictEqual(planes, 0);
+    assert.strictEqual(workerLiberado, "limpieza-worker");
+    assert.strictEqual(estado.perdido, null);
+    assert.strictEqual(servicio.ELIMINACION_REAL_BLOQUEADA, true);
+
+    const posteriores = [];
+    const porVeredicto = await cron.recorrerCandidatos(
+      [
+        { clave: dos, categoria: "candidato", motivo: "candidato" },
+        { clave: tres, categoria: "candidato", motivo: "candidato" },
+      ],
+      {
+        validar: async (clave) => {
+          posteriores.push(clave);
+          return { apto: false, motivo: "consulta_fallida", abortar: false, detalle: "timeout" };
+        },
+      }
+    );
+    assert.deepStrictEqual(posteriores, [dos]);
+    assert.strictEqual(porVeredicto.codigo, 1);
+    assert.strictEqual(porVeredicto.clave, dos);
+    assert.strictEqual(porVeredicto.detalle, "timeout");
+    assert.strictEqual(porVeredicto.marca, false);
+    assert.strictEqual(porVeredicto.storage, false);
+
+    const seguidos = [];
+    const sanos = await cron.recorrerCandidatos(candidatos, {
+      validar: async (clave) => {
+        seguidos.push(clave);
+        if (clave === uno) return { apto: false, motivo: "hilo_activo", abortar: false };
+        return { apto: true, motivo: "candidato", abortar: false };
+      },
+    });
+    assert.strictEqual(sanos.detener, false);
+    assert.strictEqual(sanos.codigo, 0);
+    assert.deepStrictEqual(seguidos, [uno, dos, tres]);
+    assert.strictEqual(sanos.aptos, 2);
+    assert.strictEqual(planes, 0);
+  } finally {
+    eliminar.planificarEliminacion = originalPlan;
+    eliminar.ejecutarBorradoSobrePlan = originalEjecutar;
+  }
+  assert.strictEqual(servicio.ELIMINACION_REAL_BLOQUEADA, true);
+  ok("un fallo de revalidación detiene la pasada y el finally libera el candado");
+}
+
+function errorRevalidacion({ mensaje, status, codigo, codigoError, consulta }) {
+  const error = new Error(mensaje);
+  error.fase = "https://proj.supabase.co/no-debe-usarse";
+  if (consulta) error.consulta = consulta;
+  if (codigoError) error.code = codigoError;
+  error.response = {
+    data: {
+      code: codigo,
+      message: "MARCA_CUERPO_NO_LOG",
+      details: "MARCA_CUERPO_NO_LOG",
+      hint: "password=sb_secret_SUPERSECRETO123456",
+    },
+  };
+  if (status != null) error.response.status = status;
+  return error;
+}
+
+function afirmarDetalleLimpio(detalle, caso, secreto, telefono, jwt) {
+  assert.deepStrictEqual(Object.keys(detalle).sort(), ["codigo", "consulta", "fase", "mensaje", "status"]);
+  assert.strictEqual(detalle.fase, caso.fase);
+  assert.strictEqual(detalle.consulta, caso.consulta);
+  assert.strictEqual(detalle.status, caso.status);
+  assert.strictEqual(detalle.codigo, caso.codigo);
+  assert.ok(detalle.mensaje.length <= 200);
+  assert.ok(detalle.mensaje.includes(caso.prefijo));
+  const serial = JSON.stringify(detalle);
+  assert.ok(!serial.includes(secreto));
+  assert.ok(!serial.includes(telefono));
+  assert.ok(!serial.includes(jwt));
+  assert.ok(!serial.includes("https://"));
+  assert.ok(!serial.includes("MARCA_CUERPO_NO_LOG"));
+  assert.ok(!serial.includes("CUERPO_EN_MENSAJE"));
+  assert.ok(!serial.includes("apikey="));
+  assert.ok(!serial.includes("password="));
+}
+
+async function testDetalleErrorRevalidacionLlegaAlCron() {
+  const cron = require("../scripts/limpieza-media-cron");
+  const eliminar = require("../services/limpiezaMedia/limpiezaMediaEliminar");
+  const secreto = "sb_secret_SUPERSECRETO123456";
+  const jwt = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoic2VydmljZV9yb2xlIn0.firma";
+  const telefono = "59171234567";
+  const urlSecreta = `https://proj.supabase.co/rest/v1/mensajes?apikey=${secreto}&cliente_numero=eq.${telefono}`;
+  const primero = "archivos/whatsapp/u/foto.jpg";
+  const segundo = "archivos/whatsapp/u/otro.jpg";
+  const originalPlan = eliminar.planificarEliminacion;
+  const originalEjecutar = eliminar.ejecutarBorradoSobrePlan;
+  const originalError = console.error;
+  let planes = 0;
+  let borrados = 0;
+  eliminar.planificarEliminacion = async () => {
+    planes += 1;
+    return { eliminar: true, valla: { bloqueaInsertos: true } };
+  };
+  eliminar.ejecutarBorradoSobrePlan = async () => {
+    borrados += 1;
+    return { eliminado: true, storage: true };
+  };
+
+  function mensajeSucio(prefijo) {
+    return [
+      `apikey=${secreto}`,
+      prefijo,
+      urlSecreta,
+      `Authorization: Bearer ${jwt}`,
+      `+${telefono}`,
+      telefono,
+      '{"message":"CUERPO_EN_MENSAJE"}',
+      "x".repeat(250),
+    ].join(" ");
+  }
+
+  const casos = [
+    {
+      nombre: "http",
+      metodo: "existeObjeto",
+      fase: "existencia_objeto",
+      consulta: "storage.existencia",
+      prefijo: "Request failed with status code 503",
+      status: 503,
+      codigo: null,
+      error: errorRevalidacion({
+        mensaje: mensajeSucio("Request failed with status code 503"),
+        status: 503,
+        codigo: secreto,
+        codigoError: secreto,
+        consulta: urlSecreta,
+      }),
+    },
+    {
+      nombre: "timeout",
+      metodo: "leerMenciones",
+      fase: "menciones",
+      consulta: "mensajes.menciones",
+      prefijo: "timeout of 20000ms exceeded",
+      status: null,
+      codigo: null,
+      error: errorRevalidacion({
+        mensaje: mensajeSucio("timeout of 20000ms exceeded"),
+        status: null,
+        codigo: secreto,
+        codigoError: "ECONNABORTED",
+        consulta: urlSecreta,
+      }),
+    },
+    {
+      nombre: "postgrest",
+      metodo: "tieneReferenciaProtegida",
+      fase: "referencias_protegidas",
+      consulta: "seguimientos_v2.media_filename",
+      prefijo: "Request failed with status code 400",
+      status: 400,
+      codigo: "PGRST116",
+      error: errorRevalidacion({
+        mensaje: mensajeSucio("Request failed with status code 400"),
+        status: 400,
+        codigo: "PGRST116",
+        consulta: urlSecreta,
+      }),
+    },
+    {
+      nombre: "entrante",
+      metodo: "leerUltimoEntrante",
+      fase: "ultimo_entrante",
+      consulta: "mensajes.ultimo_entrante",
+      prefijo: "Request failed with status code 401",
+      status: 401,
+      codigo: "42501",
+      error: errorRevalidacion({
+        mensaje: mensajeSucio("Request failed with status code 401"),
+        status: 401,
+        codigo: "42501",
+        consulta: urlSecreta,
+      }),
+    },
+  ];
+
+  try {
+    for (const caso of casos) {
+      let existencias = 0;
+      const avisos = [];
+      console.error = (...args) => {
+        avisos.push(args);
+      };
+      const io = ioRevalidacion({
+        async candadoVigente() {
+          return { ok: true };
+        },
+        async existeObjeto() {
+          existencias += 1;
+          if (caso.metodo === "existeObjeto") throw caso.error;
+          return true;
+        },
+        async leerMenciones() {
+          if (caso.metodo === "leerMenciones") throw caso.error;
+          return [fila("u", "c", "1", { imagen_url: `${URL}whatsapp/u/foto.jpg` })];
+        },
+        async tieneReferenciaProtegida(pedido) {
+          if (caso.metodo === "tieneReferenciaProtegida") {
+            return servicio.tieneReferenciaProtegidaReal(pedido, {
+              leer() {
+                throw caso.error;
+              },
+            });
+          }
+          return false;
+        },
+        async leerUltimoEntrante() {
+          if (caso.metodo === "leerUltimoEntrante") throw caso.error;
+          return reglas.parseCreadoEnUtc(HACE_40_DIAS);
+        },
+      });
+      const recorrido = await cron.recorrerCandidatos(
+        [primero, segundo].map((clave) => ({
+          clave,
+          categoria: "candidato",
+          motivo: "candidato",
+          bytes: 12,
+        })),
+        { workerId: "limpieza-worker", io }
+      );
+      const linea = avisos.find((args) => args[0] === "[LIMPIEZA_MEDIA_CRON] detenido");
+      assert.ok(linea, caso.nombre);
+      assert.strictEqual(linea[1].motivo, "consulta_fallida");
+      assert.strictEqual(linea[1].clave, primero);
+      assert.strictEqual(linea[1].detalle, recorrido.detalle);
+      afirmarDetalleLimpio(recorrido.detalle, caso, secreto, telefono, jwt);
+      afirmarDetalleLimpio(linea[1].detalle, caso, secreto, telefono, jwt);
+      const registro = JSON.stringify(linea[1]);
+      assert.ok(!registro.includes(secreto), caso.nombre);
+      assert.ok(!registro.includes(telefono), caso.nombre);
+      assert.ok(!registro.includes(jwt), caso.nombre);
+      assert.ok(!registro.includes("https://"), caso.nombre);
+      assert.ok(!registro.includes("MARCA_CUERPO_NO_LOG"), caso.nombre);
+      assert.strictEqual(recorrido.motivo, "consulta_fallida");
+      assert.strictEqual(recorrido.codigo, 1);
+      assert.strictEqual(recorrido.detener, true);
+      assert.strictEqual(recorrido.abortar, false);
+      assert.strictEqual(recorrido.clave, primero);
+      assert.strictEqual(recorrido.marca, false);
+      assert.strictEqual(recorrido.storage, false);
+      assert.strictEqual(existencias, 1);
+      assert.strictEqual(planes, 0);
+      assert.strictEqual(borrados, 0);
+    }
+  } finally {
+    console.error = originalError;
+    eliminar.planificarEliminacion = originalPlan;
+    eliminar.ejecutarBorradoSobrePlan = originalEjecutar;
+  }
+  const largo = reglas.detalleConsultaFallida({
+    fase: "menciones",
+    consulta: "mensajes.menciones",
+    message: `apikey=${secreto} ${"m".repeat(240)}`,
+  });
+  assert.strictEqual(largo.mensaje.length, 200);
+  assert.ok(largo.mensaje.startsWith("[credential]"));
+  assert.ok(!largo.mensaje.includes(secreto));
+  assert.strictEqual(servicio.ELIMINACION_REAL_BLOQUEADA, true);
+  assert.strictEqual(servicio.eliminacionRealPermitida(), false);
+  assert.strictEqual(planes, 0);
+  assert.strictEqual(borrados, 0);
+  ok("el detalle seguro de una consulta fallida llega al cron y detiene la pasada");
+}
+
 async function main() {
   testReloj();
   testRutas();
+  testRutasSueltasCoincidenConCita();
   testClasificacion();
   testReferenciaDeConversacion();
   await testSimulacionCompleta();
@@ -1706,6 +2620,7 @@ async function main() {
   testIlikeEscapado();
   await testPaginaIlikeYNombreConGuionBajo();
   await testJsonDespuesDeCargarProteccion();
+  await testPaginacionJsonUnaVez();
   await testEntranteEntreValidacionYBorrado();
   await testCandadoPerdidoDuranteRevalidacion();
   testRutaSegv2Ambigua();
@@ -1715,6 +2630,9 @@ async function main() {
   await testEntranteDuranteYAntesDeEliminar();
   await testCasosDePlanYBorradoBloqueado();
   await testErrorConcurrenciaReintentoYEndpoint();
+  await testCronPlanificaSinBorrar();
+  await testFalloIndividualDetieneYLiberaCandado();
+  await testDetalleErrorRevalidacionLlegaAlCron();
   console.log(`${passed} pruebas ok`);
 }
 

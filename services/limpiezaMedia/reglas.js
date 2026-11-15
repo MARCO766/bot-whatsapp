@@ -306,6 +306,15 @@ function segmentoFiltroSeguro(texto) {
   return /^[a-zA-Z0-9._/-]+$/.test(String(texto || ""));
 }
 
+function bordeCitaAntes(src, pos) {
+  return pos === 0 || /[^a-zA-Z0-9]/.test(src[pos - 1]);
+}
+
+function bordeCitaDespues(src, fin) {
+  const despues = src[fin] || "";
+  return !despues || /[^a-zA-Z0-9]/.test(despues);
+}
+
 function citaRutaCompleta(texto, clave) {
   const src = String(texto || "");
   const ruta = sinBucket(clave);
@@ -318,15 +327,121 @@ function citaRutaCompleta(texto, clave) {
     while (desde < src.length) {
       const pos = src.indexOf(aguja, desde);
       if (pos < 0) break;
-      const antes = pos > 0 ? src[pos - 1] : "";
-      const despues = src[pos + aguja.length] || "";
-      const bordeAntes = pos === 0 || /[^a-zA-Z0-9]/.test(antes);
-      const bordeDespues = !despues || /[^a-zA-Z0-9]/.test(despues);
-      if (bordeAntes && bordeDespues) return true;
+      if (bordeCitaAntes(src, pos) && bordeCitaDespues(src, pos + aguja.length)) return true;
       desde = pos + aguja.length;
     }
   }
   return false;
+}
+
+function normalizarRutaCitada(token) {
+  let ruta = String(token || "");
+  if (ruta.startsWith("archivos/")) ruta = ruta.slice("archivos/".length);
+  if (!rutaConversacionValida(ruta) || !rutaObjetoValida(ruta)) return null;
+  return `archivos/${ruta}`;
+}
+
+function recordarRutaSuelta(claves, vistos, token) {
+  const clave = normalizarRutaCitada(token);
+  if (!clave || vistos.has(clave)) return;
+  vistos.add(clave);
+  claves.push(clave);
+}
+
+function extraerRutasSueltas(texto) {
+  const src = String(texto || "");
+  const claves = [];
+  const vistos = new Set();
+  for (const prefijo of ["whatsapp-meta/", "whatsapp/"]) {
+    let desde = 0;
+    while (desde < src.length) {
+      const pos = src.indexOf(prefijo, desde);
+      if (pos < 0) break;
+      if (bordeCitaAntes(src, pos)) {
+        for (let fin = pos + prefijo.length; fin <= src.length; fin += 1) {
+          if (bordeCitaDespues(src, fin)) recordarRutaSuelta(claves, vistos, src.slice(pos, fin));
+          if (fin >= src.length || !/[a-zA-Z0-9._/-]/.test(src[fin])) break;
+        }
+      }
+      desde = pos + 1;
+    }
+  }
+  return claves;
+}
+
+function ocultarTelefonos(texto) {
+  return String(texto || "").replace(
+    /(^|[^\d])(\+?\d{8,15})(?!\d)/g,
+    (coincidencia, previo) => `${previo}[telefono]`
+  );
+}
+
+function mensajeErrorSeguro(texto) {
+  let mensaje = String(texto || "").trim();
+  if (!mensaje) return "consulta_fallida";
+  mensaje = mensaje
+    .replace(/https?:\/\/[^\s"'<>]+/gi, "[url]")
+    .replace(/bearer\s+\S+/gi, "[credential]")
+    .replace(/\beyJ[A-Za-z0-9_-]*\.eyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*/g, "[credential]")
+    .replace(/\bsb_(?:secret|publishable)_[A-Za-z0-9._-]+/gi, "[credential]")
+    .replace(
+      /(?:apikey|api[_-]?key|authorization|password|secret|service[_-]?role)\s*[:=]\s*\S+/gi,
+      "[credential]"
+    );
+  mensaje = ocultarTelefonos(mensaje);
+  mensaje = mensaje.replace(/[[{]\s*["[{][\s\S]*$/g, "[respuesta]");
+  mensaje = mensaje.replace(/\s+/g, " ").trim();
+  if (!mensaje) return "consulta_fallida";
+  if (mensaje.length > 200) return mensaje.slice(0, 200);
+  return mensaje;
+}
+
+function etiquetaSegura(valor, respaldo) {
+  const texto = String(valor || "");
+  if (/^[a-z0-9_.]{1,80}$/.test(texto)) return texto;
+  return respaldo;
+}
+
+function tokenCodigoPostgrest(valor) {
+  const codigo = String(valor == null ? "" : valor).trim();
+  if (/^PGRST[0-9]{3}$/.test(codigo)) return codigo;
+  if (/^[0-9]{2}[0-9A-Z]{3}$/.test(codigo)) return codigo;
+  return null;
+}
+
+function statusHttpSeguro(error) {
+  const candidatos = [error?.response?.status, error?.status];
+  for (const valor of candidatos) {
+    if (typeof valor === "number" && Number.isInteger(valor) && valor >= 100 && valor <= 599) {
+      return valor;
+    }
+    if (typeof valor === "string" && /^[1-5][0-9]{2}$/.test(valor)) return Number(valor);
+  }
+  return null;
+}
+
+function codigoErrorSeguro(error) {
+  if (!error || typeof error !== "object") return null;
+  const data = error.response && error.response.data;
+  if (data && typeof data === "object" && !Array.isArray(data)) {
+    const deBody = tokenCodigoPostgrest(data.code) || tokenCodigoPostgrest(data.error_code);
+    if (deBody) return deBody;
+  }
+  return tokenCodigoPostgrest(error.code);
+}
+
+function detalleConsultaFallida(error) {
+  const fallo = error && typeof error === "object"
+    ? error
+    : { message: error == null ? "" : String(error) };
+  const fase = etiquetaSegura(fallo.fase, "desconocida");
+  return {
+    fase,
+    consulta: etiquetaSegura(fallo.consulta, fase),
+    mensaje: mensajeErrorSeguro(fallo.message),
+    status: statusHttpSeguro(fallo),
+    codigo: codigoErrorSeguro(fallo),
+  };
 }
 
 function veredictoRevalidacion({
@@ -340,7 +455,13 @@ function veredictoRevalidacion({
   nombresProtegidos,
   limiteMs,
 }) {
-  if (error) return { motivo: "consulta_fallida", apto: false };
+  if (error) {
+    return {
+      motivo: "consulta_fallida",
+      apto: false,
+      detalle: detalleConsultaFallida(error),
+    };
+  }
   if (esBucketExcluido(clave)) return { motivo: "bucket_protegido", apto: false };
   const objeto = { bucket: bucketDeClave(clave), path: sinBucket(clave) };
   if (!esObjetoCandidato(objeto)) return { motivo: "bucket_protegido", apto: false };
@@ -453,10 +574,12 @@ module.exports = {
   MOTIVOS,
   bucketDeClave,
   citaRutaCompleta,
+  extraerRutasSueltas,
   esBucketExcluido,
   nombreArchivo,
   segmentoFiltroSeguro,
   sinBucket,
+  detalleConsultaFallida,
   veredictoRevalidacion,
   analizarTextoStorage,
   categoriaDeMotivo,

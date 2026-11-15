@@ -78,7 +78,7 @@ async function planificarEliminacion(clave, opciones = {}) {
       clave,
       workerId: opciones.workerId,
       hilo: veredicto.hilo,
-      leerUltimoEntrante: opciones.io?.leerUltimoEntrante,
+      leerUltimoEntrante: opciones.leerUltimoEntrante || opciones.io?.leerUltimoEntrante,
       cliente: opciones.cliente,
       url: opciones.url,
       key: opciones.key,

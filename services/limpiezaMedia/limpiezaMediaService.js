@@ -10,8 +10,14 @@ const { verificarLockLimpiezaMedia } = require("./limpiezaMediaLock");
 const ELIMINACION_REAL_BLOQUEADA = true;
 const LIMITE_MENCIONES = 100;
 const LIMITE_TEXTO = 5;
-const LIMITE_JSON = 500;
-const MAX_PAGINAS_JSON = 200;
+const FASE_EXISTENCIA = "existencia_objeto";
+const FASE_MENCIONES = "menciones";
+const FASE_REFERENCIAS = "referencias_protegidas";
+const FASE_ENTRANTE = "ultimo_entrante";
+const CONSULTA_EXISTENCIA = "storage.existencia";
+const CONSULTA_MENCIONES = "mensajes.menciones";
+const CONSULTA_ENTRANTE = "mensajes.ultimo_entrante";
+const CONSULTA_NOMBRE = "seguimientos_v2.media_filename";
 
 const FUENTES = [
   "flujos_builder",
@@ -135,7 +141,27 @@ function crearEstado() {
     originales: new Set(),
     fuenteIlegible: null,
     enCurso: false,
+    jsonCursor: null,
+    referenciasJson: new Set(),
+    enFuenteJson: false,
+    omitirJson: false,
   };
+}
+
+function esFuenteJson(fuente) {
+  return FUENTES_JSON.some((item) => item.tabla === fuente);
+}
+
+function idCursorSeguro(id) {
+  const texto = String(id || "");
+  if (!/^[0-9a-zA-Z-]+$/.test(texto)) return null;
+  return texto;
+}
+
+function recordarProtegida(estado, clave) {
+  if (!clave) return;
+  estado.protegidas.add(clave);
+  if (estado.enFuenteJson) estado.referenciasJson.add(clave);
 }
 
 function reiniciarProgreso(estado = estadoGlobal) {
@@ -167,17 +193,32 @@ function headersSupabase() {
   };
 }
 
-async function leerFuenteReal({ fuente, offset, limit }) {
+async function leerFuenteReal({ fuente, offset, limit, despuesDeId, porId }) {
   const select = SELECT_FUENTE[fuente];
   if (!select) return [];
-  const pagina = `order=id.asc&limit=${limit}&offset=${offset}`;
+  const json = porId === true || esFuenteJson(fuente);
+  const columnas = json ? `id,${select}` : select;
+  let pagina = `order=id.asc&limit=${limit}`;
+  if (json) {
+    if (despuesDeId) {
+      const cursor = idCursorSeguro(despuesDeId);
+      if (!cursor) throw new Error("cursor json ilegible");
+      pagina += `&id=gt.${encodeURIComponent(cursor)}`;
+    }
+  } else {
+    pagina += `&offset=${offset}`;
+  }
   const res = await conReintento(() =>
     axios.get(
-      `${process.env.SUPABASE_URL}/rest/v1/${fuente}?select=${select}&${pagina}`,
+      `${process.env.SUPABASE_URL}/rest/v1/${fuente}?select=${columnas}&${pagina}`,
       { headers: headersSupabase(), timeout: 20000 }
     )
   );
-  return Array.isArray(res.data) ? res.data : [];
+  if (!Array.isArray(res.data)) {
+    if (json) throw new Error("pagina json ilegible");
+    return [];
+  }
+  return res.data;
 }
 
 async function leerMensajesReal({ fase, offset, limit }) {
@@ -242,7 +283,7 @@ const ioReal = {
 function absorberAnalisis(estado, analisis) {
   if (analisis.noVerificable) estado.proteccionIncompleta = true;
   for (const objeto of analisis.objetos) {
-    estado.protegidas.add(objeto.clave);
+    recordarProtegida(estado, objeto.clave);
     if (objeto.bucket === reglas.BUCKET_ORIGINAL_SEGUIMIENTO) {
       estado.originales.add(objeto.clave);
     }
@@ -252,11 +293,22 @@ function absorberAnalisis(estado, analisis) {
 function absorberRutasProtegidas(estado, filas) {
   let ilegible = false;
   for (const fila of filas) {
-    const analisis = reglas.analizarTextoStorage(reglas.textoDeFila(fila));
+    const texto = reglas.textoDeFila(fila);
+    const analisis = reglas.analizarTextoStorage(texto);
     if (analisis.noVerificable) ilegible = true;
     absorberAnalisis(estado, analisis);
+    for (const clave of reglas.extraerRutasSueltas(texto)) {
+      recordarProtegida(estado, clave);
+    }
   }
   return ilegible;
+}
+
+function paginaJsonIlegible(estado, fuente) {
+  estado.fuenteIlegible = fuente;
+  estado.proteccionIncompleta = true;
+  estado.enFuenteJson = false;
+  return { io: true, terminado: true };
 }
 
 function absorberNombresMedia(estado, fuente, filas) {
@@ -293,10 +345,20 @@ function absorberMensajeMedia(estado, fila) {
 async function pasoProtegidas(estado, io, pageSize) {
   if (estado.fuenteIndex >= FUENTES.length) return { io: false, terminado: true };
   const fuente = FUENTES[estado.fuenteIndex];
+  const json = esFuenteJson(fuente);
+  if (json && estado.omitirJson === true) {
+    estado.fuenteIndex += 1;
+    estado.offset = 0;
+    estado.jsonCursor = null;
+    return { io: false, terminado: estado.fuenteIndex >= FUENTES.length };
+  }
   let filas = [];
   try {
-    filas = await io.leerFuente({ fuente, offset: estado.offset, limit: pageSize });
+    filas = await io.leerFuente(json
+      ? { fuente, limit: pageSize, despuesDeId: estado.jsonCursor, porId: true }
+      : { fuente, offset: estado.offset, limit: pageSize });
   } catch (error) {
+    if (json) return paginaJsonIlegible(estado, fuente);
     if (!isSchemaMissingError(error)) throw error;
     estado.fuentesOmitidas.push(fuente);
     estado.proteccionIncompleta = true;
@@ -304,8 +366,14 @@ async function pasoProtegidas(estado, io, pageSize) {
     estado.offset = 0;
     return { io: true, terminado: false };
   }
+  if (json && !Array.isArray(filas)) return paginaJsonIlegible(estado, fuente);
+  if (json && filas.some((fila) => !fila || typeof fila !== "object" || Array.isArray(fila))) {
+    return paginaJsonIlegible(estado, fuente);
+  }
+  estado.enFuenteJson = json;
   absorberNombresMedia(estado, fuente, filas);
   const ilegible = absorberRutasProtegidas(estado, filas);
+  estado.enFuenteJson = false;
   if (ilegible) {
     estado.fuenteIlegible = fuente;
     return { io: true, terminado: true };
@@ -313,10 +381,20 @@ async function pasoProtegidas(estado, io, pageSize) {
   if (filas.length < pageSize) {
     estado.fuenteIndex += 1;
     estado.offset = 0;
-  } else {
-    estado.offset += filas.length;
+    estado.jsonCursor = null;
+    return { io: true, terminado: estado.fuenteIndex >= FUENTES.length };
   }
-  return { io: true, terminado: estado.fuenteIndex >= FUENTES.length };
+  if (json) {
+    const ultimo = filas[filas.length - 1];
+    const cursor = idCursorSeguro(ultimo && ultimo.id);
+    if (!cursor || (estado.jsonCursor && cursor <= estado.jsonCursor)) {
+      return paginaJsonIlegible(estado, fuente);
+    }
+    estado.jsonCursor = cursor;
+    return { io: true, terminado: false };
+  }
+  estado.offset += filas.length;
+  return { io: true, terminado: false };
 }
 
 async function pasoMensajes(estado, io, pageSize, fase) {
@@ -667,13 +745,42 @@ function hiloUnico(menciones) {
   return vistos.values().next().value;
 }
 
+function anotarConsulta(error, consulta) {
+  const fallo = error && typeof error === "object"
+    ? error
+    : new Error(error == null ? "consulta_fallida" : String(error));
+  if (!/^[a-z0-9_.]{1,80}$/.test(String(fallo.consulta || ""))) {
+    fallo.consulta = consulta;
+  }
+  return fallo;
+}
+
+function errorDeConsulta(mensaje, consulta) {
+  return anotarConsulta(new Error(mensaje), consulta);
+}
+
+async function enFase(fase, consulta, fn) {
+  try {
+    return await fn();
+  } catch (error) {
+    const fallo = anotarConsulta(error, consulta);
+    fallo.fase = fase;
+    throw fallo;
+  }
+}
+
 async function existeObjetoReal({ clave }) {
   const ruta = reglas.sinBucket(clave);
   const barra = ruta.lastIndexOf("/");
   const carpeta = barra >= 0 ? ruta.slice(0, barra) : "";
   let offset = 0;
   for (let pagina = 0; pagina < 50; pagina += 1) {
-    const items = await listarStorageReal({ prefix: carpeta, offset, limit: 100 });
+    let items;
+    try {
+      items = await listarStorageReal({ prefix: carpeta, offset, limit: 100 });
+    } catch (error) {
+      throw anotarConsulta(error, CONSULTA_EXISTENCIA);
+    }
     for (const item of items) {
       if (reglas.esCarpetaStorage(item)) continue;
       const unida = reglas.rutaListada(carpeta, item.name);
@@ -682,7 +789,7 @@ async function existeObjetoReal({ clave }) {
     if (items.length < 100) return false;
     offset += items.length;
   }
-  throw new Error("listado de existencia incompleto");
+  throw errorDeConsulta("listado de existencia incompleto", CONSULTA_EXISTENCIA);
 }
 
 async function getRest(ruta) {
@@ -705,12 +812,17 @@ function exigirPaginaCompleta(filas, limite) {
 async function leerMencionesReal({ clave }) {
   const ruta = reglas.sinBucket(clave);
   if (!reglas.segmentoFiltroSeguro(ruta)) {
-    throw new Error("ruta no filtrable");
+    throw errorDeConsulta("ruta no filtrable", CONSULTA_MENCIONES);
   }
-  const filas = await getRest(
-    `/rest/v1/mensajes?select=usuario_id,conexion_whatsapp_id,cliente_numero,imagen_url,contenido&${reglas.filtroIlike(["imagen_url", "contenido"], ruta)}&limit=${LIMITE_MENCIONES}`
-  );
-  exigirPaginaCompleta(filas, LIMITE_MENCIONES);
+  let filas;
+  try {
+    filas = await getRest(
+      `/rest/v1/mensajes?select=usuario_id,conexion_whatsapp_id,cliente_numero,imagen_url,contenido&${reglas.filtroIlike(["imagen_url", "contenido"], ruta)}&limit=${LIMITE_MENCIONES}`
+    );
+    exigirPaginaCompleta(filas, LIMITE_MENCIONES);
+  } catch (error) {
+    throw anotarConsulta(error, CONSULTA_MENCIONES);
+  }
   return filas.filter(
     (fila) =>
       reglas.citaRutaCompleta(fila?.imagen_url, clave) ||
@@ -723,33 +835,19 @@ async function leerUltimoEntranteReal(fila) {
   const conexion = String(fila?.conexion_whatsapp_id || "");
   const numero = String(fila?.cliente_numero || "");
   if (!reglas.segmentoFiltroSeguro(usuario) || !reglas.segmentoFiltroSeguro(conexion)) {
-    throw new Error("hilo no filtrable");
+    throw errorDeConsulta("hilo no filtrable", CONSULTA_ENTRANTE);
   }
-  if (!/^[0-9]+$/.test(numero)) throw new Error("numero no filtrable");
-  const filas = await getRest(
-    `/rest/v1/mensajes?select=creado_en&usuario_id=eq.${usuario}&conexion_whatsapp_id=eq.${conexion}&cliente_numero=eq.${numero}&direccion=eq.entrante&order=creado_en.desc&limit=1`
-  );
+  if (!/^[0-9]+$/.test(numero)) throw errorDeConsulta("numero no filtrable", CONSULTA_ENTRANTE);
+  let filas;
+  try {
+    filas = await getRest(
+      `/rest/v1/mensajes?select=creado_en&usuario_id=eq.${usuario}&conexion_whatsapp_id=eq.${conexion}&cliente_numero=eq.${numero}&direccion=eq.entrante&order=creado_en.desc&limit=1`
+    );
+  } catch (error) {
+    throw anotarConsulta(error, CONSULTA_ENTRANTE);
+  }
   if (!filas.length) return null;
   return reglas.parseCreadoEnUtc(filas[0].creado_en);
-}
-
-async function buscarReferenciaJson(clave, leer) {
-  for (const fuente of FUENTES_JSON) {
-    let offset = 0;
-    for (let vuelta = 0; vuelta < MAX_PAGINAS_JSON; vuelta += 1) {
-      const filas = await leer(
-        `/rest/v1/${fuente.tabla}?select=${fuente.columnas.join(",")}&order=id.asc&limit=${LIMITE_JSON}&offset=${offset}`
-      );
-      if (!Array.isArray(filas)) throw new Error("fuente json ilegible");
-      if (filas.some((fila) => reglas.citaRutaCompleta(reglas.textoDeFila(fila), clave))) {
-        return true;
-      }
-      if (filas.length < LIMITE_JSON) break;
-      offset += filas.length;
-      if (vuelta === MAX_PAGINAS_JSON - 1) throw new Error("fuente json truncada");
-    }
-  }
-  return false;
 }
 
 async function tieneReferenciaProtegidaReal({ clave }, deps = {}) {
@@ -757,28 +855,39 @@ async function tieneReferenciaProtegidaReal({ clave }, deps = {}) {
   const ruta = reglas.sinBucket(clave);
   const archivo = reglas.nombreArchivo(clave);
   if (!reglas.segmentoFiltroSeguro(ruta) || !reglas.segmentoFiltroSeguro(archivo)) {
-    throw new Error("referencia no filtrable");
+    throw errorDeConsulta("referencia no filtrable", FASE_REFERENCIAS);
   }
-  const porNombre = await leer(
-    `/rest/v1/seguimientos_v2?select=media_filename&media_filename=eq."${archivo}"&limit=1`
-  );
-  if (!Array.isArray(porNombre)) throw new Error("referencia ilegible");
+  let porNombre;
+  try {
+    porNombre = await leer(
+      `/rest/v1/seguimientos_v2?select=media_filename&media_filename=eq."${archivo}"&limit=1`
+    );
+  } catch (error) {
+    throw anotarConsulta(error, CONSULTA_NOMBRE);
+  }
+  if (!Array.isArray(porNombre)) throw errorDeConsulta("referencia ilegible", CONSULTA_NOMBRE);
   if (porNombre.some((fila) => String(fila?.media_filename || "") === archivo)) return true;
   for (const consulta of CONSULTAS_TEXTO) {
     const select = consulta.columnas.join(",");
-    const filas = await leer(
-      `/rest/v1/${consulta.tabla}?select=${select}&${reglas.filtroIlike(consulta.columnas, ruta)}&limit=${LIMITE_TEXTO}`
-    );
-    if (!Array.isArray(filas)) throw new Error("referencia ilegible");
-    exigirPaginaCompleta(filas, LIMITE_TEXTO);
+    let filas;
+    try {
+      filas = await leer(
+        `/rest/v1/${consulta.tabla}?select=${select}&${reglas.filtroIlike(consulta.columnas, ruta)}&limit=${LIMITE_TEXTO}`
+      );
+      if (!Array.isArray(filas)) throw errorDeConsulta("referencia ilegible", consulta.tabla);
+      exigirPaginaCompleta(filas, LIMITE_TEXTO);
+    } catch (error) {
+      throw anotarConsulta(error, consulta.tabla);
+    }
     if (filas.some((fila) => reglas.citaRutaCompleta(reglas.textoDeFila(fila), clave))) return true;
   }
-  return buscarReferenciaJson(clave, leer);
+  return false;
 }
 
 async function cargarProteccion(opciones = {}) {
   const io = opciones.io || ioReal;
   const estado = crearEstado();
+  estado.omitirJson = opciones.omitirJson === true;
   const pageSize = opciones.pageSize ?? 1000;
   const maxPaginas = opciones.maxPaginas ?? 100000;
   let paginas = 0;
@@ -832,14 +941,24 @@ async function revalidarCandidato(clave, opciones = {}) {
 
   let unico = null;
   try {
-    base.existe = await io.existeObjeto({ clave });
-    base.menciones = await mencionesCitadas(io, clave);
+    base.existe = await enFase(FASE_EXISTENCIA, CONSULTA_EXISTENCIA, () => io.existeObjeto({ clave }));
+    base.menciones = await enFase(FASE_MENCIONES, CONSULTA_MENCIONES, () => mencionesCitadas(io, clave));
     if (base.existe === true && base.menciones.length > 0) {
-      base.citada = await io.tieneReferenciaProtegida({ clave });
-      base.menciones = await mencionesCitadas(io, clave);
+      base.citada = await enFase(
+        FASE_REFERENCIAS,
+        FASE_REFERENCIAS,
+        () => io.tieneReferenciaProtegida({ clave })
+      );
+      base.menciones = await enFase(FASE_MENCIONES, CONSULTA_MENCIONES, () => mencionesCitadas(io, clave));
     }
     unico = hiloUnico(base.menciones);
-    if (unico) base.ultimoEntranteMs = await io.leerUltimoEntrante(unico);
+    if (unico) {
+      base.ultimoEntranteMs = await enFase(
+        FASE_ENTRANTE,
+        CONSULTA_ENTRANTE,
+        () => io.leerUltimoEntrante(unico)
+      );
+    }
   } catch (error) {
     base.error = error;
   }
@@ -881,6 +1000,7 @@ async function validarInmediatoEliminacion(clave, opciones = {}) {
     apto: veredicto.apto === true,
     abortar: false,
     hilo: veredicto.hilo || null,
+    detalle: veredicto.detalle || null,
   };
 }
 
@@ -895,6 +1015,7 @@ module.exports = {
   reiniciarProgreso,
   revalidarCandidato,
   solicitarBorradoReal,
+  leerUltimoEntranteReal,
   tieneReferenciaProtegidaReal,
   validarInmediatoEliminacion,
 };
