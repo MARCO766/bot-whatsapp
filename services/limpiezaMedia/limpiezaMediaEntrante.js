@@ -100,7 +100,7 @@ function statusSiMensajeGuardado(guardado, suelta, statusSiLibre) {
 }
 
 function statusHttpEntrante(coordinado, suelta) {
-  if (coordinado?.incierto === true) return 200;
+  if (coordinado?.incierto === true) return 503;
   if (coordinado?.duplicado === true) return 200;
   if (coordinado?.proteccion === true) return 503;
   if (!coordinado?.guardado) {
@@ -224,28 +224,32 @@ function clasificarClaim(resultado, extra = {}) {
   if (resultado?.incierto === true) {
     return {
       ...extra,
-      status: 200,
+      status: 503,
       guardado: null,
       incierto: true,
       confirmado: false,
       duplicado: false,
-      reintentar: false,
+      reintentar: true,
       recuperacion: false,
       motivo: resultado.reason || "claim_incierto",
       fase: resultado.fase || null,
     };
   }
   if (resultado?.duplicate) {
-    return { status: 200, guardado: false, confirmado: true, duplicado: true, ...extra };
+    return { status: 200, guardado: false, confirmado: true, duplicado: true, ...extra, incierto: false };
   }
   if (!resultado?.claimed) {
+    const rechazo = resultado?.rechazado === true || resultado?.reason === "claim_rechazado";
+    const sinWamid = resultado?.reason === "no_wamid";
     return {
-      status: resultado?.reason === "no_wamid" ? 200 : 503,
+      ...extra,
+      status: rechazo || sinWamid ? 200 : 503,
       guardado: false,
       confirmado: false,
-      reintentar: resultado?.reason !== "no_wamid",
+      incierto: false,
+      duplicado: false,
+      reintentar: !(rechazo || sinWamid),
       motivo: resultado?.reason || "claim_fallido",
-      ...extra,
     };
   }
   return { status: 200, guardado: true, confirmado: true, ...extra };
@@ -482,11 +486,13 @@ async function coordinarEnMemoria(opciones, store) {
       return { status: 200, guardado: false, confirmado: true, duplicado: true, marcaInstalada: true };
     }
     if (!resultado?.claimed) {
+      const rechazo = resultado?.rechazado === true || resultado?.reason === "claim_rechazado";
+      const sinWamid = resultado?.reason === "no_wamid";
       return {
-        status: resultado?.reason === "no_wamid" ? 200 : 503,
+        status: rechazo || sinWamid ? 200 : 503,
         guardado: false,
         confirmado: false,
-        reintentar: resultado?.reason !== "no_wamid",
+        reintentar: !(rechazo || sinWamid),
         motivo: resultado?.reason || "claim_fallido",
         marcaInstalada: true,
       };

@@ -7,6 +7,7 @@ const assert = require("assert");
 const fs = require("fs");
 const path = require("path");
 const entrante = require("../services/limpiezaMedia/limpiezaMediaEntrante");
+const { reclamarMensajeEntrantePorWamid } = require("../services/webhookInboundClaim");
 const store = require("../services/limpiezaMedia/limpiezaMediaMarcaStore");
 const marca = require("../services/limpiezaMedia/limpiezaMediaMarca");
 const eliminar = require("../services/limpiezaMedia/limpiezaMediaEliminar");
@@ -708,13 +709,259 @@ async function testClaimInciertoNoEjecutaBot() {
   const decision = sinBot(recibido.respuesta, { retenida: true });
   assert.strictEqual(recibido.respuesta.incierto, true);
   assert.strictEqual(recibido.respuesta.guardado, null);
-  assert.strictEqual(recibido.respuesta.reintentar, false);
+  assert.strictEqual(recibido.respuesta.reintentar, true);
   assert.strictEqual(recibido.respuesta.recuperacion, false);
   assert.notStrictEqual(recibido.respuesta.guardado, false);
-  assert.strictEqual(decision.status, 200);
+  assert.strictEqual(decision.status, 503);
   assert.strictEqual(decision.bot, false);
   assert.strictEqual(sql.filas.get("u|c|591").estado, null);
   ok("un claim incierto no afirma que no se guardó y no ejecuta el bot");
+}
+
+function almacenClaim() {
+  const filas = new Map();
+  return {
+    filas,
+    axios: {
+      async get(url) {
+        const coincidencia = /whatsapp_message_id=eq\.([^&]+)/.exec(url);
+        const wamid = coincidencia ? decodeURIComponent(coincidencia[1]) : "";
+        const fila = filas.get(wamid);
+        return { data: fila ? [fila] : [] };
+      },
+      async post(_url, body) {
+        if (filas.has(body.whatsapp_message_id)) {
+          const error = new Error("duplicate");
+          error.response = { status: 409, data: { code: "23505" } };
+          throw error;
+        }
+        const fila = { id: `id-${filas.size + 1}`, ...body };
+        filas.set(body.whatsapp_message_id, fila);
+        return { data: [fila] };
+      },
+    },
+    supabaseUrl: "https://example.supabase.co",
+    supabaseKey: "key",
+  };
+}
+
+async function decidirClaim(deps, wamid, extra = {}) {
+  const respuesta = await entrante.coordinarPersistenciaEntrante({
+    usuarioId: "u",
+    conexionId: "c",
+    numero: "591",
+    wamid,
+    permitirRed: true,
+    url: "http://marca-falsa.test",
+    key: "test",
+    cliente: extra.cliente,
+    timeoutMs: entrante.TOPE_CONSULTA_MS,
+    activa: extra.activa,
+    persistir: () => reclamarMensajeEntrantePorWamid({
+      cliente_numero: "591",
+      usuario_id: "u",
+      conexion_whatsapp_id: "c",
+      direccion: "entrante",
+      contenido: "hola",
+      whatsapp_message_id: wamid,
+    }, deps),
+  });
+  const status = entrante.statusHttpEntrante(respuesta);
+  return {
+    respuesta,
+    status,
+    bot: respuesta.guardado === true && status === 200,
+  };
+}
+
+async function testCincoEscenariosDeClaim() {
+  entrante.olvidarEsquemaAusente();
+  const deps = almacenClaim();
+
+  const nuevo = await decidirClaim(deps, "wamid.nuevo", { activa: false });
+  assert.strictEqual(nuevo.respuesta.guardado, true);
+  assert.strictEqual(nuevo.status, 200);
+  assert.strictEqual(nuevo.bot, true);
+  assert.strictEqual(deps.filas.size, 1);
+
+  const duplicado = await decidirClaim(deps, "wamid.nuevo", { activa: false });
+  assert.strictEqual(duplicado.respuesta.duplicado, true);
+  assert.strictEqual(duplicado.status, 200);
+  assert.strictEqual(duplicado.bot, false);
+  assert.strictEqual(deps.filas.size, 1);
+
+  const red = almacenClaim();
+  red.axios.post = async () => {
+    const error = new Error("socket hang up");
+    error.code = "ECONNRESET";
+    throw error;
+  };
+  const porRed = await decidirClaim(red, "wamid.red", { activa: false });
+  assert.strictEqual(porRed.respuesta.incierto, true);
+  assert.strictEqual(porRed.respuesta.reintentar, true);
+  assert.strictEqual(porRed.respuesta.guardado, null);
+  assert.strictEqual(porRed.status, 503);
+  assert.strictEqual(porRed.bot, false);
+  assert.strictEqual(red.filas.size, 0);
+
+  const caido = almacenClaim();
+  caido.axios.get = async () => {
+    const error = new Error("timeout of 500ms exceeded");
+    error.code = "ECONNABORTED";
+    throw error;
+  };
+  caido.axios.post = async () => {
+    const error = new Error("bad gateway");
+    error.response = { status: 502, data: { message: "bad gateway" } };
+    throw error;
+  };
+  const por5xx = await decidirClaim(caido, "wamid.5xx", { activa: false });
+  assert.strictEqual(por5xx.respuesta.incierto, true);
+  assert.strictEqual(por5xx.respuesta.fase, "insert");
+  assert.strictEqual(por5xx.respuesta.reintentar, true);
+  assert.strictEqual(por5xx.status, 503);
+  assert.strictEqual(por5xx.bot, false);
+
+  const limpieza = sqlFalso();
+  ocupar(limpieza, "reservado", "cl:limpieza");
+  const bloqueado = await decidirClaim(almacenClaim(), "wamid.limpieza", {
+    activa: true,
+    cliente: limpieza,
+  });
+  assert.strictEqual(bloqueado.respuesta.status, 503);
+  assert.strictEqual(bloqueado.respuesta.estado, "reservado");
+  assert.strictEqual(bloqueado.respuesta.guardado, false);
+  assert.strictEqual(bloqueado.bot, false);
+  assert.strictEqual(limpieza.filas.get("u|c|591").estado, "reservado");
+
+  const durante = sqlFalso();
+  const inestable = almacenClaim();
+  inestable.axios.post = async () => {
+    const error = new Error("socket hang up");
+    error.code = "ECONNRESET";
+    throw error;
+  };
+  const activoIncierto = await decidirClaim(inestable, "wamid.limpieza-red", {
+    activa: true,
+    cliente: durante,
+  });
+  assert.strictEqual(activoIncierto.status, 503);
+  assert.strictEqual(activoIncierto.respuesta.incierto, true);
+  assert.strictEqual(activoIncierto.respuesta.reintentar, true);
+  assert.strictEqual(activoIncierto.bot, false);
+  assert.strictEqual(durante.filas.get("u|c|591").estado, null);
+  assert.strictEqual(servicio.ELIMINACION_REAL_BLOQUEADA, true);
+  ok("nuevo, duplicado, red, 5xx y limpieza activa");
+}
+
+function falloDeInsert(error) {
+  const deps = almacenClaim();
+  deps.axios.post = async () => {
+    throw error;
+  };
+  return deps;
+}
+
+function errorDeCodigo(code) {
+  const error = new Error(code);
+  error.code = code;
+  return error;
+}
+
+function errorDeHttp(status, data, message) {
+  const error = new Error(message || `HTTP ${status}`);
+  error.response = { status, data: data || { message: message || `HTTP ${status}` } };
+  return error;
+}
+
+async function testEstadoHttpPorCodigo(code) {
+  entrante.olvidarEsquemaAusente();
+  const decision = await decidirClaim(falloDeInsert(errorDeCodigo(code)), `wamid.${code}`, { activa: false });
+  assert.strictEqual(decision.respuesta.incierto, true, code);
+  assert.strictEqual(decision.respuesta.reintentar, true, code);
+  assert.strictEqual(decision.status, 503, code);
+  assert.strictEqual(decision.bot, false, code);
+  ok(`${code} responde 503 con la limpieza apagada`);
+}
+
+async function testEstadoHttp5xx(status) {
+  entrante.olvidarEsquemaAusente();
+  const decision = await decidirClaim(
+    falloDeInsert(errorDeHttp(status, { message: "duplicate unique whatsapp_message_id" })),
+    `wamid.http${status}`,
+    { activa: false }
+  );
+  assert.strictEqual(decision.respuesta.incierto, true, String(status));
+  assert.strictEqual(decision.respuesta.duplicado, false, String(status));
+  assert.strictEqual(decision.status, 503, String(status));
+  assert.strictEqual(decision.bot, false, String(status));
+  ok(`HTTP ${status} responde 503 aunque el texto parezca un duplicado`);
+}
+
+async function testEstadoHttp4xx(status) {
+  entrante.olvidarEsquemaAusente();
+  const decision = await decidirClaim(
+    falloDeInsert(errorDeHttp(status, { message: "timeout duplicate whatsapp_message_id" }, `HTTP ${status}`)),
+    `wamid.rechazo${status}`,
+    { activa: false }
+  );
+  assert.strictEqual(decision.respuesta.incierto, false, String(status));
+  assert.strictEqual(decision.respuesta.duplicado, false, String(status));
+  assert.strictEqual(decision.respuesta.reintentar, false, String(status));
+  assert.strictEqual(decision.status, 200, String(status));
+  assert.strictEqual(decision.bot, false, String(status));
+  ok(`HTTP ${status} responde 200 y no reintenta`);
+}
+
+async function testDuplicadosConfirmadosResponden200() {
+  entrante.olvidarEsquemaAusente();
+  const conflicto = await decidirClaim(
+    falloDeInsert(errorDeHttp(409, { message: "conflict" })),
+    "wamid.solo409",
+    { activa: false }
+  );
+  assert.strictEqual(conflicto.respuesta.duplicado, true);
+  assert.strictEqual(conflicto.status, 200);
+  assert.strictEqual(conflicto.bot, false);
+
+  const sql = await decidirClaim(
+    falloDeInsert(errorDeHttp(500, { code: "23505", message: "unique violation" })),
+    "wamid.sql23505",
+    { activa: false }
+  );
+  assert.strictEqual(sql.respuesta.duplicado, true);
+  assert.strictEqual(sql.respuesta.incierto, false);
+  assert.strictEqual(sql.status, 200);
+  assert.strictEqual(sql.bot, false);
+  ok("409 y 23505 responden 200");
+}
+
+async function testLimpiezaActivaConservaProteccion() {
+  entrante.olvidarEsquemaAusente();
+  const limpieza = sqlFalso();
+  ocupar(limpieza, "reservado", "cl:codigos");
+  const bloqueado = await decidirClaim(almacenClaim(), "wamid.activa-reservado", {
+    activa: true,
+    cliente: limpieza,
+  });
+  assert.strictEqual(bloqueado.status, 503);
+  assert.strictEqual(bloqueado.respuesta.estado, "reservado");
+  assert.strictEqual(bloqueado.respuesta.guardado, false);
+  assert.strictEqual(bloqueado.bot, false);
+  assert.strictEqual(limpieza.filas.get("u|c|591").estado, "reservado");
+
+  const durante = sqlFalso();
+  const rechazado = await decidirClaim(
+    falloDeInsert(errorDeHttp(400, { message: "bad request" })),
+    "wamid.activa-400",
+    { activa: true, cliente: durante }
+  );
+  assert.strictEqual(rechazado.status, 200);
+  assert.strictEqual(rechazado.respuesta.incierto, false);
+  assert.strictEqual(rechazado.bot, false);
+  assert.strictEqual(durante.filas.get("u|c|591").estado, null);
+  assert.strictEqual(servicio.ELIMINACION_REAL_BLOQUEADA, true);
+  ok("la limpieza activa bloquea reservado y un 4xx no queda en 503");
 }
 
 function testWebhookNoEsperaNiCortaElBot() {
@@ -727,6 +974,7 @@ function testWebhookNoEsperaNiCortaElBot() {
   assert.ok(ack > 0 && ack < bot);
   assert.ok(webhook.includes("statusHttpEntrante(coordinado, sueltaDuplicado)"));
   assert.ok(webhook.includes("[WEBHOOK] claim incierto"));
+  assert.ok(webhook.includes("if (statusIncierto === 503 && messageIdEntrante) mensajesProcesados.delete(messageIdEntrante);"));
   assert.ok(webhook.indexOf("[WEBHOOK] claim incierto") < webhook.indexOf("procesarMensajeEntrante("));
   assert.ok(webhook.includes("proteccionEntranteActiva() && intentoPersistencia"));
   assert.ok(webhook.indexOf("mensajesProcesados.has(message.id)") < webhook.indexOf("await coordinarPersistenciaEntrante"));
@@ -757,6 +1005,18 @@ function testWebhookNoEsperaNiCortaElBot() {
   await testBorrandoNoSeLiberaNiBorra();
   await testCacheVenceYUnaSolaRevalidacion();
   await testClaimInciertoNoEjecutaBot();
+  await testCincoEscenariosDeClaim();
+  for (const code of ["ECONNRESET", "ECONNREFUSED", "ENOTFOUND", "EAI_AGAIN", "ETIMEDOUT", "ECONNABORTED"]) {
+    await testEstadoHttpPorCodigo(code);
+  }
+  for (const status of [500, 502, 503, 504]) {
+    await testEstadoHttp5xx(status);
+  }
+  for (const status of [400, 401, 403, 404, 408, 422, 429]) {
+    await testEstadoHttp4xx(status);
+  }
+  await testDuplicadosConfirmadosResponden200();
+  await testLimpiezaActivaConservaProteccion();
   testWebhookNoEsperaNiCortaElBot();
   console.log(`${passed} pruebas ok`);
 })().catch((error) => {

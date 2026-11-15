@@ -21,14 +21,15 @@ function supabaseHeaders(extra = {}) {
   };
 }
 
-function isUniqueViolation(err) {
-  const status = err?.response?.status;
-  if (status === 409) return true;
+function codigoSql(err) {
   const data = err?.response?.data;
-  const code = data?.code || data?.error_code || "";
-  if (String(code) === "23505") return true;
-  const msg = JSON.stringify(data || err?.message || "");
-  return /duplicate|unique|whatsapp_message_id/i.test(msg) && status >= 400;
+  if (!data || typeof data !== "object") return "";
+  return String(data.code || data.error_code || "");
+}
+
+function isUniqueViolation(err) {
+  if (codigoSql(err) === "23505") return true;
+  return Number(err?.response?.status) === 409;
 }
 
 function esTimeoutClaim(err) {
@@ -40,20 +41,28 @@ function esTimeoutClaim(err) {
 
 function esPerdidaDeConexion(err) {
   const code = String(err?.code || "");
-  if (["ECONNRESET", "EPIPE", "ENETUNREACH", "EHOSTUNREACH"].includes(code)) return true;
+  if ([
+    "ECONNRESET",
+    "ECONNREFUSED",
+    "ENOTFOUND",
+    "EAI_AGAIN",
+    "EPIPE",
+    "ENETUNREACH",
+    "EHOSTUNREACH",
+  ].includes(code)) return true;
   return /socket hang up/i.test(String(err?.message || ""));
 }
 
 function esResultadoIncierto(err) {
-  if (esTimeoutClaim(err) || esPerdidaDeConexion(err)) return true;
+  if (!err || isUniqueViolation(err)) return false;
   const status = Number(err?.response?.status);
-  return status >= 500;
+  if (status >= 400 && status < 500) return false;
+  if (status >= 500) return true;
+  return esTimeoutClaim(err) || esPerdidaDeConexion(err);
 }
 
 function esRechazoAntesDeGuardar(err) {
   if (!err || esResultadoIncierto(err) || isUniqueViolation(err)) return false;
-  const code = String(err.code || "");
-  if (code === "ECONNREFUSED" || code === "ENOTFOUND" || code === "EAI_AGAIN") return true;
   const status = Number(err?.response?.status);
   return status >= 400 && status < 500;
 }
@@ -146,7 +155,7 @@ async function reclamarMensajeEntrantePorWamid(fila, deps = {}) {
     }
   } catch (errLookup) {
     const falloLookup = clasificarFalloClaim(errLookup);
-    if (falloLookup.incierto || falloLookup.duplicate) {
+    if (falloLookup.duplicate) {
       return { ...falloLookup, fase: "lookup" };
     }
     console.log(

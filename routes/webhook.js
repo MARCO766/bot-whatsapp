@@ -740,7 +740,9 @@ if (coordinado.incierto) {
     recuperacion: false,
   });
   await soltarVallaEntrante();
-  return res.sendStatus(statusHttpEntrante(coordinado));
+  const statusIncierto = statusHttpEntrante(coordinado);
+  if (statusIncierto === 503 && messageIdEntrante) mensajesProcesados.delete(messageIdEntrante);
+  return res.sendStatus(statusIncierto);
 }
 if (coordinado.reintentar) {
   const aviso = coordinado.proteccion
