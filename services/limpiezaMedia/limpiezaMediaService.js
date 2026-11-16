@@ -142,6 +142,7 @@ function crearEstado() {
     fuenteIlegible: null,
     enCurso: false,
     jsonCursor: null,
+    mensajeCursor: null,
     referenciasJson: new Set(),
     enFuenteJson: false,
     omitirJson: false,
@@ -197,16 +198,12 @@ async function leerFuenteReal({ fuente, offset, limit, despuesDeId, porId }) {
   const select = SELECT_FUENTE[fuente];
   if (!select) return [];
   const json = porId === true || esFuenteJson(fuente);
-  const columnas = json ? `id,${select}` : select;
+  const columnas = `id,${select}`;
   let pagina = `order=id.asc&limit=${limit}`;
-  if (json) {
-    if (despuesDeId) {
-      const cursor = idCursorSeguro(despuesDeId);
-      if (!cursor) throw new Error("cursor json ilegible");
-      pagina += `&id=gt.${encodeURIComponent(cursor)}`;
-    }
-  } else {
-    pagina += `&offset=${offset}`;
+  if (despuesDeId) {
+    const cursor = idCursorSeguro(despuesDeId);
+    if (!cursor) throw new Error(json ? "cursor json ilegible" : "cursor ilegible");
+    pagina += `&id=gt.${encodeURIComponent(cursor)}`;
   }
   const res = await conReintento(() =>
     axios.get(
@@ -221,14 +218,20 @@ async function leerFuenteReal({ fuente, offset, limit, despuesDeId, porId }) {
   return res.data;
 }
 
-async function leerMensajesReal({ fase, offset, limit }) {
+async function leerMensajesReal({ fase, limit, despuesDeId }) {
   const select =
     fase === "entrantes"
-      ? "select=usuario_id,conexion_whatsapp_id,cliente_numero,creado_en&direccion=eq.entrante"
-      : "select=usuario_id,conexion_whatsapp_id,cliente_numero,imagen_url,contenido";
+      ? "select=id,usuario_id,conexion_whatsapp_id,cliente_numero,creado_en&direccion=eq.entrante"
+      : "select=id,usuario_id,conexion_whatsapp_id,cliente_numero,imagen_url,contenido";
+  let pagina = `order=id.asc&limit=${limit}`;
+  if (despuesDeId) {
+    const cursor = idCursorSeguro(despuesDeId);
+    if (!cursor) throw new Error("cursor ilegible");
+    pagina += `&id=gt.${encodeURIComponent(cursor)}`;
+  }
   const res = await conReintento(() =>
     axios.get(
-      `${process.env.SUPABASE_URL}/rest/v1/mensajes?${select}&order=id.asc&limit=${limit}&offset=${offset}`,
+      `${process.env.SUPABASE_URL}/rest/v1/mensajes?${select}&${pagina}`,
       { headers: headersSupabase(), timeout: 20000 }
     )
   );
@@ -354,9 +357,12 @@ async function pasoProtegidas(estado, io, pageSize) {
   }
   let filas = [];
   try {
-    filas = await io.leerFuente(json
-      ? { fuente, limit: pageSize, despuesDeId: estado.jsonCursor, porId: true }
-      : { fuente, offset: estado.offset, limit: pageSize });
+    filas = await io.leerFuente({
+      fuente,
+      limit: pageSize,
+      despuesDeId: estado.jsonCursor,
+      porId: true,
+    });
   } catch (error) {
     if (json) return paginaJsonIlegible(estado, fuente);
     if (!isSchemaMissingError(error)) throw error;
@@ -366,8 +372,8 @@ async function pasoProtegidas(estado, io, pageSize) {
     estado.offset = 0;
     return { io: true, terminado: false };
   }
-  if (json && !Array.isArray(filas)) return paginaJsonIlegible(estado, fuente);
-  if (json && filas.some((fila) => !fila || typeof fila !== "object" || Array.isArray(fila))) {
+  if (!Array.isArray(filas)) return paginaJsonIlegible(estado, fuente);
+  if (filas.some((fila) => !fila || typeof fila !== "object" || Array.isArray(fila))) {
     return paginaJsonIlegible(estado, fuente);
   }
   estado.enFuenteJson = json;
@@ -384,21 +390,21 @@ async function pasoProtegidas(estado, io, pageSize) {
     estado.jsonCursor = null;
     return { io: true, terminado: estado.fuenteIndex >= FUENTES.length };
   }
-  if (json) {
-    const ultimo = filas[filas.length - 1];
-    const cursor = idCursorSeguro(ultimo && ultimo.id);
-    if (!cursor || (estado.jsonCursor && cursor <= estado.jsonCursor)) {
-      return paginaJsonIlegible(estado, fuente);
-    }
-    estado.jsonCursor = cursor;
-    return { io: true, terminado: false };
+  const ultimo = filas[filas.length - 1];
+  const cursor = idCursorSeguro(ultimo && ultimo.id);
+  if (!cursor || (estado.jsonCursor && cursor <= estado.jsonCursor)) {
+    return paginaJsonIlegible(estado, fuente);
   }
-  estado.offset += filas.length;
+  estado.jsonCursor = cursor;
   return { io: true, terminado: false };
 }
 
 async function pasoMensajes(estado, io, pageSize, fase) {
-  const filas = await io.leerMensajes({ fase, offset: estado.offset, limit: pageSize });
+  const filas = await io.leerMensajes({
+    fase,
+    limit: pageSize,
+    despuesDeId: estado.mensajeCursor,
+  });
   if (fase === "entrantes") {
     for (const fila of filas) reglas.registrarEntrante(estado.hilos, fila);
   } else {
@@ -406,14 +412,24 @@ async function pasoMensajes(estado, io, pageSize, fase) {
   }
   if (estado.proteccionIncompleta) {
     estado.offset = 0;
+    estado.mensajeCursor = null;
     return { io: true, terminado: true };
   }
   if (filas.length < pageSize) {
     estado.offset = 0;
+    estado.mensajeCursor = null;
     if (fase === "entrantes") estado.entrantesCompletos = true;
     return { io: true, terminado: true };
   }
-  estado.offset += filas.length;
+  const cursor = idCursorSeguro(filas[filas.length - 1] && filas[filas.length - 1].id);
+  if (!cursor || (estado.mensajeCursor && cursor <= estado.mensajeCursor)) {
+    estado.fuenteIlegible = "mensajes";
+    estado.proteccionIncompleta = true;
+    estado.offset = 0;
+    estado.mensajeCursor = null;
+    return { io: true, terminado: true };
+  }
+  estado.mensajeCursor = cursor;
   return { io: true, terminado: false };
 }
 
@@ -809,6 +825,20 @@ function exigirPaginaCompleta(filas, limite) {
   return filas;
 }
 
+function mencionesDesdeFilas(clave, filas) {
+  const ruta = reglas.sinBucket(clave);
+  if (!reglas.segmentoFiltroSeguro(ruta)) {
+    throw errorDeConsulta("ruta no filtrable", CONSULTA_MENCIONES);
+  }
+  const lista = Array.isArray(filas) ? filas : [];
+  exigirPaginaCompleta(lista, LIMITE_MENCIONES);
+  return lista.filter(
+    (fila) =>
+      reglas.citaRutaCompleta(fila?.imagen_url, clave) ||
+      reglas.citaRutaCompleta(fila?.contenido, clave)
+  );
+}
+
 async function leerMencionesReal({ clave }) {
   const ruta = reglas.sinBucket(clave);
   if (!reglas.segmentoFiltroSeguro(ruta)) {
@@ -819,15 +849,11 @@ async function leerMencionesReal({ clave }) {
     filas = await getRest(
       `/rest/v1/mensajes?select=usuario_id,conexion_whatsapp_id,cliente_numero,imagen_url,contenido&${reglas.filtroIlike(["imagen_url", "contenido"], ruta)}&limit=${LIMITE_MENCIONES}`
     );
-    exigirPaginaCompleta(filas, LIMITE_MENCIONES);
+    filas = mencionesDesdeFilas(clave, filas);
   } catch (error) {
     throw anotarConsulta(error, CONSULTA_MENCIONES);
   }
-  return filas.filter(
-    (fila) =>
-      reglas.citaRutaCompleta(fila?.imagen_url, clave) ||
-      reglas.citaRutaCompleta(fila?.contenido, clave)
-  );
+  return filas;
 }
 
 async function leerUltimoEntranteReal(fila) {
@@ -1006,8 +1032,11 @@ async function validarInmediatoEliminacion(clave, opciones = {}) {
 
 module.exports = {
   ELIMINACION_REAL_BLOQUEADA,
+  CONSULTAS_TEXTO,
   FUENTES,
   FUENTES_JSON,
+  listarStorageReal,
+  mencionesDesdeFilas,
   cargarProteccion,
   crearEstado,
   ejecutarLimpiezaMedia,

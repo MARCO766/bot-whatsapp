@@ -347,9 +347,18 @@ function crearIo(datos, resumenes, llamadas) {
       }
       return filas.slice(offset, offset + limit);
     },
-    async leerMensajes({ fase, offset, limit }) {
+    async leerMensajes({ fase, offset, limit, despuesDeId }) {
       llamadas.push(`mensajes:${fase}`);
-      const filas = fase === "entrantes" ? datos.entrantes : datos.medias;
+      const base = fase === "entrantes" ? datos.entrantes : datos.medias;
+      const filas = base.map((fila, indice) => (
+        fila && fila.id != null ? fila : { ...fila, id: String(indice + 1).padStart(8, "0") }
+      ));
+      if (despuesDeId != null || offset == null) {
+        const siguientes = despuesDeId
+          ? filas.filter((fila) => String(fila.id) > String(despuesDeId))
+          : filas;
+        return siguientes.slice(0, limit);
+      }
       return filas.slice(offset, offset + limit);
     },
     async listarStorage({ prefix, offset, limit }) {

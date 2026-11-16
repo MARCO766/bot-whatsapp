@@ -144,11 +144,16 @@ function leerLlamadas() {
     const patrones = [
       /llamarRpc\s*\(\s*[^,]+,\s*[^,]+,\s*[^,]+,\s*"(limpieza_media_[a-z0-9_]+)"\s*,\s*(\{[\s\S]*?\})\s*\)/g,
       /(?<!Rpc)llamar\s*\(\s*[^,]+,\s*"(limpieza_media_[a-z0-9_]+)"\s*,\s*(\{[\s\S]*?\}|ids\s*\([^)]*\))\s*\)/g,
+      /axios\.post\(\s*`[^`]*\/rpc\/(limpieza_media_[a-z0-9_]+)`\s*,\s*(\{[\s\S]*?\})\s*,/g,
+      /axios\.post\(\s*["'][^"']*\/rpc\/(limpieza_media_[a-z0-9_]+)["']\s*,\s*(\{[\s\S]*?\})\s*,/g,
     ];
     for (const patron of patrones) {
       let encontrado;
       while ((encontrado = patron.exec(src))) {
         const claves = clavesDelArgumento(encontrado[2], ids);
+        if (!claves.length) {
+          throw new Error(`Node llama a ${encontrado[1]} sin argumentos con nombre`);
+        }
         const previa = llamadas.get(encontrado[1]);
         if (previa && previa.join("\0") !== claves.join("\0")) {
           throw new Error(`Node envía ${encontrado[1]} con argumentos distintos en dos llamadas`);

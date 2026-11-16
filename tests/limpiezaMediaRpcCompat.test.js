@@ -5,6 +5,8 @@
  * Ejecutar: node tests/limpiezaMediaRpcCompat.test.js
  */
 const assert = require("assert");
+const fs = require("fs");
+const path = require("path");
 const { compararLlamadas } = require("./herramientas/limpiezaMediaFirmas");
 
 const { funciones, tablas, llamadas, errores } = compararLlamadas();
@@ -20,6 +22,22 @@ for (const [nombre, tabla] of tablas) {
   assert.ok(!tabla.service.includes("delete"), `${nombre} otorga DELETE en la migración`);
 }
 assert.strictEqual(llamadas.size, funciones.size);
+assert.deepStrictEqual(llamadas.get("limpieza_media_revalidar_lote"), [
+  "p_fase",
+  "p_claves",
+  "p_hilos",
+]);
+const loteSrc = fs.readFileSync(
+  path.join(__dirname, "../services/limpiezaMedia/limpiezaMediaRevalidarLote.js"),
+  "utf8"
+);
+assert.match(
+  loteSrc,
+  /axios\.post\(\s*`\$\{process\.env\.SUPABASE_URL\}\/rest\/v1\/rpc\/limpieza_media_revalidar_lote`\s*,\s*\{\s*p_fase:\s*fase,\s*p_claves:\s*claves\s*\|\|\s*\[\],\s*p_hilos:\s*hilos\s*\|\|\s*\[\]\s*\}/
+);
+const referencias = loteSrc.indexOf('fase: "referencias"');
+const segundaLectura = loteSrc.indexOf("segundaNecesaria");
+assert.ok(referencias >= 0 && segundaLectura > referencias);
 if (errores.length) {
   throw new Error(errores.join("\n"));
 }
