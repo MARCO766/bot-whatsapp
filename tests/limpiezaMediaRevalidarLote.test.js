@@ -611,6 +611,8 @@ function testMigracionYBarreras() {
   assert.ok(!loteSrc.includes("quietas < 2"));
   assert.ok(loteSrc.includes("count=exact"));
   assert.ok(loteSrc.includes("lectura.vistos.size"));
+  assert.ok(loteSrc.includes("total < lectura.vistos.size"));
+  assert.ok(loteSrc.includes("total === lectura.vistos.size"));
   assert.ok(loteSrc.includes("lectura.marca"));
   assert.ok(loteSrc.includes("citaRutaCompleta"));
   const referencias = loteSrc.indexOf('fase: "referencias"');
@@ -980,6 +982,114 @@ async function testConcurrencia() {
     }),
     (error) => error && error.message === "lectura incompleta"
   );
+
+  const carrera = mundoConCita(ruta, idViejo, VIEJO);
+  let conteosReloj = 0;
+  const reloj = await lote.revalidarLote([clave], {
+    workerId: "limpieza-prueba",
+    ahora: AHORA,
+    listarStorage: listarDe(carrera),
+    candado: async () => ({ ok: true }),
+    leerPaginaMensajes: paginarMensajesDe(carrera),
+    leerPaginaFuente: paginarFuenteDe(carrera),
+    contarMensajes: async () => {
+      conteosReloj += 1;
+      if (conteosReloj === 1) {
+        carrera.mensajes.push(mensaje(ruta, { id: idNuevo, creado_en: RECIENTE }));
+      }
+      return contarDe(carrera)();
+    },
+  });
+  assert.strictEqual(reloj.resultados[0].motivo, "hilo_activo");
+  assert.strictEqual(reloj.resultados[0].apto, false);
+  assert.strictEqual(conteosReloj, 2);
+
+  const compartido = mundoConCita(ruta, idViejo, VIEJO);
+  let conteosCompartida = 0;
+  const otra = await lote.revalidarLote([clave], {
+    workerId: "limpieza-prueba",
+    ahora: AHORA,
+    listarStorage: listarDe(compartido),
+    candado: async () => ({ ok: true }),
+    leerPaginaMensajes: paginarMensajesDe(compartido),
+    leerPaginaFuente: paginarFuenteDe(compartido),
+    contarMensajes: async () => {
+      conteosCompartida += 1;
+      if (conteosCompartida === 1) {
+        compartido.mensajes.push(mensaje(ruta, {
+          id: idNuevo,
+          creado_en: RECIENTE,
+          cliente_numero: "59170000002",
+        }));
+      }
+      return contarDe(compartido)();
+    },
+  });
+  assert.strictEqual(otra.resultados[0].motivo, "compartida");
+  assert.strictEqual(otra.resultados[0].apto, false);
+  assert.strictEqual(conteosCompartida, 2);
+
+  const atras = mundoConCita(ruta, idViejo, VIEJO);
+  let conteosAtras = 0;
+  await assert.rejects(
+    () => lote.revalidarLote([clave], {
+      workerId: "limpieza-prueba",
+      ahora: AHORA,
+      listarStorage: listarDe(atras),
+      candado: async () => ({ ok: true }),
+      leerPaginaMensajes: paginarMensajesDe(atras),
+      leerPaginaFuente: paginarFuenteDe(atras),
+      contarMensajes: async () => {
+        conteosAtras += 1;
+        if (conteosAtras === 1) {
+          atras.mensajes.push(mensaje(ruta, {
+            id: idNuevo,
+            creado_en: "2025-06-01T00:00:00.000Z",
+          }));
+        }
+        return contarDe(atras)();
+      },
+    }),
+    (error) => error && error.message === "lectura incompleta" && error.fase === "menciones"
+  );
+  assert.strictEqual(conteosAtras, 1);
+
+  const menor = mundoConCita(ruta, idViejo, VIEJO);
+  await assert.rejects(
+    () => lote.revalidarLote([clave], {
+      workerId: "limpieza-prueba",
+      ahora: AHORA,
+      listarStorage: listarDe(menor),
+      candado: async () => ({ ok: true }),
+      leerPaginaMensajes: paginarMensajesDe(menor),
+      leerPaginaFuente: paginarFuenteDe(menor),
+      contarMensajes: async () => 0,
+    }),
+    (error) => error && error.message === "lectura incompleta" && error.fase === "menciones"
+  );
+
+  const rafagaPosterior = mundoConCita(ruta, idViejo, VIEJO);
+  let conteosTope = 0;
+  await assert.rejects(
+    () => lote.revalidarLote([clave], {
+      workerId: "limpieza-prueba",
+      ahora: AHORA,
+      listarStorage: listarDe(rafagaPosterior),
+      candado: async () => ({ ok: true }),
+      leerPaginaMensajes: paginarMensajesDe(rafagaPosterior),
+      leerPaginaFuente: paginarFuenteDe(rafagaPosterior),
+      contarMensajes: async () => {
+        conteosTope += 1;
+        rafagaPosterior.mensajes.push(mensaje(ruta, {
+          id: `00000000-0000-4000-8000-${conteosTope.toString(16).padStart(12, "0")}`,
+          creado_en: `2026-11-14T00:00:${String(conteosTope).padStart(2, "0")}.000Z`,
+        }));
+        return contarDe(rafagaPosterior)();
+      },
+    }),
+    (error) => error && error.message === "lectura incompleta" && error.fase === "menciones"
+  );
+  assert.strictEqual(conteosTope, 9);
 }
 
 async function testCitaSoloEnContenido() {

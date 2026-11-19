@@ -6,8 +6,10 @@
  * Las menciones salen de una sola lectura paginada por (creado_en, id),
  * compartida por todos los lotes. Cada fila se recuerda por id y la marca
  * queda en el último par. Los mensajes posteriores se piden solo después de
- * esa marca. El conteo exacto de mensajes con fecha cierra la lectura: si no
- * coincide con los id vistos, la pasada se detiene y no borra nada.
+ * esa marca. El conteo exacto de mensajes con fecha cierra la lectura. Si
+ * supera los id vistos, se leen solo los pares posteriores a la marca y se
+ * vuelve a contar, hasta ocho cierres. Si es menor, o esa diferencia no
+ * aparece después de la marca, la pasada se detiene y no borra nada.
  * El reconocimiento sigue siendo citaRutaCompleta.
  * El veredicto lo calcula revalidarCandidato.
  * No borra objetos ni filas. No crea índices ni tablas.
@@ -657,14 +659,21 @@ async function comprobarConteo(lectura, opciones) {
     throw falloDeLectura(errorDeFase("creado_en nulo", "mensajes.menciones"));
   }
   const contar = opciones.contarMensajes || contarMensajesReal;
-  let total;
+  const incompleta = () => falloDeLectura(errorDeFase("lectura incompleta", "mensajes.menciones"));
   try {
-    total = await contar();
+    for (let vuelta = 0; vuelta < TOPE_VUELTAS; vuelta += 1) {
+      const total = await contar();
+      if (!Number.isInteger(total) || total < lectura.vistos.size) throw incompleta();
+      if (total === lectura.vistos.size) return;
+      if (!cursorCompleto(lectura.marca)) throw incompleta();
+      const nuevos = await recorrerRango(lectura, leer, lectura.marca);
+      if (nuevos === 0) throw incompleta();
+    }
+    const total = await contar();
+    if (Number.isInteger(total) && total === lectura.vistos.size) return;
+    throw incompleta();
   } catch (error) {
     throw falloDeLectura(error);
-  }
-  if (!Number.isInteger(total) || total !== lectura.vistos.size) {
-    throw falloDeLectura(errorDeFase("lectura incompleta", "mensajes.menciones"));
   }
 }
 
@@ -894,6 +903,7 @@ async function revalidarLote(claves, opciones = {}) {
   contador.entrantes += 1;
   for (const clave of claves) volcarPlan(preparadas.get(clave), clave, lectura);
   await comprobarConteo(lectura, opciones);
+  for (const clave of claves) volcarPlan(preparadas.get(clave), clave, lectura);
 
   const armado = armarHilos(claves, preparadas);
   const hiloPorClave = armado.hiloPorClave;
