@@ -202,8 +202,13 @@ function solicitarBorradoReal() {
   throw error;
 }
 
-function eliminacionRealPermitida() {
-  return false;
+function eliminacionRealPermitida(env = process.env) {
+  return String(env?.LIMPIEZA_MEDIA_BORRAR || "").trim().toLowerCase() === "true";
+}
+
+function borradoRealAutorizado() {
+  return module.exports.ELIMINACION_REAL_BLOQUEADA === true
+    && module.exports.eliminacionRealPermitida() === true;
 }
 
 function headersSupabase() {
@@ -1141,6 +1146,7 @@ async function validarInmediatoEliminacion(clave, opciones = {}) {
 
 module.exports = {
   ELIMINACION_REAL_BLOQUEADA,
+  borradoRealAutorizado,
   COLUMNAS_JSON_VIVAS,
   CONSULTAS_TEXTO,
   FUENTES,

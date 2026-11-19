@@ -1,20 +1,25 @@
 /**
- * Recorrido diario de limpieza en DRY-RUN.
- * Comando previsto para Render Cron Job, una vez al día:
+ * Recorrido diario de limpieza.
+ * Comando del Cron, una vez al día:
  *   node scripts/limpieza-media-cron.js
- * No borra objetos ni filas. Mientras el borrado real sigue bloqueado, un
- * candidato revalidado no abre marca durable ni llama a Storage.
- * Si la revalidación de un candidato falla, la pasada se detiene: no se
- * mira el siguiente objeto y el proceso sale con código 1. El finally
- * suelta el candado global.
- * La eliminación real, cuando deje de estar bloqueada, pasa por la
- * planificación existente: marca, nuevo entrante y un solo objeto.
+ * Sin LIMPIEZA_MEDIA_BORRAR=true no borra objetos ni filas: un candidato
+ * revalidado no abre marca durable ni llama a Storage.
+ * Si la revalidación falla, la referencia queda ambigua o se pierde el
+ * candado, la pasada se detiene: no se mira el siguiente objeto y el
+ * proceso sale con código 1. El finally suelta el candado global.
+ * Con la variable en true, cada objeto pasa por la planificación existente:
+ * marca durable, último entrante, protección JSON y un solo DELETE.
+ * Cada ejecución borra como máximo un objeto. El cupo es interno: no sale de
+ * variables de entorno, parámetros ni argumentos. Se consume inmediatamente
+ * antes del DELETE a Storage. Si ese intento falla o queda incierto, la
+ * pasada se detiene. El candidato siguiente no abre marca ni llega a Storage.
+ * Una marca incierto no se reintenta.
  * No define LIMPIEZA_MEDIA_ACTIVA en la plataforma:
  * la bandera solo entra como argumento de esta ejecución.
  *
  * Los jsonb grandes se leen una vez en el inventario. Flujos, campañas e IA
- * se vuelven a leer justo antes de revalidar. La eliminación, si dejara de
- * estar bloqueada, repite esa lectura viva inmediatamente antes de Storage.
+ * se vuelven a leer justo antes de revalidar. La eliminación, si la variable
+ * la autoriza, repite esa lectura viva inmediatamente antes de Storage.
  * Las menciones de todos los candidatos salen de una lectura paginada por
  * (creado_en, id). Cada id visto se recuerda. La pasada se repite desde el
  * inicio hasta que dos recorridos no encuentran mensajes nuevos.
@@ -51,7 +56,95 @@ function exigirCandado(estado) {
 }
 
 function eliminacionSigueBloqueada() {
-  return servicio.ELIMINACION_REAL_BLOQUEADA === true || servicio.eliminacionRealPermitida() !== true;
+  return servicio.borradoRealAutorizado() !== true;
+}
+
+function debeDetenerPasada(motivo) {
+  return motivo === "consulta_fallida" || reglas.esReferenciaAmbigua(motivo);
+}
+
+const LIMITE_OBJETOS_POR_EJECUCION = 1;
+
+function crearCupo() {
+  return { usados: 0 };
+}
+
+function cupoAgotado(cupo) {
+  return cupo.usados >= LIMITE_OBJETOS_POR_EJECUCION;
+}
+
+function debeDetenerPorBorrado(paso) {
+  if (!paso || paso.modo !== "real" || paso.motivo === "limite_ejecucion") return false;
+  if (paso.eliminado === true) return false;
+  if (paso.incierto === true) return true;
+  if (paso.motivo === "resultado_incierto" || paso.motivo === "supabase_error") return true;
+  return paso.storage === true;
+}
+
+function paradaBorrado(paso, candidato, porMotivo, aptos, cupo, extra = {}) {
+  console.error("[LIMPIEZA_MEDIA_CRON] detenido", {
+    motivo: paso.motivo || "resultado_incierto",
+    clave: candidato.clave,
+  });
+  return {
+    detener: true,
+    abortar: paso.abortar === true,
+    codigo: 1,
+    motivo: paso.motivo || "resultado_incierto",
+    clave: candidato.clave,
+    porMotivo,
+    aptos,
+    storage: paso.storage === true,
+    marca: paso.marca === true,
+    paso,
+    borrados: cupo.usados,
+    ...extra,
+  };
+}
+
+async function pasoTrasLimite(candidato, opciones) {
+  const seco = {
+    eliminado: false,
+    storage: false,
+    abortar: false,
+    marca: false,
+    modo: "real",
+  };
+  if (!candidato || candidato.categoria !== "candidato" || candidato.motivo !== "candidato") {
+    return { ...seco, motivo: "no_candidato", modo: "dry-run" };
+  }
+  const validar = opciones.validar || servicio.validarInmediatoEliminacion.bind(servicio);
+  let veredicto;
+  try {
+    veredicto = await validar(candidato.clave, {
+      protegidas: opciones.protegidas,
+      nombresProtegidos: opciones.nombresProtegidos,
+      workerId: opciones.workerId,
+      io: opciones.io,
+    });
+  } catch (error) {
+    return {
+      ...seco,
+      detener: true,
+      motivo: "consulta_fallida",
+      detalle: reglas.detalleConsultaFallida(error).mensaje,
+      modo: "dry-run",
+    };
+  }
+  if (veredicto?.abortar) {
+    return { ...seco, abortar: true, motivo: veredicto.motivo || "candado_perdido", modo: "dry-run" };
+  }
+  if (veredicto?.apto !== true) {
+    const motivo = veredicto?.motivo || "no_apto";
+    return {
+      ...seco,
+      motivo,
+      detener: debeDetenerPasada(motivo),
+      detalle: veredicto?.detalle || null,
+      modo: "dry-run",
+    };
+  }
+  return { ...seco, motivo: "limite_ejecucion" };
 }
 
 /**
@@ -59,7 +152,7 @@ function eliminacionSigueBloqueada() {
  * En dry-run no abre marca durable y no llama a Storage.
  * La rama real conserva la planificación: marca, entrante nuevo y un solo objeto.
  */
-async function procesarCandidatoRevalidado(candidato, opciones = {}) {
+async function procesarCandidatoRevalidado(candidato, opciones = {}, cupo = crearCupo()) {
   const seco = { eliminado: false, storage: false, abortar: false, marca: false, modo: "dry-run" };
   if (!candidato || candidato.categoria !== "candidato" || candidato.motivo !== "candidato") {
     return { ...seco, motivo: "no_candidato" };
@@ -89,12 +182,15 @@ async function procesarCandidatoRevalidado(candidato, opciones = {}) {
     return {
       ...seco,
       motivo,
-      detener: motivo === "consulta_fallida",
+      detener: debeDetenerPasada(motivo),
       detalle: veredicto?.detalle || null,
     };
   }
   if (eliminacionSigueBloqueada()) {
     return { ...seco, motivo: "bloqueada" };
+  }
+  if (cupoAgotado(cupo)) {
+    return { ...seco, motivo: "limite_ejecucion", modo: "real" };
   }
 
   const plan = await eliminar.planificarEliminacion(candidato.clave, {
@@ -129,11 +225,17 @@ async function procesarCandidatoRevalidado(candidato, opciones = {}) {
     workerId: opciones.workerId,
     io: opciones.io,
     ahora: opciones.ahora,
-    borrarObjeto: () => eliminar.borrarObjetoStorage(candidato.clave, {
-      url: opciones.url || process.env.SUPABASE_URL,
-      cliente: opciones.cliente,
-      marca: plan.valla,
-    }),
+    borrarObjeto: () => {
+      if (cupoAgotado(cupo)) {
+        return { eliminado: false, storage: false, motivo: "limite_ejecucion" };
+      }
+      cupo.usados += 1;
+      return eliminar.borrarObjetoStorage(candidato.clave, {
+        url: opciones.url || process.env.SUPABASE_URL,
+        cliente: opciones.cliente,
+        marca: plan.valla,
+      });
+    },
   });
   return { ...hecho, marca: true, modo: "real" };
 }
@@ -181,24 +283,27 @@ async function inventario(estado) {
 }
 
 function anotarPaso(porMotivo, paso, candidato) {
-  porMotivo[paso.motivo] = (porMotivo[paso.motivo] || 0) + 1;
+  const motivo = paso?.motivo || "no_apto";
+  porMotivo[motivo] = (porMotivo[motivo] || 0) + 1;
   console.log("[LIMPIEZA_MEDIA_CRON] revalidado", {
     clave: candidato.clave,
     bytes: candidato.bytes,
-    motivo: paso.motivo,
-    apto: paso.motivo === "bloqueada",
-    borrado: "bloqueado",
-    storage: false,
+    motivo,
+    apto: motivo === "bloqueada" || paso?.eliminado === true,
+    borrado: paso?.eliminado === true ? "eliminado" : (motivo === "bloqueada" ? "bloqueado" : "omitido"),
+    storage: paso?.storage === true,
   });
 }
 
-async function recorrerCandidatosUnoAUno(candidatos, opciones = {}) {
+async function recorrerCandidatosUnoAUno(candidatos, opciones = {}, cupo = crearCupo()) {
   const porMotivo = {};
   let aptos = 0;
   const exigir = opciones.exigirCandado || (() => {});
   for (const candidato of candidatos) {
     exigir();
-    const paso = await procesarCandidatoRevalidado(candidato, opciones);
+    const paso = cupoAgotado(cupo)
+      ? await pasoTrasLimite(candidato, opciones)
+      : await procesarCandidatoRevalidado(candidato, opciones, cupo);
     if (paso.abortar) {
       return {
         detener: true,
@@ -211,9 +316,28 @@ async function recorrerCandidatosUnoAUno(candidatos, opciones = {}) {
         storage: false,
         marca: false,
         paso,
+        borrados: cupo.usados,
       };
     }
-    if (paso.detener === true || paso.motivo === "consulta_fallida") {
+    if (paso.modo === "real" && paso.motivo === "bloqueada") {
+      console.error("[LIMPIEZA_MEDIA_CRON] detenido", {
+        motivo: "bloqueada",
+        clave: candidato.clave,
+      });
+      return {
+        detener: true,
+        abortar: false,
+        codigo: 1,
+        motivo: "bloqueada",
+        clave: candidato.clave,
+        porMotivo,
+        aptos,
+        storage: false,
+        marca: false,
+        paso,
+      };
+    }
+    if (paso.detener === true || debeDetenerPasada(paso.motivo)) {
       console.error("[LIMPIEZA_MEDIA_CRON] detenido", {
         motivo: paso.motivo || "consulta_fallida",
         clave: candidato.clave,
@@ -244,12 +368,16 @@ async function recorrerCandidatosUnoAUno(candidatos, opciones = {}) {
         porMotivo,
         aptos,
         paso,
+        borrados: cupo.usados,
       };
     }
-    if (paso.motivo === "bloqueada") aptos += 1;
-    anotarPaso(porMotivo, { motivo: paso.motivo }, candidato);
+    if (debeDetenerPorBorrado(paso)) {
+      return paradaBorrado(paso, candidato, porMotivo, aptos, cupo);
+    }
+    if (paso.motivo === "bloqueada" || paso.eliminado === true) aptos += 1;
+    anotarPaso(porMotivo, paso.eliminado === true && !paso.motivo ? { ...paso, motivo: "eliminado" } : paso, candidato);
   }
-  return { detener: false, abortar: false, codigo: 0, porMotivo, aptos, storage: false, marca: false };
+  return { detener: false, abortar: false, codigo: 0, porMotivo, aptos, storage: false, marca: false, borrados: cupo.usados };
 }
 
 function sumarTiempos(total, parte) {
@@ -258,7 +386,7 @@ function sumarTiempos(total, parte) {
   return total;
 }
 
-async function recorrerCandidatosEnLote(candidatos, opciones = {}) {
+async function recorrerCandidatosEnLote(candidatos, opciones = {}, cupo = crearCupo()) {
   const porMotivo = {};
   let aptos = 0;
   const exigir = opciones.exigirCandado || (() => {});
@@ -371,47 +499,7 @@ async function recorrerCandidatosEnLote(candidatos, opciones = {}) {
     }
     for (const item of lote.resultados) {
       const candidato = reales.find((entrada) => entrada.clave === item.clave);
-      if (item.apto === true && !eliminacionSigueBloqueada()) {
-        const paso = await procesarCandidatoRevalidado(candidato, opciones);
-        if (paso.abortar) {
-          return {
-            detener: true,
-            abortar: true,
-            codigo: 1,
-            motivo: paso.motivo || "candado_perdido",
-            clave: candidato.clave,
-            porMotivo,
-            aptos,
-            storage: false,
-            marca: paso.marca === true,
-            tiempos,
-          };
-        }
-        if (paso.detener === true || paso.motivo === "consulta_fallida") {
-          console.error("[LIMPIEZA_MEDIA_CRON] detenido", {
-            motivo: paso.motivo || "consulta_fallida",
-            clave: candidato.clave,
-            detalle: paso.detalle || null,
-          });
-          return {
-            detener: true,
-            abortar: false,
-            codigo: 1,
-            motivo: paso.motivo || "consulta_fallida",
-            detalle: paso.detalle || null,
-            clave: candidato.clave,
-            porMotivo,
-            aptos,
-            storage: paso.storage === true,
-            marca: paso.marca === true,
-            tiempos,
-          };
-        }
-        if (paso.eliminado === true) aptos += 1;
-        anotarPaso(porMotivo, { motivo: paso.eliminado === true ? "eliminado" : paso.motivo }, candidato);
-        continue;
-      }
-      if (item.detener || item.motivo === "consulta_fallida") {
+      if (item.detener || debeDetenerPasada(item.motivo)) {
         console.error("[LIMPIEZA_MEDIA_CRON] detenido", {
           motivo: item.motivo || "consulta_fallida",
           clave: item.clave,
@@ -431,6 +519,76 @@ async function recorrerCandidatosEnLote(candidatos, opciones = {}) {
           tiempos,
         };
       }
+      if (item.apto === true && !eliminacionSigueBloqueada()) {
+        if (cupoAgotado(cupo)) {
+          anotarPaso(porMotivo, { motivo: "limite_ejecucion", eliminado: false, storage: false }, candidato);
+          continue;
+        }
+        const paso = await procesarCandidatoRevalidado(candidato, opciones, cupo);
+        if (paso.abortar) {
+          return {
+            detener: true,
+            abortar: true,
+            codigo: 1,
+            motivo: paso.motivo || "candado_perdido",
+            clave: candidato.clave,
+            porMotivo,
+            aptos,
+            storage: false,
+            marca: paso.marca === true,
+            tiempos,
+            borrados: cupo.usados,
+          };
+        }
+        if (paso.modo === "real" && paso.motivo === "bloqueada") {
+          console.error("[LIMPIEZA_MEDIA_CRON] detenido", {
+            motivo: "bloqueada",
+            clave: candidato.clave,
+          });
+          return {
+            detener: true,
+            abortar: false,
+            codigo: 1,
+            motivo: "bloqueada",
+            clave: candidato.clave,
+            porMotivo,
+            aptos,
+            storage: paso.storage === true,
+            marca: paso.marca === true,
+            tiempos,
+          };
+        }
+        if (paso.detener === true || debeDetenerPasada(paso.motivo)) {
+          console.error("[LIMPIEZA_MEDIA_CRON] detenido", {
+            motivo: paso.motivo || "consulta_fallida",
+            clave: candidato.clave,
+            detalle: paso.detalle || null,
+          });
+          return {
+            detener: true,
+            abortar: false,
+            codigo: 1,
+            motivo: paso.motivo || "consulta_fallida",
+            detalle: paso.detalle || null,
+            clave: candidato.clave,
+            porMotivo,
+            aptos,
+            storage: paso.storage === true,
+            marca: paso.marca === true,
+            tiempos,
+          };
+        }
+        if (debeDetenerPorBorrado(paso)) {
+          return paradaBorrado(paso, candidato, porMotivo, aptos, cupo, { tiempos });
+        }
+        if (paso.eliminado === true) aptos += 1;
+        anotarPaso(porMotivo, {
+          motivo: paso.eliminado === true ? "eliminado" : paso.motivo,
+          eliminado: paso.eliminado === true,
+          storage: paso.storage === true,
+        }, candidato);
+        continue;
+      }
       const motivo = item.motivo === "candidato" && eliminacionSigueBloqueada()
         ? "bloqueada"
         : item.motivo;
@@ -438,14 +596,15 @@ async function recorrerCandidatosEnLote(candidatos, opciones = {}) {
       anotarPaso(porMotivo, { motivo }, candidato);
     }
   }
-  return { detener: false, abortar: false, codigo: 0, porMotivo, aptos, storage: false, marca: false, tiempos };
+  return { detener: false, abortar: false, codigo: 0, porMotivo, aptos, storage: false, marca: false, tiempos, borrados: cupo.usados };
 }
 
 async function recorrerCandidatos(candidatos, opciones = {}) {
+  const cupo = crearCupo();
   if (typeof opciones.validar === "function" || opciones.io) {
-    return recorrerCandidatosUnoAUno(candidatos, opciones);
+    return recorrerCandidatosUnoAUno(candidatos, opciones, cupo);
   }
-  return recorrerCandidatosEnLote(candidatos, opciones);
+  return recorrerCandidatosEnLote(candidatos, opciones, cupo);
 }
 
 async function finalizarCandado(estado, workerId, liberar = liberarLockLimpiezaMedia) {
@@ -510,10 +669,11 @@ async function main() {
     }
     for (const clave of vivas.protegidas) fresca.protegidas.add(clave);
 
-    if (servicio.ELIMINACION_REAL_BLOQUEADA !== true || servicio.eliminacionRealPermitida()) {
-      console.error("[LIMPIEZA_MEDIA_CRON] detenido", { motivo: "borrado_real_bloqueado" });
+    if (servicio.ELIMINACION_REAL_BLOQUEADA !== true) {
+      console.error("[LIMPIEZA_MEDIA_CRON] detenido", { motivo: "bloqueo_alterado" });
       return 1;
     }
+    const borradoAutorizado = servicio.borradoRealAutorizado() === true;
 
     const candidatos = (result.informe?.objetos || []).filter(
       (objeto) => objeto.categoria === "candidato" && objeto.motivo === "candidato"
@@ -534,9 +694,11 @@ async function main() {
     const aptos = recorrido.aptos;
 
     console.log("[LIMPIEZA_MEDIA_CRON] resumen", {
-      modo: "dry-run",
-      eliminacionReal: "bloqueada",
+      modo: borradoAutorizado ? "real" : "dry-run",
+      eliminacionReal: borradoAutorizado ? "autorizada" : "bloqueada",
       dias: reglas.DIAS_INACTIVIDAD,
+      limiteObjetos: LIMITE_OBJETOS_POR_EJECUCION,
+      borrados: recorrido.borrados || 0,
       inventarioMs,
       objetosRevisados: result.objetosRevisados,
       candidatosInventario: candidatos.length,

@@ -270,6 +270,20 @@ function motivoConRuta(uso, hilos, protegidas, limiteMs, path) {
   return "candidato";
 }
 
+const MOTIVOS_AMBIGUOS = new Set([
+  "compartida",
+  "multi_usuario",
+  "sin_entrante",
+  "no_verificable",
+  "sin_referencia",
+  "ruta_no_coincide",
+  "ruta_segv2_irregular",
+]);
+
+function esReferenciaAmbigua(motivo) {
+  return MOTIVOS_AMBIGUOS.has(motivo);
+}
+
 function categoriaDeMotivo(motivo) {
   if (motivo === "candidato") return "candidato";
   if (
@@ -597,7 +611,9 @@ module.exports = {
   detalleConsultaFallida,
   veredictoRevalidacion,
   analizarTextoStorage,
+  MOTIVOS_AMBIGUOS,
   categoriaDeMotivo,
+  esReferenciaAmbigua,
   clasificarObjetoInventario,
   esCopiaSegv2,
   anotarUso,

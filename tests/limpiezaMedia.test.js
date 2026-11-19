@@ -1079,7 +1079,7 @@ function testBarrerasYCron() {
   );
   assert.ok(cron.includes("ELIMINACION_REAL_BLOQUEADA"));
   assert.ok(cron.includes("validarInmediatoEliminacion"));
-  assert.ok(cron.includes("eliminacionRealPermitida"));
+  assert.ok(cron.includes("borradoRealAutorizado"));
   assert.ok(cron.includes("limpiezaMediaEliminar"));
   assert.ok(cron.includes("planificarEliminacion"));
   assert.ok(cron.includes("ejecutarBorradoSobrePlan"));
@@ -1092,7 +1092,8 @@ function testBarrerasYCron() {
   assert.ok(!cron.includes("imagen_url"));
   assert.ok(!cron.includes("eliminarSoloObjetoStorage"));
   assert.ok(ruta.includes("adquirirLockLimpiezaMedia"));
-  assert.ok(ruta.includes("eliminacionRealPermitida"));
+  assert.ok(ruta.includes("ELIMINACION_REAL_BLOQUEADA !== true"));
+  assert.ok(!ruta.includes("eliminacionRealPermitida()"));
   assert.ok(ruta.includes('eliminacionReal: "bloqueada"'));
   assert.ok(!ruta.includes("solicitarBorradoReal"));
   assert.ok(!ruta.includes("validarInmediatoEliminacion"));
@@ -1679,7 +1680,8 @@ async function testEndpointManualNoBorra() {
   try {
     process.env.ELIMINACION_REAL = "true";
     process.env.LIMPIEZA_MEDIA_BORRAR = "true";
-    assert.strictEqual(servicio.eliminacionRealPermitida(), false);
+    assert.strictEqual(servicio.eliminacionRealPermitida(), true);
+    assert.strictEqual(servicio.borradoRealAutorizado(), true);
     assert.throws(() => servicio.solicitarBorradoReal(), /bloqueada/);
 
     servicio.ELIMINACION_REAL_BLOQUEADA = false;
@@ -2240,7 +2242,6 @@ async function testCronPlanificaSinBorrar() {
     assert.strictEqual(noLlega.marca, false);
     assert.strictEqual(storage, 0);
 
-    servicio.ELIMINACION_REAL_BLOQUEADA = false;
     servicio.eliminacionRealPermitida = () => true;
     eliminar.planificarEliminacion = async () => {
       planes += 1;

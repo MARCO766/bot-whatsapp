@@ -3,6 +3,12 @@
  * No llama a Storage, no repite un DELETE y no toca mensajes ni conversaciones.
  * Liberar exige una verificación previa. Cada paso queda en la auditoría del registro.
  *
+ * Una marca incierto no se reintenta. En la base, el desbloqueo de mensajes
+ * es manual: leer el objeto, verificar como no_eliminado_confirmado si sigue
+ * en el bucket o eliminado_confirmado si ya no está, y solo entonces liberar.
+ * Liberar pone estado y owner en null y conserva resultado = incierto, así
+ * que el Cron no vuelve a promover esa fila a borrando.
+ *
  * listarMarcasReales() no abre red. listarMarcasDurables() llama a PostgREST
  * solo si el llamador pasa permitirRed o un cliente de prueba.
  */

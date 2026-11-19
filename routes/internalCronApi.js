@@ -84,10 +84,7 @@ router.post("/rm24h", verificarCronSecret, async (req, res) => {
  * Usa el mismo candado durable. Si no puede adquirirlo, no inicia otra pasada.
  */
 router.post("/limpieza-media", verificarCronSecret, async (req, res) => {
-  if (
-    limpiezaServicio.ELIMINACION_REAL_BLOQUEADA !== true ||
-    limpiezaServicio.eliminacionRealPermitida()
-  ) {
+  if (limpiezaServicio.ELIMINACION_REAL_BLOQUEADA !== true) {
     return res.status(403).json({
       ok: false,
       modo: "simulacion",

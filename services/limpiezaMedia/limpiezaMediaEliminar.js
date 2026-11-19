@@ -8,8 +8,8 @@
  * El webhook no inserta mientras esa marca está en reservado o borrando.
  * Si la función no existe o la reserva falla, no se llama a Storage.
  *
- * ELIMINACION_REAL_BLOQUEADA y eliminacionRealPermitida() impiden llamar a
- * Storage aunque la valla, en una prueba, diga que el intervalo está cerrado.
+ * El DELETE solo se intenta si ELIMINACION_REAL_BLOQUEADA sigue en true y
+ * LIMPIEZA_MEDIA_BORRAR es exactamente true. Si la constante cambia, no se borra.
  *
  * borrarObjetoStorage comprueba dentro de sí misma que la marca durable está
  * en borrando. Si no puede verificarla, no llama a client.delete.
@@ -45,7 +45,7 @@ function solicitudBorradoStorage(clave, baseUrl) {
 }
 
 function borradoRealBloqueado() {
-  return servicio.ELIMINACION_REAL_BLOQUEADA === true || servicio.eliminacionRealPermitida() !== true;
+  return servicio.borradoRealAutorizado() !== true;
 }
 
 function abrirVallaReal(peticion = {}) {
