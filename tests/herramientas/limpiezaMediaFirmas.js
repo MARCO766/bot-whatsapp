@@ -142,10 +142,10 @@ function leerLlamadas() {
     const src = fs.readFileSync(archivo, "utf8");
     const ids = clavesIds(src);
     const patrones = [
-      /llamarRpc\s*\(\s*[^,]+,\s*[^,]+,\s*[^,]+,\s*"(limpieza_media_[a-z0-9_]+)"\s*,\s*(\{[\s\S]*?\})\s*\)/g,
-      /(?<!Rpc)llamar\s*\(\s*[^,]+,\s*"(limpieza_media_[a-z0-9_]+)"\s*,\s*(\{[\s\S]*?\}|ids\s*\([^)]*\))\s*\)/g,
-      /axios\.post\(\s*`[^`]*\/rpc\/(limpieza_media_[a-z0-9_]+)`\s*,\s*(\{[\s\S]*?\})\s*,/g,
-      /axios\.post\(\s*["'][^"']*\/rpc\/(limpieza_media_[a-z0-9_]+)["']\s*,\s*(\{[\s\S]*?\})\s*,/g,
+      /llamarRpc\s*\(\s*[^,]+,\s*[^,]+,\s*[^,]+,\s*"(limpieza_(?:media|flujo)_[a-z0-9_]+)"\s*,\s*(\{[\s\S]*?\})\s*\)/g,
+      /(?<!Rpc)llamar\s*\(\s*[^,]+,\s*"(limpieza_(?:media|flujo)_[a-z0-9_]+)"\s*,\s*(\{[\s\S]*?\}|ids\s*\([^)]*\))\s*\)/g,
+      /axios\.post\(\s*`[^`]*\/rpc\/(limpieza_(?:media|flujo)_[a-z0-9_]+)`\s*,\s*(\{[\s\S]*?\})\s*,/g,
+      /axios\.post\(\s*["'][^"']*\/rpc\/(limpieza_(?:media|flujo)_[a-z0-9_]+)["']\s*,\s*(\{[\s\S]*?\})\s*,/g,
     ];
     for (const patron of patrones) {
       let encontrado;
@@ -161,7 +161,7 @@ function leerLlamadas() {
         llamadas.set(encontrado[1], claves);
       }
     }
-    for (const literal of src.matchAll(/"(limpieza_media_[a-z0-9_]+)"/g)) {
+    for (const literal of src.matchAll(/"(limpieza_(?:media|flujo)_[a-z0-9_]+)"/g)) {
       literales.push({ nombre: literal[1], archivo });
     }
   }

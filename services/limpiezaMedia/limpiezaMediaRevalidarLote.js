@@ -240,7 +240,41 @@ function crearLecturaMenciones(claves) {
     universo: Array.isArray(claves) ? claves.slice() : null,
     paginasCompletas: 0,
     pasadasExistentes: 0,
+    marca: null,
+    entrantes: new Map(),
   };
+}
+
+function crearLecturaTexto(claves) {
+  return {
+    lista: false,
+    error: null,
+    claves: new Set(),
+    nombres: new Set(),
+    trie: null,
+    indiceNombres: null,
+    universo: Array.isArray(claves) ? claves.slice() : null,
+    paginas: 0,
+    vistos: new Set(),
+  };
+}
+
+function idFiltro(id) {
+  const texto = String(id == null ? "" : id).trim();
+  if (!/^[0-9a-zA-Z-]+$/.test(texto)) return null;
+  return texto;
+}
+
+function compararPar(a, b) {
+  const tiempoA = String(a.creado_en);
+  const tiempoB = String(b.creado_en);
+  if (tiempoA < tiempoB) return -1;
+  if (tiempoA > tiempoB) return 1;
+  const idA = String(a.id);
+  const idB = String(b.id);
+  if (idA < idB) return -1;
+  if (idA > idB) return 1;
+  return 0;
 }
 
 function cursorCompleto(fila) {
@@ -284,7 +318,7 @@ function urlPaginaMensajes(pedido) {
     params.push("creado_en=is.null");
     params.push(`limit=${limite}`);
   } else if (pedido.tipo === "completa") {
-    params.push("select=id,creado_en,usuario_id,conexion_whatsapp_id,cliente_numero,imagen_url,contenido");
+    params.push("select=id,creado_en,usuario_id,conexion_whatsapp_id,cliente_numero,direccion,imagen_url,contenido");
     params.push("creado_en=not.is.null");
     params.push("order=creado_en.asc,id.asc");
     params.push(`limit=${limite}`);
@@ -305,6 +339,42 @@ async function leerPaginaMensajesReal(pedido) {
     timeout: 20000,
   }));
   if (!Array.isArray(res.data)) throw errorDeFase("pagina ilegible", "mensajes.menciones");
+  return res.data;
+}
+
+function urlPaginaFuente(pedido) {
+  const tabla = String(pedido?.tabla || "");
+  if (!/^[a-z0-9_]+$/.test(tabla)) return null;
+  const pedidas = [...(pedido.columnas || []), ...(pedido.extra || [])];
+  const columnas = [];
+  for (const columna of pedidas) {
+    if (!/^[a-z0-9_]+$/.test(columna) || columnas.includes(columna)) continue;
+    columnas.push(columna);
+  }
+  const limite = Number.isFinite(Number(pedido.limite)) && Number(pedido.limite) > 0
+    ? Math.floor(Number(pedido.limite))
+    : PAGINA_MENSAJES;
+  let url = `${process.env.SUPABASE_URL}/rest/v1/${tabla}?select=${["id", ...columnas].join(",")}&order=id.asc&limit=${limite}`;
+  if (pedido.despuesDeId) {
+    const id = idFiltro(pedido.despuesDeId);
+    if (!id) return null;
+    url += `&id=gt.${encodeURIComponent(id)}`;
+  }
+  return url;
+}
+
+async function leerPaginaFuenteReal(pedido) {
+  const key = process.env.SUPABASE_SECRET_KEY;
+  const url = urlPaginaFuente(pedido);
+  if (!url) throw errorDeFase("pagina ilegible", pedido?.tabla || "referencias_protegidas");
+  const res = await conReintento(() => axios.get(url, {
+    headers: {
+      apikey: key,
+      Authorization: `Bearer ${key}`,
+    },
+    timeout: 20000,
+  }));
+  if (!Array.isArray(res.data)) throw errorDeFase("pagina ilegible", pedido.tabla);
   return res.data;
 }
 
@@ -372,9 +442,27 @@ function clavesEnTexto(trie, texto) {
   return halladas;
 }
 
+function recordarEntrante(lectura, fila) {
+  if (fila?.direccion !== "entrante") return;
+  const hilo = reglas.claveHilo(fila.usuario_id, fila.conexion_whatsapp_id, fila.cliente_numero);
+  const ms = reglas.parseCreadoEnUtc(fila.creado_en);
+  if (!hilo || ms == null) return;
+  const previo = lectura.entrantes.get(hilo);
+  if (!previo || ms > previo.ms) {
+    lectura.entrantes.set(hilo, { ms, creado_en: fila.creado_en });
+  }
+}
+
+function subirMarca(lectura, fila) {
+  const par = { creado_en: fila.creado_en, id: String(fila.id) };
+  if (!lectura.marca || compararPar(par, lectura.marca) > 0) lectura.marca = par;
+}
+
 function observarFila(lectura, fila) {
   if (!cursorCompleto(fila)) throw errorDeFase("fila ilegible", "mensajes.menciones");
   const id = String(fila.id);
+  subirMarca(lectura, fila);
+  recordarEntrante(lectura, fila);
   if (lectura.vistos.has(id)) return false;
   lectura.vistos.add(id);
   absorberFila(lectura, fila);
@@ -420,8 +508,8 @@ function falloDeLectura(error) {
   return fallo;
 }
 
-async function recorrerRango(lectura, leer) {
-  let cursor = null;
+async function recorrerRango(lectura, leer, inicio) {
+  let cursor = inicio || null;
   let previo = null;
   let nuevos = 0;
   for (;;) {
@@ -524,11 +612,105 @@ async function leerMencionesIniciales(claves, lectura, opciones) {
   return { error: null, filas: claves.map((clave) => filaMencionDe(lectura, clave)) };
 }
 
-async function leerMencionesPosteriores(claves, lectura, opciones) {
+async function pasadaNuevos(lectura, opciones) {
+  if (lectura.error) throw lectura.error;
+  const leer = opciones.leerPaginaMensajes || leerPaginaMensajesReal;
+  try {
+    await recorrerRango(lectura, leer, lectura.marca);
+  } catch (error) {
+    const fallo = falloDeLectura(error);
+    lectura.error = fallo;
+    throw fallo;
+  }
+}
+
+async function leerMencionesNuevas(claves, lectura, opciones) {
   anotarFase(opciones, "menciones");
-  await cubrirLectura(lectura, claves, opciones);
+  if (!lectura.lista) await cubrirLectura(lectura, claves, opciones);
+  else await pasadaNuevos(lectura, opciones);
   if (lectura.error) throw lectura.error;
   return { error: null, filas: claves.map((clave) => filaMencionDe(lectura, clave)) };
+}
+
+function avisar(opciones, fase) {
+  anotarFase(opciones, fase);
+  if (typeof opciones.efectos?.alConsultar === "function") {
+    opciones.efectos.alConsultar(fase, opciones.mundo);
+  }
+}
+
+function falloDeFuente(error, tabla) {
+  if (error && error.consulta && error.fase) return error;
+  const fallo = errorDeFase(
+    error && error.message ? error.message : "pagina ilegible",
+    tabla || "referencias_protegidas"
+  );
+  fallo.fase = "referencias_protegidas";
+  return fallo;
+}
+
+function absorberFuente(lecturaTexto, columnas, fila) {
+  for (const columna of columnas) {
+    for (const clave of clavesEnTexto(lecturaTexto.trie, fila?.[columna])) {
+      lecturaTexto.claves.add(clave);
+    }
+  }
+  if (fila?.media_filename == null || fila.media_filename === "") return;
+  const lista = lecturaTexto.indiceNombres.get(String(fila.media_filename));
+  if (!lista) return;
+  for (const clave of lista) lecturaTexto.nombres.add(clave);
+}
+
+async function recorrerFuente(tabla, columnas, extra, lecturaTexto, leer) {
+  let cursor = null;
+  for (;;) {
+    const filas = await leer({
+      tabla,
+      columnas,
+      extra,
+      limite: PAGINA_MENSAJES,
+      despuesDeId: cursor,
+    });
+    if (!Array.isArray(filas)) throw errorDeFase("pagina ilegible", tabla);
+    lecturaTexto.paginas += 1;
+    if (filas.length === 0) return;
+    let ultimo = null;
+    for (const fila of filas) {
+      const id = idFiltro(fila?.id);
+      if (!id || lecturaTexto.vistos.has(`${tabla}:${id}`)) {
+        throw errorDeFase("paginacion detenida", tabla);
+      }
+      if (ultimo && id === ultimo) throw errorDeFase("paginacion detenida", tabla);
+      lecturaTexto.vistos.add(`${tabla}:${id}`);
+      absorberFuente(lecturaTexto, columnas, fila);
+      ultimo = id;
+    }
+    if (filas.length < PAGINA_MENSAJES) return;
+    if (!ultimo || ultimo === cursor) throw errorDeFase("paginacion detenida", tabla);
+    cursor = ultimo;
+  }
+}
+
+async function cubrirTexto(lecturaTexto, claves, opciones) {
+  if (lecturaTexto.error) throw lecturaTexto.error;
+  if (lecturaTexto.lista) return;
+  avisar(opciones, "referencias");
+  asegurarUniverso(lecturaTexto, claves);
+  const indice = indicePorNombre(lecturaTexto.universo);
+  lecturaTexto.trie = trieDe(indice);
+  lecturaTexto.indiceNombres = indice;
+  const leer = opciones.leerPaginaFuente || leerPaginaFuenteReal;
+  try {
+    for (const consulta of servicio.CONSULTAS_TEXTO) {
+      const extra = consulta.tabla === "seguimientos_v2" ? ["media_filename"] : [];
+      await recorrerFuente(consulta.tabla, consulta.columnas, extra, lecturaTexto, leer);
+    }
+    lecturaTexto.lista = true;
+  } catch (error) {
+    const fallo = falloDeFuente(error, error?.consulta);
+    lecturaTexto.error = fallo;
+    throw fallo;
+  }
 }
 
 function cuentaCitas(lectura, claves) {
@@ -594,12 +776,15 @@ async function revalidarLote(claves, opciones = {}) {
   const contador = consultasVacias();
   const tiempos = tiemposVacios();
   const listar = opciones.listarStorage || servicio.listarStorageReal;
-  const consultar = opciones.consultar || consultarLoteReal;
   const candado = opciones.candado || ((workerId) => verificarLockLimpiezaMedia(workerId));
   const inventario = opciones.inventarioStorage instanceof Map
     ? opciones.inventarioStorage
     : crearInventarioStorage();
   const lectura = opciones.lecturaMenciones || crearLecturaMenciones();
+  const lecturaTexto = opciones.lecturaTexto || crearLecturaTexto();
+  if (!Array.isArray(lecturaTexto.universo) && Array.isArray(lectura.universo)) {
+    lecturaTexto.universo = lectura.universo.slice();
+  }
   const tomar = async (campo, fn) => {
     const inicio = Date.now();
     try {
@@ -620,7 +805,6 @@ async function revalidarLote(claves, opciones = {}) {
   }
   const menciones1 = indicePorClave(primera?.filas);
 
-  const conReferencia = [];
   const preparadas = new Map();
   for (const clave of claves) {
     const base = existencia.get(clave) || { existe: false, errorExiste: null };
@@ -645,25 +829,14 @@ async function revalidarLote(claves, opciones = {}) {
     }
     const pideReferencias = base.errorExiste == null && base.existe === true && menciones.length > 0 && !errorMenciones;
     preparadas.set(clave, { ...base, menciones1: menciones, errorMenciones, pideReferencias });
-    if (pideReferencias) conReferencia.push(clave);
   }
 
-  const referencias = new Map();
-  const leerBloqueReferencias = async (pedidas) => {
-    if (!pedidas.length) return;
-    const payload = await tomar("referenciasMs", () => consultar({ fase: "referencias", claves: pedidas, hilos: [] }));
-    contador.referencias += 1;
-    if (payload?.error) {
-      const error = errorDeFase(payload.error, "limpieza_media_revalidar_lote");
-      error.fase = "referencias_protegidas";
-      throw error;
-    }
-    for (const fila of payload?.filas || []) referencias.set(fila.clave, fila);
-  };
-  await leerBloqueReferencias(conReferencia);
+  const paginasTexto = lecturaTexto.paginas;
+  await tomar("referenciasMs", () => cubrirTexto(lecturaTexto, claves, { ...opciones, fase: "referencias" }));
+  contador.referencias += Math.max(0, lecturaTexto.paginas - paginasTexto);
 
   const segundaNecesaria = claves.slice();
-  const posteriores = await tomar("menciones2Ms", () => leerMencionesPosteriores(segundaNecesaria, lectura, opciones));
+  const posteriores = await tomar("menciones2Ms", () => leerMencionesNuevas(segundaNecesaria, lectura, opciones));
   contador.menciones += 1;
   if (posteriores?.error) {
     const error = errorDeFase(posteriores.error, "limpieza_media_revalidar_lote");
@@ -672,84 +845,13 @@ async function revalidarLote(claves, opciones = {}) {
   }
   for (const clave of claves) volcarPlan(preparadas.get(clave), clave, lectura);
 
-  let rondasReferencia = 0;
-  for (;;) {
-    const tardias = claves.filter((clave) => {
-      const plan = preparadas.get(clave);
-      return plan.pideReferencias && !referencias.has(clave);
-    });
-    if (!tardias.length) break;
-    rondasReferencia += 1;
-    if (rondasReferencia > 4) {
-      const error = errorDeFase("lectura incompleta", "mensajes.menciones");
-      error.fase = "menciones";
-      throw error;
-    }
-    await leerBloqueReferencias(tardias);
-    await tomar("menciones2Ms", () => cubrirLectura(lectura, claves, opciones));
-    for (const clave of claves) volcarPlan(preparadas.get(clave), clave, lectura);
-  }
-
-  let armado = armarHilos(claves, preparadas);
-  let hilos = armado.hilos;
-  let hiloPorClave = armado.hiloPorClave;
-  const traerEntrantes = async (pedidos) => {
-    if (!pedidos.length) return [];
-    const payload = await tomar("entrantesMs", () => consultar({ fase: "entrantes", claves: [], hilos: pedidos }));
-    contador.entrantes += 1;
-    if (payload?.error) {
-      const error = errorDeFase(payload.error, "limpieza_media_revalidar_lote");
-      error.fase = "ultimo_entrante";
-      throw error;
-    }
-    return payload?.filas || [];
-  };
-  let entrantes = await traerEntrantes(hilos);
-  let citas = cuentaCitas(lectura, claves);
-  await tomar("menciones2Ms", () => cubrirLectura(lectura, claves, opciones));
+  avisar(opciones, "entrantes");
+  await tomar("entrantesMs", () => pasadaNuevos(lectura, opciones));
+  contador.entrantes += 1;
   for (const clave of claves) volcarPlan(preparadas.get(clave), clave, lectura);
-  if (cuentaCitas(lectura, claves) !== citas) {
-    armado = armarHilos(claves, preparadas);
-    hilos = armado.hilos;
-    hiloPorClave = armado.hiloPorClave;
-    entrantes = await traerEntrantes(hilos);
-    citas = cuentaCitas(lectura, claves);
-    await tomar("menciones2Ms", () => cubrirLectura(lectura, claves, opciones));
-    for (const clave of claves) volcarPlan(preparadas.get(clave), clave, lectura);
-    if (cuentaCitas(lectura, claves) !== citas) {
-      const error = errorDeFase("lectura incompleta", "mensajes.menciones");
-      error.fase = "menciones";
-      throw error;
-    }
-    armado = armarHilos(claves, preparadas);
-    hilos = armado.hilos;
-    hiloPorClave = armado.hiloPorClave;
-    entrantes = await traerEntrantes(hilos);
-  }
 
-  let cierres = 0;
-  for (;;) {
-    const pendientes = claves.filter((clave) => {
-      const plan = preparadas.get(clave);
-      return plan.pideReferencias && !referencias.has(clave);
-    });
-    if (!pendientes.length) break;
-    cierres += 1;
-    if (cierres > 4) {
-      const error = errorDeFase("lectura incompleta", "mensajes.menciones");
-      error.fase = "menciones";
-      throw error;
-    }
-    await leerBloqueReferencias(pendientes);
-    citas = cuentaCitas(lectura, claves);
-    await tomar("menciones2Ms", () => cubrirLectura(lectura, claves, opciones));
-    for (const clave of claves) volcarPlan(preparadas.get(clave), clave, lectura);
-    if (cuentaCitas(lectura, claves) === citas) continue;
-    armado = armarHilos(claves, preparadas);
-    hilos = armado.hilos;
-    hiloPorClave = armado.hiloPorClave;
-    entrantes = await traerEntrantes(hilos);
-  }
+  const armado = armarHilos(claves, preparadas);
+  const hiloPorClave = armado.hiloPorClave;
 
   let candadoOk = { ok: false, motivo: "candado_perdido" };
   try {
@@ -776,14 +878,26 @@ async function revalidarLote(claves, opciones = {}) {
     let citada = false;
     let errorCita = null;
     if (plan.pideReferencias) {
-      try {
-        citada = await citadaDeItem(clave, referencias.get(clave));
-      } catch (error) {
-        errorCita = error;
+      if (!lecturaTexto.lista || lecturaTexto.error) {
+        errorCita = lecturaTexto.error || errorDeFase("referencias incompletas", "referencias_protegidas");
+      } else {
+        citada = lecturaTexto.claves.has(clave) || lecturaTexto.nombres.has(clave);
       }
     }
     const hilo = hiloPorClave.get(clave);
-    const entrante = hilo ? entrantes.find((fila) => mismaPersona(fila, hilo)) : null;
+    let entrante = null;
+    if (hilo) {
+      if (!/^[0-9]+$/.test(String(hilo.cliente_numero || ""))) {
+        entrante = { ...hilo, error: "hilo_no_filtrable", creado_en: null };
+      } else {
+        const guardado = lectura.entrantes.get(reglas.claveHilo(
+          hilo.usuario_id,
+          hilo.conexion_whatsapp_id,
+          hilo.cliente_numero
+        ));
+        entrante = { ...hilo, error: null, creado_en: guardado?.creado_en || null };
+      }
+    }
     let lecturas = 0;
     const io = {
       async existeObjeto() {
@@ -842,6 +956,8 @@ module.exports = {
   conReintento,
   crearInventarioStorage,
   crearLecturaMenciones,
+  crearLecturaTexto,
+  urlPaginaFuente,
   esCancelacion57014,
   revalidarLote,
   urlPaginaMensajes,

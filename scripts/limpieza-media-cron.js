@@ -276,6 +276,10 @@ async function recorrerCandidatosEnLote(candidatos, opciones = {}) {
     }
     lecturaMenciones.universo = universo;
   }
+  const lecturaTexto = opciones.lecturaTexto || loteMedia.crearLecturaTexto();
+  if (!Array.isArray(lecturaTexto.universo)) {
+    lecturaTexto.universo = lecturaMenciones.universo.slice();
+  }
   const tiempos = {
     storageMs: 0,
     mencionesMs: 0,
@@ -308,7 +312,11 @@ async function recorrerCandidatosEnLote(candidatos, opciones = {}) {
         listarStorage: opciones.listarStorage,
         inventarioStorage,
         lecturaMenciones,
+        lecturaTexto,
         leerPaginaMensajes: opciones.leerPaginaMensajes,
+        leerPaginaFuente: opciones.leerPaginaFuente,
+        efectos: opciones.efectos,
+        mundo: opciones.mundo,
         alFase: opciones.alFase,
         consultar: opciones.consultar,
         candado: opciones.candado,
