@@ -3,13 +3,12 @@
  * y no se adelantan candidatos de un lote posterior.
  *
  * La existencia se lista una vez por carpeta y se confirma por igualdad de ruta.
- * Las menciones salen de una lectura paginada por (creado_en, id), compartida
- * por todos los lotes. El id es UUID y no indica qué mensaje es nuevo, y
- * creado_en puede repetirse o llegar atrasado. Cada fila examinada se recuerda
- * por id. Después de la primera pasada, y otra vez después de las referencias
- * y de los entrantes, se vuelve a leer desde el principio hasta que dos
- * pasadas seguidas no ven ningún id nuevo. Así entra un mensaje con fecha
- * anterior, igual o UUID menor. El reconocimiento sigue siendo citaRutaCompleta.
+ * Las menciones salen de una sola lectura paginada por (creado_en, id),
+ * compartida por todos los lotes. Cada fila se recuerda por id y la marca
+ * queda en el último par. Los mensajes posteriores se piden solo después de
+ * esa marca. El conteo exacto de mensajes con fecha cierra la lectura: si no
+ * coincide con los id vistos, la pasada se detiene y no borra nada.
+ * El reconocimiento sigue siendo citaRutaCompleta.
  * El veredicto lo calcula revalidarCandidato.
  * No borra objetos ni filas. No crea índices ni tablas.
  */
@@ -18,9 +17,8 @@ const reglas = require("./reglas");
 const servicio = require("./limpiezaMediaService");
 const { verificarLockLimpiezaMedia } = require("./limpiezaMediaLock");
 
-// Cada lote sigue siendo de ocho y va en serie. Las menciones no se filtran
-// por una marca de agua: una pasada completa, y se repite desde el primer
-// par hasta estabilizar. No hay paralelo.
+// Cada lote sigue siendo de ocho y va en serie. La tabla de mensajes se
+// recorre una vez. TOPE_VUELTAS limita los cierres que leen solo lo nuevo.
 const TAMANO_LOTE = 8;
 const PAGINA_LISTADO = 100;
 const TOPE_PAGINAS = 50;
@@ -329,6 +327,18 @@ function urlPaginaMensajes(pedido) {
   return `${process.env.SUPABASE_URL}/rest/v1/mensajes?${params.join("&")}`;
 }
 
+function urlConteoMensajes() {
+  return `${process.env.SUPABASE_URL}/rest/v1/mensajes?select=id&creado_en=not.is.null&limit=1`;
+}
+
+function totalDeRango(contenido) {
+  const hallado = String(contenido || "").match(/\/(\d+)\s*$/);
+  if (!hallado) return null;
+  const total = Number(hallado[1]);
+  if (!Number.isInteger(total) || total < 0) return null;
+  return total;
+}
+
 async function leerPaginaMensajesReal(pedido) {
   const key = process.env.SUPABASE_SECRET_KEY;
   const res = await conReintento(() => axios.get(urlPaginaMensajes(pedido), {
@@ -340,6 +350,22 @@ async function leerPaginaMensajesReal(pedido) {
   }));
   if (!Array.isArray(res.data)) throw errorDeFase("pagina ilegible", "mensajes.menciones");
   return res.data;
+}
+
+async function contarMensajesReal() {
+  const key = process.env.SUPABASE_SECRET_KEY;
+  const res = await conReintento(() => axios.get(urlConteoMensajes(), {
+    headers: {
+      apikey: key,
+      Authorization: `Bearer ${key}`,
+      Prefer: "count=exact",
+      Range: "0-0",
+    },
+    timeout: 20000,
+  }));
+  const total = totalDeRango(res.headers && (res.headers["content-range"] || res.headers["Content-Range"]));
+  if (total == null) throw errorDeFase("lectura incompleta", "mensajes.menciones");
+  return total;
 }
 
 function urlPaginaFuente(pedido) {
@@ -569,14 +595,7 @@ async function cubrirLectura(lectura, claves, opciones) {
       lectura.lista = true;
       return;
     }
-    let quietas = 0;
-    let vueltas = 0;
-    while (quietas < 2) {
-      vueltas += 1;
-      if (vueltas > TOPE_VUELTAS) throw errorDeFase("lectura incompleta", "mensajes.menciones");
-      const nuevos = await pasadaCompleta(lectura, leer);
-      quietas = nuevos === 0 ? quietas + 1 : 0;
-    }
+    await pasadaCompleta(lectura, leer);
     lectura.lista = true;
   } catch (error) {
     const fallo = falloDeLectura(error);
@@ -616,11 +635,36 @@ async function pasadaNuevos(lectura, opciones) {
   if (lectura.error) throw lectura.error;
   const leer = opciones.leerPaginaMensajes || leerPaginaMensajesReal;
   try {
-    await recorrerRango(lectura, leer, lectura.marca);
+    for (let vuelta = 0; vuelta < TOPE_VUELTAS; vuelta += 1) {
+      const nuevos = await recorrerRango(lectura, leer, lectura.marca);
+      if (nuevos === 0) return;
+    }
+    throw errorDeFase("lectura incompleta", "mensajes.menciones");
   } catch (error) {
     const fallo = falloDeLectura(error);
     lectura.error = fallo;
     throw fallo;
+  }
+}
+
+async function comprobarConteo(lectura, opciones) {
+  const leer = opciones.leerPaginaMensajes || leerPaginaMensajesReal;
+  const nulos = await leer({ tipo: "nulos", limite: 1 });
+  if (!Array.isArray(nulos)) {
+    throw falloDeLectura(errorDeFase("pagina ilegible", "mensajes.menciones"));
+  }
+  if (nulos.length > 0) {
+    throw falloDeLectura(errorDeFase("creado_en nulo", "mensajes.menciones"));
+  }
+  const contar = opciones.contarMensajes || contarMensajesReal;
+  let total;
+  try {
+    total = await contar();
+  } catch (error) {
+    throw falloDeLectura(error);
+  }
+  if (!Number.isInteger(total) || total !== lectura.vistos.size) {
+    throw falloDeLectura(errorDeFase("lectura incompleta", "mensajes.menciones"));
   }
 }
 
@@ -849,6 +893,7 @@ async function revalidarLote(claves, opciones = {}) {
   await tomar("entrantesMs", () => pasadaNuevos(lectura, opciones));
   contador.entrantes += 1;
   for (const clave of claves) volcarPlan(preparadas.get(clave), clave, lectura);
+  await comprobarConteo(lectura, opciones);
 
   const armado = armarHilos(claves, preparadas);
   const hiloPorClave = armado.hiloPorClave;
@@ -958,6 +1003,8 @@ module.exports = {
   crearLecturaMenciones,
   crearLecturaTexto,
   urlPaginaFuente,
+  urlConteoMensajes,
+  totalDeRango,
   esCancelacion57014,
   revalidarLote,
   urlPaginaMensajes,

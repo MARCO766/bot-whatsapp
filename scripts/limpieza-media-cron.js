@@ -315,6 +315,7 @@ async function recorrerCandidatosEnLote(candidatos, opciones = {}) {
         lecturaTexto,
         leerPaginaMensajes: opciones.leerPaginaMensajes,
         leerPaginaFuente: opciones.leerPaginaFuente,
+        contarMensajes: opciones.contarMensajes,
         efectos: opciones.efectos,
         mundo: opciones.mundo,
         alFase: opciones.alFase,
