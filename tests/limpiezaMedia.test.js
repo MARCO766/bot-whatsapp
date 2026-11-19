@@ -536,8 +536,9 @@ function testBloqueoDeBorrado() {
   assert.ok(!src.includes("registrarResumen"));
   assert.ok(!src.includes("/rest/v1/admin_logs"));
   const posts = src.match(/axios\.post\(/g) || [];
-  assert.strictEqual(posts.length, 1);
+  assert.strictEqual(posts.length, 2);
   assert.ok(src.includes("/storage/v1/object/list/archivos"));
+  assert.ok(src.includes("/rest/v1/rpc/limpieza_flujo_cita_viva"));
   ok("borrado real bloqueado en el código");
 }
 

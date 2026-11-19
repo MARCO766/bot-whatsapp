@@ -59,8 +59,12 @@ COPY --chown=macbot:nodejs \
 COPY --chown=macbot:nodejs routes ./routes
 COPY --chown=macbot:nodejs config ./config
 COPY --chown=macbot:nodejs services ./services
-# Solo el cron de limpieza. El resto de scripts/ y tmp/ no entran en la imagen.
+# El comando de la imagen sigue siendo server.js.
+# El Cron diario sigue siendo scripts/limpieza-media-cron.js.
+# El turno y el backfill M2 viajan en la imagen y no se arrancan solos.
 COPY --chown=macbot:nodejs scripts/limpieza-media-cron.js ./scripts/limpieza-media-cron.js
+COPY --chown=macbot:nodejs scripts/limpieza-media-backfill-m2.js ./scripts/limpieza-media-backfill-m2.js
+COPY --chown=macbot:nodejs scripts/limpieza-media-turno.js ./scripts/limpieza-media-turno.js
 COPY --chown=macbot:nodejs middlewares ./middlewares
 COPY --chown=macbot:nodejs jobs ./jobs
 COPY --chown=macbot:nodejs utils ./utils

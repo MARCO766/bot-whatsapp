@@ -126,6 +126,56 @@ function listarDe(mundo, contador) {
   };
 }
 
+function parCompare(a, b) {
+  const tiempoA = String(a.creado_en);
+  const tiempoB = String(b.creado_en);
+  if (tiempoA < tiempoB) return -1;
+  if (tiempoA > tiempoB) return 1;
+  const idA = String(a.id);
+  const idB = String(b.id);
+  if (idA < idB) return -1;
+  if (idA > idB) return 1;
+  return 0;
+}
+
+function paginarMensajesDe(mundo, registro, alterar) {
+  const secuencia = { n: 0 };
+  function asegurar(fila) {
+    if (fila.id == null || fila.id === "") {
+      secuencia.n += 1;
+      fila.id = `00000000-0000-4000-8000-${secuencia.n.toString(16).padStart(12, "0")}`;
+    }
+    return fila;
+  }
+  function conFecha() {
+    return mundo.mensajes
+      .map(asegurar)
+      .filter((fila) => typeof fila.creado_en === "string" && fila.creado_en.length > 0)
+      .slice()
+      .sort(parCompare);
+  }
+  return async function leer(pedido) {
+    if (registro) {
+      registro.push({
+        tipo: pedido.tipo,
+        despues: pedido.despues ? { creado_en: pedido.despues.creado_en, id: pedido.despues.id } : null,
+      });
+    }
+    if (pedido.tipo === "nulos") {
+      return mundo.mensajes
+        .filter((fila) => fila.creado_en == null || fila.creado_en === "")
+        .map((fila) => ({ ...fila }));
+    }
+    if (pedido.tipo !== "completa") return [];
+    const filas = conFecha();
+    let seleccion = filas;
+    if (pedido.despues) seleccion = seleccion.filter((fila) => parCompare(fila, pedido.despues) > 0);
+    const pagina = seleccion.slice(0, pedido.limite).map((fila) => ({ ...fila }));
+    if (typeof alterar === "function") alterar(pedido, mundo);
+    return pagina;
+  };
+}
+
 async function veredictoAnterior(clave, mundo, opciones, contador) {
   const io = {
     async existeObjeto() {
@@ -188,18 +238,26 @@ async function veredictoAnterior(clave, mundo, opciones, contador) {
   return veredicto;
 }
 
-async function veredictoNuevo(claves, mundo, opciones, efectos) {
-  const puente = consultarDe(mundo, efectos);
+async function veredictoNuevo(claves, mundo, opciones = {}, efectos) {
+  const fases = [];
+  const puente = consultarDe(mundo, efectos || opciones.efectos);
   const resultado = await lote.revalidarLote(claves, {
     workerId: "limpieza-prueba",
     ahora: AHORA,
+    dias: opciones.dias,
     protegidas: opciones.protegidas || new Set(),
     nombresProtegidos: opciones.nombresProtegidos || new Set(),
-    consultar: puente.consultar,
-    listarStorage: listarDe(mundo),
+    consultar: async (pedido) => {
+      fases.push(pedido.fase);
+      return puente.consultar(pedido);
+    },
+    listarStorage: opciones.listarStorage || listarDe(mundo),
     candado: async () => ({ ok: true }),
+    lecturaMenciones: opciones.lecturaMenciones,
+    leerPaginaMensajes: opciones.leerPaginaMensajes || paginarMensajesDe(mundo),
+    alFase: (fase) => fases.push(fase),
   });
-  return { ...resultado, fases: puente.fases };
+  return { ...resultado, fases };
 }
 
 function ponerArchivo(mundo, ruta) {
@@ -358,12 +416,16 @@ async function medir(cantidad) {
   const nuevo = { storage: 0, menciones: 0, referencias: 0, entrantes: 0, candado: 0 };
   const t1 = Date.now();
   const motivos = [];
+  const lectura = lote.crearLecturaMenciones(claves);
+  const leerPaginaMensajes = paginarMensajesDe(mundo);
   for (let i = 0; i < claves.length; i += lote.TAMANO_LOTE) {
     const grupo = claves.slice(i, i + lote.TAMANO_LOTE);
-    const resultado = await veredictoNuevo(grupo, mundo, {});
+    const resultado = await veredictoNuevo(grupo, mundo, { lecturaMenciones: lectura, leerPaginaMensajes });
     for (const tipo of Object.keys(nuevo)) nuevo[tipo] += resultado.consultas[tipo];
     motivos.push(...resultado.resultados.map((item) => item.motivo));
   }
+  assert.strictEqual(lectura.pasadasExistentes, 1, `pasadas ${cantidad}`);
+  assert.ok(lectura.paginasCompletas >= Math.ceil(cantidad / lote.PAGINA_MENSAJES), `paginas ${cantidad}`);
   const msNuevo = Date.now() - t1;
   const total = (contador) => Object.values(contador).reduce((suma, valor) => suma + valor, 0);
   assert.strictEqual(motivos.filter((motivo) => motivo === "referenciada").length, 1);
@@ -393,6 +455,7 @@ async function testFalloCandadoYCron() {
     ahora: AHORA,
     consultar: puente.consultar,
     listarStorage: listarDe(mundo),
+    leerPaginaMensajes: paginarMensajesDe(mundo),
     candado: async () => ({ ok: false, motivo: "candado_perdido" }),
   });
   assert.strictEqual(perdido.abortar, true);
@@ -417,6 +480,7 @@ async function testFalloCandadoYCron() {
       ahora: AHORA,
       consultar: consultarDe(muchos).consultar,
       listarStorage: listarDe(muchos),
+      leerPaginaMensajes: paginarMensajesDe(muchos),
       candado: async () => ({ ok: true }),
     }
   );
@@ -460,6 +524,8 @@ function testMigracionYBarreras() {
   assert.ok(sql.includes("m.contenido is not null"));
   assert.ok(sql.includes("v_total > 8"));
   assert.strictEqual(lote.TAMANO_LOTE, 8);
+  assert.strictEqual(lote.TOPE_MENCIONES_POR_RUTA, 100);
+  assert.strictEqual(reglas.DIAS_INACTIVIDAD, 30);
   for (const consulta of servicio.CONSULTAS_TEXTO) {
     assert.ok(sql.includes(`'${consulta.tabla}'`), consulta.tabla);
     for (const columna of consulta.columnas) assert.ok(sql.includes(columna), columna);
@@ -492,6 +558,13 @@ function testMigracionYBarreras() {
   assert.ok(cronSrc.includes("menciones2Ms"));
   assert.ok(cronSrc.includes("[LIMPIEZA_MEDIA_CRON] fases"));
   assert.ok(loteSrc.includes("crearInventarioStorage"));
+  assert.ok(loteSrc.includes("order=creado_en.asc,id.asc"));
+  assert.ok(!loteSrc.includes("order=creado_en.desc,id.desc"));
+  assert.ok(!loteSrc.includes("id.lte"));
+  assert.ok(!loteSrc.includes("order=id.asc"));
+  assert.ok(!loteSrc.includes("order=id.desc"));
+  assert.ok(loteSrc.includes("quietas < 2"));
+  assert.ok(loteSrc.includes("citaRutaCompleta"));
   const referencias = loteSrc.indexOf('fase: "referencias"');
   const segunda = loteSrc.indexOf('tomar("menciones2Ms"');
   assert.ok(referencias >= 0 && segunda > referencias);
@@ -550,6 +623,7 @@ async function testInventarioStorage() {
     listas += 1;
     return listarDe(mundo)(pedido);
   };
+  const lectura = lote.crearLecturaMenciones();
   const recorrido = await cron.recorrerCandidatos(
     claves.map((clave) => ({ clave, categoria: "candidato", motivo: "candidato", bytes: 4 })),
     {
@@ -557,9 +631,12 @@ async function testInventarioStorage() {
       ahora: AHORA,
       consultar: consultarDe(mundo).consultar,
       listarStorage: listar,
+      lecturaMenciones: lectura,
+      leerPaginaMensajes: paginarMensajesDe(mundo),
       candado: async () => ({ ok: true }),
     }
   );
+  assert.strictEqual(lectura.pasadasExistentes, 1);
   assert.strictEqual(recorrido.detener, false);
   assert.strictEqual(recorrido.codigo, 0);
   assert.strictEqual(listas, 1);
@@ -588,6 +665,7 @@ async function testInventarioStorage() {
     consultar,
     listarStorage: lleno,
     inventarioStorage: cache,
+    leerPaginaMensajes: async () => [],
     candado: async () => ({ ok: true }),
   };
   const primero = await lote.revalidarLote([clave], base);
@@ -633,10 +711,286 @@ async function testLimitesIguales() {
   assert.strictEqual(dos.nuevo.resultados[0].apto, false);
 }
 
+function errorHttp(status, data, message) {
+  const error = new Error(message || "fallo");
+  error.response = { status, data };
+  return error;
+}
+
+async function testNoReintenta57014() {
+  assert.strictEqual(lote.esCancelacion57014(errorHttp(500, { code: "57014", message: "canceling statement due to statement timeout" })), true);
+  assert.strictEqual(lote.esCancelacion57014(errorHttp(500, "57014")), true);
+  assert.strictEqual(lote.esCancelacion57014(errorHttp(503, { code: "PGRST000", message: "upstream" })), false);
+
+  let llamadas = 0;
+  await assert.rejects(() => lote.conReintento(async () => {
+    llamadas += 1;
+    throw errorHttp(500, { code: "57014", message: "canceling statement due to statement timeout" });
+  }));
+  assert.strictEqual(llamadas, 1);
+
+  llamadas = 0;
+  await assert.rejects(() => lote.conReintento(async () => {
+    llamadas += 1;
+    throw errorHttp(400, { code: "22P02", message: "invalid" });
+  }));
+  assert.strictEqual(llamadas, 1);
+
+  llamadas = 0;
+  await assert.rejects(() => lote.conReintento(async () => {
+    llamadas += 1;
+    throw errorHttp(503, { message: "upstream" });
+  }));
+  assert.strictEqual(llamadas, 4);
+}
+
+function mundoConCita(ruta, id, creado) {
+  const mundo = mundoVacio();
+  ponerArchivo(mundo, ruta);
+  mundo.mensajes.push(mensaje(ruta, { id, creado_en: creado || VIEJO }));
+  return mundo;
+}
+
+function inyectarOtroHilo(actual, ruta, creado) {
+  if (actual.ya) return false;
+  actual.ya = true;
+  actual.mensajes.push(mensaje(ruta, {
+    id: "00000000-0000-4000-8000-000000000001",
+    creado_en: creado,
+    cliente_numero: "59170000002",
+  }));
+  return true;
+}
+
+async function veredictoConInyeccion(clave, mundo, creado, fase) {
+  const ruta = reglas.sinBucket(clave);
+  const registro = [];
+  const efectos = {
+    alConsultar(actualFase, actual) {
+      if (actualFase === fase) inyectarOtroHilo(actual, ruta, creado);
+    },
+  };
+  const nuevo = await veredictoNuevo([clave], mundo, {
+    leerPaginaMensajes: paginarMensajesDe(mundo, registro),
+  }, efectos);
+  return { nuevo, registro };
+}
+
+async function testConcurrencia() {
+  const ruta = "whatsapp/u1/foto.jpg";
+  const clave = `archivos/${ruta}`;
+  const idViejo = "ffffffff-ffff-4000-8000-0000000000ff";
+  const idNuevo = "00000000-0000-4000-8000-000000000001";
+  assert.ok(idNuevo < idViejo);
+
+  const mismo = mundoVacio();
+  ponerArchivo(mismo, ruta);
+  mismo.mensajes.push(mensaje(ruta, { id: idNuevo, creado_en: VIEJO }));
+  mismo.mensajes.push(mensaje(ruta, {
+    id: idViejo,
+    creado_en: VIEJO,
+    cliente_numero: "59170000002",
+  }));
+  const pareja = await comparar("mismo timestamp en la misma página", clave, mismo);
+  assert.strictEqual(pareja.anterior.motivo, "compartida");
+
+  for (const creado of ["2025-06-01T00:00:00.000Z", VIEJO]) {
+    const mundo = mundoConCita(ruta, idViejo, VIEJO);
+    let hecho = false;
+    const registro = [];
+    const nuevo = await veredictoNuevo([clave], mundo, {
+      leerPaginaMensajes: paginarMensajesDe(mundo, registro, (pedido, actual) => {
+        if (hecho || pedido.tipo !== "completa" || pedido.despues) return;
+        hecho = true;
+        actual.mensajes.push(mensaje(ruta, {
+          id: idNuevo,
+          creado_en: creado,
+          cliente_numero: "59170000002",
+        }));
+      }),
+    });
+    assert.strictEqual(nuevo.resultados[0].motivo, "compartida", creado);
+    assert.strictEqual(nuevo.resultados[0].apto, false, creado);
+    const reinicios = registro.filter((pedido) => pedido.tipo === "completa" && pedido.despues == null);
+    assert.ok(reinicios.length >= 2, creado);
+    assert.ok(registro.every((pedido) => pedido.tipo === "nulos" || pedido.tipo === "completa"), creado);
+  }
+
+  for (const creado of ["2025-06-01T00:00:00.000Z", VIEJO]) {
+    const anterior = await veredictoAnterior(
+      clave,
+      mundoConCita(ruta, idViejo, VIEJO),
+      { efectos: { alConsultar(fase, actual) { if (fase === "referencias") inyectarOtroHilo(actual, ruta, creado); } } },
+      { storage: 0, menciones: 0, referencias: 0, entrantes: 0, candado: 0 }
+    );
+    assert.strictEqual(anterior.motivo, "compartida", `anterior ${creado}`);
+    const { nuevo, registro } = await veredictoConInyeccion(
+      clave,
+      mundoConCita(ruta, idViejo, VIEJO),
+      creado,
+      "referencias"
+    );
+    assert.strictEqual(nuevo.resultados[0].motivo, "compartida", creado);
+    assert.ok(registro.some((pedido) => pedido.tipo === "completa" && pedido.despues == null));
+    assert.ok(!registro.some((pedido) => pedido.marca));
+  }
+
+  const duranteEntrantes = await veredictoConInyeccion(
+    clave,
+    mundoConCita(ruta, idViejo, VIEJO),
+    "2025-06-01T00:00:00.000Z",
+    "entrantes"
+  );
+  assert.strictEqual(duranteEntrantes.nuevo.resultados[0].motivo, "compartida");
+  assert.strictEqual(duranteEntrantes.nuevo.resultados[0].apto, false);
+
+  const tardio = mundoVacio();
+  ponerArchivo(tardio, ruta);
+  tardio.conversaciones.push({ ultimo_mensaje: citar(ruta) });
+  const fasesTardias = [];
+  let vistas = 0;
+  const puente = consultarDe(tardio);
+  const primeraTardia = await lote.revalidarLote([clave], {
+    workerId: "limpieza-prueba",
+    ahora: AHORA,
+    listarStorage: listarDe(tardio),
+    candado: async () => ({ ok: true }),
+    leerPaginaMensajes: paginarMensajesDe(tardio),
+    consultar: async (pedido) => {
+      fasesTardias.push(pedido.fase);
+      return puente.consultar(pedido);
+    },
+    alFase(fase) {
+      fasesTardias.push(fase);
+      if (fase !== "menciones") return;
+      vistas += 1;
+      if (vistas !== 2) return;
+      tardio.mensajes.push(mensaje(ruta, {
+        id: idNuevo,
+        creado_en: "2025-03-01T00:00:00.000Z",
+      }));
+    },
+  });
+  assert.strictEqual(primeraTardia.resultados[0].motivo, "referenciada");
+  assert.strictEqual(primeraTardia.resultados[0].apto, false);
+  assert.ok(fasesTardias.indexOf("referencias") > fasesTardias.lastIndexOf("menciones"));
+
+  const rafaga = mundoConCita(ruta, idViejo, VIEJO);
+  let n = 0;
+  await assert.rejects(
+    () => lote.revalidarLote([clave], {
+      workerId: "limpieza-prueba",
+      ahora: AHORA,
+      consultar: consultarDe(rafaga).consultar,
+      listarStorage: listarDe(rafaga),
+      candado: async () => ({ ok: true }),
+      leerPaginaMensajes: paginarMensajesDe(rafaga, null, (pedido, actual) => {
+        if (pedido.tipo !== "completa" || pedido.despues) return;
+        n += 1;
+        actual.mensajes.push(mensaje(ruta, {
+          id: `00000000-0000-4000-8000-${n.toString(16).padStart(12, "0")}`,
+          creado_en: "2025-01-01T00:00:00.000Z",
+          cliente_numero: String(59171000000 + n),
+        }));
+      }),
+    }),
+    (error) => error && error.message === "lectura incompleta"
+  );
+}
+
+async function testCitaSoloEnContenido() {
+  const ruta = "whatsapp/u1/nota.jpg";
+  const clave = `archivos/${ruta}`;
+  const mundo = mundoVacio();
+  ponerArchivo(mundo, ruta);
+  mundo.mensajes.push(mensaje(ruta, { imagen_url: "", contenido: citar(ruta) }));
+  const hallado = await comparar("cita solo en contenido", clave, mundo);
+  assert.strictEqual(hallado.anterior.motivo, "candidato");
+}
+
+async function testCreadoEnNuloYCursorPegado() {
+  const clave = "archivos/whatsapp/u1/foto.jpg";
+  await assert.rejects(
+    () => lote.revalidarLote([clave], {
+      workerId: "limpieza-prueba",
+      ahora: AHORA,
+      consultar: async () => ({ error: null, filas: [] }),
+      listarStorage: async () => [],
+      candado: async () => ({ ok: true }),
+      leerPaginaMensajes: async (pedido) => (pedido.tipo === "nulos"
+        ? [{ id: "00000000-0000-4000-8000-000000000009" }]
+        : []),
+    }),
+    (error) => error && error.message === "creado_en nulo"
+  );
+
+  const fila = {
+    id: "00000000-0000-4000-8000-000000000001",
+    creado_en: VIEJO,
+    usuario_id: "u1",
+    conexion_whatsapp_id: "c1",
+    cliente_numero: "59170000001",
+    imagen_url: citar("whatsapp/u1/foto.jpg"),
+    contenido: "",
+  };
+  await assert.rejects(
+    () => lote.revalidarLote([clave], {
+      workerId: "limpieza-prueba",
+      ahora: AHORA,
+      consultar: async () => ({ error: null, filas: [] }),
+      listarStorage: async () => [{ name: "foto.jpg", id: "foto.jpg" }],
+      candado: async () => ({ ok: true }),
+      leerPaginaMensajes: async (pedido) => {
+        if (pedido.tipo === "nulos") return [];
+        if (pedido.tipo === "completa") return Array.from({ length: lote.PAGINA_MENSAJES }, () => fila);
+        return [];
+      },
+    }),
+    (error) => error && error.message === "cursor ilegible"
+  );
+}
+
+function testUrlPorCreadoEnEId() {
+  const previo = process.env.SUPABASE_URL;
+  process.env.SUPABASE_URL = "https://ejemplo.test";
+  try {
+    const primera = lote.urlPaginaMensajes({ tipo: "completa", limite: 200 });
+    assert.ok(primera.includes("order=creado_en.asc,id.asc"));
+    assert.ok(!primera.includes("creado_en.gt."));
+    assert.ok(!primera.includes("id.lte"));
+    assert.ok(!/order=id[.&]/.test(primera));
+
+    const siguiente = lote.urlPaginaMensajes({
+      tipo: "completa",
+      limite: 200,
+      despues: { creado_en: "2026-01-01 00:00:00.5", id: "00000000-0000-4000-8000-000000000001" },
+    });
+    assert.ok(siguiente.includes("order=creado_en.asc,id.asc"));
+    assert.ok(siguiente.includes("%20"));
+    assert.ok(siguiente.includes("creado_en.gt.%22"));
+    assert.ok(siguiente.includes("creado_en.eq.%22"));
+    assert.ok(siguiente.includes("id.gt.%22"));
+    assert.ok(!siguiente.includes("id.lte"));
+    assert.ok(!/order=id[.&]/.test(siguiente));
+
+    const nulos = lote.urlPaginaMensajes({ tipo: "nulos", limite: 1 });
+    assert.ok(nulos.includes("creado_en=is.null"));
+    assert.ok(!/order=id/.test(nulos));
+  } finally {
+    if (previo == null) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = previo;
+  }
+}
+
 async function main() {
   testMigracionYBarreras();
+  testUrlPorCreadoEnEId();
+  await testNoReintenta57014();
   await testPaginacionPorId();
   await testParidad();
+  await testCitaSoloEnContenido();
+  await testConcurrencia();
+  await testCreadoEnNuloYCursorPegado();
   await testLimitesIguales();
   await testInventarioStorage();
   await testFalloCandadoYCron();

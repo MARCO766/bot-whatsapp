@@ -12,8 +12,12 @@
  * No define LIMPIEZA_MEDIA_ACTIVA en la plataforma:
  * la bandera solo entra como argumento de esta ejecución.
  *
- * Las columnas jsonb se leen una sola vez en el inventario. La revalidación
- * reutiliza ese conjunto y no las vuelve a descargar.
+ * Los jsonb grandes se leen una vez en el inventario. Flujos, campañas e IA
+ * se vuelven a leer justo antes de revalidar. La eliminación, si dejara de
+ * estar bloqueada, repite esa lectura viva inmediatamente antes de Storage.
+ * Las menciones de todos los candidatos salen de una lectura paginada por
+ * (creado_en, id). Cada id visto se recuerda. La pasada se repite desde el
+ * inicio hasta que dos recorridos no encuentran mensajes nuevos.
  * Un ilike con página llena excluye el objeto. El candado se vuelve a
  * comprobar después de esa lectura. Si se pierde, el proceso sale con código 1.
  */
@@ -47,7 +51,7 @@ function exigirCandado(estado) {
 }
 
 function eliminacionSigueBloqueada() {
-  return servicio.ELIMINACION_REAL_BLOQUEADA === true && servicio.eliminacionRealPermitida() !== true;
+  return servicio.ELIMINACION_REAL_BLOQUEADA === true || servicio.eliminacionRealPermitida() !== true;
 }
 
 /**
@@ -119,6 +123,12 @@ async function procesarCandidatoRevalidado(candidato, opciones = {}) {
   const hecho = await eliminar.ejecutarBorradoSobrePlan(plan, candidato.clave, {
     url: opciones.url,
     cliente: opciones.cliente,
+    exigirJsonVivo: true,
+    protegidas: opciones.protegidas,
+    nombresProtegidos: opciones.nombresProtegidos,
+    workerId: opciones.workerId,
+    io: opciones.io,
+    ahora: opciones.ahora,
     borrarObjeto: () => eliminar.borrarObjetoStorage(candidato.clave, {
       url: opciones.url || process.env.SUPABASE_URL,
       cliente: opciones.cliente,
@@ -223,7 +233,7 @@ async function recorrerCandidatosUnoAUno(candidatos, opciones = {}) {
         paso,
       };
     }
-    if (paso.storage === true || paso.eliminado === true) {
+    if ((paso.storage === true || paso.eliminado === true) && eliminacionSigueBloqueada()) {
       console.error("[LIMPIEZA_MEDIA_CRON] detenido", { motivo: "borrado_en_dry_run", clave: candidato.clave });
       return {
         detener: true,
@@ -256,6 +266,16 @@ async function recorrerCandidatosEnLote(candidatos, opciones = {}) {
   const inventarioStorage = opciones.inventarioStorage instanceof Map
     ? opciones.inventarioStorage
     : loteMedia.crearInventarioStorage();
+  const lecturaMenciones = opciones.lecturaMenciones || loteMedia.crearLecturaMenciones();
+  if (!Array.isArray(lecturaMenciones.universo)) {
+    const universo = [];
+    for (const candidato of candidatos) {
+      if (candidato && candidato.categoria === "candidato" && candidato.motivo === "candidato") {
+        universo.push(candidato.clave);
+      }
+    }
+    lecturaMenciones.universo = universo;
+  }
   const tiempos = {
     storageMs: 0,
     mencionesMs: 0,
@@ -287,6 +307,9 @@ async function recorrerCandidatosEnLote(candidatos, opciones = {}) {
         dias: opciones.dias,
         listarStorage: opciones.listarStorage,
         inventarioStorage,
+        lecturaMenciones,
+        leerPaginaMensajes: opciones.leerPaginaMensajes,
+        alFase: opciones.alFase,
         consultar: opciones.consultar,
         candado: opciones.candado,
       });
@@ -339,6 +362,46 @@ async function recorrerCandidatosEnLote(candidatos, opciones = {}) {
     }
     for (const item of lote.resultados) {
       const candidato = reales.find((entrada) => entrada.clave === item.clave);
+      if (item.apto === true && !eliminacionSigueBloqueada()) {
+        const paso = await procesarCandidatoRevalidado(candidato, opciones);
+        if (paso.abortar) {
+          return {
+            detener: true,
+            abortar: true,
+            codigo: 1,
+            motivo: paso.motivo || "candado_perdido",
+            clave: candidato.clave,
+            porMotivo,
+            aptos,
+            storage: false,
+            marca: paso.marca === true,
+            tiempos,
+          };
+        }
+        if (paso.detener === true || paso.motivo === "consulta_fallida") {
+          console.error("[LIMPIEZA_MEDIA_CRON] detenido", {
+            motivo: paso.motivo || "consulta_fallida",
+            clave: candidato.clave,
+            detalle: paso.detalle || null,
+          });
+          return {
+            detener: true,
+            abortar: false,
+            codigo: 1,
+            motivo: paso.motivo || "consulta_fallida",
+            detalle: paso.detalle || null,
+            clave: candidato.clave,
+            porMotivo,
+            aptos,
+            storage: paso.storage === true,
+            marca: paso.marca === true,
+            tiempos,
+          };
+        }
+        if (paso.eliminado === true) aptos += 1;
+        anotarPaso(porMotivo, { motivo: paso.eliminado === true ? "eliminado" : paso.motivo }, candidato);
+        continue;
+      }
       if (item.detener || item.motivo === "consulta_fallida") {
         console.error("[LIMPIEZA_MEDIA_CRON] detenido", {
           motivo: item.motivo || "consulta_fallida",
@@ -419,6 +482,10 @@ async function main() {
 
     const fresca = await servicio.cargarProteccion({ pageSize: 1000, omitirJson: true });
     for (const clave of result.referenciasJson || []) fresca.protegidas.add(clave);
+    const vivas = await servicio.cargarProteccion({
+      pageSize: 1000,
+      soloFuentes: servicio.FUENTES_JSON_VIVAS,
+    });
     exigirCandado(estado);
     if (fresca.proteccionIncompleta || fresca.fuenteIlegible) {
       console.error("[LIMPIEZA_MEDIA_CRON] relectura de proteccion incompleta", {
@@ -426,6 +493,13 @@ async function main() {
       });
       return 1;
     }
+    if (vivas.proteccionIncompleta || vivas.fuenteIlegible) {
+      console.error("[LIMPIEZA_MEDIA_CRON] relectura de flujos incompleta", {
+        fuenteIlegible: vivas.fuenteIlegible,
+      });
+      return 1;
+    }
+    for (const clave of vivas.protegidas) fresca.protegidas.add(clave);
 
     if (servicio.ELIMINACION_REAL_BLOQUEADA !== true || servicio.eliminacionRealPermitida()) {
       console.error("[LIMPIEZA_MEDIA_CRON] detenido", { motivo: "borrado_real_bloqueado" });

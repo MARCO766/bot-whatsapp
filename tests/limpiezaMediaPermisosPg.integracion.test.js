@@ -18,10 +18,10 @@ function ok(nombre) {
 }
 
 function noEjecutada(motivo) {
-  console.log(`NO EJECUTADA: RLS habilitado en las cinco tablas. ${motivo}`);
+  console.log(`NO EJECUTADA: RLS habilitado en las seis tablas. ${motivo}`);
   console.log(`NO EJECUTADA: sin privilegios para anon y authenticated. ${motivo}`);
   console.log(`NO EJECUTADA: privilegios de service_role según las migraciones. ${motivo}`);
-  console.log(`NO EJECUTADA: sin permiso DELETE. ${motivo}`);
+  console.log(`NO EJECUTADA: DELETE de service_role solo en media_cita. ${motivo}`);
   console.log(`NO EJECUTADA: las funciones RPC solo las ejecuta service_role. ${motivo}`);
   process.exitCode = 2;
 }
@@ -42,13 +42,20 @@ async function privilegiosDe(client, rol, tabla) {
   return presentes;
 }
 
+function tipoSinDefault(tipo) {
+  return tipo.replace(/\s+default\b[\s\S]*$/i, "").replace(/\s+/g, " ").trim();
+}
+
 function firmaTexto(funcion) {
-  return funcion.parametros.map((parametro) => `${parametro.nombre} ${parametro.tipo}`).join(", ");
+  return funcion.parametros
+    .map((parametro) => `${parametro.nombre} ${tipoSinDefault(parametro.tipo)}`)
+    .join(", ");
 }
 
 async function escenario(preparado) {
   const esperadas = [...preparado.tablas.keys()].sort();
-  assert.strictEqual(esperadas.length, 5, esperadas.join(", "));
+  assert.strictEqual(esperadas.length, 6, esperadas.join(", "));
+  assert.ok(esperadas.includes("media_cita"));
 
   const clases = await preparado.client.query(
     `select c.relname, c.relrowsecurity
@@ -56,8 +63,9 @@ async function escenario(preparado) {
      join pg_namespace n on n.oid = c.relnamespace
      where n.nspname = 'public'
        and c.relkind = 'r'
-       and c.relname like 'limpieza_media\\_%' escape '\\'
-     order by c.relname`
+       and c.relname = any($1::text[])
+     order by c.relname`,
+    [esperadas]
   );
   const encontradas = clases.rows.map((fila) => fila.relname);
   assert.deepStrictEqual(encontradas, esperadas);
@@ -65,7 +73,7 @@ async function escenario(preparado) {
     assert.strictEqual(fila.relrowsecurity, true, fila.relname);
     assert.strictEqual(preparado.tablas.get(fila.relname).rls, true);
   }
-  ok("RLS está habilitado en las cinco tablas");
+  ok("RLS está habilitado en las seis tablas");
 
   for (const tabla of esperadas) {
     for (const rol of ROLES_SIN_ACCESO) {
@@ -79,11 +87,16 @@ async function escenario(preparado) {
     const otorgados = preparado.tablas.get(tabla).service.map(sqlDe).sort();
     const reales = (await privilegiosDe(preparado.client, "service_role", tabla)).sort();
     assert.deepStrictEqual(reales, otorgados, tabla);
-    assert.ok(!otorgados.includes("DELETE"), tabla);
-    assert.ok(!reales.includes("DELETE"), tabla);
+    if (tabla === "media_cita") {
+      assert.ok(otorgados.includes("DELETE"), tabla);
+      assert.ok(!otorgados.includes("UPDATE"), tabla);
+    } else {
+      assert.ok(!otorgados.includes("DELETE"), tabla);
+      assert.ok(!reales.includes("DELETE"), tabla);
+    }
   }
   ok("service_role tiene exactamente los privilegios que otorgan las migraciones");
-  ok("service_role, anon, authenticated y public no tienen DELETE");
+  ok("DELETE de service_role queda solo en media_cita");
 
   const catalogo = await preparado.client.query(
     `select p.oid::text as oid,

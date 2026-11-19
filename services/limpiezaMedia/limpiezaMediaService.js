@@ -3,7 +3,7 @@
  * No inserta, actualiza ni borra filas ni objetos.
  */
 const axios = require("axios");
-const { isSchemaMissingError } = require("../supabaseSafe");
+const { isSchemaMissingError, clasificarErrorPostgrest } = require("../supabaseSafe");
 const reglas = require("./reglas");
 const { verificarLockLimpiezaMedia } = require("./limpiezaMediaLock");
 
@@ -66,6 +66,25 @@ const FUENTES_JSON = [
   { tabla: "seguimientos_v2_logs", columnas: ["detalle"] },
   { tabla: "crm_historial_cliente", columnas: ["metadata"] },
   { tabla: "admin_logs", columnas: ["detalle"] },
+];
+
+const FUENTES_JSON_VIVAS = [
+  "flujos_builder",
+  "flujos_builder_versiones",
+  "remarketing_global_24h",
+  "seguimientos_programados",
+  "ia_sessions",
+];
+
+const COLUMNAS_JSON_VIVAS = [
+  ["flujos_builder", "data"],
+  ["flujos_builder", "datos"],
+  ["flujos_builder_versiones", "data_snapshot"],
+  ["remarketing_global_24h", "config_snapshot"],
+  ["seguimientos_programados", "mensaje_payload"],
+  ["ia_sessions", "flow_context"],
+  ["ia_sessions", "chat_history"],
+  ["ia_sessions", "last_replies"],
 ];
 
 const CONSULTAS_TEXTO = [
@@ -146,6 +165,7 @@ function crearEstado() {
     referenciasJson: new Set(),
     enFuenteJson: false,
     omitirJson: false,
+    soloFuentes: null,
   };
 }
 
@@ -331,13 +351,14 @@ function absorberNombresMedia(estado, fuente, filas) {
 }
 
 function absorberMensajeMedia(estado, fila) {
-  absorberAnalisis(estado, reglas.analizarTextoStorage(fila?.contenido));
-  const analisisUrl = reglas.analizarTextoStorage(fila?.imagen_url);
-  if (analisisUrl.noVerificable) estado.proteccionIncompleta = true;
-  for (const objeto of analisisUrl.objetos) {
-    if (objeto.bucket !== reglas.BUCKET_ORIGINAL_SEGUIMIENTO) continue;
-    estado.originales.add(objeto.clave);
-    estado.protegidas.add(objeto.clave);
+  for (const texto of [fila?.imagen_url, fila?.contenido]) {
+    const analisis = reglas.analizarTextoStorage(texto);
+    if (analisis.noVerificable) estado.proteccionIncompleta = true;
+    for (const objeto of analisis.objetos) {
+      if (objeto.bucket !== reglas.BUCKET_ORIGINAL_SEGUIMIENTO) continue;
+      estado.originales.add(objeto.clave);
+      estado.protegidas.add(objeto.clave);
+    }
   }
   const uso = reglas.anotarUso(estado.usos, fila);
   if (uso && typeof uso === "object" && uso.noVerificable) {
@@ -348,6 +369,12 @@ function absorberMensajeMedia(estado, fila) {
 async function pasoProtegidas(estado, io, pageSize) {
   if (estado.fuenteIndex >= FUENTES.length) return { io: false, terminado: true };
   const fuente = FUENTES[estado.fuenteIndex];
+  if (estado.soloFuentes && !estado.soloFuentes.has(fuente)) {
+    estado.fuenteIndex += 1;
+    estado.offset = 0;
+    estado.jsonCursor = null;
+    return { io: false, terminado: estado.fuenteIndex >= FUENTES.length };
+  }
   const json = esFuenteJson(fuente);
   if (json && estado.omitirJson === true) {
     estado.fuenteIndex += 1;
@@ -914,6 +941,7 @@ async function cargarProteccion(opciones = {}) {
   const io = opciones.io || ioReal;
   const estado = crearEstado();
   estado.omitirJson = opciones.omitirJson === true;
+  estado.soloFuentes = Array.isArray(opciones.soloFuentes) ? new Set(opciones.soloFuentes) : null;
   const pageSize = opciones.pageSize ?? 1000;
   const maxPaginas = opciones.maxPaginas ?? 100000;
   let paginas = 0;
@@ -999,6 +1027,87 @@ async function revalidarCandidato(clave, opciones = {}) {
   return veredicto;
 }
 
+function filaCitaLaClave(fila, clave) {
+  const texto = reglas.textoDeFila(fila);
+  if (reglas.citaRutaCompleta(texto, clave)) return true;
+  const analisis = reglas.analizarTextoStorage(texto);
+  if (analisis.noVerificable) return "ilegible";
+  if (analisis.objetos.some((objeto) => objeto.clave === clave)) return true;
+  if (reglas.extraerRutasSueltas(texto).includes(clave)) return true;
+  return false;
+}
+
+async function citarJsonConIo(clave, io) {
+  for (const fuente of FUENTES_JSON_VIVAS) {
+    let cursor = null;
+    for (let pagina = 0; pagina < 100000; pagina += 1) {
+      let filas;
+      try {
+        filas = await io.leerFuente({
+          fuente,
+          limit: 200,
+          despuesDeId: cursor,
+          porId: true,
+        });
+      } catch (error) {
+        return { citada: false, error: "consulta_fallida" };
+      }
+      if (!Array.isArray(filas)) return { citada: false, error: "consulta_fallida" };
+      for (const fila of filas) {
+        const cita = filaCitaLaClave(fila, clave);
+        if (cita === "ilegible") return { citada: false, error: "consulta_fallida" };
+        if (cita === true) return { citada: true, error: null };
+      }
+      if (filas.length < 200) break;
+      const siguiente = idCursorSeguro(filas[filas.length - 1] && filas[filas.length - 1].id);
+      if (!siguiente || (cursor && siguiente <= cursor)) {
+        return { citada: false, error: "consulta_fallida" };
+      }
+      cursor = siguiente;
+    }
+  }
+  return { citada: false, error: null };
+}
+
+async function citarJsonConRpc(clave) {
+  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SECRET_KEY) {
+    return { citada: false, error: "cita_json_no_instalada" };
+  }
+  try {
+    const res = await axios.post(
+      `${process.env.SUPABASE_URL}/rest/v1/rpc/limpieza_flujo_cita_viva`,
+      { p_ruta: clave },
+      {
+        headers: { ...headersSupabase(), "Content-Type": "application/json" },
+        timeout: 20000,
+      }
+    );
+    const fila = Array.isArray(res.data) ? res.data[0] : res.data;
+    if (!fila || typeof fila !== "object" || typeof fila.citada !== "boolean") {
+      return { citada: false, error: "consulta_fallida" };
+    }
+    if (fila.error) return { citada: false, error: "consulta_fallida" };
+    return { citada: fila.citada === true, error: null };
+  } catch (error) {
+    const tipo = clasificarErrorPostgrest(error);
+    if (tipo === "funcion_ausente") return { citada: false, error: "cita_json_no_instalada" };
+    return { citada: false, error: "consulta_fallida" };
+  }
+}
+
+async function buscarCitaJsonViva(clave, opciones = {}) {
+  if (!clave || reglas.esBucketExcluido(clave)) return { citada: true, error: null };
+  const ruta = reglas.sinBucket(clave);
+  if (!reglas.segmentoFiltroSeguro(ruta) || !reglas.rutaConversacionValida(ruta)) {
+    return { citada: true, error: null };
+  }
+  if (typeof opciones.leerCitaJson === "function") return opciones.leerCitaJson(clave);
+  if (opciones.io && typeof opciones.io.leerFuente === "function") {
+    return citarJsonConIo(clave, opciones.io);
+  }
+  return citarJsonConRpc(clave);
+}
+
 async function validarInmediatoEliminacion(clave, opciones = {}) {
   const io = opciones.io || ioReal;
   const veredicto = await revalidarCandidato(clave, opciones);
@@ -1032,9 +1141,12 @@ async function validarInmediatoEliminacion(clave, opciones = {}) {
 
 module.exports = {
   ELIMINACION_REAL_BLOQUEADA,
+  COLUMNAS_JSON_VIVAS,
   CONSULTAS_TEXTO,
   FUENTES,
   FUENTES_JSON,
+  FUENTES_JSON_VIVAS,
+  buscarCitaJsonViva,
   listarStorageReal,
   mencionesDesdeFilas,
   cargarProteccion,

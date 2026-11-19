@@ -1,5 +1,7 @@
 .env
 tmp/
+tmp/backfill-m1/
+tmp/backfill-m2/
 tests/herramientas/node_modules/
 macbot-android/.gradle/
 macbot-android/build/

@@ -199,8 +199,8 @@ function asegurarUso(usos, clave) {
   return uso;
 }
 
-function anotarUso(usos, fila) {
-  const analisis = analizarTextoStorage(fila?.imagen_url);
+function anotarColumna(usos, fila, texto) {
+  const analisis = analizarTextoStorage(texto);
   if (analisis.noVerificable) return { noVerificable: true };
   const hilo = claveHilo(fila?.usuario_id, fila?.conexion_whatsapp_id, fila?.cliente_numero);
   let ultima = null;
@@ -216,6 +216,21 @@ function anotarUso(usos, fila) {
     uso.usuarios.add(String(fila.usuario_id).trim());
     ultima = objeto.clave;
   }
+  return ultima;
+}
+
+function anotarUso(usos, fila) {
+  let noVerificable = false;
+  let ultima = null;
+  for (const texto of [fila?.imagen_url, fila?.contenido]) {
+    const resultado = anotarColumna(usos, fila, texto);
+    if (resultado && typeof resultado === "object" && resultado.noVerificable) {
+      noVerificable = true;
+      continue;
+    }
+    if (typeof resultado === "string") ultima = resultado;
+  }
+  if (noVerificable) return { noVerificable: true };
   return ultima;
 }
 

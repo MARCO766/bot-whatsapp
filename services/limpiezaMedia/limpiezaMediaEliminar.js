@@ -158,11 +158,56 @@ async function ejecutarBorradoSobrePlan(plan, clave, opciones = {}) {
       reintentar: false,
     };
   }
+  if (opciones.exigirJsonVivo === true) {
+    const freno = await frenarSiDejoDeSerExclusivo(clave, opciones);
+    if (freno) {
+      await cerrarValla(valla);
+      return freno;
+    }
+  }
   return marcaMedia.ejecutarBajoMarca({
     clave,
     marca: valla,
     borrarObjeto: () => opciones.borrarObjeto({ clave, ruta: destino, bucket: "archivos" }),
   });
+}
+
+async function frenarSiDejoDeSerExclusivo(clave, opciones) {
+  let veredicto;
+  try {
+    veredicto = await servicio.validarInmediatoEliminacion(clave, opciones);
+  } catch (error) {
+    return { eliminado: false, motivo: "consulta_fallida", storage: false, abortar: false };
+  }
+  if (!veredicto || veredicto.abortar) {
+    return {
+      eliminado: false,
+      motivo: veredicto?.motivo || "candado_perdido",
+      storage: false,
+      abortar: true,
+    };
+  }
+  if (veredicto.apto !== true) {
+    return {
+      eliminado: false,
+      motivo: veredicto.motivo || "no_apto",
+      storage: false,
+      abortar: veredicto.motivo === "consulta_fallida",
+    };
+  }
+  let cita;
+  try {
+    cita = await servicio.buscarCitaJsonViva(clave, opciones);
+  } catch (error) {
+    return { eliminado: false, motivo: "consulta_fallida", storage: false, abortar: false };
+  }
+  if (!cita || cita.error) {
+    return { eliminado: false, motivo: "consulta_fallida", storage: false, abortar: false };
+  }
+  if (cita.citada === true) {
+    return { eliminado: false, motivo: "referenciada", storage: false, abortar: false };
+  }
+  return null;
 }
 
 async function borrarObjetoStorage(clave, opciones = {}) {

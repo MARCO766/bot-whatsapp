@@ -1,5 +1,7 @@
 /**
  * Dry-run de limpieza de multimedia. Solo lee. No borra objetos ni filas.
+ * El inventario de mensajes usa imagen_url y contenido. No ejecuta el
+ * backfill M2 y no levanta ELIMINACION_REAL_BLOQUEADA.
  * Uso: node scripts/limpieza-media-dry-run.js
  */
 require("dotenv").config();
@@ -7,10 +9,8 @@ const fs = require("fs");
 const path = require("path");
 const axios = require("axios");
 const reglas = require("../services/limpiezaMedia/reglas");
-const {
-  crearEstado,
-  ejecutarLimpiezaMedia,
-} = require("../services/limpiezaMedia/limpiezaMediaService");
+const servicio = require("../services/limpiezaMedia/limpiezaMediaService");
+const { crearEstado, ejecutarLimpiezaMedia } = servicio;
 
 function headers() {
   return {
@@ -129,6 +129,9 @@ function recontar(objetos) {
 }
 
 async function main() {
+  if (servicio.ELIMINACION_REAL_BLOQUEADA !== true || servicio.eliminacionRealPermitida() === true) {
+    throw new Error("dry-run cancelado: la eliminación real no está bloqueada");
+  }
   if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SECRET_KEY) {
     throw new Error("Supabase no configurado");
   }
@@ -148,6 +151,8 @@ async function main() {
       result.fase,
       estado.fuenteIndex,
       estado.offset,
+      estado.jsonCursor || "",
+      estado.mensajeCursor || "",
       estado.carpetaIndex,
       estado.listadoOffset,
       result.paginasEnEstaPasada,
@@ -193,6 +198,8 @@ async function main() {
   const informe = {
     modo: "dry-run",
     eliminacionReal: "bloqueada",
+    columnasMensaje: ["imagen_url", "contenido"],
+    backfillM2: "no_ejecutado",
     generadoEn: new Date().toISOString(),
     dias: reglas.DIAS_INACTIVIDAD,
     completo: result.completo,
