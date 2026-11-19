@@ -4,6 +4,9 @@
 -- No modifica mensajes, conversaciones, contactos ni ventas.
 -- No toca los buckets seguimiento-v2-media ni rm24h-media.
 -- Si una columna no existe o no es texto/json, no concluye que el archivo está libre.
+-- Solo busca una ruta con forma prefijo/carpeta/archivo.ext.
+-- no/valida no tiene esa forma y responde ruta_no_filtrable, sin ilike.
+-- Un prefijo ajeno que sí la tiene responde citada y no declara el archivo libre.
 --
 -- Cubre las columnas que el inventario JSON ya protege y que la revalidación
 -- por ilike de columnas de texto no vuelve a leer:
@@ -21,6 +24,8 @@ set search_path = public
 as $$
 declare
   v_ruta text;
+  v_partes text[];
+  v_archivo text;
   v_patron text;
   v_tabla text;
   v_columna text;
@@ -37,6 +42,23 @@ begin
   end if;
   if v_ruta like 'archivos/%' then
     v_ruta := substr(v_ruta, 10);
+  end if;
+
+  v_partes := regexp_split_to_array(v_ruta, '/');
+  v_archivo := v_partes[coalesce(array_length(v_partes, 1), 0)];
+  if v_ruta = ''
+     or coalesce(array_length(v_partes, 1), 0) < 3
+     or v_archivo is null
+     or v_archivo !~ '^[a-zA-Z0-9_-][a-zA-Z0-9._-]*\.[a-zA-Z0-9]+$'
+     or exists (
+       select 1
+       from unnest(v_partes) as segmento
+       where segmento = ''
+          or segmento = '.'
+          or segmento = '..'
+          or segmento !~ '^[a-zA-Z0-9_-][a-zA-Z0-9._-]*$'
+     ) then
+    return jsonb_build_object('citada', false, 'error', 'ruta_no_filtrable');
   end if;
   if v_ruta !~ '^(whatsapp|whatsapp-meta)/' then
     return jsonb_build_object('citada', true, 'error', null);

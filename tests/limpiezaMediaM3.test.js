@@ -628,6 +628,75 @@ async function testRevalidacionCoincideConElInventario() {
   ok("la revalidación acepta contenido exclusivo y frena lo compartido o protegido");
 }
 
+function decidirRutaCitaViva(entrada) {
+  let ruta = String(entrada == null ? "" : entrada).trim();
+  if (!ruta || !/^[a-zA-Z0-9._/-]+$/.test(ruta) || ruta.includes("..") || ruta.length > 500) {
+    return { citada: false, error: "ruta_no_filtrable" };
+  }
+  if (ruta.startsWith("archivos/")) ruta = ruta.slice("archivos/".length);
+  const partes = ruta.split("/");
+  const archivo = partes[partes.length - 1];
+  const segmentoRoto = partes.some(
+    (segmento) =>
+      segmento === "" ||
+      segmento === "." ||
+      segmento === ".." ||
+      !/^[a-zA-Z0-9_-][a-zA-Z0-9._-]*$/.test(segmento)
+  );
+  if (
+    ruta === "" ||
+    partes.length < 3 ||
+    !archivo ||
+    !/^[a-zA-Z0-9_-][a-zA-Z0-9._-]*\.[a-zA-Z0-9]+$/.test(archivo) ||
+    segmentoRoto
+  ) {
+    return { citada: false, error: "ruta_no_filtrable" };
+  }
+  if (!/^(whatsapp|whatsapp-meta)\//.test(ruta)) return { citada: true, error: null };
+  return { busca: true };
+}
+
+function testRutaSinArchivoNoSeBusca() {
+  const sql = fs.readFileSync(
+    path.join(__dirname, "../supabase/migrations/limpieza_media_cita_json.sql"),
+    "utf8"
+  );
+  const forma = sql.indexOf("coalesce(array_length(v_partes, 1), 0) < 3");
+  const prefijo = sql.indexOf("v_ruta !~ '^(whatsapp|whatsapp-meta)/'");
+  assert.ok(forma > 0 && forma < prefijo);
+  assert.deepStrictEqual(decidirRutaCitaViva("no/valida"), {
+    citada: false,
+    error: "ruta_no_filtrable",
+  });
+  assert.deepStrictEqual(decidirRutaCitaViva("otro/prefijo/x.jpg"), {
+    citada: true,
+    error: null,
+  });
+  assert.deepStrictEqual(decidirRutaCitaViva("archivos/whatsapp/u1/nota.jpg"), { busca: true });
+  assert.deepStrictEqual(decidirRutaCitaViva("whatsapp-meta/u1/nota.jpg"), { busca: true });
+  assert.ok(sql.includes("security invoker"));
+  assert.ok(sql.includes("set search_path = public"));
+  assert.ok(sql.includes("revoke all on function public.limpieza_flujo_cita_viva(text) from public"));
+  assert.ok(sql.includes("revoke all on function public.limpieza_flujo_cita_viva(text) from anon"));
+  assert.ok(sql.includes("revoke all on function public.limpieza_flujo_cita_viva(text) from authenticated"));
+  assert.ok(sql.includes("grant execute on function public.limpieza_flujo_cita_viva(text) to service_role"));
+  assert.strictEqual(servicio.ELIMINACION_REAL_BLOQUEADA, true);
+  ok("no/valida no entra al ilike y el prefijo ajeno sigue citado");
+}
+
+function testRecorridoYPrefijoConBucketSiguenCerrados() {
+  assert.deepStrictEqual(decidirRutaCitaViva("whatsapp/../x.jpg"), {
+    citada: false,
+    error: "ruta_no_filtrable",
+  });
+  assert.deepStrictEqual(decidirRutaCitaViva("archivos/otro/prefijo/x.jpg"), {
+    citada: true,
+    error: null,
+  });
+  assert.strictEqual(servicio.ELIMINACION_REAL_BLOQUEADA, true);
+  ok("un recorrido y un prefijo ajeno con bucket no declaran el archivo libre");
+}
+
 function testContratoSinBorradoNiBackfill() {
   const servicioSrc = fs.readFileSync(
     path.join(__dirname, "../services/limpiezaMedia/limpiezaMediaService.js"),
@@ -704,6 +773,8 @@ async function main() {
   await testRelecturaDeFlujosAntesDeRevalidar();
   await testFrenoInmediatoAntesDeBorrar();
   await testRevalidacionCoincideConElInventario();
+  testRutaSinArchivoNoSeBusca();
+  testRecorridoYPrefijoConBucketSiguenCerrados();
   testContratoSinBorradoNiBackfill();
   console.log(`${passed} pruebas ok`);
 }
