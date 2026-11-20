@@ -2,7 +2,6 @@ const crypto = require("crypto");
 const { parseSeguimientoV2Node } = require("./seguimientoV2Parser");
 const {
   insertarPasos,
-  insertarLog,
   obtenerCampanaActiva,
   normalizarConexionId,
 } = require("./seguimientoV2Repository");
@@ -117,23 +116,6 @@ async function programarSeguimientoV2EnFlujo({
   }
 
   const insertados = await insertarPasos(rows);
-
-  for (const fila of insertados) {
-    await insertarLog({
-      seguimientoId: fila.id,
-      usuarioId,
-      conexionWhatsappId: conexionId,
-      numero,
-      evento: "programado",
-      detalle: {
-        campana_id: campanaId,
-        paso_index: fila.paso_index,
-        paso_id: fila.paso_id,
-        run_at: fila.run_at,
-        conexion_whatsapp_id: conexionId,
-      },
-    });
-  }
 
   console.log("[SEG_V2_PROGRAMADO]", {
     campana_id: campanaId,
