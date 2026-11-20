@@ -528,11 +528,11 @@ async function testFalloCandadoYCron() {
       candado: async () => ({ ok: true }),
     }
   );
-  assert.strictEqual(recorrido.detener, true);
-  assert.strictEqual(recorrido.codigo, 1);
-  assert.strictEqual(recorrido.clave, claves[1]);
-  assert.strictEqual(recorrido.motivo, "consulta_fallida");
-  assert.strictEqual(recorrido.aptos, 1);
+  assert.strictEqual(recorrido.detener, false);
+  assert.strictEqual(recorrido.codigo, 0);
+  assert.strictEqual(recorrido.porMotivo.compartida, 1);
+  assert.strictEqual(recorrido.porMotivo.bloqueada, 2);
+  assert.strictEqual(recorrido.aptos, 2);
   assert.strictEqual(recorrido.storage, false);
   assert.strictEqual(recorrido.marca, false);
 }
@@ -568,7 +568,6 @@ function testMigracionYBarreras() {
   assert.ok(sql.includes("m.contenido is not null"));
   assert.ok(sql.includes("v_total > 8"));
   assert.strictEqual(lote.TAMANO_LOTE, 8);
-  assert.strictEqual(lote.TOPE_MENCIONES_POR_RUTA, 100);
   assert.strictEqual(reglas.DIAS_INACTIVIDAD, 30);
   for (const consulta of servicio.CONSULTAS_TEXTO) {
     assert.ok(sql.includes(`'${consulta.tabla}'`), consulta.tabla);
@@ -592,6 +591,9 @@ function testMigracionYBarreras() {
     path.join(__dirname, "../services/limpiezaMedia/limpiezaMediaRevalidarLote.js"),
     "utf8"
   );
+  assert.ok(!loteSrc.includes("TOPE_MENCIONES_POR_RUTA"));
+  assert.ok(loteSrc.includes("completa: true"));
+  assert.ok(loteSrc.includes("item.hilos.size > 1"));
   assert.ok(eliminar.indexOf('motivo: "bloqueada"') < eliminar.indexOf("cliente.delete"));
   assert.ok(!loteSrc.includes("client.delete"));
   assert.ok(!loteSrc.includes("axios.delete"));
@@ -743,9 +745,14 @@ async function testLimitesIguales() {
   for (let i = 0; i < 100; i += 1) {
     muchas.mensajes.push(mensaje(ruta, { cliente_numero: String(59173000000 + i) }));
   }
-  const lleno = await comparar("cien menciones detienen igual", clave, muchas);
-  assert.strictEqual(lleno.anterior.motivo, "consulta_fallida");
-  assert.strictEqual(lleno.nuevo.resultados[0].motivo, "consulta_fallida");
+  const llenoAnterior = await veredictoAnterior(clave, muchas, {}, {
+    storage: 0, menciones: 0, referencias: 0, entrantes: 0, candado: 0,
+  });
+  const lleno = await veredictoNuevo([clave], muchas);
+  assert.strictEqual(llenoAnterior.motivo, "consulta_fallida");
+  assert.strictEqual(lleno.resultados[0].motivo, "compartida");
+  assert.strictEqual(lleno.resultados[0].apto, false);
+  assert.strictEqual(lleno.resultados[0].detener, false);
 
   const refs = mundoVacio();
   ponerArchivo(refs, ruta);
@@ -1272,6 +1279,45 @@ async function testTextoUnaVezYPaginacion() {
   );
 }
 
+async function testMasDeCienMenciones() {
+  const ruta = "whatsapp/u1/foto.jpg";
+  const clave = `archivos/${ruta}`;
+  const otra = "archivos/whatsapp/u1/otra.jpg";
+
+  const mismo = mundoVacio();
+  ponerArchivo(mismo, ruta);
+  for (let i = 0; i < 120; i += 1) mismo.mensajes.push(mensaje(ruta));
+  mismo.mensajes.push(mensaje(ruta, { direccion: "saliente", creado_en: RECIENTE }));
+  const uno = await veredictoNuevo([clave], mismo);
+  assert.strictEqual(uno.resultados[0].motivo, "candidato");
+  assert.strictEqual(uno.resultados[0].apto, true);
+  assert.strictEqual(uno.resultados[0].detener, false);
+
+  const tardia = mundoVacio();
+  ponerArchivo(tardia, ruta);
+  for (let i = 0; i < 100; i += 1) tardia.mensajes.push(mensaje(ruta));
+  tardia.mensajes.push(mensaje(ruta, { cliente_numero: "59170000999" }));
+  const segundoHilo = await veredictoNuevo([clave], tardia);
+  assert.strictEqual(segundoHilo.resultados[0].motivo, "compartida");
+  assert.strictEqual(segundoHilo.resultados[0].apto, false);
+  assert.strictEqual(segundoHilo.resultados[0].detener, false);
+
+  const mixto = mundoVacio();
+  ponerArchivo(mixto, ruta);
+  ponerArchivo(mixto, "whatsapp/u1/otra.jpg");
+  for (let i = 0; i < 130; i += 1) {
+    mixto.mensajes.push(mensaje(ruta, { cliente_numero: String(59174000000 + i) }));
+  }
+  mixto.mensajes.push(mensaje("whatsapp/u1/otra.jpg"));
+  const seguido = await veredictoNuevo([clave, otra], mixto);
+  assert.strictEqual(seguido.abortar, false);
+  assert.strictEqual(seguido.resultados.length, 2);
+  assert.strictEqual(seguido.resultados[0].motivo, "compartida");
+  assert.strictEqual(seguido.resultados[0].detener, false);
+  assert.strictEqual(seguido.resultados[1].motivo, "candidato");
+  assert.strictEqual(seguido.resultados[1].apto, true);
+}
+
 async function main() {
   testMigracionYBarreras();
   testUrlPorCreadoEnEId();
@@ -1282,6 +1328,7 @@ async function main() {
   await testConcurrencia();
   await testCreadoEnNuloYCursorPegado();
   await testLimitesIguales();
+  await testMasDeCienMenciones();
   await testInventarioStorage();
   await testFalloCandadoYCron();
   await testVolumen();

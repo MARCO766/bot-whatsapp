@@ -12,6 +12,10 @@
  * aparece después de la marca, la pasada se detiene y no borra nada.
  * El reconocimiento sigue siendo citaRutaCompleta.
  * El veredicto lo calcula revalidarCandidato.
+ * Cada página se absorbe entera. Un archivo conserva un hilo nuevo aunque
+ * aparezca después de las primeras cien citas. Con dos hilos queda ambiguo
+ * y se salta; el resto de la pasada sigue. Una página ilegible, un cursor
+ * detenido o un conteo que no cierra detienen la pasada.
  * No borra objetos ni filas. No crea índices ni tablas.
  */
 const axios = require("axios");
@@ -26,7 +30,6 @@ const PAGINA_LISTADO = 100;
 const TOPE_PAGINAS = 50;
 const PAGINA_MENSAJES = 200;
 const TOPE_PAGINAS_MENSAJES = 100000;
-const TOPE_MENCIONES_POR_RUTA = 100;
 const TOPE_VUELTAS = 8;
 
 function consultasVacias() {
@@ -176,10 +179,10 @@ function errorDeFase(mensaje, consulta) {
 
 function filasMencion(item) {
   if (!item) return { error: errorDeFase("referencia ilegible", "mensajes.menciones") };
-  if (item.error) return { error: errorDeFase(item.error, "mensajes.menciones") };
-  if (item.truncada === true) {
-    return { error: errorDeFase("consulta truncada", "mensajes.menciones"), filas: item.filas || [] };
+  if (item.error === "ruta_no_filtrable" || item.ambigua === true || item.truncada === true) {
+    return { ambigua: true, filas: [] };
   }
+  if (item.error) return { error: errorDeFase(item.error, "mensajes.menciones") };
   return { filas: item.filas || [] };
 }
 
@@ -514,17 +517,23 @@ function absorberFila(lectura, fila) {
   for (const clave of citadas) {
     let item = lectura.mapa.get(clave);
     if (!item) {
-      item = { filas: [], truncada: false, ids: new Set() };
+      item = { filas: [], truncada: false, ambigua: false, compartida: false, hilos: new Set(), ids: new Set() };
       lectura.mapa.set(clave, item);
     }
     if (item.ids.has(id)) continue;
     item.ids.add(id);
-    if (item.filas.length >= TOPE_MENCIONES_POR_RUTA) {
-      item.truncada = true;
+    if (item.ambigua === true || item.compartida === true) continue;
+    const hilo = reglas.claveHilo(fila.usuario_id, fila.conexion_whatsapp_id, fila.cliente_numero);
+    if (!hilo) {
+      item.ambigua = true;
+      item.filas = [];
       continue;
     }
+    if (!item.hilos) item.hilos = new Set();
+    if (item.hilos.has(hilo)) continue;
+    item.hilos.add(hilo);
     item.filas.push(proyectada);
-    if (item.filas.length >= TOPE_MENCIONES_POR_RUTA) item.truncada = true;
+    if (item.hilos.size > 1) item.compartida = true;
   }
 }
 
@@ -613,12 +622,13 @@ function filaMencionDe(lectura, clave) {
     return { clave, error: "ruta_no_filtrable", truncada: false, filas: [] };
   }
   const item = lectura.mapa.get(clave);
-  if (!item) return { clave, error: null, truncada: false, filas: [] };
+  if (!item) return { clave, error: null, truncada: false, ambigua: false, filas: [] };
   return {
     clave,
     error: null,
-    truncada: item.truncada === true,
-    filas: item.filas.slice(),
+    truncada: false,
+    ambigua: item.ambigua === true,
+    filas: item.ambigua === true ? [] : item.filas.slice(),
   };
 }
 
@@ -777,6 +787,12 @@ function cuentaCitas(lectura, claves) {
 
 function volcarPlan(plan, clave, lectura) {
   const crudas = filasMencion(filaMencionDe(lectura, clave));
+  if (crudas.ambigua) {
+    plan.ambigua = true;
+    plan.menciones2 = [];
+    plan.pideReferencias = false;
+    return;
+  }
   if (crudas.error) {
     plan.errorSegunda = crudas.error;
     plan.menciones2 = [];
@@ -786,7 +802,7 @@ function volcarPlan(plan, clave, lectura) {
   }
   let lista;
   try {
-    lista = servicio.mencionesDesdeFilas(clave, crudas.filas);
+    lista = servicio.mencionesDesdeFilas(clave, crudas.filas, { completa: true });
   } catch (error) {
     plan.errorSegunda = error;
     plan.menciones2 = [];
@@ -862,18 +878,28 @@ async function revalidarLote(claves, opciones = {}) {
   for (const clave of claves) {
     const base = existencia.get(clave) || { existe: false, errorExiste: null };
     const crudas = filasMencion(menciones1.get(clave));
+    if (crudas.ambigua) {
+      preparadas.set(clave, {
+        ...base,
+        menciones1: [],
+        errorMenciones: null,
+        pideReferencias: false,
+        ambigua: true,
+      });
+      continue;
+    }
     let menciones;
     let errorMenciones = crudas.error || null;
     if (!errorMenciones) {
       try {
-        menciones = servicio.mencionesDesdeFilas(clave, crudas.filas);
+        menciones = servicio.mencionesDesdeFilas(clave, crudas.filas, { completa: true });
       } catch (error) {
         errorMenciones = error;
         menciones = [];
       }
     } else if (crudas.filas) {
       try {
-        menciones = servicio.mencionesDesdeFilas(clave, crudas.filas);
+        menciones = servicio.mencionesDesdeFilas(clave, crudas.filas, { completa: true });
       } catch (error) {
         menciones = [];
       }
@@ -930,6 +956,17 @@ async function revalidarLote(claves, opciones = {}) {
   const resultados = [];
   for (const clave of claves) {
     const plan = preparadas.get(clave);
+    if (plan?.ambigua === true) {
+      resultados.push({
+        clave,
+        motivo: "no_verificable",
+        apto: false,
+        detalle: null,
+        hilo: null,
+        detener: false,
+      });
+      continue;
+    }
     let citada = false;
     let errorCita = null;
     if (plan.pideReferencias) {
@@ -1006,7 +1043,6 @@ async function revalidarLote(claves, opciones = {}) {
 module.exports = {
   TAMANO_LOTE,
   PAGINA_MENSAJES,
-  TOPE_MENCIONES_POR_RUTA,
   consultarLoteReal,
   conReintento,
   crearInventarioStorage,

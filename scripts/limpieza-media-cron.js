@@ -1,21 +1,24 @@
 /**
  * Recorrido diario de limpieza.
- * Comando del Cron, una vez al día:
+ * Comando del Cron, una vez al día, a las 03:00 de Bolivia (UTC-4):
  *   node scripts/limpieza-media-cron.js
+ * Expresión UTC: 0 7 * * *
  * Sin LIMPIEZA_MEDIA_BORRAR=true no borra objetos ni filas: un candidato
  * revalidado no abre marca durable ni llama a Storage.
- * Si la revalidación falla, la referencia queda ambigua o se pierde el
- * candado, la pasada se detiene: no se mira el siguiente objeto y el
- * proceso sale con código 1. El finally suelta el candado global.
- * Con la variable en true, cada objeto pasa por la planificación existente:
- * marca durable, último entrante, protección JSON y un solo DELETE.
- * Cada ejecución borra como máximo un objeto. El cupo es interno: no sale de
- * variables de entorno, parámetros ni argumentos. Se consume inmediatamente
- * antes del DELETE a Storage. Si ese intento falla o queda incierto, la
- * pasada se detiene. El candidato siguiente no abre marca ni llega a Storage.
- * Una marca incierto no se reintenta.
+ * Un archivo ambiguo o protegido se salta y la pasada sigue con el resto.
+ * Si la consulta falla, se pierde el candado o un DELETE queda incierto,
+ * la pasada se detiene: no se mira el siguiente objeto y el proceso sale
+ * con código 1. El finally suelta el candado global.
+ * Una marca ya incierta no abre otro DELETE: se salta y la pasada sigue.
+ * Un DELETE incierto de esta pasada no se reintenta.
  * No define LIMPIEZA_MEDIA_ACTIVA en la plataforma:
  * la bandera solo entra como argumento de esta ejecución.
+ *
+ * Los candidatos se recorren en pasadas de 50 y se sigue solo hasta
+ * terminarlos. Cada pasada revalida de a 8, el máximo de la función SQL.
+ * Render corta el Cron a las 12 horas. Esta pasada deja de empezar trabajo
+ * 15 minutos antes. Lo ya borrado queda en Storage; lo pendiente lo retoma
+ * la ejecución siguiente. No hay cupo por variables, parámetros ni argumentos.
  *
  * Los jsonb grandes se leen una vez en el inventario. Flujos, campañas e IA
  * se vuelven a leer justo antes de revalidar. La eliminación, si la variable
@@ -23,8 +26,9 @@
  * Las menciones de todos los candidatos salen de una lectura paginada por
  * (creado_en, id). Cada id visto se recuerda. La pasada se repite desde el
  * inicio hasta que dos recorridos no encuentran mensajes nuevos.
- * Un ilike con página llena excluye el objeto. El candado se vuelve a
- * comprobar después de esa lectura. Si se pierde, el proceso sale con código 1.
+ * Un archivo ambiguo o protegido se salta y la pasada sigue. Una lectura
+ * fallida detiene la pasada. El candado se vuelve a comprobar después de
+ * esa lectura. Si se pierde, el proceso sale con código 1.
  */
 require("dotenv").config();
 const reglas = require("../services/limpiezaMedia/reglas");
@@ -60,102 +64,87 @@ function eliminacionSigueBloqueada() {
 }
 
 function debeDetenerPasada(motivo) {
-  return motivo === "consulta_fallida" || reglas.esReferenciaAmbigua(motivo);
+  return motivo === "consulta_fallida";
 }
 
-const LIMITE_OBJETOS_POR_EJECUCION = 1;
-
-function crearCupo() {
-  return { usados: 0 };
+function seSaltaSinBorrar(motivo) {
+  return reglas.esReferenciaAmbigua(motivo) || reglas.categoriaDeMotivo(motivo) === "protegido";
 }
 
-function cupoAgotado(cupo) {
-  return cupo.usados >= LIMITE_OBJETOS_POR_EJECUCION;
+const TOPE_RENDER_MS = 12 * 60 * 60 * 1000;
+const MARGEN_RENDER_MS = 15 * 60 * 1000;
+const PRESUPUESTO_MS = TOPE_RENDER_MS - MARGEN_RENDER_MS;
+const TAMANO_PASADA = 50;
+
+function crearReloj(opciones = {}) {
+  const ahora = typeof opciones.ahoraMs === "function" ? opciones.ahoraMs : () => Date.now();
+  const inicio = Number.isFinite(opciones.inicioMs) ? opciones.inicioMs : ahora();
+  const presupuesto = Number.isFinite(opciones.presupuestoMs) ? opciones.presupuestoMs : PRESUPUESTO_MS;
+  return {
+    ahora,
+    limiteMs: inicio + presupuesto,
+    agotado() {
+      return this.ahora() >= this.limiteMs;
+    },
+  };
+}
+
+function crearCuenta() {
+  return { borrados: 0 };
 }
 
 function debeDetenerPorBorrado(paso) {
-  if (!paso || paso.modo !== "real" || paso.motivo === "limite_ejecucion") return false;
+  if (!paso || paso.modo !== "real" || paso.previo === true) return false;
   if (paso.eliminado === true) return false;
   if (paso.incierto === true) return true;
   if (paso.motivo === "resultado_incierto" || paso.motivo === "supabase_error") return true;
   return paso.storage === true;
 }
 
-function paradaBorrado(paso, candidato, porMotivo, aptos, cupo, extra = {}) {
-  console.error("[LIMPIEZA_MEDIA_CRON] detenido", {
-    motivo: paso.motivo || "resultado_incierto",
-    clave: candidato.clave,
-  });
+function parada(motivo, candidato, porMotivo, aptos, cuenta, paso, extra = {}) {
+  const registro = {
+    motivo: motivo || "resultado_incierto",
+    clave: candidato?.clave || null,
+    detalle: paso?.detalle || extra.detalle || null,
+  };
+  if (motivo === "tiempo_agotado") console.log("[LIMPIEZA_MEDIA_CRON] detenido", registro);
+  else console.error("[LIMPIEZA_MEDIA_CRON] detenido", registro);
   return {
     detener: true,
-    abortar: paso.abortar === true,
-    codigo: 1,
-    motivo: paso.motivo || "resultado_incierto",
-    clave: candidato.clave,
+    abortar: paso?.abortar === true && motivo !== "tiempo_agotado",
+    codigo: motivo === "tiempo_agotado" ? 0 : 1,
+    motivo: registro.motivo,
+    clave: registro.clave,
+    detalle: paso?.detalle || extra.detalle || null,
     porMotivo,
     aptos,
-    storage: paso.storage === true,
-    marca: paso.marca === true,
+    storage: paso?.storage === true,
+    marca: paso?.marca === true,
     paso,
-    borrados: cupo.usados,
+    borrados: cuenta.borrados,
+    pendientes: extra.pendientes,
+    pasadas: extra.pasadas,
     ...extra,
   };
 }
 
-async function pasoTrasLimite(candidato, opciones) {
-  const seco = {
-    eliminado: false,
-    storage: false,
-    abortar: false,
-    marca: false,
-    modo: "real",
-  };
-  if (!candidato || candidato.categoria !== "candidato" || candidato.motivo !== "candidato") {
-    return { ...seco, motivo: "no_candidato", modo: "dry-run" };
-  }
-  const validar = opciones.validar || servicio.validarInmediatoEliminacion.bind(servicio);
-  let veredicto;
-  try {
-    veredicto = await validar(candidato.clave, {
-      protegidas: opciones.protegidas,
-      nombresProtegidos: opciones.nombresProtegidos,
-      workerId: opciones.workerId,
-      io: opciones.io,
-    });
-  } catch (error) {
-    return {
-      ...seco,
-      detener: true,
-      motivo: "consulta_fallida",
-      detalle: reglas.detalleConsultaFallida(error).mensaje,
-      modo: "dry-run",
-    };
-  }
-  if (veredicto?.abortar) {
-    return { ...seco, abortar: true, motivo: veredicto.motivo || "candado_perdido", modo: "dry-run" };
-  }
-  if (veredicto?.apto !== true) {
-    const motivo = veredicto?.motivo || "no_apto";
-    return {
-      ...seco,
-      motivo,
-      detener: debeDetenerPasada(motivo),
-      detalle: veredicto?.detalle || null,
-      modo: "dry-run",
-    };
-  }
-  return { ...seco, motivo: "limite_ejecucion" };
+function inciertoPrevio(paso) {
+  return paso?.previo === true && paso.storage !== true && paso.eliminado !== true;
 }
 
 /**
  * Solo entra un objeto ya clasificado como candidato y revalidado como apto.
  * En dry-run no abre marca durable y no llama a Storage.
- * La rama real conserva la planificación: marca, entrante nuevo y un solo objeto.
+ * La rama real conserva la planificación: marca, entrante nuevo y el DELETE
+ * de ese único objeto. Los buckets de flujos y remarketing no llegan ahí.
  */
-async function procesarCandidatoRevalidado(candidato, opciones = {}, cupo = crearCupo()) {
+async function procesarCandidatoRevalidado(candidato, opciones = {}) {
   const seco = { eliminado: false, storage: false, abortar: false, marca: false, modo: "dry-run" };
   if (!candidato || candidato.categoria !== "candidato" || candidato.motivo !== "candidato") {
     return { ...seco, motivo: "no_candidato" };
+  }
+  if (reglas.esBucketExcluido(candidato.clave)) {
+    return { ...seco, motivo: "bucket_protegido" };
   }
   const validar = opciones.validar || servicio.validarInmediatoEliminacion.bind(servicio);
   let veredicto;
@@ -189,9 +178,6 @@ async function procesarCandidatoRevalidado(candidato, opciones = {}, cupo = crea
   if (eliminacionSigueBloqueada()) {
     return { ...seco, motivo: "bloqueada" };
   }
-  if (cupoAgotado(cupo)) {
-    return { ...seco, motivo: "limite_ejecucion", modo: "real" };
-  }
 
   const plan = await eliminar.planificarEliminacion(candidato.clave, {
     protegidas: opciones.protegidas,
@@ -207,12 +193,14 @@ async function procesarCandidatoRevalidado(candidato, opciones = {}, cupo = crea
     abrirValla: opciones.abrirValla,
   });
   if (!plan || plan.eliminar !== true) {
+    const motivo = plan?.motivo || "no_apto";
     return {
       eliminado: false,
       storage: false,
       marca: false,
       abortar: plan?.abortar === true,
-      motivo: plan?.motivo || "no_apto",
+      motivo,
+      detener: debeDetenerPasada(motivo),
       modo: "real",
     };
   }
@@ -225,26 +213,25 @@ async function procesarCandidatoRevalidado(candidato, opciones = {}, cupo = crea
     workerId: opciones.workerId,
     io: opciones.io,
     ahora: opciones.ahora,
-    borrarObjeto: () => {
-      if (cupoAgotado(cupo)) {
-        return { eliminado: false, storage: false, motivo: "limite_ejecucion" };
-      }
-      cupo.usados += 1;
-      return eliminar.borrarObjetoStorage(candidato.clave, {
-        url: opciones.url || process.env.SUPABASE_URL,
-        cliente: opciones.cliente,
-        marca: plan.valla,
-      });
-    },
+    borrarObjeto: () => eliminar.borrarObjetoStorage(candidato.clave, {
+      url: opciones.url || process.env.SUPABASE_URL,
+      cliente: opciones.cliente,
+      marca: plan.valla,
+    }),
   });
   return { ...hecho, marca: true, modo: "real" };
 }
 
-async function inventario(estado) {
+async function inventario(estado, reloj) {
   const progreso = servicio.crearEstado();
   let anterior = "";
   let result = null;
   for (let vuelta = 0; vuelta < 8000; vuelta += 1) {
+    if (reloj && reloj.agotado()) {
+      const error = new Error("tiempo_agotado");
+      error.motivo = "tiempo_agotado";
+      throw error;
+    }
     exigirCandado(estado);
     result = await servicio.ejecutarLimpiezaMedia({
       env: { ...process.env, LIMPIEZA_MEDIA_ACTIVA: "true" },
@@ -292,92 +279,100 @@ function anotarPaso(porMotivo, paso, candidato) {
     apto: motivo === "bloqueada" || paso?.eliminado === true,
     borrado: paso?.eliminado === true ? "eliminado" : (motivo === "bloqueada" ? "bloqueado" : "omitido"),
     storage: paso?.storage === true,
+    saltado: seSaltaSinBorrar(motivo) || motivo === "bucket_protegido" || paso?.previo === true,
   });
 }
 
-async function recorrerCandidatosUnoAUno(candidatos, opciones = {}, cupo = crearCupo()) {
+function aplicarPaso(paso, candidato, porMotivo, aptos, cuenta, extra) {
+  if (inciertoPrevio(paso)) {
+    anotarPaso(porMotivo, paso, candidato);
+    return { aptos, parada: null };
+  }
+  if (paso?.abortar) {
+    return {
+      aptos,
+      parada: parada(paso.motivo || "candado_perdido", candidato, porMotivo, aptos, cuenta, paso, extra),
+    };
+  }
+  if (paso?.modo === "real" && paso?.motivo === "bloqueada") {
+    return { aptos, parada: parada("bloqueada", candidato, porMotivo, aptos, cuenta, paso, extra) };
+  }
+  if (paso?.detener === true || debeDetenerPasada(paso?.motivo)) {
+    return {
+      aptos,
+      parada: parada(paso?.motivo || "consulta_fallida", candidato, porMotivo, aptos, cuenta, paso, extra),
+    };
+  }
+  if ((paso?.storage === true || paso?.eliminado === true) && eliminacionSigueBloqueada()) {
+    return { aptos, parada: parada("borrado_en_dry_run", candidato, porMotivo, aptos, cuenta, paso, extra) };
+  }
+  if (paso?.eliminado === true && seSaltaSinBorrar(paso?.motivo)) {
+    return { aptos, parada: parada("borrado_en_dry_run", candidato, porMotivo, aptos, cuenta, paso, extra) };
+  }
+  if (debeDetenerPorBorrado(paso)) {
+    return {
+      aptos,
+      parada: parada(paso.motivo || "resultado_incierto", candidato, porMotivo, aptos, cuenta, paso, extra),
+    };
+  }
+  let siguientes = aptos;
+  if (paso?.motivo === "bloqueada" || paso?.eliminado === true) siguientes += 1;
+  if (paso?.eliminado === true) cuenta.borrados += 1;
+  const visible = paso?.eliminado === true && !paso?.motivo ? { ...paso, motivo: "eliminado" } : paso;
+  anotarPaso(porMotivo, visible, candidato || { clave: null, bytes: 0 });
+  return { aptos: siguientes, parada: null };
+}
+
+function paradaPorTiempo(candidato, porMotivo, aptos, cuenta, extra) {
+  return parada("tiempo_agotado", candidato, porMotivo, aptos, cuenta, null, extra);
+}
+
+async function recorrerCandidatosUnoAUno(candidatos, opciones, cuenta, reloj) {
   const porMotivo = {};
   let aptos = 0;
+  let pasadas = 0;
   const exigir = opciones.exigirCandado || (() => {});
-  for (const candidato of candidatos) {
+  for (let inicio = 0; inicio < candidatos.length; inicio += TAMANO_PASADA) {
+    const pendiente = candidatos[inicio];
+    if (reloj.agotado()) {
+      return paradaPorTiempo(pendiente, porMotivo, aptos, cuenta, {
+        pendientes: candidatos.length - inicio,
+        pasadas,
+      });
+    }
     exigir();
-    const paso = cupoAgotado(cupo)
-      ? await pasoTrasLimite(candidato, opciones)
-      : await procesarCandidatoRevalidado(candidato, opciones, cupo);
-    if (paso.abortar) {
-      return {
-        detener: true,
-        abortar: true,
-        codigo: 1,
-        motivo: paso.motivo || "candado_perdido",
-        clave: candidato.clave,
-        porMotivo,
-        aptos,
-        storage: false,
-        marca: false,
-        paso,
-        borrados: cupo.usados,
-      };
+    pasadas += 1;
+    const bloque = candidatos.slice(inicio, inicio + TAMANO_PASADA);
+    if (typeof opciones.alPasada === "function") {
+      opciones.alPasada({ inicio, tamano: bloque.length, pasada: pasadas });
     }
-    if (paso.modo === "real" && paso.motivo === "bloqueada") {
-      console.error("[LIMPIEZA_MEDIA_CRON] detenido", {
-        motivo: "bloqueada",
-        clave: candidato.clave,
-      });
-      return {
-        detener: true,
-        abortar: false,
-        codigo: 1,
-        motivo: "bloqueada",
-        clave: candidato.clave,
-        porMotivo,
-        aptos,
-        storage: false,
-        marca: false,
-        paso,
-      };
+    for (let cursor = 0; cursor < bloque.length; cursor += 1) {
+      const candidato = bloque[cursor];
+      if (reloj.agotado()) {
+        return paradaPorTiempo(candidato, porMotivo, aptos, cuenta, {
+          pendientes: candidatos.length - inicio - cursor,
+          pasadas,
+        });
+      }
+      exigir();
+      const paso = await procesarCandidatoRevalidado(candidato, opciones);
+      const resuelto = aplicarPaso(paso, candidato, porMotivo, aptos, cuenta, { pasadas });
+      if (resuelto.parada) return resuelto.parada;
+      aptos = resuelto.aptos;
     }
-    if (paso.detener === true || debeDetenerPasada(paso.motivo)) {
-      console.error("[LIMPIEZA_MEDIA_CRON] detenido", {
-        motivo: paso.motivo || "consulta_fallida",
-        clave: candidato.clave,
-        detalle: paso.detalle || null,
-      });
-      return {
-        detener: true,
-        abortar: false,
-        codigo: 1,
-        motivo: paso.motivo || "consulta_fallida",
-        detalle: paso.detalle || null,
-        clave: candidato.clave,
-        porMotivo,
-        aptos,
-        storage: false,
-        marca: false,
-        paso,
-      };
-    }
-    if ((paso.storage === true || paso.eliminado === true) && eliminacionSigueBloqueada()) {
-      console.error("[LIMPIEZA_MEDIA_CRON] detenido", { motivo: "borrado_en_dry_run", clave: candidato.clave });
-      return {
-        detener: true,
-        abortar: false,
-        codigo: 1,
-        motivo: "borrado_en_dry_run",
-        clave: candidato.clave,
-        porMotivo,
-        aptos,
-        paso,
-        borrados: cupo.usados,
-      };
-    }
-    if (debeDetenerPorBorrado(paso)) {
-      return paradaBorrado(paso, candidato, porMotivo, aptos, cupo);
-    }
-    if (paso.motivo === "bloqueada" || paso.eliminado === true) aptos += 1;
-    anotarPaso(porMotivo, paso.eliminado === true && !paso.motivo ? { ...paso, motivo: "eliminado" } : paso, candidato);
   }
-  return { detener: false, abortar: false, codigo: 0, porMotivo, aptos, storage: false, marca: false, borrados: cupo.usados };
+  return {
+    detener: false,
+    abortar: false,
+    codigo: 0,
+    porMotivo,
+    aptos,
+    storage: false,
+    marca: false,
+    borrados: cuenta.borrados,
+    pendientes: 0,
+    pasadas,
+  };
 }
 
 function sumarTiempos(total, parte) {
@@ -386,11 +381,12 @@ function sumarTiempos(total, parte) {
   return total;
 }
 
-async function recorrerCandidatosEnLote(candidatos, opciones = {}, cupo = crearCupo()) {
+async function recorrerCandidatosEnLote(candidatos, opciones, cuenta, reloj) {
   const porMotivo = {};
   let aptos = 0;
+  let pasadas = 0;
   const exigir = opciones.exigirCandado || (() => {});
-  const tamano = opciones.tamanoLote || loteMedia.TAMANO_LOTE;
+  const tamano = loteMedia.TAMANO_LOTE;
   const inventarioStorage = opciones.inventarioStorage instanceof Map
     ? opciones.inventarioStorage
     : loteMedia.crearInventarioStorage();
@@ -415,196 +411,162 @@ async function recorrerCandidatosEnLote(candidatos, opciones = {}, cupo = crearC
     menciones2Ms: 0,
     entrantesMs: 0,
   };
-  for (let inicio = 0; inicio < candidatos.length; inicio += tamano) {
-    exigir();
-    const grupo = candidatos.slice(inicio, inicio + tamano);
-    const reales = [];
-    for (const candidato of grupo) {
-      if (!candidato || candidato.categoria !== "candidato" || candidato.motivo !== "candidato") {
-        const paso = { motivo: "no_candidato" };
-        if (paso.motivo === "bloqueada") aptos += 1;
-        anotarPaso(porMotivo, paso, candidato || { clave: null, bytes: 0 });
-        continue;
-      }
-      reales.push(candidato);
-    }
-    if (!reales.length) continue;
-    let lote;
-    try {
-      lote = await loteMedia.revalidarLote(reales.map((candidato) => candidato.clave), {
-        protegidas: opciones.protegidas,
-        nombresProtegidos: opciones.nombresProtegidos,
-        workerId: opciones.workerId,
-        ahora: opciones.ahora,
-        dias: opciones.dias,
-        listarStorage: opciones.listarStorage,
-        inventarioStorage,
-        lecturaMenciones,
-        lecturaTexto,
-        leerPaginaMensajes: opciones.leerPaginaMensajes,
-        leerPaginaFuente: opciones.leerPaginaFuente,
-        contarMensajes: opciones.contarMensajes,
-        efectos: opciones.efectos,
-        mundo: opciones.mundo,
-        alFase: opciones.alFase,
-        consultar: opciones.consultar,
-        candado: opciones.candado,
+  for (let pasadaInicio = 0; pasadaInicio < candidatos.length; pasadaInicio += TAMANO_PASADA) {
+    const primero = candidatos[pasadaInicio];
+    if (reloj.agotado()) {
+      return paradaPorTiempo(primero, porMotivo, aptos, cuenta, {
+        pendientes: candidatos.length - pasadaInicio,
+        pasadas,
+        tiempos,
       });
-    } catch (error) {
-      sumarTiempos(tiempos, error?.tiempos);
+    }
+    exigir();
+    pasadas += 1;
+    const bloque = candidatos.slice(pasadaInicio, pasadaInicio + TAMANO_PASADA);
+    if (typeof opciones.alPasada === "function") {
+      opciones.alPasada({ inicio: pasadaInicio, tamano: bloque.length, pasada: pasadas });
+    }
+    for (let offset = 0; offset < bloque.length; offset += tamano) {
+      const inicio = pasadaInicio + offset;
+      if (reloj.agotado()) {
+        return paradaPorTiempo(bloque[offset], porMotivo, aptos, cuenta, {
+          pendientes: candidatos.length - inicio,
+          pasadas,
+          tiempos,
+        });
+      }
+      exigir();
+      const grupo = bloque.slice(offset, offset + tamano);
+      const reales = [];
+      for (const candidato of grupo) {
+        if (!candidato || candidato.categoria !== "candidato" || candidato.motivo !== "candidato") {
+          const resuelto = aplicarPaso({ motivo: "no_candidato" }, candidato || { clave: null, bytes: 0 }, porMotivo, aptos, cuenta, { tiempos, pasadas });
+          if (resuelto.parada) return resuelto.parada;
+          aptos = resuelto.aptos;
+          continue;
+        }
+        if (reglas.esBucketExcluido(candidato.clave)) {
+          const resuelto = aplicarPaso({ motivo: "bucket_protegido" }, candidato, porMotivo, aptos, cuenta, { tiempos, pasadas });
+          if (resuelto.parada) return resuelto.parada;
+          aptos = resuelto.aptos;
+          continue;
+        }
+        reales.push(candidato);
+      }
+      if (!reales.length) continue;
+      let lote;
+      try {
+        lote = await loteMedia.revalidarLote(reales.map((candidato) => candidato.clave), {
+          protegidas: opciones.protegidas,
+          nombresProtegidos: opciones.nombresProtegidos,
+          workerId: opciones.workerId,
+          ahora: opciones.ahora,
+          dias: opciones.dias,
+          listarStorage: opciones.listarStorage,
+          inventarioStorage,
+          lecturaMenciones,
+          lecturaTexto,
+          leerPaginaMensajes: opciones.leerPaginaMensajes,
+          leerPaginaFuente: opciones.leerPaginaFuente,
+          contarMensajes: opciones.contarMensajes,
+          efectos: opciones.efectos,
+          mundo: opciones.mundo,
+          alFase: opciones.alFase,
+          consultar: opciones.consultar,
+          candado: opciones.candado,
+        });
+      } catch (error) {
+        sumarTiempos(tiempos, error?.tiempos);
+        console.log("[LIMPIEZA_MEDIA_CRON] fases", {
+          desde: inicio,
+          claves: reales.length,
+          ...(error?.tiempos || {}),
+        });
+        const detalle = reglas.detalleConsultaFallida(error);
+        const fallo = parada("consulta_fallida", reales[0], porMotivo, aptos, cuenta, { detalle }, {
+          tiempos,
+          pasadas,
+          detalle,
+          pendientes: candidatos.length - inicio,
+        });
+        return fallo;
+      }
+      sumarTiempos(tiempos, lote.tiempos);
       console.log("[LIMPIEZA_MEDIA_CRON] fases", {
         desde: inicio,
         claves: reales.length,
-        ...(error?.tiempos || {}),
+        ...lote.tiempos,
       });
-      const detalle = reglas.detalleConsultaFallida(error);
-      console.error("[LIMPIEZA_MEDIA_CRON] detenido", {
-        motivo: "consulta_fallida",
-        clave: reales[0].clave,
-        detalle,
-      });
-      return {
-        detener: true,
-        abortar: false,
-        codigo: 1,
-        motivo: "consulta_fallida",
-        detalle,
-        clave: reales[0].clave,
-        porMotivo,
-        aptos,
-        storage: false,
-        marca: false,
-        tiempos,
-      };
-    }
-    sumarTiempos(tiempos, lote.tiempos);
-    console.log("[LIMPIEZA_MEDIA_CRON] fases", {
-      desde: inicio,
-      claves: reales.length,
-      ...lote.tiempos,
-    });
-    if (lote.abortar) {
-      return {
-        detener: true,
-        abortar: true,
-        codigo: 1,
-        motivo: lote.motivo || "candado_perdido",
-        clave: lote.clave,
-        porMotivo,
-        aptos,
-        storage: false,
-        marca: false,
-        tiempos,
-      };
-    }
-    for (const item of lote.resultados) {
-      const candidato = reales.find((entrada) => entrada.clave === item.clave);
-      if (item.detener || debeDetenerPasada(item.motivo)) {
-        console.error("[LIMPIEZA_MEDIA_CRON] detenido", {
-          motivo: item.motivo || "consulta_fallida",
-          clave: item.clave,
-          detalle: item.detalle || null,
-        });
-        return {
-          detener: true,
-          abortar: false,
-          codigo: 1,
-          motivo: item.motivo || "consulta_fallida",
-          detalle: item.detalle || null,
-          clave: item.clave,
-          porMotivo,
-          aptos,
-          storage: false,
-          marca: false,
-          tiempos,
-        };
+      if (lote.abortar) {
+        return parada(lote.motivo || "candado_perdido", { clave: lote.clave }, porMotivo, aptos, cuenta, {
+          abortar: true,
+          motivo: lote.motivo || "candado_perdido",
+        }, { tiempos, pasadas, pendientes: candidatos.length - inicio });
       }
-      if (item.apto === true && !eliminacionSigueBloqueada()) {
-        if (cupoAgotado(cupo)) {
-          anotarPaso(porMotivo, { motivo: "limite_ejecucion", eliminado: false, storage: false }, candidato);
+      for (let indice = 0; indice < lote.resultados.length; indice += 1) {
+        const item = lote.resultados[indice];
+        const candidato = reales.find((entrada) => entrada.clave === item.clave) || { clave: item.clave, bytes: 0 };
+        if (reloj.agotado()) {
+          return paradaPorTiempo(candidato, porMotivo, aptos, cuenta, {
+            pendientes: candidatos.length - inicio - indice,
+            pasadas,
+            tiempos,
+          });
+        }
+        if (item.apto === true && !eliminacionSigueBloqueada()) {
+          if (reloj.agotado()) {
+            return paradaPorTiempo(candidato, porMotivo, aptos, cuenta, {
+              pendientes: candidatos.length - inicio - indice,
+              pasadas,
+              tiempos,
+            });
+          }
+          const paso = await procesarCandidatoRevalidado(candidato, opciones);
+          const resuelto = aplicarPaso(paso, candidato, porMotivo, aptos, cuenta, { tiempos, pasadas });
+          if (resuelto.parada) return resuelto.parada;
+          aptos = resuelto.aptos;
           continue;
         }
-        const paso = await procesarCandidatoRevalidado(candidato, opciones, cupo);
-        if (paso.abortar) {
-          return {
-            detener: true,
-            abortar: true,
-            codigo: 1,
-            motivo: paso.motivo || "candado_perdido",
-            clave: candidato.clave,
-            porMotivo,
-            aptos,
-            storage: false,
-            marca: paso.marca === true,
-            tiempos,
-            borrados: cupo.usados,
-          };
-        }
-        if (paso.modo === "real" && paso.motivo === "bloqueada") {
-          console.error("[LIMPIEZA_MEDIA_CRON] detenido", {
-            motivo: "bloqueada",
-            clave: candidato.clave,
-          });
-          return {
-            detener: true,
-            abortar: false,
-            codigo: 1,
-            motivo: "bloqueada",
-            clave: candidato.clave,
-            porMotivo,
-            aptos,
-            storage: paso.storage === true,
-            marca: paso.marca === true,
-            tiempos,
-          };
-        }
-        if (paso.detener === true || debeDetenerPasada(paso.motivo)) {
-          console.error("[LIMPIEZA_MEDIA_CRON] detenido", {
-            motivo: paso.motivo || "consulta_fallida",
-            clave: candidato.clave,
-            detalle: paso.detalle || null,
-          });
-          return {
-            detener: true,
-            abortar: false,
-            codigo: 1,
-            motivo: paso.motivo || "consulta_fallida",
-            detalle: paso.detalle || null,
-            clave: candidato.clave,
-            porMotivo,
-            aptos,
-            storage: paso.storage === true,
-            marca: paso.marca === true,
-            tiempos,
-          };
-        }
-        if (debeDetenerPorBorrado(paso)) {
-          return paradaBorrado(paso, candidato, porMotivo, aptos, cupo, { tiempos });
-        }
-        if (paso.eliminado === true) aptos += 1;
-        anotarPaso(porMotivo, {
-          motivo: paso.eliminado === true ? "eliminado" : paso.motivo,
-          eliminado: paso.eliminado === true,
-          storage: paso.storage === true,
-        }, candidato);
-        continue;
+        const motivo = item.motivo === "candidato" && eliminacionSigueBloqueada()
+          ? "bloqueada"
+          : item.motivo;
+        const resuelto = aplicarPaso({
+          motivo,
+          detener: item.detener === true || debeDetenerPasada(motivo),
+          detalle: item.detalle || null,
+          eliminado: false,
+          storage: false,
+          abortar: false,
+          modo: "dry-run",
+        }, candidato, porMotivo, aptos, cuenta, { tiempos, pasadas });
+        if (resuelto.parada) return resuelto.parada;
+        aptos = resuelto.aptos;
       }
-      const motivo = item.motivo === "candidato" && eliminacionSigueBloqueada()
-        ? "bloqueada"
-        : item.motivo;
-      if (motivo === "bloqueada") aptos += 1;
-      anotarPaso(porMotivo, { motivo }, candidato);
     }
   }
-  return { detener: false, abortar: false, codigo: 0, porMotivo, aptos, storage: false, marca: false, tiempos, borrados: cupo.usados };
+  return {
+    detener: false,
+    abortar: false,
+    codigo: 0,
+    porMotivo,
+    aptos,
+    storage: false,
+    marca: false,
+    tiempos,
+    borrados: cuenta.borrados,
+    pendientes: 0,
+    pasadas,
+  };
 }
 
 async function recorrerCandidatos(candidatos, opciones = {}) {
-  const cupo = crearCupo();
+  const cuenta = crearCuenta();
+  const reloj = opciones.reloj || crearReloj(opciones);
+  const lista = Array.isArray(candidatos) ? candidatos : [];
   if (typeof opciones.validar === "function" || opciones.io) {
-    return recorrerCandidatosUnoAUno(candidatos, opciones, cupo);
+    return recorrerCandidatosUnoAUno(lista, opciones, cuenta, reloj);
   }
-  return recorrerCandidatosEnLote(candidatos, opciones, cupo);
+  return recorrerCandidatosEnLote(lista, opciones, cuenta, reloj);
 }
 
 async function finalizarCandado(estado, workerId, liberar = liberarLockLimpiezaMedia) {
@@ -636,9 +598,10 @@ async function main() {
   }, RENOVACION_MS);
   if (typeof timer.unref === "function") timer.unref();
 
+  const reloj = crearReloj();
   try {
     const inicioInventario = Date.now();
-    const result = await inventario(estado);
+    const result = await inventario(estado, reloj);
     const inventarioMs = Date.now() - inicioInventario;
     if (!result.completo || result.proteccionIncompleta) {
       console.error("[LIMPIEZA_MEDIA_CRON] proteccion incompleta", {
@@ -684,6 +647,7 @@ async function main() {
       workerId: candado.workerId,
       leerUltimoEntrante: servicio.leerUltimoEntranteReal,
       exigirCandado: () => exigirCandado(estado),
+      reloj,
     });
     if (recorrido.abortar) {
       marcarPerdida(estado, { ok: false, motivo: recorrido.motivo || "candado_perdido" });
@@ -697,8 +661,11 @@ async function main() {
       modo: borradoAutorizado ? "real" : "dry-run",
       eliminacionReal: borradoAutorizado ? "autorizada" : "bloqueada",
       dias: reglas.DIAS_INACTIVIDAD,
-      limiteObjetos: LIMITE_OBJETOS_POR_EJECUCION,
+      tamanoPasada: TAMANO_PASADA,
+      presupuestoMs: PRESUPUESTO_MS,
       borrados: recorrido.borrados || 0,
+      pasadas: recorrido.pasadas || 0,
+      pendientes: recorrido.pendientes || 0,
       inventarioMs,
       objetosRevisados: result.objetosRevisados,
       candidatosInventario: candidatos.length,
@@ -712,6 +679,10 @@ async function main() {
     });
     return 0;
   } catch (error) {
+    if (error.motivo === "tiempo_agotado") {
+      console.log("[LIMPIEZA_MEDIA_CRON] detenido", { motivo: "tiempo_agotado" });
+      return 0;
+    }
     console.error("[LIMPIEZA_MEDIA_CRON] error", error.motivo || error.message);
     return 1;
   } finally {
@@ -736,6 +707,10 @@ if (require.main === module) {
 }
 
 module.exports = {
+  MARGEN_RENDER_MS,
+  PRESUPUESTO_MS,
+  TAMANO_PASADA,
+  TOPE_RENDER_MS,
   finalizarCandado,
   procesarCandidatoRevalidado,
   recorrerCandidatos,

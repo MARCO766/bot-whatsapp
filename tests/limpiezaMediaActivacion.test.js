@@ -160,13 +160,16 @@ async function testParadaPorAmbiguoConsultaYCandado() {
       workerId: "limpieza-activacion",
       validar: async (clave) => {
         ambiguos.push(clave);
-        return { apto: false, motivo: "compartida", abortar: false };
+        if (clave === UNO) return { apto: false, motivo: "compartida", abortar: false };
+        return { apto: true, motivo: "candidato", abortar: false };
       },
     });
-    assert.deepStrictEqual(ambiguos, [UNO]);
-    assert.strictEqual(ambiguo.detener, true);
-    assert.strictEqual(ambiguo.codigo, 1);
-    assert.strictEqual(ambiguo.motivo, "compartida");
+    assert.deepStrictEqual(ambiguos, [UNO, DOS]);
+    assert.strictEqual(ambiguo.detener, false);
+    assert.strictEqual(ambiguo.codigo, 0);
+    assert.strictEqual(ambiguo.motivo, undefined);
+    assert.strictEqual(ambiguo.porMotivo.compartida, 1);
+    assert.strictEqual(ambiguo.porMotivo.bloqueada, 1);
     assert.strictEqual(ambiguo.storage, false);
 
     const fallos = [];
@@ -201,7 +204,7 @@ async function testParadaPorAmbiguoConsultaYCandado() {
     eliminar.planificarEliminacion = originalPlan;
     eliminar.ejecutarBorradoSobrePlan = originalEjecutar;
   }
-  ok("ambiguo, consulta fallida y candado perdido detienen sin borrar");
+  ok("el ambiguo se salta; la consulta fallida y el candado perdido detienen sin borrar");
 }
 
 async function testInciertoNoSeReintenta() {
@@ -287,10 +290,16 @@ async function testResolucionManualNoBorra() {
   assert.strictEqual(suelta.liberada, true);
   assert.strictEqual(suelta.reintentar, false);
   assert.strictEqual(suelta.storage, false);
-  assert.strictEqual(registro.porHilo.has(hilo), false);
+  assert.strictEqual(registro.porHilo.get(hilo).estado, null);
+  assert.strictEqual(registro.porHilo.get(hilo).resultado, "incierto");
+  const reserva = await registro.tomar({ hilo, owner: "cl:2", estado: "reservado" });
+  assert.strictEqual(reserva.ok, false);
+  assert.strictEqual(reserva.motivo, "resultado_incierto");
+  assert.strictEqual(reserva.reintentar, false);
   const entrante = await registro.tomar({ hilo, owner: "wh:nuevo", estado: "entrante" });
   assert.strictEqual(entrante.ok, true);
   assert.strictEqual(entrante.estado, "entrante");
+  assert.strictEqual(registro.porHilo.get(hilo).resultado, "incierto");
   ok("la resolución manual suelta la conversación sin otro DELETE");
 }
 
@@ -403,22 +412,24 @@ async function escenarioLimite(rama, resultadoDelete) {
   }
 }
 
-function afirmarUnSoloIntento(resultado, segundoQuedaLimitado) {
-  assert.strictEqual(resultado.deletes, 1);
-  assert.deepStrictEqual(resultado.planes, [UNO]);
-  assert.strictEqual(resultado.recorrido.borrados, 1);
-  if (segundoQuedaLimitado) {
-    assert.strictEqual(resultado.recorrido.detener, false);
-    assert.strictEqual(resultado.recorrido.codigo, 0);
-    assert.strictEqual(resultado.recorrido.porMotivo.limite_ejecucion, 1);
-  } else {
-    assert.strictEqual(resultado.recorrido.detener, true);
-    assert.strictEqual(resultado.recorrido.codigo, 1);
-    assert.strictEqual(resultado.recorrido.porMotivo.limite_ejecucion, undefined);
-  }
+function afirmarSinTope(resultado) {
+  assert.strictEqual(resultado.deletes, 2);
+  assert.deepStrictEqual(resultado.planes, [UNO, DOS]);
+  assert.strictEqual(resultado.recorrido.detener, false);
+  assert.strictEqual(resultado.recorrido.codigo, 0);
+  assert.strictEqual(resultado.recorrido.borrados, 2);
+  assert.strictEqual(resultado.recorrido.porMotivo.limite_ejecucion, undefined);
 }
 
-async function testLimiteDeUnObjetoPorEjecucion() {
+function afirmarDetenidoEnElPrimero(resultado) {
+  assert.strictEqual(resultado.deletes, 1);
+  assert.deepStrictEqual(resultado.planes, [UNO]);
+  assert.strictEqual(resultado.recorrido.detener, true);
+  assert.strictEqual(resultado.recorrido.codigo, 1);
+  assert.strictEqual(resultado.recorrido.porMotivo.limite_ejecucion, undefined);
+}
+
+async function testSinTopeDeUnObjeto() {
   const exito = () => ({ eliminado: true, storage: true, status: 200 });
   const ausente = () => ({ eliminado: true, storage: true, status: 404, idempotente: true });
   const error = () => ({
@@ -436,20 +447,13 @@ async function testLimiteDeUnObjetoPorEjecucion() {
     motivo: "resultado_incierto",
   });
 
-  afirmarUnSoloIntento(await escenarioLimite("uno", exito), true);
-  afirmarUnSoloIntento(await escenarioLimite("lote", ausente), true);
-  afirmarUnSoloIntento(await escenarioLimite("uno", error), false);
-  afirmarUnSoloIntento(await escenarioLimite("lote", error), false);
-  afirmarUnSoloIntento(await escenarioLimite("uno", incierto), false);
-  afirmarUnSoloIntento(await escenarioLimite("lote", incierto), false);
-
-  const primero = await escenarioLimite("uno", exito);
-  const segundo = await escenarioLimite("lote", exito);
-  assert.strictEqual(primero.recorrido.borrados, 1);
-  assert.strictEqual(segundo.recorrido.borrados, 1);
-  assert.strictEqual(primero.deletes, 1);
-  assert.strictEqual(segundo.deletes, 1);
-  ok("cada ejecución borra como máximo un objeto y el cupo no se hereda");
+  afirmarSinTope(await escenarioLimite("uno", exito));
+  afirmarSinTope(await escenarioLimite("lote", ausente));
+  afirmarDetenidoEnElPrimero(await escenarioLimite("uno", error));
+  afirmarDetenidoEnElPrimero(await escenarioLimite("lote", error));
+  afirmarDetenidoEnElPrimero(await escenarioLimite("uno", incierto));
+  afirmarDetenidoEnElPrimero(await escenarioLimite("lote", incierto));
+  ok("no hay tope de un objeto; un DELETE incierto detiene y el cupo ajeno no entra");
 }
 
 function testContratoDeArchivos() {
@@ -467,8 +471,16 @@ function testContratoDeArchivos() {
   assert.ok(cronSrc.includes("bloqueo_alterado"));
   assert.ok(cronSrc.includes("esReferenciaAmbigua"));
   assert.strictEqual(reglas.DIAS_INACTIVIDAD, 30);
-  assert.ok(cronSrc.includes("const LIMITE_OBJETOS_POR_EJECUCION = 1;"));
-  assert.ok(!/LIMITE_OBJETOS_POR_EJECUCION\s*=\s*process\.env/.test(cronSrc));
+  assert.strictEqual(cron.TAMANO_PASADA, 50);
+  assert.strictEqual(cron.TOPE_RENDER_MS, 12 * 60 * 60 * 1000);
+  assert.strictEqual(cron.MARGEN_RENDER_MS, 15 * 60 * 1000);
+  assert.strictEqual(cron.PRESUPUESTO_MS, cron.TOPE_RENDER_MS - cron.MARGEN_RENDER_MS);
+  assert.ok(cronSrc.includes("0 7 * * *"));
+  assert.ok(cronSrc.includes("tiempo_agotado"));
+  assert.ok(cronSrc.includes("TAMANO_PASADA"));
+  assert.ok(!cronSrc.includes("LIMITE_OBJETOS_POR_EJECUCION"));
+  assert.ok(!/PRESUPUESTO_MS\s*=\s*process\.env/.test(cronSrc));
+  assert.ok(!/TAMANO_PASADA\s*=\s*process\.env/.test(cronSrc));
   assert.ok(!cronSrc.includes("opciones.limite"));
   assert.ok(!cronSrc.includes("opciones.cupo"));
   assert.ok(!cronSrc.includes("req.body"));
@@ -480,11 +492,12 @@ function testContratoDeArchivos() {
     cronSrc.indexOf("async function recorrerCandidatosEnLote"),
     cronSrc.indexOf("async function recorrerCandidatos(")
   );
-  assert.ok(uno.includes("cupoAgotado"));
-  assert.ok(lote.includes("cupoAgotado"));
-  assert.ok(uno.includes("limite_ejecucion") || uno.includes("pasoTrasLimite"));
-  assert.ok(lote.includes("limite_ejecucion"));
-  assert.ok(cronSrc.includes("cupo.usados += 1"));
+  assert.ok(uno.includes("TAMANO_PASADA"));
+  assert.ok(lote.includes("TAMANO_PASADA"));
+  assert.ok(lote.includes("loteMedia.TAMANO_LOTE"));
+  assert.ok(uno.includes("tiempo_agotado") || uno.includes("reloj.agotado"));
+  assert.ok(lote.includes("reloj.agotado"));
+  assert.ok(!cronSrc.includes("cupo.usados += 1"));
   assert.ok(reglasSrc.includes("if (fila?.direccion && fila.direccion !== \"entrante\") return;"));
   assert.ok(reglas.MOTIVOS_AMBIGUOS.has("compartida"));
   assert.strictEqual(reglas.esReferenciaAmbigua("hilo_activo"), false);
@@ -498,7 +511,7 @@ async function main() {
   await testInciertoNoSeReintenta();
   await testResolucionManualNoBorra();
   await testEndpointSigueEnDryRun();
-  await testLimiteDeUnObjetoPorEjecucion();
+  await testSinTopeDeUnObjeto();
   testContratoDeArchivos();
   assert.strictEqual(process.env.LIMPIEZA_MEDIA_BORRAR, undefined);
   assert.strictEqual(servicio.ELIMINACION_REAL_BLOQUEADA, true);

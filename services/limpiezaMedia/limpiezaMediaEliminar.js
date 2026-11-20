@@ -133,6 +133,7 @@ async function ejecutarBorradoSobrePlan(plan, clave, opciones = {}) {
       motivo: "resultado_incierto",
       storage: false,
       abortar: true,
+      previo: true,
     };
   }
   if (!plan || plan.eliminar !== true || !valla) {

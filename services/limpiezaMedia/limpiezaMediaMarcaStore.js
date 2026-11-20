@@ -1,7 +1,9 @@
 /**
  * Cliente PostgREST de la marca durable.
  * La fuente de verdad es PostgreSQL, mediante las funciones de
- * supabase/migrations/limpieza_media_marca.sql. Este módulo no guarda marcas.
+ * supabase/migrations/limpieza_media_marca.sql y
+ * supabase/migrations/limpieza_media_marca_incierto_20261119.sql.
+ * Este módulo no guarda marcas.
  *
  * Sin permitirRed y sin cliente inyectado no abre red. Así las pruebas y un
  * require accidental no tocan producción. El webhook de producción pasa
@@ -140,6 +142,15 @@ function consultar(opciones) {
   return llamar(opciones, "limpieza_media_marca_consultar", ids(opciones));
 }
 
+function recuperar(opciones) {
+  return llamar(opciones, "limpieza_media_marca_recuperar", {
+    ...ids(opciones),
+    p_actor: opciones.actor,
+    p_objeto_existe: opciones.objetoExiste,
+    p_nota: opciones.nota || null,
+  });
+}
+
 function listar(opciones = {}) {
   return llamar(opciones, "limpieza_media_marca_listar", {
     p_estado: opciones.estado || null,
@@ -148,6 +159,7 @@ function listar(opciones = {}) {
 
 module.exports = {
   consultar,
+  recuperar,
   liberar,
   listar,
   pasarABorrando,

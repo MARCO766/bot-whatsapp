@@ -817,6 +817,10 @@ async function enFase(fase, consulta, fn) {
   }
 }
 
+async function comprobarExistenciaObjeto(clave) {
+  return existeObjetoReal({ clave });
+}
+
 async function existeObjetoReal({ clave }) {
   const ruta = reglas.sinBucket(clave);
   const barra = ruta.lastIndexOf("/");
@@ -857,13 +861,13 @@ function exigirPaginaCompleta(filas, limite) {
   return filas;
 }
 
-function mencionesDesdeFilas(clave, filas) {
+function mencionesDesdeFilas(clave, filas, opciones = {}) {
   const ruta = reglas.sinBucket(clave);
   if (!reglas.segmentoFiltroSeguro(ruta)) {
     throw errorDeConsulta("ruta no filtrable", CONSULTA_MENCIONES);
   }
   const lista = Array.isArray(filas) ? filas : [];
-  exigirPaginaCompleta(lista, LIMITE_MENCIONES);
+  if (opciones.completa !== true) exigirPaginaCompleta(lista, LIMITE_MENCIONES);
   return lista.filter(
     (fila) =>
       reglas.citaRutaCompleta(fila?.imagen_url, clave) ||
@@ -1153,6 +1157,7 @@ module.exports = {
   FUENTES_JSON,
   FUENTES_JSON_VIVAS,
   buscarCitaJsonViva,
+  comprobarExistenciaObjeto,
   listarStorageReal,
   mencionesDesdeFilas,
   cargarProteccion,

@@ -36,6 +36,18 @@ function sqlFalso() {
       const fila = filas.get(k);
       const reloj = ahora();
       if (nombre === "limpieza_media_marca_reservar") {
+        if (fila && fila.resultado === "incierto") {
+          return {
+            data: {
+              ok: false,
+              motivo: "resultado_incierto",
+              reintentar: false,
+              estado: fila.estado,
+              resultado: "incierto",
+              ahora: reloj,
+            },
+          };
+        }
         if (fila && ["reservado", "entrante", "borrando"].includes(fila.estado)) {
           return { data: { ok: false, motivo: "valla_ocupada", estado: fila.estado, owner: fila.owner, ahora: reloj } };
         }
@@ -140,6 +152,38 @@ function sqlFalso() {
         fila.verificacion = { resultadoVerificado: resultado, actor: body.p_actor };
         auditoria.push({ accion: "verificar", actor: body.p_actor, storage: false });
         return { data: { ok: true, storage: false, liberada: false, reintentar: false, ahora: reloj } };
+      }
+      if (nombre === "limpieza_media_marca_recuperar") {
+        if (typeof body.p_objeto_existe !== "boolean" || !body.p_actor) {
+          return { data: { ok: false, motivo: "verificacion_invalida", storage: false, liberada: false, reintentar: false, ahora: reloj } };
+        }
+        if (!fila || fila.estado !== "borrando" || (fila.resultado != null && fila.resultado !== "incierto")) {
+          return { data: { ok: false, motivo: "marca_no_resoluble", storage: false, liberada: false, reintentar: false, ahora: reloj } };
+        }
+        if (!fila.clave_archivo) {
+          return { data: { ok: false, motivo: "marca_sin_clave", storage: false, liberada: false, reintentar: false, ahora: reloj } };
+        }
+        fila.resultado = "incierto";
+        fila.verificacion = {
+          resultadoVerificado: "incierto",
+          objetoExiste: body.p_objeto_existe,
+          procedimiento: "recuperacion",
+          actor: body.p_actor,
+        };
+        auditoria.push({ accion: "verificar", actor: body.p_actor, storage: false });
+        return {
+          data: {
+            ok: true,
+            motivo: "recuperada",
+            estado: "borrando",
+            resultado: "incierto",
+            objeto_existe: body.p_objeto_existe,
+            storage: false,
+            liberada: false,
+            reintentar: false,
+            ahora: reloj,
+          },
+        };
       }
       if (nombre === "limpieza_media_marca_liberar") {
         if (!fila || fila.estado == null) {
@@ -260,6 +304,12 @@ async function testProtocolo() {
   assert.strictEqual(duplicado.duplicado, true);
   assert.strictEqual(inserts, 1);
   if (reintento.valla) await reintento.valla.liberar();
+  const otraReserva = await store.reservar({ ...opt, usuarioId: "u", conexionId: "c", numero: "591", owner: "cl:3" });
+  assert.strictEqual(otraReserva.ok, false);
+  assert.strictEqual(otraReserva.motivo, "resultado_incierto");
+  assert.strictEqual(otraReserva.reintentar, false);
+  assert.strictEqual(sql.filas.get("u|c|591").resultado, "incierto");
+  assert.notStrictEqual(sql.filas.get("u|c|591").estado, "reservado");
 
   const caido = {
     async post() {
@@ -306,6 +356,25 @@ function testNoRedNiCron() {
   assert.ok(sql.includes("storage_en_curso"));
   assert.ok(sql.includes("marca_de_limpieza"));
   assert.ok(sql.includes("limpieza_media_marca_soltar_reservado"));
+  assert.ok(sql.includes("v_row.resultado = 'incierto'"));
+  assert.ok(sql.includes("resultado is distinct from 'incierto'"));
+  const proteccion = fs.readFileSync(
+    path.join(__dirname, "../supabase/migrations/limpieza_media_marca_incierto_20261119.sql"),
+    "utf8"
+  );
+  assert.ok(proteccion.includes("create or replace function public.limpieza_media_marca_reservar("));
+  assert.ok(proteccion.includes("if v_row.resultado = 'incierto' then"));
+  assert.ok(proteccion.includes("and resultado is distinct from 'incierto'"));
+  assert.ok(proteccion.includes("create or replace function public.limpieza_media_marca_recuperar("));
+  assert.ok(proteccion.includes("p_objeto_existe is null"));
+  assert.ok(proteccion.includes("liberada', false"));
+  assert.ok(!/delete\s+from/i.test(proteccion));
+  assert.ok(!/drop\s+table/i.test(proteccion));
+  assert.ok(!/update\s+public\.(mensajes|conversaciones|clientes|contactos)\b/i.test(proteccion));
+  assert.ok(/revoke all on function public\.limpieza_media_marca_recuperar\(text, text, text, text, boolean, text\) from public, anon, authenticated/.test(proteccion));
+  assert.ok(/grant execute on function public\.limpieza_media_marca_recuperar\(text, text, text, text, boolean, text\) to service_role/.test(proteccion));
+  assert.ok(/revoke all on function public\.limpieza_media_marca_reservar\(text, text, text, text\) from public, anon, authenticated/.test(proteccion));
+  assert.ok(/grant execute on function public\.limpieza_media_marca_reservar\(text, text, text, text\) to service_role/.test(proteccion));
   assert.ok(/revoke all on function public\.limpieza_media_marca_verificar\(text, text, text, text, text, text\) from public, anon, authenticated/.test(sql));
   assert.ok(/grant execute on function public\.limpieza_media_marca_verificar\(text, text, text, text, text, text\) to service_role/.test(sql));
   assert.ok(/revoke all on function public\.limpieza_media_marca_liberar\(text, text, text, text, text\) from public, anon, authenticated/.test(sql));
@@ -533,9 +602,89 @@ async function testSoltarOkFalseDuplicadoYLimpieza() {
   ok("ok false, red, duplicado y marca de limpieza no confirman ni sueltan lo ajeno");
 }
 
+async function testRecuperacionNoRepiteDelete() {
+  const sql = sqlFalso();
+  const opt = opciones(sql);
+  const clave = "archivos/whatsapp/u/foto.jpg";
+  await store.reservar({ ...opt, usuarioId: "u", conexionId: "c", numero: "596", owner: "cl:1" });
+  await store.pasarABorrando({
+    ...opt,
+    usuarioId: "u",
+    conexionId: "c",
+    numero: "596",
+    owner: "cl:1",
+    claveArchivo: clave,
+  });
+  let borrados = 0;
+  let lecturas = 0;
+  const recuperada = await admin.recuperarMarcaDurable({
+    ...opt,
+    usuarioId: "u",
+    conexionId: "c",
+    numero: "596",
+    actor: "ops",
+    existeObjeto: async ({ clave: pedida }) => {
+      lecturas += 1;
+      assert.strictEqual(pedida, clave);
+      return false;
+    },
+    borrarObjeto: async () => {
+      borrados += 1;
+      return { eliminado: true };
+    },
+  });
+  assert.strictEqual(recuperada.ok, true);
+  assert.strictEqual(recuperada.liberada, false);
+  assert.strictEqual(recuperada.storage, false);
+  assert.strictEqual(recuperada.reintentar, false);
+  assert.strictEqual(lecturas, 1);
+  assert.strictEqual(borrados, 0);
+  assert.strictEqual(sql.filas.get("u|c|596").estado, "borrando");
+  assert.strictEqual(sql.filas.get("u|c|596").resultado, "incierto");
+  assert.strictEqual(sql.filas.get("u|c|596").verificacion.objetoExiste, false);
+  const suelta = await admin.liberarMarcaDurable({ ...opt, usuarioId: "u", conexionId: "c", numero: "596", actor: "ops" });
+  assert.strictEqual(suelta.liberada, true);
+  assert.strictEqual(sql.filas.get("u|c|596").estado, null);
+  assert.strictEqual(sql.filas.get("u|c|596").resultado, "incierto");
+  const reserva = await store.reservar({ ...opt, usuarioId: "u", conexionId: "c", numero: "596", owner: "cl:2" });
+  assert.strictEqual(reserva.ok, false);
+  assert.strictEqual(reserva.motivo, "resultado_incierto");
+  assert.strictEqual(reserva.reintentar, false);
+  assert.strictEqual(borrados, 0);
+  assert.strictEqual(sql.filas.get("u|c|596").estado, null);
+
+  await store.reservar({ ...opt, usuarioId: "u", conexionId: "c", numero: "597", owner: "cl:1" });
+  await store.pasarABorrando({
+    ...opt,
+    usuarioId: "u",
+    conexionId: "c",
+    numero: "597",
+    owner: "cl:1",
+    claveArchivo: clave,
+  });
+  const fallo = await admin.recuperarMarcaDurable({
+    ...opt,
+    usuarioId: "u",
+    conexionId: "c",
+    numero: "597",
+    actor: "ops",
+    existeObjeto: async () => {
+      throw new Error("listado incompleto");
+    },
+  });
+  assert.strictEqual(fallo.ok, false);
+  assert.strictEqual(fallo.motivo, "consulta_fallida");
+  assert.strictEqual(fallo.liberada, false);
+  assert.strictEqual(sql.filas.get("u|c|597").resultado, null);
+  assert.strictEqual(sql.filas.get("u|c|597").estado, "borrando");
+  assert.ok(!sql.llamadas.includes("limpieza_media_marca_recuperar") || sql.filas.get("u|c|597").verificacion == null);
+  ok("la recuperación verifica el objeto, no lo borra y el incierto no se reserva");
+}
+
 async function main() {
   testNoRedNiCron();
   await testProtocolo();
+  await testRecuperacionNoRepiteDelete();
   await testNoSueltaReservaNiStorageEnCurso();
   await testSoltarOkFalseDuplicadoYLimpieza();
   console.log(`${passed} pruebas ok`);

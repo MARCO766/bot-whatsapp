@@ -46,6 +46,9 @@ function sqlFalso() {
         return { data: { ok: true, estado: "entrante", owner: body.p_owner, ahora } };
       }
       if (nombre === "limpieza_media_marca_reservar") {
+        if (fila && fila.resultado === "incierto") {
+          return { data: { ok: false, motivo: "resultado_incierto", reintentar: false, estado: fila.estado, ahora } };
+        }
         if (fila && ["entrante", "reservado", "borrando"].includes(fila.estado)) {
           return { data: { ok: false, motivo: "valla_ocupada", estado: fila.estado, owner: fila.owner, ahora } };
         }

@@ -122,7 +122,12 @@ async function testReinicioTimeoutYResolucion() {
   assert.strictEqual(suelta.liberada, true);
   assert.strictEqual(suelta.storage, false);
   assert.strictEqual(suelta.reintentar, false);
-  assert.strictEqual(caido.registro.porHilo.has(hilo), false);
+  assert.strictEqual(caido.registro.porHilo.get(hilo).estado, null);
+  assert.strictEqual(caido.registro.porHilo.get(hilo).resultado, "incierto");
+  const reserva = await caido.registro.tomar({ hilo, owner: "cl:otra", estado: "reservado" });
+  assert.strictEqual(reserva.ok, false);
+  assert.strictEqual(reserva.motivo, "resultado_incierto");
+  assert.strictEqual(reserva.reintentar, false);
   assert.deepStrictEqual(
     caido.registro.auditoria.map((item) => item.accion),
     ["verificar", "liberar"]

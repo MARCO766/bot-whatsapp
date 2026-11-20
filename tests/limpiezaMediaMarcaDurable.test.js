@@ -36,6 +36,9 @@ function sqlFalso() {
       const fila = filas.get(k);
       const reloj = ahora();
       if (nombre === "limpieza_media_marca_reservar") {
+        if (fila && fila.resultado === "incierto") {
+          return { data: { ok: false, motivo: "resultado_incierto", reintentar: false, estado: fila.estado, ahora: reloj } };
+        }
         if (fila && ["reservado", "entrante", "borrando"].includes(fila.estado)) {
           return { data: { ok: false, motivo: "valla_ocupada", estado: fila.estado, owner: fila.owner, ahora: reloj } };
         }

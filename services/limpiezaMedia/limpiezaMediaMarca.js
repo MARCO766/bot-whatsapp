@@ -33,6 +33,17 @@ function crearRegistroDePrueba() {
     auditoria: [],
     async tomar({ hilo, owner, estado, ficha = {} }) {
       const actual = porHilo.get(hilo);
+      if (actual?.resultado === "incierto") {
+        if (estado !== "entrante" || actual.estado === "borrando" || actual.estado === "reservado") {
+          return { ok: false, motivo: "resultado_incierto", reintentar: false, owner: actual.owner };
+        }
+        if (actual.estado === "entrante" && actual.owner !== owner) {
+          return { ok: false, motivo: "valla_ocupada", owner: actual.owner };
+        }
+        actual.estado = "entrante";
+        actual.owner = owner;
+        return { ok: true, estado: "entrante" };
+      }
       if (actual?.estado === "borrando") {
         return { ok: false, motivo: "resultado_incierto", owner: actual.owner };
       }
@@ -78,6 +89,11 @@ function crearRegistroDePrueba() {
       if (!actual || actual.owner !== owner) return { ok: false, motivo: "valla_ajena" };
       if (actual.estado === "borrando" && permitirBorrando !== true) {
         return { ok: false, motivo: "resultado_incierto" };
+      }
+      if (actual.resultado === "incierto") {
+        actual.estado = null;
+        actual.owner = null;
+        return { ok: true };
       }
       porHilo.delete(hilo);
       return { ok: true };
@@ -213,7 +229,7 @@ async function vigenciaPerdida(marca) {
 async function ejecutarBajoMarca({ clave, marca, borrarObjeto }) {
   const filaInicial = typeof marca?.leer === "function" ? await marca.leer() : null;
   if (esIncierto(clave) || filaInicial?.resultado === "incierto" || filaInicial?.estado === "borrando") {
-    return resultadoIncerto();
+    return { ...resultadoIncerto(), previo: true };
   }
   if (!marca || marca.sobreviveDesconexion !== true || marca.sinVencimiento !== true) {
     return { eliminado: false, motivo: "proteccion_no_durable", storage: false, abortar: true, reintentar: false };

@@ -3,11 +3,10 @@
  * No llama a Storage, no repite un DELETE y no toca mensajes ni conversaciones.
  * Liberar exige una verificación previa. Cada paso queda en la auditoría del registro.
  *
- * Una marca incierto no se reintenta. En la base, el desbloqueo de mensajes
- * es manual: leer el objeto, verificar como no_eliminado_confirmado si sigue
- * en el bucket o eliminado_confirmado si ya no está, y solo entonces liberar.
- * Liberar pone estado y owner en null y conserva resultado = incierto, así
- * que el Cron no vuelve a promover esa fila a borrando.
+ * Una marca incierto no se reintenta ni vuelve a reservarse, aunque se libere.
+ * recuperarMarcaDurable lee el objeto y deja resultado incierto. No libera
+ * la fila y no llama a Storage DELETE. Liberar sigue siendo un paso aparte:
+ * pone estado y owner en null y conserva resultado = incierto.
  *
  * listarMarcasReales() no abre red. listarMarcasDurables() llama a PostgREST
  * solo si el llamador pasa permitirRed o un cliente de prueba.
@@ -39,6 +38,80 @@ function verificarMarcaDurable(opciones = {}) {
 function liberarMarcaDurable(opciones = {}) {
   if (opciones.permitirRed !== true && !opciones.cliente) return resolverMarcaReal();
   return marcaStore.liberar(opciones);
+}
+
+async function leerExistencia(clave, opciones) {
+  if (typeof opciones.existeObjeto === "function") return opciones.existeObjeto({ clave });
+  if (opciones.permitirRed !== true) return undefined;
+  const servicio = require("./limpiezaMediaService");
+  return servicio.comprobarExistenciaObjeto(clave);
+}
+
+async function recuperarMarcaDurable(opciones = {}) {
+  if (opciones.permitirRed !== true && !opciones.cliente) return resolverMarcaReal();
+  const visto = await marcaStore.consultar(opciones);
+  const marca = visto?.marca;
+  if (!marca || marca.estado !== "borrando") {
+    return {
+      ok: false,
+      motivo: "marca_no_resoluble",
+      storage: false,
+      reintentar: false,
+      liberada: false,
+    };
+  }
+  if (marca.resultado != null && marca.resultado !== "incierto") {
+    return {
+      ok: false,
+      motivo: "marca_no_resoluble",
+      storage: false,
+      reintentar: false,
+      liberada: false,
+    };
+  }
+  const clave = marca.clave_archivo || marca.claveArchivo;
+  if (!clave) {
+    return {
+      ok: false,
+      motivo: "marca_sin_clave",
+      storage: false,
+      reintentar: false,
+      liberada: false,
+    };
+  }
+  let existe;
+  try {
+    existe = await leerExistencia(clave, opciones);
+  } catch (error) {
+    return {
+      ok: false,
+      motivo: "consulta_fallida",
+      storage: false,
+      reintentar: false,
+      liberada: false,
+    };
+  }
+  if (existe !== true && existe !== false) {
+    return {
+      ok: false,
+      motivo: "verificacion_requerida",
+      storage: false,
+      reintentar: false,
+      liberada: false,
+    };
+  }
+  const paso = await marcaStore.recuperar({
+    ...opciones,
+    objetoExiste: existe,
+    nota: opciones.nota || (existe ? "el objeto sigue en el bucket" : "el objeto ya no está en el bucket"),
+  });
+  return {
+    ...paso,
+    ok: paso?.ok === true,
+    storage: false,
+    reintentar: false,
+    liberada: false,
+  };
 }
 
 function resolverMarcaReal() {
@@ -155,6 +228,7 @@ module.exports = {
   RESULTADOS,
   clasificarResultado,
   intentarReanudarBorrado,
+  recuperarMarcaDurable,
   liberarMarca,
   consultarMarcaDurable,
   liberarMarcaDurable,
